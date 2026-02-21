@@ -6,6 +6,7 @@ from chimera.tools.search import SearchTool
 from chimera.tools.list_files import ListFilesTool
 from chimera.tools.test import TestTool
 from chimera.tools.web_fetch import WebFetchTool
+from chimera.tools.git import GitTool
 
 read_file = ReadFileTool()
 write_file = WriteFileTool()
@@ -15,10 +16,11 @@ search = SearchTool()
 list_files = ListFilesTool()
 test = TestTool()
 web_fetch = WebFetchTool()
+git = GitTool()
 
 __all__ = [
     "ReadFileTool", "WriteFileTool", "BashTool", "EditFileTool", "SearchTool", "ListFilesTool",
-    "TestTool", "WebFetchTool",
+    "TestTool", "WebFetchTool", "GitTool",
     "read_file", "write_file", "bash", "edit_file", "search", "list_files",
-    "test", "web_fetch",
+    "test", "web_fetch", "git",
 ]
