@@ -11,7 +11,7 @@
 > *"Sufficiently advanced agentic coding is essentially machine learning: the engineer sets up the optimization goal (the spec), then an optimization process (coding agents) iterates until the goal is reached. The result is a blackbox model (the generated codebase): an artifact that performs the task, that you deploy without ever inspecting its internal logic."*
 > -- Francois Chollet
 
-Chimera is the framework that makes this real. Named after the mythological creature that takes many forms, Chimera adapts to what you need: a toolkit for building coding agents, a training framework for generating codebases from specs, or a benchmark harness for evaluating agent performance.
+Chimera is the framework that makes this real. Named after the mythological creature that takes many forms, Chimera adapts to what you need: a toolkit for building coding agents, a synthesis framework for generating codebases from specs, or a benchmark harness for evaluating agent performance. The core verb is `.synthesize()` -- combining CS program synthesis, biological chimera synthesis, and chemical synthesis into one concept.
 
 ---
 
@@ -22,7 +22,8 @@ Chimera is the framework that makes this real. Named after the mythological crea
 | Identity | Both toolkit AND training framework | Low-level primitives for framework authors, high-level API for end users |
 | Users | Framework authors, developers, researchers | Three API levels, like Keras (subclassing, functional, sequential) |
 | Language | Python | Matches ML ecosystem, Keras analogy, SWE-bench, existing code |
-| Training | Test-driven convergence (default) | Plus: curriculum, ensemble, passthrough strategies |
+| Synthesis | Test-driven convergence (default) | Plus: curriculum, ensemble, passthrough strategies |
+| Core verb | `.synthesize()` | Program synthesis + biological chimera + chemical synthesis |
 | Architecture | Monolithic Keras-style | Single package, layered API. Split later if needed |
 | Starting point | Fresh codebase | Port best ideas from NovalisCode, NovalisGraph, Pi, coding-agents |
 
@@ -35,10 +36,10 @@ Six layers, each usable independently:
 ```
 +---------------------------------------------------+
 |  Layer 6: CLI                                      |
-|  chimera train / chimera eval / chimera bench      |
+|  chimera synthesize / chimera eval / chimera bench  |
 |  Target: End users                                 |
 +---------------------------------------------------+
-|  Layer 5: Training                                 |
+|  Layer 5: Synthesis                                |
 |  Trainer, Strategy, Spec, Architecture, Constraint |
 |  Target: Developers                                |
 +---------------------------------------------------+
@@ -60,7 +61,7 @@ Six layers, each usable independently:
 +---------------------------------------------------+
 ```
 
-Each layer depends only on layers below it. You can use Layer 3 without Layer 5. Just like Keras -- you don't need `model.fit()` to use a `Dense` layer.
+Each layer depends only on layers below it. You can use Layer 3 without Layer 5. Just like Keras -- you don't need `model.compile()` to use a `Dense` layer.
 
 ---
 
@@ -285,7 +286,7 @@ evaluators = [
 
 ## Layer 5: Training
 
-The `model.fit()` equivalent. Where everything comes together.
+The synthesis layer. Where everything comes together.
 
 ### Spec (the "loss function")
 
@@ -343,8 +344,8 @@ trainer = Trainer(
     env=Environment.local("./output", test_cmd="pytest"),
 )
 
-result = trainer.fit(
-    strategy=TestConvergence(max_epochs=100, early_stopping=5),
+result = trainer.synthesize(
+    strategy=TestConvergence(max_iterations=100, patience=5),
     callbacks=[Checkpoint(every=5), CostLimit(max=10.0), ProgressBar()],
 )
 ```
@@ -399,7 +400,7 @@ Wrap an existing agent (Aider, Claude Code, etc.) with standardized evaluation. 
 ```python
 if result.converged:
     result.codebase.export("./release/")
-    print(f"Converged in {result.epochs} epochs, cost ${result.total_cost:.2f}")
+    print(f"Synthesized in {result.iterations} iterations, cost ${result.total_cost:.2f}")
 else:
     print(f"Failed: {result.failure_reason}")
     result.best_codebase.export("./partial/")
@@ -410,9 +411,9 @@ else:
 ## Layer 6: CLI
 
 ```bash
-chimera train --spec spec.md --output ./myapp
-chimera train --spec spec.md --strategy curriculum --agent claude-sonnet
-chimera train --resume ./checkpoints/epoch_7
+chimera synthesize --spec spec.md --output ./myapp
+chimera synthesize --spec spec.md --strategy curriculum --agent claude-sonnet
+chimera synthesize --resume ./checkpoints/iteration_7
 chimera eval ./myapp --tests ./tests/ --metrics coverage,complexity
 chimera bench swe-bench-lite --agent my_agent.py --output results/
 chimera compare results/agent_a/ results/agent_b/ --format table
@@ -487,7 +488,7 @@ all = ["chimera-ai[anthropic,openai,google,docker]"]
 import chimera
 
 # One-liner (end user)
-result = chimera.fit("Build a REST API for tasks", tests="./tests/")
+result = chimera.synthesize("Build a REST API for tasks", tests="./tests/")
 
 # Configured (developer)
 trainer = chimera.Trainer(
@@ -497,7 +498,7 @@ trainer = chimera.Trainer(
     constraints=[chimera.tests_pass, chimera.coverage(0.8)],
     env=chimera.Environment.local("./output"),
 )
-result = trainer.fit(strategy=chimera.TestConvergence())
+result = trainer.synthesize(strategy=chimera.TestConvergence())
 
 # Custom agent (framework author)
 class MyAgent(chimera.Agent):
@@ -537,6 +538,6 @@ results = harness.run(agent=MyAgent())
 | Chollet | Anti-overfitting | eval/anti_overfit/ |
 | Chollet | Codebase as trained model | Training layer paradigm |
 | Chollet | Spec as loss function | training/spec.py |
-| Keras | Layer/Model/compile/fit | Architecture/Trainer/Strategy |
+| Keras | Layer/Model/compile/fit | Architecture/Trainer/synthesize |
 | Keras | Callbacks | training/callbacks.py |
 | Keras | Zero-dep core | No required dependencies |
