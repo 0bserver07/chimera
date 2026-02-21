@@ -4,8 +4,9 @@ from chimera.core.context import Context
 from chimera.core.loop import ReAct
 from chimera.core.prompt import Prompt
 from chimera.core.tool import BaseTool, tool
+from chimera.core.tool_group import ToolGroup, DEFAULT_TOOLS
 
 __all__ = [
     "Agent", "ApprovalPolicy", "AutoApprove", "AlwaysDeny", "AllowList",
-    "BaseTool", "Context", "Prompt", "ReAct", "tool",
+    "BaseTool", "Context", "DEFAULT_TOOLS", "Prompt", "ReAct", "tool", "ToolGroup",
 ]
