@@ -2,7 +2,7 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Build the MVP vertical slice of Chimera -- from `chimera.fit("spec", tests="./tests/")` to a trained codebase.
+**Goal:** Build the MVP vertical slice of Chimera -- from `chimera.synthesize("spec", tests="./tests/")` to a synthesized codebase.
 
 **Architecture:** Six-layer monolithic framework. Build bottom-up: Environment -> Provider -> Tools -> Agent -> Training -> CLI. Each layer has protocol + implementation. Zero required dependencies in core.
 
@@ -32,7 +32,7 @@ build-backend = "hatchling.build"
 [project]
 name = "chimera-ai"
 dynamic = ["version"]
-description = "A composable coding agent framework."
+description = "A composable coding agent framework. Synthesize codebases from specifications."
 readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "AGPL-3.0"}
@@ -1654,7 +1654,7 @@ Trainer ties together Architecture + Spec + Agent + Strategy + Constraints + Env
 **Files:**
 - Modify: `chimera/__init__.py`
 
-Export all public classes and the `chimera.fit()` one-liner.
+Export all public classes and the `chimera.synthesize()` one-liner.
 
 ```python
 # chimera/__init__.py
@@ -1669,8 +1669,8 @@ from chimera.training.trainer import Trainer
 from chimera.training.constraint import Constraint
 from chimera.training.strategies.convergence import TestConvergence
 
-def fit(spec_text, tests=None, **kwargs):
-    """One-liner: train a codebase from a spec."""
+def synthesize(spec_text, tests=None, **kwargs):
+    """One-liner: synthesize a codebase from a spec."""
     ...
 ```
 
@@ -1689,7 +1689,7 @@ def test_end_to_end_training():
     """Train a simple calculator module from spec + tests."""
     # 1. Create temp dir with test file
     # 2. Configure Trainer with mock provider
-    # 3. Run trainer.fit()
+    # 3. Run trainer.synthesize()
     # 4. Assert result.converged
     # 5. Assert generated code passes tests
 ```
@@ -1698,13 +1698,13 @@ def test_end_to_end_training():
 
 ## Phase 8: CLI (outline)
 
-### Task 18: `chimera train` command
+### Task 18: `chimera synthesize` command
 
 **Files:**
 - Create: `chimera/cli/main.py`
-- Create: `chimera/cli/train.py`
+- Create: `chimera/cli/synthesize.py`
 
-Uses argparse. Parses --spec, --output, --strategy, --model flags. Constructs Trainer and runs fit().
+Uses argparse. Parses --spec, --output, --strategy, --model flags. Constructs Trainer and runs synthesize().
 
 ---
 
@@ -1721,4 +1721,4 @@ Uses argparse. Parses --spec, --output, --strategy, --model flags. Constructs Tr
 | 7 | 16-17 | Public API, integration test |
 | 8 | 18 | CLI |
 
-After Phase 7, you have a working `chimera.fit()`. After Phase 8, you have `chimera train --spec spec.md`.
+After Phase 7, you have a working `chimera.synthesize()`. After Phase 8, you have `chimera synthesize --spec spec.md`.
