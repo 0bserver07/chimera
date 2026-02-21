@@ -1,0 +1,43 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "chimera-ai"
+dynamic = ["version"]
+description = "A composable coding agent framework. Synthesize codebases from specifications."
+requires-python = ">=3.11"
+license = {text = "AGPL-3.0"}
+keywords = ["ai", "agents", "coding", "framework", "synthesis"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Topic :: Software Development :: Code Generators",
+]
+
+[project.optional-dependencies]
+anthropic = ["anthropic>=0.40"]
+openai = ["openai>=1.50"]
+all = ["chimera-ai[anthropic,openai]"]
+dev = ["pytest>=8.0", "ruff>=0.4", "mypy>=1.10"]
+
+[project.scripts]
+chimera = "chimera.cli.main:main"
+
+[tool.hatch.version]
+path = "chimera/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["chimera"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
