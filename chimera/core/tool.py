@@ -13,6 +13,7 @@ class BaseTool(ABC):
     name: str
     description: str
     parameters: dict[str, Any]  # JSON Schema
+    requires_approval: bool = False
 
     @abstractmethod
     def execute(self, args: dict[str, Any], env: Environment | None) -> ToolResult:
