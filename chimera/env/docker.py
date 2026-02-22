@@ -1,0 +1,145 @@
+"""Docker-based sandboxed environment."""
+from __future__ import annotations
+
+import re
+import uuid
+from typing import Any
+
+from chimera.env.base import Environment
+from chimera.types import CommandResult, TestResult
+
+try:
+    import docker
+except ImportError:
+    docker = None  # type: ignore[assignment]
+
+
+class DockerEnvironment(Environment):
+    """Docker-based sandboxed environment.
+
+    Runs code inside a Docker container for isolation.  Falls back to
+    an in-memory file store when no real container is available (useful
+    for unit testing without Docker).
+    """
+
+    def __init__(
+        self,
+        image: str = "python:3.11-slim",
+        workdir: str = "/workspace",
+        test_cmd: str = "python -m pytest",
+    ) -> None:
+        if docker is None:
+            raise ImportError("pip install docker")
+        self._image = image
+        self._workdir = workdir
+        self._test_cmd = test_cmd
+        self._container: Any = None
+        self._client: Any = None
+        self._checkpoints: dict[str, dict[str, str]] = {}
+        self._files: dict[str, str] = {}  # In-memory store (mock testing)
+
+    # ------------------------------------------------------------------
+    # Lifecycle
+    # ------------------------------------------------------------------
+
+    def setup(self) -> None:
+        self._client = docker.from_env()
+        self._container = self._client.containers.run(
+            self._image,
+            command="sleep infinity",
+            detach=True,
+            working_dir=self._workdir,
+            remove=True,
+        )
+
+    def cleanup(self) -> None:
+        if self._container:
+            try:
+                self._container.stop(timeout=5)
+            except Exception:
+                pass
+
+    # ------------------------------------------------------------------
+    # File operations
+    # ------------------------------------------------------------------
+
+    def read_file(self, path: str) -> str:
+        if self._container is None:
+            if path in self._files:
+                return self._files[path]
+            raise FileNotFoundError(path)
+        exit_code, output = self._container.exec_run(f"cat {self._workdir}/{path}")
+        if exit_code != 0:
+            raise FileNotFoundError(path)
+        return output.decode()
+
+    def write_file(self, path: str, content: str) -> None:
+        if self._container is None:
+            self._files[path] = content
+            return
+        # Create parent directories
+        if "/" in path:
+            parent = "/".join(path.split("/")[:-1])
+            self._container.exec_run(f"mkdir -p {self._workdir}/{parent}")
+        self._container.exec_run(
+            ["sh", "-c", f"cat > {self._workdir}/{path}"],
+            stdin=True,
+            socket=True,
+        )
+
+    def list_files(self, pattern: str = "**/*") -> list[str]:
+        if self._container is None:
+            return sorted(self._files.keys())
+        exit_code, output = self._container.exec_run(
+            f"find {self._workdir} -type f -name '*'"
+        )
+        if exit_code != 0:
+            return []
+        lines = output.decode().strip().split("\n")
+        return [
+            line.replace(f"{self._workdir}/", "")
+            for line in lines
+            if line.strip()
+        ]
+
+    # ------------------------------------------------------------------
+    # Command execution
+    # ------------------------------------------------------------------
+
+    def run_command(self, cmd: str, timeout: int = 120) -> CommandResult:
+        if self._container is None:
+            return CommandResult(stdout="", stderr="No container", exit_code=1)
+        exit_code, output = self._container.exec_run(
+            ["sh", "-c", cmd], workdir=self._workdir
+        )
+        text = output.decode()
+        return CommandResult(stdout=text, stderr="", exit_code=exit_code)
+
+    def run_tests(self) -> TestResult:
+        result = self.run_command(self._test_cmd)
+        output = result.stdout + result.stderr
+        passed = failed = errors = 0
+        m = re.search(r"(\d+) passed", output)
+        if m:
+            passed = int(m.group(1))
+        m = re.search(r"(\d+) failed", output)
+        if m:
+            failed = int(m.group(1))
+        m = re.search(r"(\d+) error", output)
+        if m:
+            errors = int(m.group(1))
+        return TestResult(passed=passed, failed=failed, errors=errors, output=output)
+
+    # ------------------------------------------------------------------
+    # Checkpointing (in-memory)
+    # ------------------------------------------------------------------
+
+    def checkpoint(self) -> str:
+        cp_id = uuid.uuid4().hex[:8]
+        self._checkpoints[cp_id] = dict(self._files)
+        return cp_id
+
+    def restore(self, checkpoint_id: str) -> None:
+        if checkpoint_id not in self._checkpoints:
+            raise ValueError(f"Checkpoint {checkpoint_id} not found")
+        self._files = dict(self._checkpoints[checkpoint_id])
