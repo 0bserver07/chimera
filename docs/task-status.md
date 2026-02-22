@@ -1,7 +1,9 @@
 # Chimera — Task Status
 
-> 18 tasks across 8 phases. TDD approach: tests first, then implementation.
-> Source: `docs/plans/2026-02-20-chimera-implementation-plan.md`
+> 57 tasks across 13 phases. TDD approach: tests first, then implementation.
+> Sources: `docs/plans/2026-02-20-chimera-implementation-plan.md`, `docs/plans/2026-02-20-chimera-extension-plan.md`
+
+## Phases 1–8: Core Framework (Original)
 
 | # | Phase | Task | Files | Tests | Status |
 |---|-------|------|-------|-------|--------|
@@ -20,11 +22,55 @@
 | 13 | 6 - Synthesis | Constraints | `chimera/training/constraint.py` | 30 | DONE |
 | 14 | 6 - Synthesis | TestConvergence strategy | `chimera/training/strategies/base.py`, `convergence.py`, `__init__.py` | 16 | DONE |
 | 15 | 6 - Synthesis | Trainer and Callbacks | `chimera/training/trainer.py`, `callbacks.py` | 14 | DONE |
-| 16 | 7 - Integration | Public API | `chimera/__init__.py` (35 exports + `synthesize()` one-liner) | — | DONE |
+| 16 | 7 - Integration | Public API | `chimera/__init__.py` | — | DONE |
 | 17 | 7 - Integration | Integration test | `tests/test_integration.py` | 3 | DONE |
 | 18 | 8 - CLI | `chimera synthesize` command | `chimera/cli/main.py`, `chimera/cli/__init__.py` | 8 | DONE |
 
-**Total: 163 tests passing** (as of 2026-02-20)
+## Phases 9–13: Extension (Tools, Providers, Composition, Eval, Polish)
+
+| # | Phase | Task | Files | Tests | Status |
+|---|-------|------|-------|-------|--------|
+| 19 | 9 - Tools | EditFileTool | `chimera/tools/edit.py` | 5 | DONE |
+| 20 | 9 - Tools | SearchTool | `chimera/tools/search.py` | 5 | DONE |
+| 21 | 9 - Tools | ListFilesTool | `chimera/tools/list_files.py` | 5 | DONE |
+| 22 | 9 - Tools | TestTool | `chimera/tools/test.py` | 4 | DONE |
+| 23 | 9 - Tools | WebFetchTool | `chimera/tools/web_fetch.py` | 4 | DONE |
+| 24 | 9 - Tools | GitTool | `chimera/tools/git.py` | 6 | DONE |
+| 25 | 9 - Tools | ReplaceInFileTool | `chimera/tools/replace_in_file.py` | 5 | DONE |
+| 26 | 9 - Internals | Approval policies | `chimera/core/approval.py` | 7 | DONE |
+| 27 | 9 - Internals | ToolGroup | `chimera/core/tool_group.py` | 6 | DONE |
+| 28 | 9 - Internals | DelegateTool | `chimera/tools/delegate.py` | 3 | DONE |
+| 29 | 9 - Internals | Loop detection | `chimera/core/loop_detection.py` | 6 | DONE |
+| 30 | 9 - Internals | Context compression | `chimera/core/compression.py` | 5 | DONE |
+| 31 | 9 - Internals | Streaming | `chimera/core/streaming.py` | 4 | DONE |
+| 32 | 10 - Providers | OpenAIProvider | `chimera/providers/openai.py` | 5 | DONE |
+| 33 | 10 - Providers | GoogleProvider | `chimera/providers/google.py` | 4 | DONE |
+| 34 | 10 - Providers | OllamaProvider | `chimera/providers/ollama.py` | 4 | DONE |
+| 35 | 10 - Providers | OpenAICompatibleProvider | `chimera/providers/compatible.py` | 4 | DONE |
+| 36 | 10 - Providers | Provider factory | `chimera/providers/factory.py` | 6 | DONE |
+| 37 | 11 - Composition | Pipeline | `chimera/composition/pipeline.py` | 3 | DONE |
+| 38 | 11 - Composition | Ensemble | `chimera/composition/ensemble.py` | 3 | DONE |
+| 39 | 11 - Composition | Supervisor | `chimera/composition/supervisor.py` | 2 | DONE |
+| 40 | 11 - Loops | PlanAndExecute | `chimera/core/loops/plan_execute.py` | 2 | DONE |
+| 41 | 11 - Loops | Reflexion | `chimera/core/loops/reflexion.py` | 3 | DONE |
+| 42 | 11 - Loops | TreeOfThought | `chimera/core/loops/tree_of_thought.py` | 3 | DONE |
+| 43 | 11 - Strategies | CurriculumStrategy | `chimera/training/strategies/curriculum.py` | 4 | DONE |
+| 44 | 11 - Strategies | EnsembleStrategy | `chimera/training/strategies/ensemble.py` | 3 | DONE |
+| 45 | 11 - Strategies | Passthrough | `chimera/training/strategies/passthrough.py` | 4 | DONE |
+| 46 | 12 - Eval | Harness + Benchmark | `chimera/eval/harness.py` | 6 | DONE |
+| 47 | 12 - Eval | Metrics | `chimera/eval/metrics.py` | 14 | DONE |
+| 48 | 12 - Eval | AntiOverfit | `chimera/eval/anti_overfit.py` | 9 | DONE |
+| 49 | 12 - Benchmarks | SWE-bench adapter | `chimera/eval/benchmarks/swe_bench.py` | 9 | DONE |
+| 50 | 12 - Benchmarks | HumanEval adapter | `chimera/eval/benchmarks/human_eval.py` | 8 | DONE |
+| 51 | 12 - Benchmarks | Custom benchmark | `chimera/eval/benchmarks/custom.py` | 8 | DONE |
+| 52 | 13 - Environments | DockerEnvironment | `chimera/env/docker.py` | 9 | DONE |
+| 53 | 13 - Environments | GitEnvironment | `chimera/env/git_env.py` | 6 | DONE |
+| 54 | 13 - CLI | `chimera eval` command | `chimera/cli/main.py` | 3 | DONE |
+| 55 | 13 - CLI | `chimera bench` command | `chimera/cli/main.py` | 3 | DONE |
+| 56 | 13 - Constraints | Extended constraints | `chimera/training/constraint.py` | 11 | DONE |
+| 57 | 13 - Callbacks | ProgressBar | `chimera/training/callbacks.py` | 4 | DONE |
+
+**Total: 367 tests passing** (as of 2026-02-22)
 
 ---
 
@@ -32,24 +78,30 @@
 
 | Phase | Description | Tasks | Tests | Status |
 |-------|-------------|-------|-------|--------|
-| 1 | Project Scaffold + Core Types | 1-2 | 11 | DONE |
-| 2 | Environment Layer | 3-4 | 9 | DONE |
-| 3 | Provider Layer | 5-6 | 9 | DONE |
-| 4 | Tool Layer | 7-8 | 14 | DONE |
-| 5 | Agent Core | 9-11 | 28 | DONE |
-| 6 | Synthesis Layer | 12-15 | 81 | DONE |
-| 7 | Integration | 16-17 | 3 | DONE |
+| 1 | Project Scaffold + Core Types | 1–2 | 11 | DONE |
+| 2 | Environment Layer | 3–4 | 9 | DONE |
+| 3 | Provider Layer | 5–6 | 9 | DONE |
+| 4 | Tool Layer | 7–8 | 14 | DONE |
+| 5 | Agent Core | 9–11 | 28 | DONE |
+| 6 | Synthesis Layer | 12–15 | 81 | DONE |
+| 7 | Integration | 16–17 | 3 | DONE |
 | 8 | CLI | 18 | 8 | DONE |
+| 9 | Extended Tools + Internals | 19–31 | 65 | DONE |
+| 10 | Additional Providers | 32–36 | 23 | DONE |
+| 11 | Composition, Loops, Strategies | 37–45 | 27 | DONE |
+| 12 | Evaluation Layer | 46–51 | 54 | DONE |
+| 13 | Environments, CLI, Polish | 52–57 | 36 | DONE |
 
 ---
 
 ## What's Next (not yet planned)
 
-- [ ] Layer 4: Evaluation (Harness, Metrics, AntiOverfit)
-- [ ] Additional strategies (Curriculum, Ensemble, Passthrough)
-- [ ] Additional providers (OpenAI, Google, Ollama)
-- [ ] Docker environment
-- [ ] Additional tools (edit_file, search, list_files, delegate)
-- [ ] Agent composition (Pipeline, Ensemble, Supervisor)
-- [ ] Approval workflows
-- [ ] `chimera eval` and `chimera bench` CLI commands
+- [ ] Real provider integration tests (with API keys)
+- [ ] Docker environment integration tests
+- [ ] `chimera.synthesize()` one-liner with provider auto-detection
+- [ ] Plugin/extension system
+- [ ] Repository mapping (aider-style)
+- [ ] Session persistence and branching
+- [ ] Multi-file edit transactions
+- [ ] Cost tracking and budgets
+- [ ] Documentation site
