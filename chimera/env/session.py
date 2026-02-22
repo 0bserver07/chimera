@@ -62,3 +62,39 @@ class SessionMixin:
             capture_output=True,
         )
         self._session_name = None
+
+    def create_shell(self, name: str) -> None:
+        """Create a new named shell (tmux window).
+
+        Raises RuntimeError if no session is active.
+        Raises ValueError if a shell with that name already exists.
+        """
+        if not self.has_session:
+            raise RuntimeError("No active session")
+        if name in self.list_shells():
+            raise ValueError(f"Shell '{name}' already exists")
+        subprocess.run(
+            ["tmux", "new-window", "-t", self._session_name, "-n", name],
+            check=True,
+            capture_output=True,
+        )
+
+    def list_shells(self) -> list[str]:
+        """List names of all active shells in the session."""
+        if not self.has_session:
+            return []
+        result = subprocess.run(
+            [
+                "tmux", "list-windows",
+                "-t", self._session_name,
+                "-F", "#{window_name}",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            return []
+        return [
+            line.strip() for line in result.stdout.strip().split("\n")
+            if line.strip()
+        ]
