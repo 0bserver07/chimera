@@ -64,3 +64,38 @@ class TestSessionLifecycle:
                 s.start_session()
         finally:
             s.end_session()
+
+
+class TestNamedShells:
+    def test_main_shell_exists_after_start(self):
+        s = ConcreteSession()
+        s.start_session()
+        try:
+            assert "main" in s.list_shells()
+        finally:
+            s.end_session()
+
+    def test_create_shell(self):
+        s = ConcreteSession()
+        s.start_session()
+        try:
+            s.create_shell("server")
+            shells = s.list_shells()
+            assert "main" in shells
+            assert "server" in shells
+        finally:
+            s.end_session()
+
+    def test_create_duplicate_shell_raises(self):
+        s = ConcreteSession()
+        s.start_session()
+        try:
+            with pytest.raises(ValueError, match="already exists"):
+                s.create_shell("main")
+        finally:
+            s.end_session()
+
+    def test_create_shell_without_session_raises(self):
+        s = ConcreteSession()
+        with pytest.raises(RuntimeError, match="No active session"):
+            s.create_shell("test")
