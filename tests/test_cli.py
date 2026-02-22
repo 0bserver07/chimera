@@ -1,0 +1,84 @@
+"""Tests for chimera.cli.main — CLI argument parsing and basic behavior."""
+
+from __future__ import annotations
+
+import pytest
+from chimera.cli.main import create_parser, main
+
+
+def test_parser_no_command():
+    """No command should return 0 (prints help)."""
+    result = main([])
+    assert result == 0
+
+
+def test_parser_synthesize_basic():
+    """Parses --spec flag for synthesize command."""
+    parser = create_parser()
+    args = parser.parse_args(["synthesize", "--spec", "Build a calculator"])
+    assert args.command == "synthesize"
+    assert args.spec == "Build a calculator"
+
+
+def test_parser_synthesize_tests():
+    """Parses --tests flag for synthesize command."""
+    parser = create_parser()
+    args = parser.parse_args(["synthesize", "--tests", "./tests/"])
+    assert args.tests == "./tests/"
+
+
+def test_parser_synthesize_all_flags():
+    """Parses all flags together for synthesize command."""
+    parser = create_parser()
+    args = parser.parse_args([
+        "synthesize",
+        "--spec", "spec.md",
+        "--tests", "./tests/",
+        "--output", "./out",
+        "--model", "claude-opus-4-20250514",
+        "--max-iterations", "100",
+        "--patience", "10",
+        "--max-cost", "5.0",
+    ])
+    assert args.spec == "spec.md"
+    assert args.tests == "./tests/"
+    assert args.output == "./out"
+    assert args.model == "claude-opus-4-20250514"
+    assert args.max_iterations == 100
+    assert args.patience == 10
+    assert args.max_cost == 5.0
+
+
+def test_parser_synthesize_alias():
+    """'synth' works as alias for 'synthesize'."""
+    parser = create_parser()
+    args = parser.parse_args(["synth", "--spec", "Build something"])
+    assert args.command == "synth"
+    assert args.spec == "Build something"
+
+
+def test_run_synthesize_no_spec_no_tests(capsys):
+    """Should return 1 when neither --spec nor --tests provided."""
+    result = main(["synthesize"])
+    assert result == 1
+    captured = capsys.readouterr()
+    assert "Error" in captured.err
+
+
+def test_main_no_args(capsys):
+    """main([]) returns 0 and prints help."""
+    result = main([])
+    assert result == 0
+
+
+def test_parser_synthesize_defaults():
+    """Default values are set correctly."""
+    parser = create_parser()
+    args = parser.parse_args(["synthesize", "--spec", "something"])
+    assert args.output == "./output"
+    assert args.model == "claude-sonnet-4-20250514"
+    assert args.provider == "anthropic"
+    assert args.strategy == "convergence"
+    assert args.max_iterations == 50
+    assert args.patience == 5
+    assert args.max_cost is None

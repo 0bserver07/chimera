@@ -74,36 +74,38 @@ results = harness.run(agent=MyAgent())
 - [x] chimera/providers/anthropic.py (AnthropicProvider with tool use)
 - [x] 9 tests passing
 
-### Phase 4: Tool Layer -- IN PROGRESS (agent running)
-- [ ] chimera/core/tool.py (BaseTool, tool decorator, schema conversion)
-- [ ] chimera/tools/ (read_file, write_file, bash)
-- [ ] Tests
+### Phase 4: Tool Layer -- DONE
+- [x] chimera/core/tool.py (BaseTool, tool decorator, schema conversion)
+- [x] chimera/tools/ (read_file, write_file, bash)
+- [x] 14 tests passing
 
-### Phase 5: Agent Core -- IN PROGRESS (agent running)
-- [ ] chimera/core/context.py (Context)
-- [ ] chimera/core/prompt.py (Prompt with {{variable}} templates)
-- [ ] chimera/core/loop.py (ReAct loop)
-- [ ] chimera/core/agent.py (Agent = Provider + Tools + Loop + Prompt)
-- [ ] Tests
+### Phase 5: Agent Core -- DONE
+- [x] chimera/core/context.py (Context)
+- [x] chimera/core/prompt.py (Prompt with {{variable}} templates)
+- [x] chimera/core/loop.py (ReAct loop)
+- [x] chimera/core/agent.py (Agent = Provider + Tools + Loop + Prompt)
+- [x] 28 tests passing
 
-### Phase 6: Synthesis Layer -- NOT STARTED
-- [ ] chimera/training/spec.py (Spec from string/file/tests)
-- [ ] chimera/training/architecture.py (Architecture, Layer with deps)
-- [ ] chimera/training/constraint.py (tests_pass, coverage, complexity)
-- [ ] chimera/training/strategies/convergence.py (TestConvergence)
-- [ ] chimera/training/trainer.py (Trainer)
-- [ ] chimera/training/callbacks.py (Checkpoint, CostLimit, ProgressBar)
-- [ ] Tests
+### Phase 6: Synthesis Layer -- DONE
+- [x] chimera/training/spec.py (Spec from string/file/tests)
+- [x] chimera/training/architecture.py (Architecture, Layer with deps, topological sort)
+- [x] chimera/training/constraint.py (tests_pass, min_pass_rate, max_files, max_total_lines, custom)
+- [x] chimera/training/strategies/base.py (Strategy ABC, EpochResult, SynthesisResult, Callback)
+- [x] chimera/training/strategies/convergence.py (TestConvergence with checkpointing/rollback)
+- [x] chimera/training/trainer.py (Trainer)
+- [x] chimera/training/callbacks.py (CostLimit, EpochCheckpoint, HistoryRecorder)
+- [x] 81 tests passing (spec: 21, constraints: 30, strategy: 16, trainer: 14)
 
-### Phase 7: Integration -- NOT STARTED
-- [ ] chimera/__init__.py (public API + chimera.synthesize() one-liner)
-- [ ] tests/test_integration.py (end-to-end with mock provider)
+### Phase 7: Integration -- DONE
+- [x] chimera/__init__.py (public API with 35 exports + chimera.synthesize() one-liner)
+- [x] tests/test_integration.py (end-to-end with mock provider, gradual convergence, one-liner)
+- [x] 3 tests passing
 
-### Phase 8: CLI -- NOT STARTED
-- [ ] chimera/cli/main.py
-- [ ] chimera/cli/synthesize.py
+### Phase 8: CLI -- DONE
+- [x] chimera/cli/main.py (argparse with synthesize/synth subcommand)
+- [x] 8 tests passing
 
-## Test Count: 29 passing (as of Phases 1-3)
+## Test Count: 163 passing (all phases complete)
 
 ## Key Files
 
