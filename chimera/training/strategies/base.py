@@ -20,8 +20,9 @@ class EpochResult:
     passed: int
     total: int
     agent_output: str
-    improved: bool
+    improved: bool = False
     cost: float = 0.0
+    checkpoint_id: str | None = None
 
 
 @dataclass
@@ -42,8 +43,19 @@ class Callback(ABC):
     def on_synthesis_start(self) -> None:
         """Called when synthesis begins."""
 
-    def on_epoch_end(self, epoch: EpochResult) -> None:
-        """Called after each epoch."""
+    def on_epoch_start(self, epoch: int) -> None:
+        """Called before each epoch."""
+
+    def on_epoch_end(self, epoch: int | EpochResult, result: EpochResult | None = None) -> bool | None:
+        """Called after each epoch.
+
+        Supports both signatures:
+        - on_epoch_end(epoch_num, epoch_result)  -- original Phase 6-8 API
+        - on_epoch_end(epoch_result)              -- extension API
+
+        Return False to stop synthesis early. Return True or None to continue.
+        """
+        return True
 
     def on_synthesis_end(self, result: SynthesisResult) -> None:
         """Called when synthesis completes."""

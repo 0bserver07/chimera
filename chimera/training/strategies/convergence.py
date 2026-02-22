@@ -32,6 +32,17 @@ class TestConvergence(Strategy):
         self.max_iterations = max_iterations
         self.patience = patience
 
+    def _build_task(self, spec: Spec, history: list[EpochResult]) -> str:
+        """Build the task prompt, incorporating failure history if available."""
+        task = spec.to_prompt()
+        if history:
+            last = history[-1]
+            task += (
+                f"\n\nPrevious attempt: {last.passed}/{last.total} tests passed "
+                f"({last.pass_rate:.0%}).\nFix the failing tests."
+            )
+        return task
+
     def run(
         self,
         agent: Agent,
@@ -41,6 +52,7 @@ class TestConvergence(Strategy):
         callbacks: list[Callback] | None = None,
     ) -> SynthesisResult:
         callbacks = callbacks or []
+        constraints = constraints or []
         for cb in callbacks:
             cb.on_synthesis_start()
 
@@ -51,11 +63,11 @@ class TestConvergence(Strategy):
         total_cost = 0.0
 
         for epoch_num in range(1, self.max_iterations + 1):
+            for cb in callbacks:
+                cb.on_epoch_start(epoch_num)
+
             # Build task prompt -- include test failures if we have history
-            task = spec.to_prompt()
-            if history:
-                last = history[-1]
-                task += f"\n\nPrevious pass rate: {last.pass_rate:.0%}. Fix remaining failures."
+            task = self._build_task(spec, history)
 
             # Run agent
             agent_result = agent.run(task, env)
@@ -77,8 +89,12 @@ class TestConvergence(Strategy):
             )
             history.append(epoch)
 
+            # Call on_epoch_end with (epoch_num, epoch_result) signature
+            should_continue = True
             for cb in callbacks:
-                cb.on_epoch_end(epoch)
+                ret = cb.on_epoch_end(epoch_num, epoch)
+                if ret is False:
+                    should_continue = False
 
             if improved:
                 best_pass_rate = test_result.pass_rate
@@ -90,14 +106,37 @@ class TestConvergence(Strategy):
                 if best_checkpoint is not None and test_result.pass_rate < best_pass_rate:
                     env.restore(best_checkpoint)
 
-            # Converged?
-            if test_result.all_passed:
+            # Check constraints
+            all_tests_pass = test_result.all_passed
+            constraints_ok = True
+            if constraints and all_tests_pass:
+                for constraint in constraints:
+                    cr = constraint.evaluate(env)
+                    if not cr.satisfied:
+                        constraints_ok = False
+
+            # Converged? (all tests pass AND all constraints satisfied)
+            if all_tests_pass and constraints_ok:
                 result = SynthesisResult(
                     converged=True,
                     iterations=epoch_num,
                     total_cost=total_cost,
                     best_pass_rate=best_pass_rate,
                     history=history,
+                )
+                for cb in callbacks:
+                    cb.on_synthesis_end(result)
+                return result
+
+            # Callback requested stop?
+            if not should_continue:
+                result = SynthesisResult(
+                    converged=False,
+                    iterations=epoch_num,
+                    total_cost=total_cost,
+                    best_pass_rate=best_pass_rate,
+                    history=history,
+                    failure_reason="Stopped by callback",
                 )
                 for cb in callbacks:
                     cb.on_synthesis_end(result)

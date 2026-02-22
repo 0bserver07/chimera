@@ -2,6 +2,7 @@
 
 Usage::
 
+    chimera synthesize --spec "Build a calculator"
     chimera eval --benchmark swe-bench --dataset ./data.json --limit 10 --output results.json
     chimera bench --suite custom --tasks-dir ./tasks/ --output results.json
 """
@@ -20,6 +21,20 @@ def build_parser() -> argparse.ArgumentParser:
         description="Chimera: AI-powered code synthesis framework",
     )
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
+
+    # ---- synthesize subcommand ----
+    synth_parser = subparsers.add_parser(
+        "synthesize",
+        help="Synthesize code from a specification",
+    )
+    _add_synthesize_args(synth_parser)
+
+    # ---- synth alias ----
+    synth_alias = subparsers.add_parser(
+        "synth",
+        help="Alias for 'synthesize'",
+    )
+    _add_synthesize_args(synth_alias)
 
     # ---- eval subcommand ----
     eval_parser = subparsers.add_parser(
@@ -72,6 +87,71 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _add_synthesize_args(parser: argparse.ArgumentParser) -> None:
+    """Add common arguments for synthesize/synth subcommands."""
+    parser.add_argument(
+        "--spec",
+        default=None,
+        help="Specification text or path to spec file",
+    )
+    parser.add_argument(
+        "--tests",
+        default=None,
+        help="Path to test directory",
+    )
+    parser.add_argument(
+        "--output",
+        default="./output",
+        help="Output directory (default: ./output)",
+    )
+    parser.add_argument(
+        "--model",
+        default="claude-sonnet-4-20250514",
+        help="Model to use (default: claude-sonnet-4-20250514)",
+    )
+    parser.add_argument(
+        "--provider",
+        default="anthropic",
+        help="Provider to use (default: anthropic)",
+    )
+    parser.add_argument(
+        "--strategy",
+        default="convergence",
+        help="Strategy to use (default: convergence)",
+    )
+    parser.add_argument(
+        "--max-iterations",
+        type=int,
+        default=50,
+        help="Maximum iterations (default: 50)",
+    )
+    parser.add_argument(
+        "--patience",
+        type=int,
+        default=5,
+        help="Patience before stopping (default: 5)",
+    )
+    parser.add_argument(
+        "--max-cost",
+        type=float,
+        default=None,
+        help="Maximum cost budget",
+    )
+
+
+# Backward-compatible alias for Phase 6-8 tests
+create_parser = build_parser
+
+
+def run_synthesize(args: argparse.Namespace) -> int:
+    """Execute the synthesize command."""
+    if not args.spec and not args.tests:
+        print("Error: at least one of --spec or --tests is required.", file=sys.stderr)
+        return 1
+    print(f"Running synthesis: spec={args.spec}", file=sys.stderr)
+    return 0
+
+
 def run_eval(args: argparse.Namespace) -> int:
     """Execute the eval command."""
     print(f"Running evaluation: benchmark={args.benchmark}", file=sys.stderr)
@@ -103,9 +183,11 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.command is None:
         parser.print_help()
-        return 1
+        return 0
 
-    if args.command == "eval":
+    if args.command in ("synthesize", "synth"):
+        return run_synthesize(args)
+    elif args.command == "eval":
         return run_eval(args)
     elif args.command == "bench":
         return run_bench(args)
