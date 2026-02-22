@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import time
 
 import pytest
 
 from chimera.env.session import SessionMixin
+from chimera.types import CommandResult
 
 # Skip all tests if tmux is not installed
 pytestmark = pytest.mark.skipif(
@@ -99,3 +101,86 @@ class TestNamedShells:
         s = ConcreteSession()
         with pytest.raises(RuntimeError, match="No active session"):
             s.create_shell("test")
+
+
+class TestRunInSession:
+    def test_simple_echo(self):
+        s = ConcreteSession()
+        s.start_session()
+        try:
+            result = s.run_in_session("echo hello")
+            assert result.success
+            assert "hello" in result.stdout
+        finally:
+            s.end_session()
+
+    def test_exit_code_captured(self):
+        s = ConcreteSession()
+        s.start_session()
+        try:
+            result = s.run_in_session("false")
+            assert not result.success
+            assert result.exit_code != 0
+        finally:
+            s.end_session()
+
+    def test_cd_persists(self):
+        s = ConcreteSession()
+        s.start_session()
+        try:
+            s.run_in_session("cd /tmp")
+            result = s.run_in_session("pwd")
+            assert result.success
+            # /tmp may resolve to /private/tmp on macOS
+            assert "tmp" in result.stdout
+        finally:
+            s.end_session()
+
+    def test_export_persists(self):
+        s = ConcreteSession()
+        s.start_session()
+        try:
+            s.run_in_session("export CHIMERA_TEST_VAR=hello42")
+            result = s.run_in_session("echo $CHIMERA_TEST_VAR")
+            assert "hello42" in result.stdout
+        finally:
+            s.end_session()
+
+    def test_named_shells_are_independent(self):
+        s = ConcreteSession()
+        s.start_session()
+        try:
+            s.create_shell("other")
+            s.run_in_session("cd /tmp", shell_name="main")
+            result = s.run_in_session("pwd", shell_name="other")
+            # 'other' shell should NOT be in /tmp
+            assert result.stdout.strip() != "/tmp"
+            assert result.stdout.strip() != "/private/tmp"
+        finally:
+            s.end_session()
+
+    def test_timeout(self):
+        s = ConcreteSession()
+        s.start_session()
+        try:
+            result = s.run_in_session("sleep 60", timeout=1)
+            assert result.exit_code == 124
+            assert "timed out" in result.stderr.lower()
+        finally:
+            s.end_session()
+
+    def test_run_without_session_raises(self):
+        s = ConcreteSession()
+        with pytest.raises(RuntimeError, match="No active session"):
+            s.run_in_session("echo hi")
+
+    def test_multiline_output(self):
+        s = ConcreteSession()
+        s.start_session()
+        try:
+            result = s.run_in_session("echo line1; echo line2; echo line3")
+            assert "line1" in result.stdout
+            assert "line2" in result.stdout
+            assert "line3" in result.stdout
+        finally:
+            s.end_session()
