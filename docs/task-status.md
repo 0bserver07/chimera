@@ -1,7 +1,7 @@
 # Chimera — Task Status
 
-> 57 tasks across 13 phases. TDD approach: tests first, then implementation.
-> Sources: `docs/plans/2026-02-20-chimera-implementation-plan.md`, `docs/plans/2026-02-20-chimera-extension-plan.md`
+> 66 tasks across 14 phases. TDD approach: tests first, then implementation.
+> Sources: `docs/plans/2026-02-20-chimera-implementation-plan.md`, `docs/plans/2026-02-20-chimera-extension-plan.md`, `docs/plans/2026-02-22-persistent-shell-plan.md`
 
 ## Phases 1–8: Core Framework (Original)
 
@@ -70,7 +70,19 @@
 | 56 | 13 - Constraints | Extended constraints | `chimera/training/constraint.py` | 11 | DONE |
 | 57 | 13 - Callbacks | ProgressBar | `chimera/training/callbacks.py` | 4 | DONE |
 
-**Total: 367 tests passing** (as of 2026-02-22)
+## Phase 14: Persistent Shell
+
+| # | Phase | Task | Files | Tests | Status |
+|---|-------|------|-------|-------|--------|
+| 58 | 14 - Persistent Shell | SessionMixin core | `chimera/env/session.py` | 5 | DONE |
+| 59 | 14 - Persistent Shell | Named shells | `chimera/env/session.py` | 4 | DONE |
+| 60 | 14 - Persistent Shell | run_in_session | `chimera/env/session.py` | 8 | DONE |
+| 61 | 14 - Persistent Shell | Environment ABC update | `chimera/env/base.py` | 1 | DONE |
+| 62 | 14 - Persistent Shell | LocalEnvironment integration | `chimera/env/local.py` | 8 | DONE |
+| 63 | 14 - Persistent Shell | GitEnvironment inheritance | `tests/test_env_git.py` | 1 | DONE |
+| 64 | 14 - Persistent Shell | Package exports | `chimera/env/__init__.py`, `chimera/__init__.py` | 2 | DONE |
+
+**Total: 396 tests passing** (as of 2026-02-22)
 
 ---
 
@@ -91,6 +103,7 @@
 | 11 | Composition, Loops, Strategies | 37–45 | 27 | DONE |
 | 12 | Evaluation Layer | 46–51 | 54 | DONE |
 | 13 | Environments, CLI, Polish | 52–57 | 36 | DONE |
+| 14 | Persistent Shell | 58–64 | 29 | DONE |
 
 ---
 
@@ -101,7 +114,6 @@
 - [ ] `chimera.synthesize()` one-liner with provider auto-detection
 - [ ] Plugin/extension system
 - [ ] Repository mapping (aider-style)
-- [ ] Session persistence and branching
 - [ ] Multi-file edit transactions
 - [ ] Cost tracking and budgets
 - [ ] Documentation site
