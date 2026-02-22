@@ -69,3 +69,14 @@ class TestGitEnvironmentCheckpoint:
         env.restore(cp)
         with pytest.raises(FileNotFoundError):
             env.read_file("new_file.txt")
+
+
+def test_git_env_has_session_attr():
+    """GitEnvironment inherits session support from LocalEnvironment."""
+    import shutil
+    import tempfile
+    from chimera.env.git_env import GitEnvironment
+    with tempfile.TemporaryDirectory() as tmpdir:
+        env = GitEnvironment(workdir=tmpdir, session=False)
+        assert hasattr(env, "has_session")
+        assert env.has_session is False
