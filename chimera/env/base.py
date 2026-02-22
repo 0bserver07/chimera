@@ -29,8 +29,15 @@ class Environment(ABC):
         """List files matching a glob pattern."""
 
     @abstractmethod
-    def run_command(self, cmd: str, timeout: int = 120) -> CommandResult:
-        """Run a shell command in the workspace."""
+    def run_command(self, cmd: str, timeout: int = 120, shell_name: str = "main") -> CommandResult:
+        """Run a shell command in the workspace.
+
+        Args:
+            cmd: The command to execute.
+            timeout: Max seconds to wait.
+            shell_name: Target shell when a persistent session is active.
+                        Ignored when no session is running.
+        """
 
     @abstractmethod
     def run_tests(self) -> TestResult:

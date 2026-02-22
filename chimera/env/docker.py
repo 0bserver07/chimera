@@ -106,7 +106,7 @@ class DockerEnvironment(Environment):
     # Command execution
     # ------------------------------------------------------------------
 
-    def run_command(self, cmd: str, timeout: int = 120) -> CommandResult:
+    def run_command(self, cmd: str, timeout: int = 120, shell_name: str = "main") -> CommandResult:
         if self._container is None:
             return CommandResult(stdout="", stderr="No container", exit_code=1)
         exit_code, output = self._container.exec_run(
