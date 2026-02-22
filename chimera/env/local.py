@@ -7,10 +7,11 @@ import subprocess
 from pathlib import Path
 
 from chimera.env.base import Environment
+from chimera.env.session import SessionMixin
 from chimera.types import CommandResult, TestResult
 
 
-class LocalEnvironment(Environment):
+class LocalEnvironment(SessionMixin, Environment):
     """Local filesystem environment with git-based checkpointing."""
 
     def __init__(
@@ -18,19 +19,24 @@ class LocalEnvironment(Environment):
         workdir: str,
         test_cmd: str = "python -m pytest",
         timeout: int = 300,
+        session: bool = False,
     ) -> None:
         self.workdir = Path(workdir).resolve()
         self.test_cmd = test_cmd
         self.timeout = timeout
         self._checkpoint_dir: Path | None = None
+        self._use_session = session
 
     def setup(self) -> None:
         self.workdir.mkdir(parents=True, exist_ok=True)
         self._checkpoint_dir = self.workdir / ".chimera_checkpoints"
         self._checkpoint_dir.mkdir(exist_ok=True)
+        if self._use_session:
+            self.start_session()
 
     def cleanup(self) -> None:
-        pass  # Don't delete workdir -- user may want to inspect
+        if self.has_session:
+            self.end_session()
 
     def read_file(self, path: str) -> str:
         full = self.workdir / path
@@ -54,6 +60,8 @@ class LocalEnvironment(Environment):
         return sorted(results)
 
     def run_command(self, cmd: str, timeout: int | None = None, shell_name: str = "main") -> CommandResult:
+        if self.has_session:
+            return self.run_in_session(cmd, shell_name=shell_name, timeout=timeout or self.timeout)
         try:
             result = subprocess.run(
                 cmd,
