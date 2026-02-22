@@ -1,39 +1,37 @@
-"""Trainer — the top-level orchestrator for code synthesis.
-
-The top-level orchestrator for code synthesis:
-    trainer.synthesize() = model.fit()
-"""
-
 from __future__ import annotations
 
-from chimera.core.agent import Agent
-from chimera.env.base import Environment
-from chimera.training.architecture import Architecture
-from chimera.training.constraint import Constraint
-from chimera.training.spec import Spec
-from chimera.training.strategies.base import Callback, Strategy, SynthesisResult
+from typing import TYPE_CHECKING
+
+from chimera.training.strategies.base import Callback, SynthesisResult
 from chimera.training.strategies.convergence import TestConvergence
+
+if TYPE_CHECKING:
+    from chimera.core.agent import Agent
+    from chimera.env.base import Environment
+    from chimera.training.architecture import Architecture
+    from chimera.training.constraint import Constraint
+    from chimera.training.spec import Spec
+    from chimera.training.strategies.base import Strategy
 
 
 class Trainer:
-    """The top-level orchestrator. The top-level orchestrator for code synthesis.
+    """Ties together Architecture + Spec + Agent + Strategy + Constraints + Environment.
 
-    Trainer = Architecture + Spec + Agent + Environment.
-    trainer.synthesize() = model.fit()
+    The main orchestrator for code synthesis.
     """
 
     def __init__(
         self,
+        architecture: Architecture,
         spec: Spec,
         agent: Agent,
         env: Environment,
-        architecture: Architecture | None = None,
         constraints: list[Constraint] | None = None,
     ) -> None:
+        self.architecture = architecture
         self.spec = spec
         self.agent = agent
         self.env = env
-        self.architecture = architecture
         self.constraints = constraints or []
 
     def synthesize(
@@ -41,13 +39,8 @@ class Trainer:
         strategy: Strategy | None = None,
         callbacks: list[Callback] | None = None,
     ) -> SynthesisResult:
-        """Synthesize a codebase from the spec.
-
-        This is the core verb. Like model.fit() in ML frameworks.
-        """
+        """Run synthesis with the given strategy."""
         strategy = strategy or TestConvergence()
-        callbacks = callbacks or []
-
         return strategy.run(
             agent=self.agent,
             spec=self.spec,
