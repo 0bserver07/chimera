@@ -20,3 +20,12 @@ def test_environment_is_protocol():
 
     env = MyEnv()
     assert isinstance(env, Environment)
+
+
+def test_run_command_accepts_shell_name():
+    """Verify Environment.run_command signature includes shell_name."""
+    import inspect
+    from chimera.env.base import Environment
+    sig = inspect.signature(Environment.run_command)
+    params = list(sig.parameters.keys())
+    assert "shell_name" in params

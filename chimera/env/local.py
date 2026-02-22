@@ -53,7 +53,7 @@ class LocalEnvironment(Environment):
                 results.append(str(p.relative_to(self.workdir)))
         return sorted(results)
 
-    def run_command(self, cmd: str, timeout: int | None = None) -> CommandResult:
+    def run_command(self, cmd: str, timeout: int | None = None, shell_name: str = "main") -> CommandResult:
         try:
             result = subprocess.run(
                 cmd,
