@@ -30,7 +30,7 @@ from chimera.core.loops import PlanAndExecute, Reflexion, TreeOfThought
 from chimera.composition import Ensemble, Pipeline, Supervisor
 
 # Environment
-from chimera.env import Environment, GitEnvironment, LocalEnvironment
+from chimera.env import Environment, GitEnvironment, LocalEnvironment, SessionMixin
 
 # Providers
 from chimera.providers import Provider, Response, StreamEvent, create_provider
@@ -111,6 +111,7 @@ __all__ = [
     "Environment",
     "GitEnvironment",
     "LocalEnvironment",
+    "SessionMixin",
     # Providers
     "Provider",
     "Response",
