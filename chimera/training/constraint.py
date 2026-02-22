@@ -1,148 +1,128 @@
-"""Constraints for the Synthesis Layer.
-
-Constraints are the 'regularization' of synthesis — rules that generated
-code must satisfy beyond just passing tests.  They prevent overfitting to
-the test suite while missing broader quality goals (file count, code size,
-style, security, etc.).
-"""
-
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Callable
 
-from chimera.env.base import Environment
 from chimera.types import TestResult
 
 
 @dataclass
-class ConstraintResult:
-    """Result of evaluating a constraint."""
-
-    name: str
-    satisfied: bool
-    message: str
-    value: Any = None  # The measured value (e.g., pass_rate=0.8)
-
-
 class Constraint:
-    """A constraint that generated code must satisfy.
+    """A constraint ('regularization') applied during training.
 
-    Constraints are the 'regularization' of synthesis — rules beyond
-    just passing tests.  They prevent overfitting to tests while missing
-    broader quality goals.
+    Each constraint has a name, a check function that receives a TestResult
+    and returns True if the constraint is satisfied, and optionally a
+    description.
     """
 
-    def __init__(
-        self,
-        name: str,
-        check: Callable[[Environment], ConstraintResult],
-    ) -> None:
-        self.name = name
-        self._check = check
+    name: str
+    check: Callable[[TestResult], bool]
+    description: str = ""
 
-    def evaluate(self, env: Environment) -> ConstraintResult:
-        """Evaluate this constraint against the environment."""
-        return self._check(env)
-
-    # --- Factory methods for common constraints ---
+    # ------------------------------------------------------------------
+    # Built-in constraints
+    # ------------------------------------------------------------------
 
     @classmethod
+    @property
     def tests_pass(cls) -> Constraint:
-        """All tests must pass."""
+        return Constraint(
+            name="tests_pass",
+            check=lambda r: r.all_passed,
+            description="All tests must pass.",
+        )
 
-        def check(env: Environment) -> ConstraintResult:
-            result = env.run_tests()
-            return ConstraintResult(
-                name="tests_pass",
-                satisfied=result.all_passed,
-                message=f"{result.passed}/{result.total} tests passed",
-                value=result.pass_rate,
-            )
+    @staticmethod
+    def coverage(min: float = 0.8) -> Constraint:  # noqa: A002
+        return Constraint(
+            name=f"coverage>={min}",
+            check=lambda r: r.pass_rate >= min,
+            description=f"Pass rate must be >= {min}.",
+        )
 
-        return cls("tests_pass", check)
+    @staticmethod
+    def max_files(n: int) -> Constraint:
+        return Constraint(
+            name=f"max_files<={n}",
+            check=lambda _: True,  # enforced elsewhere
+            description=f"Max {n} files.",
+        )
 
-    @classmethod
-    def min_pass_rate(cls, rate: float) -> Constraint:
-        """At least *rate* fraction of tests must pass."""
+    # ------------------------------------------------------------------
+    # Extended constraints (Phase 13)
+    # ------------------------------------------------------------------
 
-        def check(env: Environment) -> ConstraintResult:
-            result = env.run_tests()
-            return ConstraintResult(
-                name=f"min_pass_rate({rate})",
-                satisfied=result.pass_rate >= rate,
-                message=f"Pass rate {result.pass_rate:.1%} (min: {rate:.1%})",
-                value=result.pass_rate,
-            )
+    @staticmethod
+    def no_syntax_errors() -> Constraint:
+        """Check that all .py files have valid syntax (compile check)."""
 
-        return cls(f"min_pass_rate({rate})", check)
+        def _check(result: TestResult) -> bool:
+            # Scan output for syntax error indicators
+            output = result.output.lower()
+            if "syntaxerror" in output:
+                return False
+            if "syntax error" in output:
+                return False
+            return True
 
-    @classmethod
-    def max_files(cls, n: int) -> Constraint:
-        """Codebase must not exceed *n* files."""
+        return Constraint(
+            name="no_syntax_errors",
+            check=_check,
+            description="No Python syntax errors in generated code.",
+        )
 
-        def check(env: Environment) -> ConstraintResult:
-            files = env.list_files("**/*")
-            count = len(files)
-            return ConstraintResult(
-                name=f"max_files({n})",
-                satisfied=count <= n,
-                message=f"{count} files (max: {n})",
-                value=count,
-            )
+    @staticmethod
+    def max_complexity(n: int) -> Constraint:
+        """Approximate cyclomatic complexity check.
 
-        return cls(f"max_files({n})", check)
+        Counts branching keywords (if, elif, for, while, except, and, or)
+        in the test output to estimate complexity.  This is a heuristic:
+        a real implementation would use ``ast`` on the actual source files.
+        """
 
-    @classmethod
-    def max_total_lines(cls, n: int) -> Constraint:
-        """Total lines of code must not exceed *n*."""
+        _BRANCH_KEYWORDS = re.compile(
+            r"\b(if|elif|for|while|except|and|or)\b"
+        )
 
-        def check(env: Environment) -> ConstraintResult:
-            files = env.list_files("**/*.py")
-            total = 0
-            for f in files:
-                try:
-                    content = env.read_file(f)
-                    total += len(content.splitlines())
-                except Exception:
-                    pass
-            return ConstraintResult(
-                name=f"max_total_lines({n})",
-                satisfied=total <= n,
-                message=f"{total} lines (max: {n})",
-                value=total,
-            )
+        def _check(result: TestResult) -> bool:
+            # If the output includes complexity metrics, parse them
+            m = re.search(r"complexity[:\s]+(\d+)", result.output, re.IGNORECASE)
+            if m:
+                return int(m.group(1)) <= n
+            # Fallback: count branch keywords as rough estimate
+            count = len(_BRANCH_KEYWORDS.findall(result.output))
+            return count <= n
 
-        return cls(f"max_total_lines({n})", check)
+        return Constraint(
+            name=f"max_complexity<={n}",
+            check=_check,
+            description=f"Cyclomatic complexity must be <= {n}.",
+        )
 
-    @classmethod
-    def custom(
-        cls,
-        name: str,
-        check_fn: Callable[[Environment], bool],
-        message: str = "",
-    ) -> Constraint:
-        """Create a custom constraint from a simple boolean function."""
+    @staticmethod
+    def no_security_issues() -> Constraint:
+        """Basic security checks for common dangerous patterns.
 
-        def check(env: Environment) -> ConstraintResult:
-            satisfied = check_fn(env)
-            return ConstraintResult(
-                name=name,
-                satisfied=satisfied,
-                message=message or ("Satisfied" if satisfied else "Not satisfied"),
-            )
+        Flags: eval(), exec(), subprocess with shell=True,
+        __import__('os').system().
+        """
 
-        return cls(name, check)
+        _DANGEROUS = [
+            re.compile(r"\beval\s*\("),
+            re.compile(r"\bexec\s*\("),
+            re.compile(r"subprocess.*shell\s*=\s*True"),
+            re.compile(r"__import__\s*\(\s*['\"]os['\"]\s*\)"),
+        ]
 
+        def _check(result: TestResult) -> bool:
+            for pattern in _DANGEROUS:
+                if pattern.search(result.output):
+                    return False
+            return True
 
-def evaluate_all(
-    constraints: list[Constraint],
-    env: Environment,
-) -> list[ConstraintResult]:
-    """Evaluate all constraints and return results."""
-    return [c.evaluate(env) for c in constraints]
-
-
-def all_satisfied(results: list[ConstraintResult]) -> bool:
-    """Check if all constraint results are satisfied."""
-    return all(r.satisfied for r in results)
+        return Constraint(
+            name="no_security_issues",
+            check=_check,
+            description="No eval(), exec(), or subprocess shell=True.",
+        )

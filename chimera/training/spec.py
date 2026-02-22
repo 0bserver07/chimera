@@ -1,18 +1,25 @@
-"""Spec — the specification for what to synthesize."""
-
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 
 @dataclass
 class Spec:
-    """The specification -- what to synthesize. Acts as the 'loss function'."""
+    """Specification for what to synthesize -- the 'loss function'.
 
-    text: str
+    A Spec can be constructed from a text description, a file path, or
+    a tests directory.  The to_prompt() method renders it as a prompt string
+    that an agent can act on.
+    """
+
+    text: str = ""
+    files: list[str] = field(default_factory=list)
     tests_dir: str | None = None
-    source_file: str | None = None
+
+    # ------------------------------------------------------------------
+    # Constructors
+    # ------------------------------------------------------------------
 
     @classmethod
     def from_string(cls, text: str) -> Spec:
@@ -21,19 +28,22 @@ class Spec:
     @classmethod
     def from_file(cls, path: str) -> Spec:
         content = Path(path).read_text()
-        return cls(text=content, source_file=path)
+        return cls(text=content, files=[path])
 
     @classmethod
-    def from_tests(cls, tests_dir: str, description: str = "") -> Spec:
-        """Tests ARE the spec."""
-        return cls(
-            text=description or f"Pass all tests in {tests_dir}",
-            tests_dir=tests_dir,
-        )
+    def from_tests(cls, tests_dir: str) -> Spec:
+        return cls(tests_dir=tests_dir)
+
+    # ------------------------------------------------------------------
+    # Rendering
+    # ------------------------------------------------------------------
 
     def to_prompt(self) -> str:
-        """Convert spec to a prompt string for the agent."""
-        parts = [self.text]
+        parts: list[str] = []
+        if self.text:
+            parts.append(self.text)
         if self.tests_dir:
-            parts.append(f"\nTest directory: {self.tests_dir}")
-        return "\n".join(parts)
+            parts.append(f"Tests directory: {self.tests_dir}")
+        if self.files:
+            parts.append(f"Spec files: {', '.join(self.files)}")
+        return "\n\n".join(parts) if parts else "No specification provided."

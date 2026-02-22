@@ -1,0 +1,1 @@
+"""Chimera command-line interface."""
