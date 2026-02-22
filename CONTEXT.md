@@ -31,10 +31,10 @@ Origin: The insight (from ML theory) that agentic coding is essentially ML -- th
 ```
 Layer 6: CLI          -- chimera synthesize / chimera eval / chimera bench
 Layer 5: Synthesis    -- Trainer, Strategy, Spec, Architecture, Constraint
-Layer 4: Evaluation   -- Harness, Metrics, AntiOverfit
-Layer 3: Agent        -- Agent, Tool, Loop, Prompt, Context
-Layer 2: Provider     -- LLM backends (Claude, GPT, Gemini, local)
-Layer 1: Environment  -- Sandbox, Filesystem, Docker, Git, TestRunner
+Layer 4: Evaluation   -- Harness, Metrics, AntiOverfit, Benchmarks (SWE-bench, HumanEval, Custom)
+Layer 3: Agent        -- Agent, Tool, Loop (ReAct, PlanAndExecute, Reflexion, TreeOfThought), Prompt, Context
+Layer 2: Provider     -- LLM backends (Claude, GPT, Gemini, Ollama, OpenAI-compatible)
+Layer 1: Environment  -- Local, Docker, Git
 ```
 
 ## API at Three Levels
@@ -89,28 +89,83 @@ results = harness.run(agent=MyAgent())
 ### Phase 6: Synthesis Layer -- DONE
 - [x] chimera/training/spec.py (Spec from string/file/tests)
 - [x] chimera/training/architecture.py (Architecture, Layer with deps, topological sort)
-- [x] chimera/training/constraint.py (tests_pass, min_pass_rate, max_files, max_total_lines, custom)
+- [x] chimera/training/constraint.py (tests_pass, min_pass_rate, max_files, max_total_lines, custom, no_syntax_errors, max_complexity, no_security_issues)
 - [x] chimera/training/strategies/base.py (Strategy ABC, EpochResult, SynthesisResult, Callback)
 - [x] chimera/training/strategies/convergence.py (TestConvergence with checkpointing/rollback)
 - [x] chimera/training/trainer.py (Trainer)
-- [x] chimera/training/callbacks.py (CostLimit, EpochCheckpoint, HistoryRecorder)
-- [x] 81 tests passing (spec: 21, constraints: 30, strategy: 16, trainer: 14)
+- [x] chimera/training/callbacks.py (CostLimit, EpochCheckpoint, HistoryRecorder, ProgressBar)
+- [x] 81 tests passing
 
 ### Phase 7: Integration -- DONE
-- [x] chimera/__init__.py (public API with 35 exports + chimera.synthesize() one-liner)
+- [x] chimera/__init__.py (public API with 60+ exports)
 - [x] tests/test_integration.py (end-to-end with mock provider, gradual convergence, one-liner)
 - [x] 3 tests passing
 
 ### Phase 8: CLI -- DONE
-- [x] chimera/cli/main.py (argparse with synthesize/synth subcommand)
+- [x] chimera/cli/main.py (argparse with synthesize/synth/eval/bench subcommands)
 - [x] 8 tests passing
 
-## Test Count: 163 passing (all phases complete)
+### Phase 9: Extended Tools + Internals -- DONE
+- [x] chimera/tools/edit.py (EditFileTool -- exact string replacement)
+- [x] chimera/tools/search.py (SearchTool -- regex across files)
+- [x] chimera/tools/list_files.py (ListFilesTool -- directory listing with glob)
+- [x] chimera/tools/test.py (TestTool -- run pytest from agent)
+- [x] chimera/tools/web_fetch.py (WebFetchTool -- HTTP fetch, requires httpx)
+- [x] chimera/tools/git.py (GitTool -- git commands with destructive blocking)
+- [x] chimera/tools/replace_in_file.py (ReplaceInFileTool -- regex replace)
+- [x] chimera/tools/delegate.py (DelegateTool -- sub-agent dispatch)
+- [x] chimera/core/approval.py (ApprovalPolicy, AutoApprove, AlwaysDeny, AllowList)
+- [x] chimera/core/tool_group.py (ToolGroup, DEFAULT_TOOLS)
+- [x] chimera/core/loop_detection.py (LoopDetector -- sliding window MD5 signatures)
+- [x] chimera/core/compression.py (ContextCompressor -- keep-first/keep-last)
+- [x] chimera/core/streaming.py (StreamHandler, PrintStreamHandler, CollectStreamHandler)
+- [x] 65 tests passing
+
+### Phase 10: Additional Providers -- DONE
+- [x] chimera/providers/openai.py (OpenAIProvider -- Chat Completions API)
+- [x] chimera/providers/google.py (GoogleProvider -- Gemini format conversion)
+- [x] chimera/providers/ollama.py (OllamaProvider -- httpx against /api/chat)
+- [x] chimera/providers/compatible.py (OpenAICompatibleProvider -- OpenRouter/vLLM/Groq)
+- [x] chimera/providers/factory.py (create_provider() with model name inference)
+- [x] 23 tests passing
+
+### Phase 11: Composition, Loops, Strategies -- DONE
+- [x] chimera/composition/pipeline.py (Pipeline -- sequential agent chaining)
+- [x] chimera/composition/ensemble.py (Ensemble -- parallel with best() selector)
+- [x] chimera/composition/supervisor.py (Supervisor -- coordinator + workers)
+- [x] chimera/core/loops/plan_execute.py (PlanAndExecute)
+- [x] chimera/core/loops/reflexion.py (Reflexion with reflection prompts)
+- [x] chimera/core/loops/tree_of_thought.py (TreeOfThought with candidate evaluation)
+- [x] chimera/training/strategies/curriculum.py (CurriculumStrategy -- topological sort)
+- [x] chimera/training/strategies/ensemble.py (EnsembleStrategy -- multiple attempts)
+- [x] chimera/training/strategies/passthrough.py (Passthrough -- single-shot)
+- [x] 27 tests passing
+
+### Phase 12: Evaluation Layer -- DONE
+- [x] chimera/eval/harness.py (Harness, Benchmark ABC, TaskEvalResult, EvalResult)
+- [x] chimera/eval/metrics.py (pass_at_k, avg_cost, avg_steps, resolve_rate)
+- [x] chimera/eval/anti_overfit.py (OverfitSignal, check_output_similarity, check_hardcoded_answers)
+- [x] chimera/eval/benchmarks/swe_bench.py (SWEBench adapter)
+- [x] chimera/eval/benchmarks/human_eval.py (HumanEval adapter)
+- [x] chimera/eval/benchmarks/custom.py (CustomBenchmark)
+- [x] 54 tests passing
+
+### Phase 13: Environments, CLI, Polish -- DONE
+- [x] chimera/env/docker.py (DockerEnvironment with container lifecycle)
+- [x] chimera/env/git_env.py (GitEnvironment -- git-based checkpointing)
+- [x] chimera/cli/main.py (eval and bench subcommands)
+- [x] chimera/training/constraint.py (no_syntax_errors, max_complexity, no_security_issues)
+- [x] chimera/training/callbacks.py (ProgressBar)
+- [x] 36 tests passing
+
+## Test Count: 367 passing (all 13 phases complete)
 
 ## Key Files
 
 - Design doc: `docs/plans/2026-02-20-chimera-framework-design.md`
-- Implementation plan: `docs/plans/2026-02-20-chimera-implementation-plan.md`
+- Implementation plan (phases 1-8): `docs/plans/2026-02-20-chimera-implementation-plan.md`
+- Extension plan (phases 9-13): `docs/plans/2026-02-20-chimera-extension-plan.md`
+- Task status: `docs/task-status.md`
 - This file: `CONTEXT.md`
 
 ## Ideas Ported From
