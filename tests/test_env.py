@@ -29,3 +29,13 @@ def test_run_command_accepts_shell_name():
     sig = inspect.signature(Environment.run_command)
     params = list(sig.parameters.keys())
     assert "shell_name" in params
+
+
+def test_session_mixin_importable_from_package():
+    from chimera.env import SessionMixin
+    assert SessionMixin is not None
+
+
+def test_session_mixin_importable_from_chimera():
+    import chimera
+    assert hasattr(chimera, "SessionMixin")

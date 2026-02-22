@@ -1,8 +1,9 @@
 from chimera.env.base import Environment
 from chimera.env.git_env import GitEnvironment
 from chimera.env.local import LocalEnvironment
+from chimera.env.session import SessionMixin
 
-__all__ = ["Environment", "GitEnvironment", "LocalEnvironment"]
+__all__ = ["Environment", "GitEnvironment", "LocalEnvironment", "SessionMixin"]
 
 # DockerEnvironment is conditionally available (requires `docker` package)
 try:
