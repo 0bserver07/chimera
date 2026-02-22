@@ -34,7 +34,7 @@ Layer 5: Synthesis    -- Trainer, Strategy, Spec, Architecture, Constraint
 Layer 4: Evaluation   -- Harness, Metrics, AntiOverfit, Benchmarks (SWE-bench, HumanEval, Custom)
 Layer 3: Agent        -- Agent, Tool, Loop (ReAct, PlanAndExecute, Reflexion, TreeOfThought), Prompt, Context
 Layer 2: Provider     -- LLM backends (Claude, GPT, Gemini, Ollama, OpenAI-compatible)
-Layer 1: Environment  -- Local, Docker, Git
+Layer 1: Environment  -- Local, Docker, Git (+ persistent shell via tmux)
 ```
 
 ## API at Three Levels
@@ -158,13 +158,24 @@ results = harness.run(agent=MyAgent())
 - [x] chimera/training/callbacks.py (ProgressBar)
 - [x] 36 tests passing
 
-## Test Count: 367 passing (all 13 phases complete)
+### Phase 14: Persistent Shell -- DONE
+- [x] chimera/env/session.py (SessionMixin -- tmux-based persistent shell sessions)
+- [x] Named shells (create, list) with independent tmux windows
+- [x] run_in_session() with sentinel-based output capture and polling
+- [x] Environment ABC updated with shell_name parameter
+- [x] LocalEnvironment integration (session=True routes through tmux)
+- [x] GitEnvironment inherits session support via MRO
+- [x] SessionMixin exported from chimera.env and chimera packages
+- [x] 29 tests passing
+
+## Test Count: 396 passing (all 14 phases complete)
 
 ## Key Files
 
 - Design doc: `docs/plans/2026-02-20-chimera-framework-design.md`
 - Implementation plan (phases 1-8): `docs/plans/2026-02-20-chimera-implementation-plan.md`
 - Extension plan (phases 9-13): `docs/plans/2026-02-20-chimera-extension-plan.md`
+- Persistent shell plan (phase 14): `docs/plans/2026-02-22-persistent-shell-plan.md`
 - Task status: `docs/task-status.md`
 - This file: `CONTEXT.md`
 
