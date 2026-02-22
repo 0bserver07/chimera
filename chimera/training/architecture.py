@@ -19,6 +19,20 @@ class Layer:
     constraints: list[str] = field(default_factory=list)
     code: str | None = None
 
+    @property
+    def level(self) -> str:
+        """Determine the abstraction level of this layer.
+
+        Returns one of: 'frozen', 'templated', 'guided', 'abstract'.
+        """
+        if self.frozen:
+            return "frozen"
+        if self.template is not None:
+            return "templated"
+        if self.description or self.constraints:
+            return "guided"
+        return "abstract"
+
 
 class Architecture:
     """Ordered collection of Layers with dependency management.
@@ -30,12 +44,52 @@ class Architecture:
     def __init__(self, layers: list[Layer] | None = None) -> None:
         self.layers: list[Layer] = layers or []
         self._by_name: dict[str, Layer] = {l.name: l for l in self.layers}
+        self._validate()
+
+    def _validate(self) -> None:
+        """Validate dependencies: no unknown layers, no cycles."""
+        known = set(self._by_name.keys())
+        for layer in self.layers:
+            for dep in layer.depends_on:
+                if dep not in known:
+                    raise ValueError(
+                        f"Layer '{layer.name}' depends on unknown layer '{dep}'"
+                    )
+        # Check for cycles using DFS
+        self._check_cycles()
+
+    def _check_cycles(self) -> None:
+        """Detect circular dependencies via DFS."""
+        WHITE, GRAY, BLACK = 0, 1, 2
+        color = {l.name: WHITE for l in self.layers}
+
+        def dfs(name: str) -> None:
+            color[name] = GRAY
+            layer = self._by_name[name]
+            for dep in layer.depends_on:
+                if color[dep] == GRAY:
+                    raise ValueError(
+                        f"circular dependency detected involving '{dep}'"
+                    )
+                if color[dep] == WHITE:
+                    dfs(dep)
+            color[name] = BLACK
+
+        for layer in self.layers:
+            if color[layer.name] == WHITE:
+                dfs(layer.name)
 
     def add(self, layer: Layer) -> None:
         self.layers.append(layer)
         self._by_name[layer.name] = layer
 
     def get(self, name: str) -> Layer:
+        return self._by_name[name]
+
+    def get_layer(self, name: str) -> Layer:
+        """Get a layer by name, raising KeyError if not found."""
+        if name not in self._by_name:
+            raise KeyError(f"No layer named '{name}'")
         return self._by_name[name]
 
     def build_order(self) -> list[Layer]:

@@ -16,6 +16,7 @@ class Spec:
     text: str = ""
     files: list[str] = field(default_factory=list)
     tests_dir: str | None = None
+    source_file: str | None = None
 
     # ------------------------------------------------------------------
     # Constructors
@@ -28,11 +29,16 @@ class Spec:
     @classmethod
     def from_file(cls, path: str) -> Spec:
         content = Path(path).read_text()
-        return cls(text=content, files=[path])
+        return cls(text=content, files=[path], source_file=path)
 
     @classmethod
-    def from_tests(cls, tests_dir: str) -> Spec:
-        return cls(tests_dir=tests_dir)
+    def from_tests(cls, tests_dir: str, description: str | None = None) -> Spec:
+        if description:
+            return cls(text=description, tests_dir=tests_dir)
+        return cls(
+            text=f"Make all tests in {tests_dir} pass.",
+            tests_dir=tests_dir,
+        )
 
     # ------------------------------------------------------------------
     # Rendering

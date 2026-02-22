@@ -22,10 +22,10 @@ class Trainer:
 
     def __init__(
         self,
-        architecture: Architecture,
         spec: Spec,
         agent: Agent,
         env: Environment,
+        architecture: Architecture | None = None,
         constraints: list[Constraint] | None = None,
     ) -> None:
         self.architecture = architecture
@@ -46,5 +46,5 @@ class Trainer:
             spec=self.spec,
             env=self.env,
             constraints=self.constraints,
-            callbacks=callbacks,
+            callbacks=callbacks or [],
         )
