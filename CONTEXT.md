@@ -186,7 +186,15 @@ results = harness.run(agent=MyAgent())
 - [x] Exported from chimera and chimera.tools packages
 - [x] 13 tests passing
 
-## Test Count: 429 passing (all 17 phases complete)
+### Phase 18: Tree Search Strategy -- DONE
+- [x] chimera/training/strategies/tree_search.py (SearchNode, TreeSearch, _clone_environment)
+- [x] Best-first search with parallel branch execution via ThreadPoolExecutor
+- [x] Environment cloning for isolated branch evaluation
+- [x] Custom branch_fn support, pruning, cost limits, callbacks
+- [x] Exported from chimera and chimera.training.strategies packages
+- [x] 19 tests passing
+
+## Test Count: 448 passing (all 18 phases complete)
 
 ## Key Files
 
