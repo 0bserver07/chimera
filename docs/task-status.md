@@ -1,6 +1,6 @@
 # Chimera — Task Status
 
-> 74 tasks across 17 phases. TDD approach: tests first, then implementation.
+> 82 tasks across 18 phases. TDD approach: tests first, then implementation.
 > Sources: `docs/plans/2026-02-20-chimera-implementation-plan.md`, `docs/plans/2026-02-20-chimera-extension-plan.md`, `docs/plans/2026-02-22-persistent-shell-plan.md`
 
 ## Phases 1–8: Core Framework (Original)
@@ -107,7 +107,18 @@
 | 73 | 17 - RepoMap | RepoMapTool integration | `tests/test_repo_map.py` | 4 | DONE |
 | 74 | 17 - RepoMap | Package exports | `chimera/__init__.py` | 2 | DONE |
 
-**Total: 429 tests passing** (as of 2026-02-23)
+## Phase 18: Tree Search Strategy
+
+| # | Phase | Task | Files | Tests | Status |
+|---|-------|------|-------|-------|--------|
+| 75 | 18 - Tree Search | SearchNode data model | `chimera/training/strategies/tree_search.py` | 3 | DONE |
+| 76 | 18 - Tree Search | TreeSearch constructor | `chimera/training/strategies/tree_search.py` | 3 | DONE |
+| 77 | 18 - Tree Search | Environment cloning | `chimera/training/strategies/tree_search.py` | 3 | DONE |
+| 78 | 18 - Tree Search | Core search loop | `chimera/training/strategies/tree_search.py` | 6 | DONE |
+| 79 | 18 - Tree Search | Custom branch_fn | `tests/test_strategy_tree_search.py` | 1 | DONE |
+| 80 | 18 - Tree Search | Package exports | `chimera/__init__.py` | 3 | DONE |
+
+**Total: 448 tests passing** (as of 2026-02-24)
 
 ---
 
@@ -132,6 +143,7 @@
 | 15 | Cost Tracking | 65–68 | 14 | DONE |
 | 16 | synthesize() + CLI | 69–71 | 6 | DONE |
 | 17 | Repository Mapping | 72–74 | 13 | DONE |
+| 18 | Tree Search Strategy | 75–80 | 19 | DONE |
 
 ---
 
@@ -139,7 +151,6 @@
 
 - [ ] Real provider integration tests (with API keys)
 - [ ] Docker environment integration tests
-- [ ] Tree search strategy
 - [ ] Plugin/extension system
 - [ ] Repository mapping enhancements (non-Python languages)
 - [ ] Multi-file edit transactions
