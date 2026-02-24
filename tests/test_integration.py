@@ -80,7 +80,7 @@ class MockProvider(Provider):
 
     @property
     def model_name(self) -> str:
-        return "mock-provider"
+        return "gpt-4o-mini"
 
 
 # ---------------------------------------------------------------------------
@@ -265,3 +265,37 @@ def test_synthesize_one_liner():
             chimera.synthesize("Build something")
     except ImportError:
         pytest.skip("chimera.synthesize import failed")
+
+
+def test_cost_propagates_through_synthesis():
+    """Verify that costs from provider usage flow through to SynthesisResult."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        test_content = (
+            "from calc import add, subtract\n"
+            "\n"
+            "def test_add():\n"
+            "    assert add(2, 3) == 5\n"
+            "\n"
+            "def test_subtract():\n"
+            "    assert subtract(5, 3) == 2\n"
+        )
+        Path(tmpdir, "test_calc.py").write_text(test_content)
+
+        env = LocalEnvironment(workdir=tmpdir, test_cmd="python -m pytest test_calc.py -v")
+        env.setup()
+
+        agent = Agent(
+            provider=MockProvider(),
+            tools=[ReadFileTool(), WriteFileTool(), BashTool()],
+            loop=ReAct(max_steps=10),
+        )
+        trainer = Trainer(
+            spec=Spec.from_tests(tmpdir, "Implement calculator"),
+            agent=agent,
+            env=env,
+        )
+        result = trainer.synthesize(strategy=TestConvergence(max_iterations=5, patience=3))
+
+        assert result.converged is True
+        assert result.total_cost > 0  # Costs now flow through
+        assert result.history[0].cost > 0
