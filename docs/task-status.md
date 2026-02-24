@@ -1,6 +1,6 @@
 # Chimera — Task Status
 
-> 66 tasks across 14 phases. TDD approach: tests first, then implementation.
+> 74 tasks across 17 phases. TDD approach: tests first, then implementation.
 > Sources: `docs/plans/2026-02-20-chimera-implementation-plan.md`, `docs/plans/2026-02-20-chimera-extension-plan.md`, `docs/plans/2026-02-22-persistent-shell-plan.md`
 
 ## Phases 1–8: Core Framework (Original)
@@ -82,7 +82,32 @@
 | 63 | 14 - Persistent Shell | GitEnvironment inheritance | `tests/test_env_git.py` | 1 | DONE |
 | 64 | 14 - Persistent Shell | Package exports | `chimera/env/__init__.py`, `chimera/__init__.py` | 2 | DONE |
 
-**Total: 396 tests passing** (as of 2026-02-22)
+## Phase 15: Cost Tracking
+
+| # | Phase | Task | Files | Tests | Status |
+|---|-------|------|-------|-------|--------|
+| 65 | 15 - Cost | Cost calculation utility | `chimera/providers/cost.py` | 9 | DONE |
+| 66 | 15 - Cost | ReAct loop cost aggregation | `chimera/core/loop.py` | 1 | DONE |
+| 67 | 15 - Cost | Other loops cost aggregation | `chimera/core/loops/*.py` | 3 | DONE |
+| 68 | 15 - Cost | Cost integration test | `tests/test_integration.py` | 1 | DONE |
+
+## Phase 16: synthesize() One-Liner + CLI
+
+| # | Phase | Task | Files | Tests | Status |
+|---|-------|------|-------|-------|--------|
+| 69 | 16 - Synthesize | chimera.synthesize() function | `chimera/synthesize.py` | 3 | DONE |
+| 70 | 16 - Synthesize | Export synthesize | `chimera/__init__.py` | 1 | DONE |
+| 71 | 16 - Synthesize | Wire CLI run_synthesize() | `chimera/cli/main.py` | 2 | DONE |
+
+## Phase 17: Repository Mapping
+
+| # | Phase | Task | Files | Tests | Status |
+|---|-------|------|-------|-------|--------|
+| 72 | 17 - RepoMap | RepoMap core class | `chimera/tools/repo_map.py` | 7 | DONE |
+| 73 | 17 - RepoMap | RepoMapTool integration | `tests/test_repo_map.py` | 4 | DONE |
+| 74 | 17 - RepoMap | Package exports | `chimera/__init__.py` | 2 | DONE |
+
+**Total: 429 tests passing** (as of 2026-02-23)
 
 ---
 
@@ -104,6 +129,9 @@
 | 12 | Evaluation Layer | 46–51 | 54 | DONE |
 | 13 | Environments, CLI, Polish | 52–57 | 36 | DONE |
 | 14 | Persistent Shell | 58–64 | 29 | DONE |
+| 15 | Cost Tracking | 65–68 | 14 | DONE |
+| 16 | synthesize() + CLI | 69–71 | 6 | DONE |
+| 17 | Repository Mapping | 72–74 | 13 | DONE |
 
 ---
 
@@ -111,9 +139,9 @@
 
 - [ ] Real provider integration tests (with API keys)
 - [ ] Docker environment integration tests
-- [ ] `chimera.synthesize()` one-liner with provider auto-detection
+- [ ] Tree search strategy
 - [ ] Plugin/extension system
-- [ ] Repository mapping (aider-style)
+- [ ] Repository mapping enhancements (non-Python languages)
 - [ ] Multi-file edit transactions
-- [ ] Cost tracking and budgets
+- [ ] Cost tracking enhancements (budget alerts, per-session tracking)
 - [ ] Documentation site
