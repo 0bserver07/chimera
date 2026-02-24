@@ -2,9 +2,13 @@
 """Tree search strategy for non-linear synthesis."""
 from __future__ import annotations
 
+import shutil
+import tempfile
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Callable, TYPE_CHECKING
 
+from chimera.env.local import LocalEnvironment
 from chimera.training.strategies.base import (
     Callback,
     EpochResult,
@@ -41,6 +45,29 @@ class SearchNode:
     @property
     def is_leaf(self) -> bool:
         return len(self.children) == 0
+
+
+def _clone_environment(env: LocalEnvironment, suffix: str = "clone") -> LocalEnvironment:
+    """Create an independent copy of a LocalEnvironment."""
+    parent = env.workdir.parent
+    clone_dir = Path(tempfile.mkdtemp(prefix=f"chimera-{suffix}-", dir=parent))
+
+    for item in env.workdir.iterdir():
+        if item.name == ".chimera_checkpoints":
+            continue
+        dest = clone_dir / item.name
+        if item.is_dir():
+            shutil.copytree(item, dest)
+        else:
+            shutil.copy2(item, dest)
+
+    cloned = LocalEnvironment(
+        workdir=str(clone_dir),
+        test_cmd=env.test_cmd,
+        timeout=env.timeout,
+    )
+    cloned.setup()
+    return cloned
 
 
 class TreeSearch(Strategy):
