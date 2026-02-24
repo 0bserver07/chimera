@@ -53,6 +53,7 @@ from chimera.training.strategies import (
     Strategy,
     SynthesisResult,
     TestConvergence,
+    TreeSearch,
 )
 
 # Evaluation
@@ -143,6 +144,7 @@ __all__ = [
     "SynthesisResult",
     "TestConvergence",
     "Trainer",
+    "TreeSearch",
     # Evaluation
     "Benchmark",
     "EvalResult",

@@ -390,3 +390,17 @@ class TestBranchFn:
             assert result.converged is True
             assert len(prompts_seen) == 3
             assert all("Approach" in p for p in prompts_seen)
+
+
+class TestExports:
+    def test_importable_from_strategies(self):
+        from chimera.training.strategies import TreeSearch as TS
+        assert TS is TreeSearch
+
+    def test_importable_from_chimera(self):
+        import chimera
+        assert hasattr(chimera, "TreeSearch")
+
+    def test_search_node_importable(self):
+        from chimera.training.strategies.tree_search import SearchNode as SN
+        assert SN is SearchNode
