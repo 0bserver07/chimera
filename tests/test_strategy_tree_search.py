@@ -364,3 +364,29 @@ class TestTreeSearchRun:
                 assert hasattr(epoch, "pass_rate")
                 assert hasattr(epoch, "cost")
                 assert epoch.total > 0
+
+
+class TestBranchFn:
+    def test_custom_branch_fn_provides_prompts(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env = _make_test_env(tmpdir)
+            agent = Agent(
+                provider=FixedProvider(),
+                tools=[WriteFileTool()],
+                loop=ReAct(max_steps=5),
+            )
+            spec = Spec.from_tests(tmpdir, "Implement calculator")
+
+            prompts_seen = []
+
+            def my_branch_fn(spec, node, n):
+                ps = [f"Approach {i}: {spec.to_prompt()}" for i in range(n)]
+                prompts_seen.extend(ps)
+                return ps
+
+            ts = TreeSearch(branch_factor=3, max_depth=1, max_nodes=5, branch_fn=my_branch_fn)
+            result = ts.run(agent, spec, env)
+
+            assert result.converged is True
+            assert len(prompts_seen) == 3
+            assert all("Approach" in p for p in prompts_seen)
