@@ -21,11 +21,16 @@ class AnthropicProvider(Provider):
         "claude-haiku-3.5": 200_000,
     }
 
-    def __init__(self, model: str, api_key: str | None = None) -> None:
+    def __init__(self, model: str, api_key: str | None = None, base_url: str | None = None) -> None:
         if anthropic is None:
             raise ImportError("pip install chimera-ai[anthropic]")
         self._model = model
-        self._client = anthropic.Anthropic(api_key=api_key or os.environ.get("ANTHROPIC_API_KEY"))
+        client_kwargs: dict[str, Any] = {
+            "api_key": api_key or os.environ.get("ANTHROPIC_API_KEY"),
+        }
+        if base_url or os.environ.get("ANTHROPIC_BASE_URL"):
+            client_kwargs["base_url"] = base_url or os.environ.get("ANTHROPIC_BASE_URL")
+        self._client = anthropic.Anthropic(**client_kwargs)
 
     def complete(
         self,

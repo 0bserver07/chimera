@@ -27,7 +27,7 @@ def create_provider(
 
     if provider_type == "anthropic":
         from chimera.providers.anthropic import AnthropicProvider
-        return AnthropicProvider(model=model, api_key=api_key)
+        return AnthropicProvider(model=model, api_key=api_key, base_url=base_url)
 
     elif provider_type == "openai":
         from chimera.providers.openai import OpenAIProvider
