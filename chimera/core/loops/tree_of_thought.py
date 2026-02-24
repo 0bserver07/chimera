@@ -4,6 +4,7 @@ from chimera.core.context import Context
 from chimera.core.tool import BaseTool
 from chimera.env.base import Environment
 from chimera.providers.base import Provider
+from chimera.providers.cost import calculate_cost
 from chimera.types import AgentResult, Message
 
 
@@ -35,6 +36,7 @@ class TreeOfThought:
         schemas = [t.to_anthropic_schema() for t in tools]
         steps = 0
         total_tool_calls = 0
+        total_cost = 0.0
 
         for _ in range(self.max_steps):
             steps += 1
@@ -48,6 +50,7 @@ class TreeOfThought:
                     tools=schemas if schemas else None,
                     temperature=0.7,
                 )
+                total_cost += calculate_cost(provider.model_name, response.usage)
                 candidates.append(response.content)
                 candidate_tool_calls.append(response.tool_calls)
 
@@ -89,6 +92,7 @@ class TreeOfThought:
                 eval_context = Context(system="You are an evaluator.")
                 eval_context.add(Message.user(f"{candidate_text}\n\n{eval_prompt}"))
                 eval_response = provider.complete(eval_context.to_messages())
+                total_cost += calculate_cost(provider.model_name, eval_response.usage)
 
                 # Parse the selection
                 try:
@@ -105,7 +109,7 @@ class TreeOfThought:
                 output=best_content,
                 steps=steps,
                 tool_calls_total=total_tool_calls,
-                cost=0.0,
+                cost=total_cost,
                 success=True,
             )
 
@@ -113,7 +117,7 @@ class TreeOfThought:
             output="Max steps reached",
             steps=steps,
             tool_calls_total=total_tool_calls,
-            cost=0.0,
+            cost=total_cost,
             success=False,
             error="Max steps reached",
         )
