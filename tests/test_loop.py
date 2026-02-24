@@ -244,3 +244,53 @@ def test_react_context_messages_accumulated():
     assert context.messages[1].role == "assistant"
     assert context.messages[2].role == "tool"
     assert context.messages[3].role == "assistant"
+
+
+def test_react_tracks_cost():
+    """ReAct loop should sum costs from provider usage across all steps."""
+    from chimera.providers.base import Response
+    from chimera.types import ToolCall
+
+    class CostTrackingProvider:
+        def complete(self, messages, tools=None, temperature=0.0, max_tokens=None):
+            if messages and messages[-1].role == "tool":
+                return Response(
+                    content="Done.",
+                    tool_calls=[],
+                    usage={"input_tokens": 200, "output_tokens": 50},
+                )
+            return Response(
+                content="Writing.",
+                tool_calls=[ToolCall(id="c1", name="write_file", arguments={"path": "f.py", "content": "x=1"})],
+                usage={"input_tokens": 500, "output_tokens": 100},
+            )
+
+        @property
+        def context_window(self):
+            return 200_000
+
+        @property
+        def supports_tool_use(self):
+            return True
+
+        @property
+        def model_name(self):
+            return "claude-sonnet-4-20250514"
+
+    from chimera.core.loop import ReAct
+    from chimera.core.context import Context
+    from chimera.tools.write import WriteFileTool
+    from chimera.env.local import LocalEnvironment
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        env = LocalEnvironment(workdir=tmpdir)
+        env.setup()
+        ctx = Context(system="test")
+        from chimera.types import Message
+        ctx.add(Message.user("write something"))
+        result = ReAct(max_steps=5).run(
+            CostTrackingProvider(), [WriteFileTool()], ctx, env,
+        )
+        assert result.cost > 0
+        assert result.success is True
