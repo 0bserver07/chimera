@@ -4,6 +4,7 @@ from chimera.core.context import Context
 from chimera.core.tool import BaseTool
 from chimera.env.base import Environment
 from chimera.providers.base import Provider
+from chimera.providers.cost import calculate_cost
 from chimera.types import AgentResult, Message
 
 
@@ -28,10 +29,12 @@ class ReAct:
         schemas = [t.to_anthropic_schema() for t in tools]
         steps = 0
         total_tool_calls = 0
+        total_cost = 0.0
 
         for _ in range(self.max_steps):
             steps += 1
             response = provider.complete(context.to_messages(), tools=schemas if schemas else None)
+            total_cost += calculate_cost(provider.model_name, response.usage)
             context.add(Message.assistant(response.content, tool_calls=response.tool_calls))
 
             if not response.has_tool_calls:
@@ -39,7 +42,7 @@ class ReAct:
                     output=response.content,
                     steps=steps,
                     tool_calls_total=total_tool_calls,
-                    cost=0.0,
+                    cost=total_cost,
                     success=True,
                 )
 
@@ -60,7 +63,7 @@ class ReAct:
             output="Max steps reached",
             steps=steps,
             tool_calls_total=total_tool_calls,
-            cost=0.0,
+            cost=total_cost,
             success=False,
             error="Max steps reached",
         )
