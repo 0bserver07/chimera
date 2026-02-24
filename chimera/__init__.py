@@ -34,6 +34,7 @@ from chimera.env import Environment, GitEnvironment, LocalEnvironment, SessionMi
 
 # Providers
 from chimera.providers import Provider, Response, StreamEvent, create_provider
+from chimera.providers.cost import calculate_cost
 
 # Training
 from chimera.training import Architecture, Constraint, Layer, Spec, Trainer
@@ -122,6 +123,7 @@ __all__ = [
     "Provider",
     "Response",
     "StreamEvent",
+    "calculate_cost",
     "create_provider",
     # Training
     "Architecture",
