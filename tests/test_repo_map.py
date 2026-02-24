@@ -5,7 +5,8 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
-from chimera.tools.repo_map import RepoMap
+from chimera.tools.repo_map import RepoMap, RepoMapTool
+from chimera.env.local import LocalEnvironment
 
 
 class TestRepoMap:
@@ -90,3 +91,51 @@ class TestRepoMap:
             rm = RepoMap(tmpdir)
             output = rm.generate()
             assert "broken.py" in output  # File listed even if unparseable
+
+
+class TestRepoMapTool:
+    def test_tool_schema(self):
+        tool = RepoMapTool()
+        assert tool.name == "repo_map"
+        schema = tool.to_anthropic_schema()
+        assert schema["name"] == "repo_map"
+        assert "input_schema" in schema
+
+    def test_execute_returns_map(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            Path(tmpdir, "app.py").write_text("def main():\n    pass\n")
+            env = LocalEnvironment(workdir=tmpdir)
+            env.setup()
+            tool = RepoMapTool()
+            result = tool.execute({}, env)
+            assert result.success
+            assert "app.py" in result.output
+            assert "main()" in result.output
+
+    def test_execute_with_max_depth(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            deep = Path(tmpdir, "a", "b")
+            deep.mkdir(parents=True)
+            Path(deep, "deep.py").write_text("def fn():\n    pass\n")
+            Path(tmpdir, "top.py").write_text("def top():\n    pass\n")
+            env = LocalEnvironment(workdir=tmpdir)
+            env.setup()
+            tool = RepoMapTool()
+            result = tool.execute({"max_depth": 0}, env)
+            assert "top.py" in result.output
+            assert "deep.py" not in result.output
+
+    def test_execute_no_env(self):
+        tool = RepoMapTool()
+        result = tool.execute({}, None)
+        assert not result.success
+
+
+class TestRepoMapExports:
+    def test_importable_from_tools(self):
+        from chimera.tools import RepoMapTool as RMT
+        assert RMT is RepoMapTool
+
+    def test_importable_from_chimera(self):
+        import chimera
+        assert hasattr(chimera, "RepoMapTool")

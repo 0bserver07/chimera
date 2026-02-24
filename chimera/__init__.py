@@ -69,6 +69,9 @@ from chimera.eval import (
     resolve_rate,
 )
 
+# Tools
+from chimera.tools.repo_map import RepoMapTool
+
 # Convenience
 from chimera.synthesize import synthesize
 
@@ -150,6 +153,8 @@ __all__ = [
     "check_output_similarity",
     "pass_at_k",
     "resolve_rate",
+    # Tools
+    "RepoMapTool",
     # Convenience
     "synthesize",
     # Types
