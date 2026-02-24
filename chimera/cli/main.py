@@ -13,6 +13,8 @@ import json
 import sys
 from typing import Sequence
 
+from chimera.synthesize import synthesize as synthesize_fn
+
 
 def build_parser() -> argparse.ArgumentParser:
     """Build the top-level argument parser with all subcommands."""
@@ -148,8 +150,38 @@ def run_synthesize(args: argparse.Namespace) -> int:
     if not args.spec and not args.tests:
         print("Error: at least one of --spec or --tests is required.", file=sys.stderr)
         return 1
-    print(f"Running synthesis: spec={args.spec}", file=sys.stderr)
-    return 0
+
+    spec_text = args.spec or "Make all tests pass."
+
+    try:
+        result = synthesize_fn(
+            spec_text,
+            tests=args.tests,
+            model=args.model,
+            workdir=args.output,
+            max_iterations=args.max_iterations,
+            patience=args.patience,
+            max_cost=args.max_cost,
+        )
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+    if result.converged:
+        print(
+            f"Synthesis converged in {result.iterations} iterations "
+            f"(cost: ${result.total_cost:.4f})",
+        )
+        return 0
+    else:
+        print(
+            f"Synthesis failed after {result.iterations} iterations "
+            f"(best: {result.best_pass_rate:.0%}, cost: ${result.total_cost:.4f})",
+            file=sys.stderr,
+        )
+        if result.failure_reason:
+            print(f"Reason: {result.failure_reason}", file=sys.stderr)
+        return 1
 
 
 def run_eval(args: argparse.Namespace) -> int:
