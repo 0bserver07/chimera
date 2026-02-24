@@ -89,3 +89,55 @@ class TestTreeSearchInit:
     def test_is_strategy_subclass(self):
         from chimera.training.strategies.base import Strategy
         assert issubclass(TreeSearch, Strategy)
+
+
+import tempfile
+from pathlib import Path
+
+from chimera.env.local import LocalEnvironment
+from chimera.training.strategies.tree_search import _clone_environment
+
+
+class TestCloneEnvironment:
+    def test_clone_copies_files(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env = LocalEnvironment(workdir=tmpdir)
+            env.setup()
+            env.write_file("hello.py", "print('hello')")
+            env.write_file("sub/deep.txt", "deep")
+
+            cloned = _clone_environment(env, suffix="branch-0")
+            try:
+                assert cloned.read_file("hello.py") == "print('hello')"
+                assert cloned.read_file("sub/deep.txt") == "deep"
+                assert cloned.workdir != env.workdir
+            finally:
+                import shutil
+                shutil.rmtree(cloned.workdir)
+
+    def test_clone_is_independent(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env = LocalEnvironment(workdir=tmpdir)
+            env.setup()
+            env.write_file("data.txt", "original")
+
+            cloned = _clone_environment(env, suffix="branch-1")
+            try:
+                cloned.write_file("data.txt", "modified")
+                assert env.read_file("data.txt") == "original"
+                assert cloned.read_file("data.txt") == "modified"
+            finally:
+                import shutil
+                shutil.rmtree(cloned.workdir)
+
+    def test_clone_workdir_contains_suffix(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env = LocalEnvironment(workdir=tmpdir)
+            env.setup()
+
+            cloned = _clone_environment(env, suffix="branch-42")
+            try:
+                assert "branch-42" in str(cloned.workdir)
+            finally:
+                import shutil
+                shutil.rmtree(cloned.workdir)
