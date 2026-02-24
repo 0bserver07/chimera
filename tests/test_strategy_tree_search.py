@@ -57,3 +57,35 @@ class TestSearchNode:
             children=["n1", "n2"],
         )
         assert not node.is_leaf
+
+
+from chimera.training.strategies.tree_search import TreeSearch
+
+
+class TestTreeSearchInit:
+    def test_default_params(self):
+        ts = TreeSearch()
+        assert ts.branch_factor == 3
+        assert ts.max_depth == 5
+        assert ts.max_nodes == 20
+        assert ts.max_cost is None
+        assert ts.min_pass_rate == 0.0
+        assert ts.branch_fn is None
+
+    def test_custom_params(self):
+        ts = TreeSearch(
+            branch_factor=5,
+            max_depth=10,
+            max_nodes=50,
+            max_cost=5.0,
+            min_pass_rate=0.2,
+        )
+        assert ts.branch_factor == 5
+        assert ts.max_depth == 10
+        assert ts.max_nodes == 50
+        assert ts.max_cost == 5.0
+        assert ts.min_pass_rate == 0.2
+
+    def test_is_strategy_subclass(self):
+        from chimera.training.strategies.base import Strategy
+        assert issubclass(TreeSearch, Strategy)
