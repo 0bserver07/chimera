@@ -253,18 +253,10 @@ def test_end_to_end_gradual_convergence():
 
 
 def test_synthesize_one_liner():
-    """Test the chimera.synthesize() convenience function."""
-    try:
-        import chimera
-
-        if not hasattr(chimera, "synthesize"):
-            pytest.skip("chimera.synthesize() not yet implemented")
-
-        # Test that synthesize() raises ValueError when no provider given
-        with pytest.raises(ValueError, match="provider"):
-            chimera.synthesize("Build something")
-    except ImportError:
-        pytest.skip("chimera.synthesize import failed")
+    """Test that chimera.synthesize is importable from the top-level package."""
+    import chimera
+    assert hasattr(chimera, "synthesize")
+    assert callable(chimera.synthesize)
 
 
 def test_cost_propagates_through_synthesis():

@@ -69,6 +69,9 @@ from chimera.eval import (
     resolve_rate,
 )
 
+# Convenience
+from chimera.synthesize import synthesize
+
 # Types
 from chimera.types import (
     AgentResult,
@@ -147,6 +150,8 @@ __all__ = [
     "check_output_similarity",
     "pass_at_k",
     "resolve_rate",
+    # Convenience
+    "synthesize",
     # Types
     "AgentResult",
     "CommandResult",
