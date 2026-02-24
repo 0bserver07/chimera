@@ -168,7 +168,25 @@ results = harness.run(agent=MyAgent())
 - [x] SessionMixin exported from chimera.env and chimera packages
 - [x] 29 tests passing
 
-## Test Count: 396 passing (all 14 phases complete)
+### Phase 15: Cost Tracking -- DONE
+- [x] chimera/providers/cost.py (PRICING table, calculate_cost)
+- [x] Cost aggregation in ReAct, PlanAndExecute, Reflexion, TreeOfThought loops
+- [x] Cost propagation through Trainer → SynthesisResult
+- [x] 14 tests passing
+
+### Phase 16: synthesize() One-Liner + CLI -- DONE
+- [x] chimera/synthesize.py (one-liner: spec + model → SynthesisResult)
+- [x] CLI run_synthesize() wired to real synthesis logic
+- [x] Exported from chimera package
+- [x] 6 tests passing
+
+### Phase 17: Repository Mapping -- DONE
+- [x] chimera/tools/repo_map.py (RepoMap with ast-based Python analysis)
+- [x] RepoMapTool (agent-usable tool)
+- [x] Exported from chimera and chimera.tools packages
+- [x] 13 tests passing
+
+## Test Count: 429 passing (all 17 phases complete)
 
 ## Key Files
 
