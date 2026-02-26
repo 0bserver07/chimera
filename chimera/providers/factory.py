@@ -15,7 +15,7 @@ def create_provider(
     """Factory function to create a provider by type or by model name inference.
 
     Args:
-        provider_type: One of "anthropic", "openai", "google", "ollama", "compatible".
+        provider_type: One of "anthropic", "openai", "google", "ollama", "compatible", "modal".
                        If None, inferred from model name.
         model: Model identifier (e.g. "claude-sonnet-4-20250514", "gpt-4o", "gemini-2.0-flash").
         api_key: API key for the provider.
@@ -56,10 +56,18 @@ def create_provider(
             **kwargs,
         )
 
+    elif provider_type == "modal":
+        from chimera.providers.modal import ModalProvider
+        return ModalProvider(
+            model=model,
+            base_url=base_url,
+            **kwargs,
+        )
+
     else:
         raise ValueError(
             f"Unknown provider: '{provider_type}'. "
-            f"Choose from: anthropic, openai, google, ollama, compatible"
+            f"Choose from: anthropic, openai, google, ollama, compatible, modal"
         )
 
 
