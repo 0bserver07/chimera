@@ -45,6 +45,7 @@ from chimera.training.callbacks import (
     ProgressCallback,
 )
 from chimera.training.strategies import (
+    AIMOEnsemble,
     Callback,
     CurriculumStrategy,
     EnsembleStrategy,
@@ -128,6 +129,7 @@ __all__ = [
     "calculate_cost",
     "create_provider",
     # Training
+    "AIMOEnsemble",
     "Architecture",
     "Callback",
     "CheckpointCallback",
