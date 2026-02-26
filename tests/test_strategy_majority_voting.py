@@ -74,17 +74,19 @@ class TestMajorityVoting:
         assert call_count < 16
 
     def test_tracks_cost(self):
-        agent = FakeAgent(["ANSWER: 42"] * 4)
-        strategy = MajorityVoting(n_samples=4)
+        # Use diverse answers to prevent early stopping so all 4 samples run
+        agent = FakeAgent(["ANSWER: 1", "ANSWER: 2", "ANSWER: 3", "ANSWER: 4"])
+        strategy = MajorityVoting(n_samples=4, min_agreement=2)
         result = strategy.run(agent, FakeSpec(), FakeEnv())
         assert result.total_cost == pytest.approx(0.04)
 
     def test_callbacks_called(self):
-        agent = FakeAgent(["ANSWER: 42"] * 3)
-        strategy = MajorityVoting(n_samples=3)
+        # Use diverse answers to prevent early stopping so all 3 epochs fire
+        agent = FakeAgent(["ANSWER: 42", "ANSWER: 99", "ANSWER: 7"])
+        strategy = MajorityVoting(n_samples=3, min_agreement=2)
         cb = MagicMock()
         cb.on_epoch_end.return_value = True
-        result = strategy.run(agent, FakeSpec(), FakeEnv(), callbacks=[cb])
+        strategy.run(agent, FakeSpec(), FakeEnv(), callbacks=[cb])
         assert cb.on_synthesis_start.called
         assert cb.on_synthesis_end.called
         assert cb.on_epoch_end.call_count == 3
