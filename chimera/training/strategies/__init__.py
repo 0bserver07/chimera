@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from chimera.training.strategies.aimo_ensemble import AIMOEnsemble
 from chimera.training.strategies.base import (
     Callback,
     EpochResult,
@@ -14,6 +15,7 @@ from chimera.training.strategies.passthrough import Passthrough
 from chimera.training.strategies.tree_search import TreeSearch
 
 __all__ = [
+    "AIMOEnsemble",
     "Callback",
     "EpochResult",
     "MajorityVoting",
