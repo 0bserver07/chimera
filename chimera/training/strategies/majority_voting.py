@@ -20,7 +20,15 @@ if TYPE_CHECKING:
 
 
 class MajorityVoting(Strategy):
-    """Sample N solutions and pick the consensus answer."""
+    """Sample N solutions and pick the consensus answer.
+
+    Args:
+        n_samples: Number of solution attempts per problem.
+        temperature: Recommended sampling temperature. Configure this on the
+            provider level (e.g. ``provider.temperature = 0.7``) before passing
+            the agent to this strategy.
+        min_agreement: Minimum votes for a consensus answer.
+    """
 
     def __init__(
         self,
@@ -80,11 +88,10 @@ class MajorityVoting(Strategy):
             if not should_continue:
                 break
 
-            # Early stopping: only when enough samples remain that the
-            # check is meaningful (remaining >= min_agreement) and the
-            # leader cannot be overtaken.
+            # Early stopping: if the leader has enough agreement and
+            # cannot be overtaken by remaining samples, stop early.
             remaining = self.n_samples - sample_num
-            if votes and remaining >= self.min_agreement:
+            if votes:
                 top_answer, top_count = votes.most_common(1)[0]
                 if top_count >= self.min_agreement:
                     second_count = votes.most_common(2)[-1][1] if len(votes) > 1 else 0

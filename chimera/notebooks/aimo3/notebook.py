@@ -21,6 +21,8 @@ import csv
 import chimera
 from chimera.eval.benchmarks.aimo import AIMOBenchmark, extract_answer
 from chimera.tools.verify import VerifyTool
+from chimera.training.spec import Spec
+from chimera.training.strategies.majority_voting import MajorityVoting
 
 
 def main(
@@ -44,23 +46,32 @@ def main(
         loop=chimera.ReAct(max_steps=30),
     )
 
-    # --- Benchmark ---
-    benchmark = AIMOBenchmark(problems_path=problems_path)
+    # --- Strategy ---
+    strategy = MajorityVoting(n_samples=n_samples, temperature=0.7, min_agreement=2)
 
     # --- Solve ---
-    harness = chimera.Harness(benchmark=benchmark, agent=agent)
-    result = harness.run()
+    benchmark = AIMOBenchmark(problems_path=problems_path)
+    tasks = benchmark.tasks()
+
+    answers: dict[str, int] = {}
+    total_cost = 0.0
+    for task in tasks:
+        spec = Spec(prompt=task["prompt"], tests=[])
+        result = strategy.run(agent, spec, chimera.LocalEnvironment())
+        total_cost += result.total_cost
+        answer = extract_answer(result.history[-1].agent_output) if result.history else None
+        answers[task["id"]] = answer if answer is not None else 0
 
     # --- Write submission ---
     with open(output_path, "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(["id", "answer"])
-        for task_result in result.results:
-            answer = extract_answer(task_result.output)
-            writer.writerow([task_result.task_id, answer if answer is not None else 0])
+        for task_id, answer in answers.items():
+            writer.writerow([task_id, answer])
 
-    print(f"Results: {result.passed}/{result.total} ({result.pass_rate:.1%})")
-    print(f"Total cost: ${result.total_cost:.4f}")
+    solved = sum(1 for a in answers.values() if a != 0)
+    print(f"Solved: {solved}/{len(tasks)}")
+    print(f"Total cost: ${total_cost:.4f}")
     print(f"Submission written to: {output_path}")
 
 
