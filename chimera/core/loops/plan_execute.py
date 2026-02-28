@@ -52,6 +52,7 @@ class PlanAndExecute:
         total_tool_calls = 0
         plan_generated = False
         total_cost = 0.0
+        event_bus = self.config.event_bus if self.config else None
 
         for _ in range(self.max_steps):
             steps += 1
@@ -67,6 +68,9 @@ class PlanAndExecute:
                 if not plan_generated and tools:
                     plan_generated = True
                     context.add(Message.user(self.EXECUTE_PROMPT))
+                    if event_bus:
+                        from chimera.events.types import StepEvent
+                        event_bus.publish(StepEvent(step_number=steps, content=response.content))
                     yield StepResult(
                         message=Message.assistant(response.content),
                         tool_calls=[],
@@ -75,6 +79,9 @@ class PlanAndExecute:
                         cost=step_cost,
                     )
                     continue
+                if event_bus:
+                    from chimera.events.types import StepEvent
+                    event_bus.publish(StepEvent(step_number=steps, content=response.content))
                 yield StepResult(
                     message=Message.assistant(response.content),
                     tool_calls=[],
@@ -143,6 +150,9 @@ class PlanAndExecute:
                 else:
                     context.add(Message.tool(pa.tool_call.id, pa.denial_message))
             else:
+                if event_bus:
+                    from chimera.events.types import StepEvent
+                    event_bus.publish(StepEvent(step_number=steps, content=response.content))
                 yield StepResult(
                     message=Message.assistant(response.content),
                     tool_calls=response.tool_calls,

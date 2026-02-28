@@ -55,6 +55,7 @@ class Reflexion:
         total_tool_calls = 0
         action_count = 0
         total_cost = 0.0
+        event_bus = self.config.event_bus if self.config else None
 
         for _ in range(self.max_steps):
             steps += 1
@@ -67,6 +68,9 @@ class Reflexion:
             context.add(Message.assistant(response.content, tool_calls=response.tool_calls))
 
             if not response.has_tool_calls:
+                if event_bus:
+                    from chimera.events.types import StepEvent
+                    event_bus.publish(StepEvent(step_number=steps, content=response.content))
                 yield StepResult(
                     message=Message.assistant(response.content),
                     tool_calls=[],
@@ -135,6 +139,9 @@ class Reflexion:
                 else:
                     context.add(Message.tool(pa.tool_call.id, pa.denial_message))
             else:
+                if event_bus:
+                    from chimera.events.types import StepEvent
+                    event_bus.publish(StepEvent(step_number=steps, content=response.content))
                 yield StepResult(
                     message=Message.assistant(response.content),
                     tool_calls=response.tool_calls,

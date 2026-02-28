@@ -56,6 +56,7 @@ class ReAct:
         steps = 0
         total_tool_calls = 0
         total_cost = 0.0
+        event_bus = self.config.event_bus if self.config else None
 
         for _ in range(self.max_steps):
             steps += 1
@@ -69,6 +70,9 @@ class ReAct:
             )
 
             if not response.has_tool_calls:
+                if event_bus:
+                    from chimera.events.types import StepEvent
+                    event_bus.publish(StepEvent(step_number=steps, content=response.content))
                 yield StepResult(
                     message=Message.assistant(response.content),
                     tool_calls=[],
@@ -147,6 +151,9 @@ class ReAct:
                     )
             else:
                 # All tool calls executed normally
+                if event_bus:
+                    from chimera.events.types import StepEvent
+                    event_bus.publish(StepEvent(step_number=steps, content=response.content))
                 yield StepResult(
                     message=Message.assistant(response.content),
                     tool_calls=response.tool_calls,

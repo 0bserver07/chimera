@@ -82,6 +82,17 @@ from chimera.synthesize import synthesize
 # LSP
 from chimera.lsp import Diagnostic, LSPClient, Severity
 
+# Extension modules
+from chimera.core.loop_config import LoopConfig
+from chimera.events import Event, EventBus
+from chimera.compaction import CompactionStrategy, TokenCounter
+from chimera.detection import DetectionResult, ExactRepeatDetector
+from chimera.permissions import PermissionAction, PermissionRuleset
+from chimera.streaming import ConsoleStreamHandler, StreamingReAct
+from chimera.sessions import InMemoryStorage, Session
+from chimera.auth import AuthManager, Credential
+from chimera.agents import AgentConfig, AgentRegistry
+
 # Types
 from chimera.core.loop import drain_steps
 from chimera.types import (
@@ -189,4 +200,22 @@ __all__ = [
     "FileChange",
     "PendingApproval",
     "drain_steps",
+    # Extension modules
+    "LoopConfig",
+    "EventBus",
+    "Event",
+    "CompactionStrategy",
+    "TokenCounter",
+    "DetectionResult",
+    "ExactRepeatDetector",
+    "PermissionAction",
+    "PermissionRuleset",
+    "ConsoleStreamHandler",
+    "StreamingReAct",
+    "Session",
+    "InMemoryStorage",
+    "AuthManager",
+    "Credential",
+    "AgentConfig",
+    "AgentRegistry",
 ]
