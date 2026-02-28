@@ -20,7 +20,7 @@ classifiers = [
 anthropic = ["anthropic>=0.40"]
 openai = ["openai>=1.50"]
 all = ["chimera-ai[anthropic,openai]"]
-dev = ["pytest>=8.0", "ruff>=0.4", "mypy>=1.10"]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.23", "ruff>=0.4", "mypy>=1.10"]
 
 [project.scripts]
 chimera = "chimera.cli.main:main"

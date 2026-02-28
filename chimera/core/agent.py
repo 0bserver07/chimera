@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+from collections.abc import Generator
+
 from chimera.core.context import Context
 from chimera.core.loop import ReAct
 from chimera.core.prompt import Prompt
 from chimera.core.tool import BaseTool
 from chimera.env.base import Environment
 from chimera.providers.base import Provider
-from chimera.types import AgentResult, Message
+from chimera.types import AgentResult, Message, StepResult
 
 
 class Agent:
@@ -40,3 +42,22 @@ class Agent:
         context = Context(system=system)
         context.add(Message.user(task))
         return self.loop.run(self.provider, self.tools, context, env)
+
+    def iter_steps(
+        self, task: str, env: Environment | None,
+    ) -> Generator[StepResult, None, AgentResult]:
+        """Yield one :class:`StepResult` per LLM turn.
+
+        Creates a fresh Context and delegates to the loop's ``iter_steps``.
+        """
+        system = self.prompt.render(tools=[t.name for t in self.tools])
+        context = Context(system=system)
+        context.add(Message.user(task))
+        return (yield from self.loop.iter_steps(self.provider, self.tools, context, env))
+
+    async def async_run(self, task: str, env: Environment | None) -> AgentResult:
+        """Run the agent asynchronously using async provider calls."""
+        system = self.prompt.render(tools=[t.name for t in self.tools])
+        context = Context(system=system)
+        context.add(Message.user(task))
+        return await self.loop.async_run(self.provider, self.tools, context, env)

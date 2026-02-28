@@ -79,11 +79,18 @@ from chimera.tools.repo_map import RepoMapTool
 # Convenience
 from chimera.synthesize import synthesize
 
+# LSP
+from chimera.lsp import Diagnostic, LSPClient, Severity
+
 # Types
+from chimera.core.loop import drain_steps
 from chimera.types import (
     AgentResult,
+    ChangeType,
     CommandResult,
+    FileChange,
     Message,
+    PendingApproval,
     StepResult,
     TestResult,
     ToolCall,
@@ -173,4 +180,13 @@ __all__ = [
     "TestResult",
     "ToolCall",
     "ToolResult",
+    # LSP
+    "Diagnostic",
+    "LSPClient",
+    "Severity",
+    # New APIs
+    "ChangeType",
+    "FileChange",
+    "PendingApproval",
+    "drain_steps",
 ]
