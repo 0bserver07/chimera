@@ -100,7 +100,7 @@ from chimera.mcp import MCPClient, MCPToolSource
 from chimera.transactions import FileTransaction, StagedChange, TransactionState
 
 # Types
-from chimera.core.loop import drain_steps
+from chimera.core.loop import async_drain_steps, drain_steps
 from chimera.types import (
     AgentResult,
     ChangeType,
@@ -210,6 +210,7 @@ __all__ = [
     "ChangeType",
     "FileChange",
     "PendingApproval",
+    "async_drain_steps",
     "drain_steps",
     # Extension modules
     "LoopConfig",

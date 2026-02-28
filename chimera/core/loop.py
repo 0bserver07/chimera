@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from collections.abc import Generator
+from collections.abc import AsyncGenerator, Generator
 from typing import Iterator, TYPE_CHECKING
 
 from chimera.core.context import Context
 from chimera.core.tool import BaseTool
 from chimera.core.tool_executor import (
     LoopBreak,
+    async_execute_tool_calls_incremental,
     execute_tool_calls,
     execute_tool_calls_incremental,
 )
@@ -270,6 +271,152 @@ class ReAct:
         return drain_steps(self.iter_steps(provider, tools, context, env))
 
 
+    async def async_iter_steps(
+        self,
+        provider: Provider,
+        tools: list[BaseTool],
+        context: Context,
+        env: Environment | None,
+    ) -> AsyncGenerator[StepResult, None]:
+        """Async version of :meth:`iter_steps`.
+
+        Uses ``async_complete`` for LLM calls and
+        ``async_execute_tool_calls_incremental`` for concurrent tool
+        execution.
+
+        The :class:`AgentResult` is stored on ``self._async_result``
+        because async generators cannot use ``return <value>``.
+        Use :func:`async_drain_steps` to consume and retrieve it.
+        """
+        tool_map = {t.name: t for t in tools}
+        schemas = [t.to_anthropic_schema() for t in tools]
+        steps = 0
+        total_tool_calls = 0
+        total_cost = 0.0
+        event_bus = self.config.event_bus if self.config else None
+
+        for _ in range(self.max_steps):
+            steps += 1
+
+            response = await provider.async_complete(
+                context.to_messages(), tools=schemas if schemas else None,
+            )
+
+            step_cost = calculate_cost(provider.model_name, response.usage)
+            total_cost += step_cost
+            context.add(
+                Message.assistant(response.content, tool_calls=response.tool_calls),
+            )
+
+            if not response.has_tool_calls:
+                if event_bus:
+                    from chimera.events.types import StepEvent
+                    event_bus.publish(StepEvent(step_number=steps, content=response.content))
+                yield StepResult(
+                    message=Message.assistant(response.content),
+                    tool_calls=[],
+                    done=True,
+                    step=steps,
+                    cost=step_cost,
+                )
+                self._async_result = AgentResult(
+                    output=response.content,
+                    steps=steps,
+                    tool_calls_total=total_tool_calls,
+                    cost=total_cost,
+                    success=True,
+                )
+                return
+
+            # Execute tool calls concurrently
+            try:
+                exec_result = await async_execute_tool_calls_incremental(
+                    response.tool_calls, tool_map, context, env, self.config,
+                )
+            except LoopBreak:
+                yield StepResult(
+                    message=Message.assistant(response.content),
+                    tool_calls=response.tool_calls,
+                    done=True,
+                    step=steps,
+                    cost=step_cost,
+                )
+                self._async_result = AgentResult(
+                    output=response.content,
+                    steps=steps,
+                    tool_calls_total=total_tool_calls + len(response.tool_calls),
+                    cost=total_cost,
+                    success=False,
+                    error="Loop detected",
+                )
+                return
+
+            total_tool_calls += exec_result.executed
+
+            if exec_result.pending is not None:
+                step = StepResult(
+                    message=Message.assistant(response.content),
+                    tool_calls=response.tool_calls,
+                    tool_results=exec_result.results,
+                    done=False,
+                    step=steps,
+                    cost=step_cost,
+                    pending_approval=exec_result.pending,
+                )
+                yield step
+
+                pa = exec_result.pending
+                if pa.approved:
+                    remaining = [pa.tool_call] + exec_result.remaining
+                    try:
+                        extra = await async_execute_tool_calls_incremental(
+                            remaining, tool_map, context, env, None,
+                        )
+                    except LoopBreak:
+                        self._async_result = AgentResult(
+                            output=response.content,
+                            steps=steps,
+                            tool_calls_total=total_tool_calls,
+                            cost=total_cost,
+                            success=False,
+                            error="Loop detected",
+                        )
+                        return
+                    total_tool_calls += extra.executed
+                else:
+                    context.add(
+                        Message.tool(pa.tool_call.id, pa.denial_message),
+                    )
+            else:
+                if event_bus:
+                    from chimera.events.types import StepEvent
+                    event_bus.publish(StepEvent(step_number=steps, content=response.content))
+                yield StepResult(
+                    message=Message.assistant(response.content),
+                    tool_calls=response.tool_calls,
+                    tool_results=exec_result.results,
+                    done=False,
+                    step=steps,
+                    cost=step_cost,
+                )
+
+        # Max steps
+        yield StepResult(
+            message=Message.assistant("Max steps reached"),
+            tool_calls=[],
+            done=True,
+            step=steps,
+            cost=0.0,
+        )
+        self._async_result = AgentResult(
+            output="Max steps reached",
+            steps=steps,
+            tool_calls_total=total_tool_calls,
+            cost=total_cost,
+            success=False,
+            error="Max steps reached",
+        )
+
     async def async_run(
         self,
         provider: Provider,
@@ -279,68 +426,11 @@ class ReAct:
     ) -> AgentResult:
         """Run the loop to completion using async provider calls.
 
-        Tool execution remains synchronous.  Any pending ASK permissions
-        are auto-denied (same as :meth:`run`).
+        Uses :meth:`async_iter_steps` internally.  Any pending ASK
+        permissions are auto-denied (same as :meth:`run`).
         """
-        tool_map = {t.name: t for t in tools}
-        schemas = [t.to_anthropic_schema() for t in tools]
-        steps = 0
-        total_tool_calls = 0
-        total_cost = 0.0
-
-        for _ in range(self.max_steps):
-            steps += 1
-            response = await provider.async_complete(
-                context.to_messages(), tools=schemas if schemas else None,
-            )
-            step_cost = calculate_cost(provider.model_name, response.usage)
-            total_cost += step_cost
-            context.add(
-                Message.assistant(response.content, tool_calls=response.tool_calls),
-            )
-
-            if not response.has_tool_calls:
-                return AgentResult(
-                    output=response.content,
-                    steps=steps,
-                    tool_calls_total=total_tool_calls,
-                    cost=total_cost,
-                    success=True,
-                )
-
-            try:
-                exec_result = execute_tool_calls_incremental(
-                    response.tool_calls, tool_map, context, env, self.config,
-                )
-            except LoopBreak:
-                return AgentResult(
-                    output=response.content,
-                    steps=steps,
-                    tool_calls_total=total_tool_calls + len(response.tool_calls),
-                    cost=total_cost,
-                    success=False,
-                    error="Loop detected",
-                )
-
-            total_tool_calls += exec_result.executed
-
-            if exec_result.pending is not None:
-                # Auto-deny in async_run (same as run/drain_steps)
-                exec_result.pending.deny("Auto-denied by async_run")
-                context.add(
-                    Message.tool(
-                        exec_result.pending.tool_call.id,
-                        exec_result.pending.denial_message,
-                    ),
-                )
-
-        return AgentResult(
-            output="Max steps reached",
-            steps=steps,
-            tool_calls_total=total_tool_calls,
-            cost=total_cost,
-            success=False,
-            error="Max steps reached",
+        return await async_drain_steps(
+            self.async_iter_steps(provider, tools, context, env)
         )
 
 
@@ -367,3 +457,31 @@ def drain_steps(
             error="Generator ended unexpectedly",
         )
     return result
+
+
+async def async_drain_steps(
+    gen: AsyncGenerator[StepResult, None],
+) -> AgentResult:
+    """Consume an ``async_iter_steps`` generator to completion.
+
+    Any :attr:`~StepResult.pending_approval` is automatically denied.
+    Retrieves the :class:`AgentResult` from the ``_async_result``
+    attribute set by :meth:`ReAct.async_iter_steps`.
+    """
+    owner: ReAct | None = None
+    # Access the underlying ReAct instance from the generator
+    if hasattr(gen, "ag_frame") and gen.ag_frame is not None:
+        local_vars = gen.ag_frame.f_locals
+        owner = local_vars.get("self")
+
+    async for step in gen:
+        if step.pending_approval:
+            step.pending_approval.deny("Auto-denied by async_drain_steps")
+
+    if owner is not None and hasattr(owner, "_async_result"):
+        return owner._async_result
+
+    return AgentResult(
+        output="", steps=0, tool_calls_total=0, cost=0.0, success=False,
+        error="Generator ended unexpectedly",
+    )
