@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Generator
-from typing import TYPE_CHECKING
+from typing import Iterator, TYPE_CHECKING
 
 from chimera.core.context import Context
 from chimera.core.tool import BaseTool
@@ -11,12 +11,13 @@ from chimera.core.tool_executor import (
     execute_tool_calls_incremental,
 )
 from chimera.env.base import Environment
-from chimera.providers.base import Provider
+from chimera.providers.base import Provider, Response, StreamEvent
 from chimera.providers.cost import calculate_cost
-from chimera.types import AgentResult, Message, StepResult, ToolResult
+from chimera.types import AgentResult, Message, StepResult, ToolCall, ToolResult
 
 if TYPE_CHECKING:
     from chimera.core.loop_config import LoopConfig
+    from chimera.streaming.base import StreamHandler
 
 
 class ReAct:
@@ -57,12 +58,22 @@ class ReAct:
         total_tool_calls = 0
         total_cost = 0.0
         event_bus = self.config.event_bus if self.config else None
+        handler: StreamHandler | None = self.config.handler if self.config else None
 
         for _ in range(self.max_steps):
             steps += 1
-            response = provider.complete(
-                context.to_messages(), tools=schemas if schemas else None,
-            )
+
+            if handler:
+                handler.on_step_start(steps)
+                events = provider.stream(
+                    context.to_messages(), tools=schemas if schemas else None,
+                )
+                response = self._accumulate_stream(events, handler)
+            else:
+                response = provider.complete(
+                    context.to_messages(), tools=schemas if schemas else None,
+                )
+
             step_cost = calculate_cost(provider.model_name, response.usage)
             total_cost += step_cost
             context.add(
@@ -73,6 +84,9 @@ class ReAct:
                 if event_bus:
                     from chimera.events.types import StepEvent
                     event_bus.publish(StepEvent(step_number=steps, content=response.content))
+                if handler:
+                    handler.on_step_end(steps)
+                    handler.on_done()
                 yield StepResult(
                     message=Message.assistant(response.content),
                     tool_calls=[],
@@ -94,6 +108,9 @@ class ReAct:
                     response.tool_calls, tool_map, context, env, self.config,
                 )
             except LoopBreak:
+                if handler:
+                    handler.on_step_end(steps)
+                    handler.on_done()
                 yield StepResult(
                     message=Message.assistant(response.content),
                     tool_calls=response.tool_calls,
@@ -111,6 +128,15 @@ class ReAct:
                 )
 
             total_tool_calls += exec_result.executed
+
+            # Emit tool events to handler
+            if handler:
+                for tc_idx, tc in enumerate(response.tool_calls):
+                    handler.on_tool_start(tc.name, tc.id)
+                    if tc_idx < len(exec_result.results):
+                        tr = exec_result.results[tc_idx]
+                        content = tr.output if tr.success else f"Error: {tr.error}\n{tr.output}"
+                        handler.on_tool_end(tc.id, content[:500])
 
             if exec_result.pending is not None:
                 # Pause: yield step with pending approval
@@ -163,7 +189,12 @@ class ReAct:
                     cost=step_cost,
                 )
 
+            if handler:
+                handler.on_step_end(steps)
+
         # Max steps
+        if handler:
+            handler.on_done()
         yield StepResult(
             message=Message.assistant("Max steps reached"),
             tool_calls=[],
@@ -178,6 +209,54 @@ class ReAct:
             cost=total_cost,
             success=False,
             error="Max steps reached",
+        )
+
+    @staticmethod
+    def _accumulate_stream(
+        events: Iterator[StreamEvent],
+        handler: StreamHandler | None,
+    ) -> Response:
+        """Consume an iterator of stream events into a single Response.
+
+        While iterating, each event is forwarded to *handler* (if given)
+        via :meth:`StreamHandler.handle_event`.
+        """
+        content_parts: list[str] = []
+        tool_calls: list[ToolCall] = []
+        current_tool_call: ToolCall | None = None
+        usage: dict[str, int] = {"input_tokens": 0, "output_tokens": 0}
+
+        for event in events:
+            if handler:
+                handler.handle_event(event)
+
+            if event.type == "text_delta":
+                content_parts.append(event.content)
+            elif event.type == "tool_call_start":
+                current_tool_call = event.tool_call
+            elif event.type == "tool_call_delta":
+                pass
+            elif event.type == "tool_call_complete":
+                if event.tool_call is not None:
+                    tool_calls.append(event.tool_call)
+                current_tool_call = None
+            elif event.type == "done":
+                if current_tool_call is not None:
+                    tool_calls.append(current_tool_call)
+                    current_tool_call = None
+                if event.tool_call and event.tool_call not in tool_calls:
+                    tool_calls.append(event.tool_call)
+                if event.usage:
+                    usage = event.usage
+
+        # Safety: flush if the stream ended without done/complete
+        if current_tool_call is not None:
+            tool_calls.append(current_tool_call)
+
+        return Response(
+            content="".join(content_parts),
+            tool_calls=tool_calls,
+            usage=usage,
         )
 
     def run(
