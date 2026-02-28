@@ -1,6 +1,7 @@
 """Shared tool execution logic used by all loop variants."""
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -12,7 +13,12 @@ from chimera.types import Message, PendingApproval, ToolCall, ToolResult
 if TYPE_CHECKING:
     from chimera.core.loop_config import LoopConfig
 
-__all__ = ["execute_tool_calls", "execute_tool_calls_incremental", "ToolExecutionResult"]
+__all__ = [
+    "execute_tool_calls",
+    "execute_tool_calls_incremental",
+    "async_execute_tool_calls_incremental",
+    "ToolExecutionResult",
+]
 
 
 class PermissionDenied(Exception):
@@ -253,6 +259,136 @@ def execute_tool_calls_incremental(
                         reason=f"Loop detected: {det_result.pattern}",
                     )
                     result.remaining = list(tool_calls[i + 1:])
+                    return result
+
+    return result
+
+
+async def async_execute_tool_calls_incremental(
+    tool_calls: list[ToolCall],
+    tool_map: dict[str, BaseTool],
+    context: Context,
+    env: Environment | None,
+    config: "LoopConfig | None",
+) -> ToolExecutionResult:
+    """Async version of :func:`execute_tool_calls_incremental`.
+
+    Runs permission and detection checks synchronously (in-memory, no I/O).
+    Executes approved tool calls concurrently via ``asyncio.gather()``.
+    Results are ordered to match *tool_calls* order.
+
+    :exc:`LoopBreak` is still raised (callers must handle it).
+    """
+    result = ToolExecutionResult()
+
+    # Phase 1: pre-process — permission checks, tool resolution (sequential)
+    approved: list[tuple[int, ToolCall, BaseTool]] = []
+
+    for i, tc in enumerate(tool_calls):
+        # -- Permission check --
+        if config and config.permissions:
+            from chimera.permissions.base import PermissionAction
+
+            action = config.permissions.evaluate(tc.name, tc.arguments)
+            if config.event_bus:
+                from chimera.events.types import PermissionEvent
+
+                config.event_bus.publish(
+                    PermissionEvent(
+                        tool_name=tc.name,
+                        action=action.value,
+                        granted=action != PermissionAction.DENY,
+                    )
+                )
+            if action == PermissionAction.DENY:
+                context.add(Message.tool(tc.id, f"Permission denied for {tc.name}"))
+                tr = ToolResult(output=f"Permission denied for {tc.name}")
+                result.results.append(tr)
+                continue
+            if action == PermissionAction.ASK:
+                result.pending = PendingApproval(
+                    tool_call=tc,
+                    tool_name=tc.name,
+                    arguments=tc.arguments,
+                    reason=f"Permission required for tool: {tc.name}",
+                )
+                result.remaining = list(tool_calls[i + 1 :])
+                return result
+
+        # -- Event: tool call --
+        if config and config.event_bus:
+            from chimera.events.types import ToolCallEvent
+
+            config.event_bus.publish(
+                ToolCallEvent(tool_name=tc.name, arguments=tc.arguments, call_id=tc.id)
+            )
+
+        # -- Resolve tool --
+        tool = tool_map.get(tc.name)
+        if tool is None:
+            context.add(Message.tool(tc.id, f"Error: unknown tool {tc.name}"))
+            tr = ToolResult(output="", error=f"Unknown tool {tc.name}")
+            result.results.append(tr)
+            result.executed += 1
+            continue
+
+        approved.append((i, tc, tool))
+
+    if not approved:
+        return result
+
+    # Phase 2: execute all approved tools concurrently
+    async def _run(tc: ToolCall, t: BaseTool) -> ToolResult:
+        try:
+            return await t.async_execute(tc.arguments, env)
+        except Exception as exc:
+            return ToolResult(output="", error=str(exc))
+
+    tool_results = await asyncio.gather(
+        *[_run(tc, t) for _, tc, t in approved]
+    )
+
+    # Phase 3: post-process — add to context, emit events, detect loops
+    for (_, tc, _tool), tr in zip(approved, tool_results):
+        content = tr.output if tr.success else f"Error: {tr.error}\n{tr.output}"
+        context.add(Message.tool(tc.id, content))
+        result.results.append(tr)
+        result.executed += 1
+
+        # -- Event: tool result --
+        if config and config.event_bus:
+            from chimera.events.types import ToolResultEvent
+
+            config.event_bus.publish(
+                ToolResultEvent(
+                    call_id=tc.id,
+                    output=content,
+                    success=tr.success,
+                    tool_metadata=tr.metadata,
+                )
+            )
+
+        # -- Loop detection --
+        if config and config.detector:
+            from chimera.detection.actions import OnDetect
+
+            det_result = config.detector.record_and_check(tc.name, tc.arguments)
+            if det_result is not None:
+                if config.event_bus:
+                    from chimera.events.types import LoopDetectedEvent
+
+                    config.event_bus.publish(
+                        LoopDetectedEvent(pattern=det_result.pattern)
+                    )
+                if config.detector.on_detect == OnDetect.BREAK:
+                    raise LoopBreak(det_result.pattern)
+                if config.detector.on_detect == OnDetect.ASK:
+                    result.pending = PendingApproval(
+                        tool_call=tc,
+                        tool_name=tc.name,
+                        arguments=tc.arguments,
+                        reason=f"Loop detected: {det_result.pattern}",
+                    )
                     return result
 
     return result
