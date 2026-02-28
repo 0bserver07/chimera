@@ -64,6 +64,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Path to write results JSON",
     )
+    eval_parser.add_argument(
+        "--model",
+        default="claude-sonnet-4-20250514",
+        help="Model to use (default: claude-sonnet-4-20250514)",
+    )
 
     # ---- bench subcommand ----
     bench_parser = subparsers.add_parser(
@@ -84,6 +89,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--output",
         default=None,
         help="Path to write results JSON",
+    )
+    bench_parser.add_argument(
+        "--model",
+        default="claude-sonnet-4-20250514",
+        help="Model to use (default: claude-sonnet-4-20250514)",
     )
 
     return parser
@@ -145,6 +155,50 @@ def _add_synthesize_args(parser: argparse.ArgumentParser) -> None:
 create_parser = build_parser
 
 
+_BENCHMARKS: dict[str, str] = {
+    "human-eval": "chimera.eval.benchmarks.human_eval:HumanEval",
+    "swe-bench": "chimera.eval.benchmarks.swe_bench:SWEBench",
+    "aimo": "chimera.eval.benchmarks.aimo:AIMOBenchmark",
+    "custom": "chimera.eval.benchmarks.custom:CustomBenchmark",
+}
+
+
+def _load_benchmark(
+    name: str,
+    dataset: str | None = None,
+    limit: int | None = None,
+    tasks_dir: str | None = None,
+):
+    """Instantiate a benchmark by name."""
+    if name not in _BENCHMARKS:
+        raise ValueError(f"Unknown benchmark: {name}. Available: {', '.join(_BENCHMARKS)}")
+    module_path, class_name = _BENCHMARKS[name].rsplit(":", 1)
+    import importlib
+    module = importlib.import_module(module_path)
+    cls = getattr(module, class_name)
+    if name == "custom":
+        return cls(tasks_dir=tasks_dir or dataset)
+    kwargs: dict = {}
+    if dataset:
+        kwargs["dataset_path"] = dataset
+    if limit:
+        kwargs["limit"] = limit
+    return cls(**kwargs)
+
+
+def _result_to_dict(result) -> dict:
+    """Convert EvalResult to a JSON-serializable dict."""
+    import dataclasses
+    return {
+        "benchmark": result.benchmark,
+        "total": result.total,
+        "passed": result.passed,
+        "pass_rate": result.pass_rate,
+        "total_cost": result.total_cost,
+        "results": [dataclasses.asdict(r) for r in result.results],
+    }
+
+
 def run_synthesize(args: argparse.Namespace) -> int:
     """Execute the synthesize command."""
     if not args.spec and not args.tests:
@@ -186,26 +240,64 @@ def run_synthesize(args: argparse.Namespace) -> int:
 
 def run_eval(args: argparse.Namespace) -> int:
     """Execute the eval command."""
-    print(f"Running evaluation: benchmark={args.benchmark}", file=sys.stderr)
-    if args.dataset:
-        print(f"  dataset: {args.dataset}", file=sys.stderr)
-    if args.limit:
-        print(f"  limit: {args.limit}", file=sys.stderr)
+    from chimera.core.agent import Agent
+    from chimera.core.tool_group import DEFAULT_TOOLS
+    from chimera.eval.harness import Harness
+    from chimera.providers.factory import create_provider
+
+    try:
+        benchmark = _load_benchmark(args.benchmark, dataset=args.dataset, limit=args.limit)
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+    provider = create_provider(model=args.model)
+    agent = Agent(provider=provider, tools=list(DEFAULT_TOOLS))
+    harness = Harness(benchmark, agent)
+
+    print(f"Running {benchmark.name()} ({len(benchmark.tasks())} tasks) with {args.model}...", file=sys.stderr)
+    result = harness.run()
+
+    print(f"\n{result.benchmark}: {result.passed}/{result.total} passed ({result.pass_rate:.1%})", file=sys.stderr)
+    print(f"Total cost: ${result.total_cost:.4f}", file=sys.stderr)
+
     if args.output:
-        print(f"  output: {args.output}", file=sys.stderr)
-    # Actual evaluation logic would go here
-    return 0
+        with open(args.output, "w") as f:
+            json.dump(_result_to_dict(result), f, indent=2)
+        print(f"Results written to {args.output}", file=sys.stderr)
+
+    return 0 if result.passed == result.total else 1
 
 
 def run_bench(args: argparse.Namespace) -> int:
     """Execute the bench command."""
-    print(f"Running benchmark suite: {args.suite}", file=sys.stderr)
-    if args.tasks_dir:
-        print(f"  tasks-dir: {args.tasks_dir}", file=sys.stderr)
+    from chimera.core.agent import Agent
+    from chimera.core.tool_group import DEFAULT_TOOLS
+    from chimera.eval.harness import Harness
+    from chimera.providers.factory import create_provider
+
+    try:
+        benchmark = _load_benchmark("custom", tasks_dir=args.tasks_dir)
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+    provider = create_provider(model=args.model)
+    agent = Agent(provider=provider, tools=list(DEFAULT_TOOLS))
+    harness = Harness(benchmark, agent)
+
+    print(f"Running {benchmark.name()} ({len(benchmark.tasks())} tasks) with {args.model}...", file=sys.stderr)
+    result = harness.run()
+
+    print(f"\n{result.benchmark}: {result.passed}/{result.total} passed ({result.pass_rate:.1%})", file=sys.stderr)
+    print(f"Total cost: ${result.total_cost:.4f}", file=sys.stderr)
+
     if args.output:
-        print(f"  output: {args.output}", file=sys.stderr)
-    # Actual bench logic would go here
-    return 0
+        with open(args.output, "w") as f:
+            json.dump(_result_to_dict(result), f, indent=2)
+        print(f"Results written to {args.output}", file=sys.stderr)
+
+    return 0 if result.passed == result.total else 1
 
 
 def main(argv: Sequence[str] | None = None) -> int:

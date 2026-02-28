@@ -33,3 +33,17 @@ class TestCliBench:
         with pytest.raises(SystemExit) as exc_info:
             parser.parse_args(["bench"])  # --suite is required
         assert exc_info.value.code != 0
+
+
+class TestBenchWiring:
+    def test_parse_model_flag(self):
+        parser = build_parser()
+        args = parser.parse_args([
+            "bench", "--suite", "custom", "--model", "gpt-4o",
+        ])
+        assert args.model == "gpt-4o"
+
+    def test_model_default(self):
+        parser = build_parser()
+        args = parser.parse_args(["bench", "--suite", "custom"])
+        assert args.model == "claude-sonnet-4-20250514"
