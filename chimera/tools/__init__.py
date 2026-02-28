@@ -10,6 +10,7 @@ from chimera.tools.git import GitTool
 from chimera.tools.replace_in_file import ReplaceInFileTool
 from chimera.tools.delegate import DelegateTool
 from chimera.tools.repo_map import RepoMapTool
+from chimera.tools.verify import VerifyTool
 
 read_file = ReadFileTool()
 write_file = WriteFileTool()
@@ -21,10 +22,12 @@ test = TestTool()
 web_fetch = WebFetchTool()
 git = GitTool()
 replace_in_file = ReplaceInFileTool()
+verify = VerifyTool()
 
 __all__ = [
     "ReadFileTool", "WriteFileTool", "BashTool", "EditFileTool", "SearchTool", "ListFilesTool",
     "TestTool", "WebFetchTool", "GitTool", "ReplaceInFileTool", "DelegateTool", "RepoMapTool",
+    "VerifyTool",
     "read_file", "write_file", "bash", "edit_file", "search", "list_files",
-    "test", "web_fetch", "git", "replace_in_file",
+    "test", "web_fetch", "git", "replace_in_file", "verify",
 ]

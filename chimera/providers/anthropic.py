@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import json
 import os
+from collections.abc import AsyncIterator, Iterator
 from typing import Any
 
-from chimera.providers.base import Provider, Response, ToolSchema
+from chimera.providers.base import Provider, Response, StreamEvent, ToolSchema
 from chimera.types import Message, ToolCall
 
 try:
@@ -32,16 +34,20 @@ class AnthropicProvider(Provider):
             client_kwargs["base_url"] = base_url or os.environ.get("ANTHROPIC_BASE_URL")
         self._client = anthropic.Anthropic(**client_kwargs)
 
-    def complete(
+    # ------------------------------------------------------------------
+    # Request / response helpers
+    # ------------------------------------------------------------------
+
+    def _prepare_request(
         self,
         messages: list[Message],
         tools: list[ToolSchema] | None = None,
         temperature: float = 0.0,
         max_tokens: int | None = None,
-    ) -> Response:
-        # Separate system message
+    ) -> dict[str, Any]:
+        """Build the kwargs dict for the Anthropic messages API."""
         system_msg = None
-        api_messages = []
+        api_messages: list[dict[str, Any]] = []
         for msg in messages:
             if msg.role == "system":
                 system_msg = msg.content
@@ -79,12 +85,13 @@ class AnthropicProvider(Provider):
             kwargs["system"] = system_msg
         if tools:
             kwargs["tools"] = tools
+        return kwargs
 
-        response = self._client.messages.create(**kwargs)
-
-        # Parse response
-        text_parts = []
-        tool_calls = []
+    @staticmethod
+    def _parse_response(response: Any) -> Response:
+        """Convert an Anthropic API response into a :class:`Response`."""
+        text_parts: list[str] = []
+        tool_calls: list[ToolCall] = []
         for block in response.content:
             if block.type == "text":
                 text_parts.append(block.text)
@@ -94,7 +101,6 @@ class AnthropicProvider(Provider):
                     name=block.name,
                     arguments=block.input,
                 ))
-
         return Response(
             content="".join(text_parts),
             tool_calls=tool_calls,
@@ -103,6 +109,221 @@ class AnthropicProvider(Provider):
                 "output_tokens": response.usage.output_tokens,
             },
         )
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    def complete(
+        self,
+        messages: list[Message],
+        tools: list[ToolSchema] | None = None,
+        temperature: float = 0.0,
+        max_tokens: int | None = None,
+    ) -> Response:
+        kwargs = self._prepare_request(messages, tools, temperature, max_tokens)
+        response = self._client.messages.create(**kwargs)
+        return self._parse_response(response)
+
+    def stream(
+        self,
+        messages: list[Message],
+        tools: list[ToolSchema] | None = None,
+        temperature: float = 0.0,
+        max_tokens: int | None = None,
+    ) -> Iterator[StreamEvent]:
+        """Stream a response using the Anthropic messages stream API."""
+        kwargs = self._prepare_request(messages, tools, temperature, max_tokens)
+
+        # Track tool call state across events
+        current_tool_id: str | None = None
+        current_tool_name: str | None = None
+        current_tool_json = ""
+
+        with self._client.messages.stream(**kwargs) as stream:
+            for event in stream:
+                yield from self._map_anthropic_event(
+                    event,
+                    current_tool_id,
+                    current_tool_name,
+                    current_tool_json,
+                )
+                # Update tracking state
+                current_tool_id, current_tool_name, current_tool_json = (
+                    self._update_tool_state(
+                        event, current_tool_id, current_tool_name, current_tool_json,
+                    )
+                )
+
+            # Emit final tool_call_complete if stream ends mid-tool
+            if current_tool_id is not None:
+                try:
+                    args = json.loads(current_tool_json) if current_tool_json else {}
+                except json.JSONDecodeError:
+                    args = {}
+                yield StreamEvent(
+                    type="tool_call_complete",
+                    tool_call=ToolCall(
+                        id=current_tool_id,
+                        name=current_tool_name or "",
+                        arguments=args,
+                    ),
+                )
+
+            # Done event with usage
+            final = stream.get_final_message()
+            yield StreamEvent(
+                type="done",
+                usage={
+                    "input_tokens": final.usage.input_tokens,
+                    "output_tokens": final.usage.output_tokens,
+                },
+            )
+
+    @staticmethod
+    def _map_anthropic_event(
+        event: Any,
+        current_tool_id: str | None,
+        current_tool_name: str | None,
+        current_tool_json: str,
+    ) -> Iterator[StreamEvent]:
+        """Map a single Anthropic SDK event to zero or more StreamEvents."""
+        event_type = getattr(event, "type", None)
+
+        if event_type == "content_block_start":
+            block = event.content_block
+            if block.type == "tool_use":
+                yield StreamEvent(
+                    type="tool_call_start",
+                    tool_call=ToolCall(id=block.id, name=block.name, arguments={}),
+                )
+
+        elif event_type == "content_block_delta":
+            delta = event.delta
+            if delta.type == "text_delta":
+                yield StreamEvent(type="text_delta", content=delta.text)
+            elif delta.type == "input_json_delta":
+                yield StreamEvent(type="tool_call_delta", content=delta.partial_json)
+
+        elif event_type == "content_block_stop":
+            # If we were accumulating a tool call, it's now complete
+            if current_tool_id is not None:
+                try:
+                    args = json.loads(current_tool_json) if current_tool_json else {}
+                except json.JSONDecodeError:
+                    args = {}
+                yield StreamEvent(
+                    type="tool_call_complete",
+                    tool_call=ToolCall(
+                        id=current_tool_id,
+                        name=current_tool_name or "",
+                        arguments=args,
+                    ),
+                )
+
+    @staticmethod
+    def _update_tool_state(
+        event: Any,
+        current_tool_id: str | None,
+        current_tool_name: str | None,
+        current_tool_json: str,
+    ) -> tuple[str | None, str | None, str]:
+        """Return updated tool-tracking state after processing *event*."""
+        event_type = getattr(event, "type", None)
+
+        if event_type == "content_block_start":
+            block = event.content_block
+            if block.type == "tool_use":
+                return block.id, block.name, ""
+        elif event_type == "content_block_delta":
+            delta = event.delta
+            if delta.type == "input_json_delta":
+                return current_tool_id, current_tool_name, current_tool_json + delta.partial_json
+        elif event_type == "content_block_stop":
+            if current_tool_id is not None:
+                return None, None, ""
+
+        return current_tool_id, current_tool_name, current_tool_json
+
+    # ------------------------------------------------------------------
+    # Async API (native, using AsyncAnthropic)
+    # ------------------------------------------------------------------
+
+    @property
+    def _aclient(self) -> Any:
+        """Lazy-initialized async Anthropic client."""
+        if not hasattr(self, "_async_client"):
+            client_kwargs: dict[str, Any] = {
+                "api_key": self._client.api_key,
+            }
+            if self._client.base_url and str(self._client.base_url) != "https://api.anthropic.com":
+                client_kwargs["base_url"] = str(self._client.base_url)
+            self._async_client = anthropic.AsyncAnthropic(**client_kwargs)  # type: ignore[union-attr]
+        return self._async_client
+
+    async def async_complete(
+        self,
+        messages: list[Message],
+        tools: list[ToolSchema] | None = None,
+        temperature: float = 0.0,
+        max_tokens: int | None = None,
+    ) -> Response:
+        kwargs = self._prepare_request(messages, tools, temperature, max_tokens)
+        response = await self._aclient.messages.create(**kwargs)
+        return self._parse_response(response)
+
+    async def async_stream(
+        self,
+        messages: list[Message],
+        tools: list[ToolSchema] | None = None,
+        temperature: float = 0.0,
+        max_tokens: int | None = None,
+    ) -> AsyncIterator[StreamEvent]:
+        """Async stream using the Anthropic async messages stream API."""
+        kwargs = self._prepare_request(messages, tools, temperature, max_tokens)
+
+        current_tool_id: str | None = None
+        current_tool_name: str | None = None
+        current_tool_json = ""
+
+        async with self._aclient.messages.stream(**kwargs) as stream:
+            async for event in stream:
+                for se in self._map_anthropic_event(
+                    event, current_tool_id, current_tool_name, current_tool_json,
+                ):
+                    yield se
+                current_tool_id, current_tool_name, current_tool_json = (
+                    self._update_tool_state(
+                        event, current_tool_id, current_tool_name, current_tool_json,
+                    )
+                )
+
+            if current_tool_id is not None:
+                try:
+                    args = json.loads(current_tool_json) if current_tool_json else {}
+                except json.JSONDecodeError:
+                    args = {}
+                yield StreamEvent(
+                    type="tool_call_complete",
+                    tool_call=ToolCall(
+                        id=current_tool_id,
+                        name=current_tool_name or "",
+                        arguments=args,
+                    ),
+                )
+
+            final = await stream.get_final_message()
+            yield StreamEvent(
+                type="done",
+                usage={
+                    "input_tokens": final.usage.input_tokens,
+                    "output_tokens": final.usage.output_tokens,
+                },
+            )
+
+    # ------------------------------------------------------------------
+    # Properties
+    # ------------------------------------------------------------------
 
     @property
     def context_window(self) -> int:

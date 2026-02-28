@@ -5,7 +5,7 @@ from typing import Any
 
 from chimera.core.tool import BaseTool
 from chimera.env.base import Environment
-from chimera.types import ToolResult
+from chimera.types import ChangeType, FileChange, ToolResult
 
 
 class EditFileTool(BaseTool):
@@ -23,20 +23,32 @@ class EditFileTool(BaseTool):
 
     def execute(self, args: dict[str, Any], env: Environment | None) -> ToolResult:
         assert env is not None
+        path = args["path"]
         try:
-            content = env.read_file(args["path"])
+            content = env.read_file(path)
         except FileNotFoundError:
-            return ToolResult(output="", error=f"File not found: {args['path']}")
+            return ToolResult(output="", error=f"File not found: {path}")
 
         old = args["old_string"]
         new = args["new_string"]
         count = content.count(old)
 
         if count == 0:
-            return ToolResult(output="", error=f"String not found in {args['path']}")
+            return ToolResult(output="", error=f"String not found in {path}")
         if count > 1:
             return ToolResult(output="", error=f"Multiple matches ({count}) found — ambiguous. Provide more context.")
 
         updated = content.replace(old, new, 1)
-        env.write_file(args["path"], updated)
-        return ToolResult(output=f"Edited {args['path']}")
+        env.write_file(path, updated)
+
+        fc = FileChange(
+            path=path,
+            change_type=ChangeType.EDIT,
+            before_content=content,
+            after_content=updated,
+            diff=FileChange.compute_diff(path, content, updated),
+        )
+        return ToolResult(
+            output=f"Edited {path}",
+            metadata={"file_change": fc},
+        )

@@ -6,7 +6,7 @@ from typing import Any
 
 from chimera.core.tool import BaseTool
 from chimera.env.base import Environment
-from chimera.types import ToolResult
+from chimera.types import ChangeType, FileChange, ToolResult
 
 
 class ReplaceInFileTool(BaseTool):
@@ -24,10 +24,11 @@ class ReplaceInFileTool(BaseTool):
 
     def execute(self, args: dict[str, Any], env: Environment | None) -> ToolResult:
         assert env is not None
+        path = args["path"]
         try:
-            content = env.read_file(args["path"])
+            content = env.read_file(path)
         except FileNotFoundError:
-            return ToolResult(output="", error=f"File not found: {args['path']}")
+            return ToolResult(output="", error=f"File not found: {path}")
 
         try:
             updated, count = re.subn(args["pattern"], args["replacement"], content)
@@ -35,7 +36,18 @@ class ReplaceInFileTool(BaseTool):
             return ToolResult(output="", error=f"Invalid regex: {e}")
 
         if count == 0:
-            return ToolResult(output=f"0 replacements made in {args['path']}")
+            return ToolResult(output=f"0 replacements made in {path}")
 
-        env.write_file(args["path"], updated)
-        return ToolResult(output=f"{count} replacement(s) made in {args['path']}")
+        env.write_file(path, updated)
+
+        fc = FileChange(
+            path=path,
+            change_type=ChangeType.EDIT,
+            before_content=content,
+            after_content=updated,
+            diff=FileChange.compute_diff(path, content, updated),
+        )
+        return ToolResult(
+            output=f"{count} replacement(s) made in {path}",
+            metadata={"file_change": fc},
+        )
