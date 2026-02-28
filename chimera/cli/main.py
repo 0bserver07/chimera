@@ -96,6 +96,28 @@ def build_parser() -> argparse.ArgumentParser:
         help="Model to use (default: claude-sonnet-4-20250514)",
     )
 
+    # ---- code subcommand ----
+    code_parser = subparsers.add_parser(
+        "code",
+        help="Interactive coding agent REPL",
+    )
+    code_parser.add_argument(
+        "--model",
+        default="claude-sonnet-4-20250514",
+        help="Model to use (default: claude-sonnet-4-20250514)",
+    )
+    code_parser.add_argument(
+        "--workdir",
+        default=".",
+        help="Working directory (default: current directory)",
+    )
+    code_parser.add_argument(
+        "--max-steps",
+        type=int,
+        default=50,
+        help="Maximum agent steps per turn (default: 50)",
+    )
+
     return parser
 
 
@@ -315,6 +337,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         return run_eval(args)
     elif args.command == "bench":
         return run_bench(args)
+    elif args.command == "code":
+        from chimera.cli.code import run_code
+        return run_code(args)
     else:
         parser.print_help()
         return 1
