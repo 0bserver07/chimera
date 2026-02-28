@@ -330,3 +330,87 @@ class TestStdioStderrReader:
         """Stderr lines empty before any subprocess output."""
         transport = StdioTransport("echo", [])
         assert transport.stderr_lines == []
+
+
+# ---- Health check + refresh tests ----
+
+
+class TestMCPHealthCheck:
+    def test_ping_all_healthy(self):
+        """ping() returns True for responsive servers."""
+        mock = MockTransport([
+            {"jsonrpc": "2.0", "id": 1, "result": {}},  # ping response
+        ])
+        client = MCPClient()
+        client._transports = {"srv1": mock}
+        result = client.ping()
+        assert result == {"srv1": True}
+
+    def test_ping_single_server(self):
+        """ping(name) only pings the named server."""
+        healthy = MockTransport([{"jsonrpc": "2.0", "id": 1, "result": {}}])
+        other = MockTransport()
+        client = MCPClient()
+        client._transports = {"healthy": healthy, "other": other}
+        result = client.ping("healthy")
+        assert result == {"healthy": True}
+        assert len(other.sent) == 0  # other not pinged
+
+    def test_ping_unhealthy(self):
+        """ping() returns False for unresponsive servers."""
+
+        class DeadTransport(MCPTransport):
+            def start(self): pass
+            def close(self): pass
+            def send(self, message):
+                raise ConnectionError("dead")
+
+        client = MCPClient()
+        client._transports = {"dead": DeadTransport()}
+        result = client.ping()
+        assert result == {"dead": False}
+
+
+class TestMCPToolRefresh:
+    def test_refresh_tools_updates_defs(self):
+        """refresh_tools re-discovers tools from server."""
+        tool_v1 = [{"name": "tool_a"}]
+        tool_v2 = [{"name": "tool_a"}, {"name": "tool_b"}]
+        mock = MockTransport([
+            # First discovery (connect_all)
+            {"jsonrpc": "2.0", "id": 1, "result": {"capabilities": {}}},
+            None,
+            {"jsonrpc": "2.0", "id": 2, "result": {"tools": tool_v1}},
+            # refresh_tools
+            {"jsonrpc": "2.0", "id": 3, "result": {"tools": tool_v2}},
+        ])
+        client = MCPClient()
+        client.add_transport("srv", mock)
+        client.connect_all()
+        assert len(client.tools) == 1
+
+        client.refresh_tools()
+        assert len(client.tools) == 2
+
+    def test_refresh_specific_server(self):
+        """refresh_tools(name) only refreshes named server."""
+        mock1 = MockTransport([
+            {"jsonrpc": "2.0", "id": 1, "result": {"capabilities": {}}},
+            None,
+            {"jsonrpc": "2.0", "id": 2, "result": {"tools": [{"name": "t1"}]}},
+            {"jsonrpc": "2.0", "id": 3, "result": {"tools": [{"name": "t1"}, {"name": "t2"}]}},
+        ])
+        mock2 = MockTransport([
+            {"jsonrpc": "2.0", "id": 1, "result": {"capabilities": {}}},
+            None,
+            {"jsonrpc": "2.0", "id": 2, "result": {"tools": [{"name": "x1"}]}},
+        ])
+        client = MCPClient()
+        client.add_transport("s1", mock1)
+        client.add_transport("s2", mock2)
+        client.connect_all()
+
+        initial_count = len(mock2.sent)
+        client.refresh_tools("s1")
+        # s2 should not have received more messages
+        assert len(mock2.sent) == initial_count

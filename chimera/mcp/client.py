@@ -165,6 +165,52 @@ class MCPClient:
                     time.sleep(2 ** attempt)  # 1s, 2s, 4s
         return {"error": f"Transport error after {max_retries} attempts: {last_exc}"}
 
+    def ping(self, name: str | None = None) -> dict[str, bool]:
+        """Check whether MCP servers are responsive.
+
+        Sends a ``ping`` JSON-RPC request to each server (or a specific one)
+        and returns a mapping of server name to reachability.
+
+        Args:
+            name: If given, only ping this server. Otherwise ping all.
+
+        Returns:
+            ``{server_name: True/False}`` for each server tested.
+        """
+        targets = (
+            {name: self._transports[name]}
+            if name and name in self._transports
+            else dict(self._transports)
+        )
+        results: dict[str, bool] = {}
+        for srv_name, transport in targets.items():
+            try:
+                transport.send({
+                    "jsonrpc": "2.0",
+                    "id": self._next_id(),
+                    "method": "ping",
+                })
+                results[srv_name] = True
+            except Exception:
+                results[srv_name] = False
+        return results
+
+    def refresh_tools(self, name: str | None = None) -> None:
+        """Re-discover tools from one or all connected servers.
+
+        Useful after a server restarts or updates its tool list.
+
+        Args:
+            name: If given, refresh only this server. Otherwise refresh all.
+        """
+        targets = (
+            {name: self._transports[name]}
+            if name and name in self._transports
+            else dict(self._transports)
+        )
+        for srv_name, transport in targets.items():
+            self._discover_tools(srv_name, transport)
+
     def __enter__(self) -> MCPClient:
         self.connect_all()
         return self
