@@ -80,7 +80,7 @@ from chimera.tools.repo_map import RepoMapTool
 from chimera.synthesize import synthesize
 
 # LSP
-from chimera.lsp import Diagnostic, LSPClient, Severity
+from chimera.lsp import Diagnostic, LSPClient, LSPManager, LSPTool, Severity
 
 # Extension modules
 from chimera.core.loop_config import LoopConfig
@@ -94,6 +94,7 @@ from chimera.auth import AuthManager, Credential
 from chimera.agents import AgentConfig, AgentRegistry
 from chimera.plugins import BasePlugin, PluginManager
 from chimera.config import ProjectConfig, Skill, SkillRegistry, StructuredOutput
+from chimera.mcp import MCPClient, MCPToolSource
 
 # Transactions
 from chimera.transactions import FileTransaction, StagedChange, TransactionState
@@ -202,6 +203,8 @@ __all__ = [
     # LSP
     "Diagnostic",
     "LSPClient",
+    "LSPManager",
+    "LSPTool",
     "Severity",
     # New APIs
     "ChangeType",
@@ -238,4 +241,7 @@ __all__ = [
     "Skill",
     "SkillRegistry",
     "StructuredOutput",
+    # MCP
+    "MCPClient",
+    "MCPToolSource",
 ]

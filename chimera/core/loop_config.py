@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from chimera.detection.actions import LoopDetector
     from chimera.events.base import EventBus
     from chimera.permissions.base import PermissionPolicy
+    from chimera.lsp.manager import LSPManager
     from chimera.streaming.base import StreamHandler
 
 __all__ = ["LoopConfig"]
@@ -39,3 +40,4 @@ class LoopConfig:
     handler: StreamHandler | None = None
     event_bus: EventBus | None = None
     auto_compact_threshold: float = 0.8
+    lsp: LSPManager | None = None
