@@ -20,6 +20,7 @@ Example:
 
 from __future__ import annotations
 
+import asyncio
 from abc import ABC, abstractmethod
 from typing import Any, Callable
 
@@ -60,6 +61,16 @@ class BaseTool(ABC):
             A :class:`~chimera.types.ToolResult` containing the tool's
             output (or error information).
         """
+
+    async def async_execute(
+        self, args: dict[str, Any], env: Environment | None,
+    ) -> ToolResult:
+        """Async version of execute. Default wraps sync via run_in_executor.
+
+        Override for native async I/O (HTTP calls, async DB queries, etc.).
+        """
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, self.execute, args, env)
 
     def to_openai_schema(self) -> dict[str, Any]:
         """Convert to OpenAI function calling schema."""
