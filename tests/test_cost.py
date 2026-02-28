@@ -2,7 +2,7 @@
 """Tests for provider cost calculation."""
 from __future__ import annotations
 
-from chimera.providers.cost import calculate_cost, PRICING
+from chimera.providers.cost import calculate_cost, register_model_cost, PRICING
 
 
 class TestCalculateCost:
@@ -68,3 +68,33 @@ class TestCalculateCost:
     def test_pricing_dict_exists(self):
         assert isinstance(PRICING, dict)
         assert len(PRICING) > 0
+
+
+class TestRegisterModelCost:
+    def test_register_new_model(self):
+        key = "my-custom-model"
+        assert key not in PRICING
+        register_model_cost(key, 5.0, 10.0)
+        try:
+            cost = calculate_cost(key, {"input_tokens": 1_000_000, "output_tokens": 0})
+            assert abs(cost - 5.0) < 1e-9
+        finally:
+            del PRICING[key]
+
+    def test_override_existing_model(self):
+        key = "gpt-4o"
+        original = PRICING[key]
+        register_model_cost(key, 1.0, 2.0)
+        try:
+            cost = calculate_cost(key, {"input_tokens": 1_000_000, "output_tokens": 0})
+            assert abs(cost - 1.0) < 1e-9
+        finally:
+            PRICING[key] = original
+
+    def test_glm5_pricing_exists(self):
+        cost = calculate_cost("glm-5", {"input_tokens": 1_000_000, "output_tokens": 0})
+        assert abs(cost - 2.0) < 1e-9
+
+    def test_deepseek_pricing_exists(self):
+        cost = calculate_cost("deepseek-chat", {"input_tokens": 1_000_000, "output_tokens": 0})
+        assert abs(cost - 0.27) < 1e-9

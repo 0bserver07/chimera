@@ -2,6 +2,8 @@
 """Token cost calculation for LLM providers."""
 from __future__ import annotations
 
+import threading
+
 # Pricing: model_prefix -> (input_cost_per_million, output_cost_per_million)
 PRICING: dict[str, tuple[float, float]] = {
     # Anthropic
@@ -17,7 +19,16 @@ PRICING: dict[str, tuple[float, float]] = {
     "gemini-2.0-flash": (0.10, 0.40),
     "gemini-1.5-pro": (1.25, 5.00),
     "gemini-1.5-flash": (0.075, 0.30),
+    # GLM
+    "glm-5": (2.0, 8.0),
+    "glm-4-plus": (1.0, 4.0),
+    "glm-4-flash": (0.04, 0.04),
+    # DeepSeek
+    "deepseek-chat": (0.27, 1.10),
+    "deepseek-reasoner": (0.55, 2.19),
 }
+
+_pricing_lock = threading.Lock()
 
 
 def calculate_cost(model: str, usage: dict[str, int]) -> float:
@@ -38,3 +49,19 @@ def calculate_cost(model: str, usage: dict[str, int]) -> float:
             input_price, output_price = PRICING[prefix]
             return (input_tokens * input_price + output_tokens * output_price) / 1_000_000
     return 0.0
+
+
+def register_model_cost(
+    model_prefix: str,
+    input_cost_per_mtok: float,
+    output_cost_per_mtok: float,
+) -> None:
+    """Register or override pricing for a model prefix.
+
+    Args:
+        model_prefix: Model name prefix to match (e.g. "my-model").
+        input_cost_per_mtok: Cost per million input tokens in USD.
+        output_cost_per_mtok: Cost per million output tokens in USD.
+    """
+    with _pricing_lock:
+        PRICING[model_prefix] = (input_cost_per_mtok, output_cost_per_mtok)

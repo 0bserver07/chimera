@@ -81,10 +81,11 @@ class DockerEnvironment(Environment):
         if "/" in path:
             parent = "/".join(path.split("/")[:-1])
             self._container.exec_run(f"mkdir -p {self._workdir}/{parent}")
+        # Use base64 encoding to safely write arbitrary content
+        import base64
+        encoded = base64.b64encode(content.encode()).decode()
         self._container.exec_run(
-            ["sh", "-c", f"cat > {self._workdir}/{path}"],
-            stdin=True,
-            socket=True,
+            ["sh", "-c", f"echo '{encoded}' | base64 -d > {self._workdir}/{path}"],
         )
 
     def list_files(self, pattern: str = "**/*") -> list[str]:

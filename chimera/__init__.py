@@ -34,7 +34,7 @@ from chimera.env import Environment, GitEnvironment, LocalEnvironment, SessionMi
 
 # Providers
 from chimera.providers import Provider, Response, StreamEvent, create_provider
-from chimera.providers.cost import calculate_cost
+from chimera.providers.cost import calculate_cost, register_model_cost
 
 # Training
 from chimera.training import Architecture, Constraint, Layer, Spec, Trainer
@@ -92,6 +92,10 @@ from chimera.streaming import ConsoleStreamHandler, StreamingReAct
 from chimera.sessions import InMemoryStorage, Session
 from chimera.auth import AuthManager, Credential
 from chimera.agents import AgentConfig, AgentRegistry
+from chimera.plugins import BasePlugin, PluginManager
+
+# Transactions
+from chimera.transactions import FileTransaction, StagedChange, TransactionState
 
 # Types
 from chimera.core.loop import drain_steps
@@ -145,6 +149,7 @@ __all__ = [
     "Response",
     "StreamEvent",
     "calculate_cost",
+    "register_model_cost",
     "create_provider",
     # Training
     "AIMOEnsemble",
@@ -218,4 +223,11 @@ __all__ = [
     "Credential",
     "AgentConfig",
     "AgentRegistry",
+    # Plugins
+    "BasePlugin",
+    "PluginManager",
+    # Transactions
+    "FileTransaction",
+    "StagedChange",
+    "TransactionState",
 ]

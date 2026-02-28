@@ -8,6 +8,8 @@ from typing import Any
 
 from chimera.core.tool import BaseTool
 from chimera.env.base import Environment
+from chimera.tools.parsers import GoParser, LanguageParser, PythonParser, RustParser, TypeScriptParser
+from chimera.tools.parsers.base import Symbol
 from chimera.types import ToolResult
 
 IGNORE_DIRS = {
@@ -15,6 +17,12 @@ IGNORE_DIRS = {
     ".ruff_cache", "node_modules", ".venv", "venv", ".tox", ".eggs",
     "dist", "build", ".chimera_checkpoints",
 }
+
+_PARSERS: dict[str, LanguageParser] = {}
+for _parser_cls in (PythonParser, TypeScriptParser, GoParser, RustParser):
+    _parser = _parser_cls()
+    for _ext in _parser.extensions:
+        _PARSERS[_ext] = _parser
 
 
 class RepoMap:
@@ -52,8 +60,34 @@ class RepoMap:
             else:
                 indent = "  " * depth
                 lines.append(f"{indent}{rel}")
-                if entry.suffix == ".py":
-                    self._parse_python(entry, lines, depth + 1)
+                parser = _PARSERS.get(entry.suffix)
+                if parser is not None:
+                    self._parse_with(parser, entry, lines, depth + 1)
+
+    def _parse_with(
+        self, parser: LanguageParser, path: Path, lines: list[str], depth: int
+    ) -> None:
+        try:
+            source = path.read_text()
+        except UnicodeDecodeError:
+            return
+        symbols = parser.parse(source)
+        self._format_symbols(symbols, lines, depth)
+
+    def _format_symbols(
+        self, symbols: list[Symbol], lines: list[str], depth: int
+    ) -> None:
+        indent = "  " * depth
+        for sym in symbols:
+            if sym.kind == "class":
+                lines.append(f"{indent}class {sym.name}")
+            elif sym.kind in ("function", "method"):
+                # Name may contain full signature (e.g. from Python parser)
+                lines.append(f"{indent}{sym.name}")
+            else:
+                lines.append(f"{indent}{sym.kind} {sym.name}")
+            if sym.children:
+                self._format_symbols(sym.children, lines, depth + 1)
 
     def _parse_python(self, path: Path, lines: list[str], depth: int) -> None:
         try:

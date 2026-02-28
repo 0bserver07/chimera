@@ -101,6 +101,17 @@ class Environment(ABC):
             checkpoint_id: ID returned by a prior :meth:`checkpoint` call.
         """
 
+    def clone(self) -> Environment:
+        """Create an independent copy for parallel execution.
+
+        Returns:
+            A new Environment instance with the same workspace contents.
+
+        Raises:
+            NotImplementedError: If the environment does not support cloning.
+        """
+        raise NotImplementedError(f"{type(self).__name__} does not support clone()")
+
     def __enter__(self) -> Environment:
         self.setup()
         return self

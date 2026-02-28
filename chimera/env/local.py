@@ -114,6 +114,19 @@ class LocalEnvironment(SessionMixin, Environment):
         # Restore from checkpoint
         self._copy_workspace(cp_dir, self.workdir)
 
+    def clone(self) -> LocalEnvironment:
+        """Create an independent copy of this environment.
+
+        Returns:
+            A new LocalEnvironment with the same files in a temporary directory.
+        """
+        import tempfile
+        clone_dir = Path(tempfile.mkdtemp(prefix="chimera-clone-", dir=self.workdir.parent))
+        self._copy_workspace(self.workdir, clone_dir)
+        cloned = LocalEnvironment(workdir=str(clone_dir), test_cmd=self.test_cmd, timeout=self.timeout)
+        cloned.setup()
+        return cloned
+
     def _copy_workspace(self, src: Path, dst: Path) -> None:
         """Copy workspace files, excluding checkpoint directory."""
         dst.mkdir(parents=True, exist_ok=True)
