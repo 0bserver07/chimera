@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import difflib
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any
 
 
@@ -78,10 +80,89 @@ class TestResult:
 
 
 @dataclass
+class PendingApproval:
+    """Represents a tool call awaiting user approval.
+
+    Used by :meth:`iter_steps` to pause the loop when a permission policy
+    returns ASK.  The consumer calls :meth:`approve` or :meth:`deny` to
+    resume execution.
+    """
+
+    tool_call: ToolCall
+    tool_name: str
+    arguments: dict[str, Any]
+    reason: str = ""
+    _decision: str | None = field(default=None, repr=False)
+    _denial_message: str | None = field(default=None, repr=False)
+
+    def approve(self) -> None:
+        """Approve the pending tool call."""
+        self._decision = "approved"
+
+    def deny(self, message: str = "User denied") -> None:
+        """Deny the pending tool call."""
+        self._decision = "denied"
+        self._denial_message = message
+
+    @property
+    def decided(self) -> bool:
+        return self._decision is not None
+
+    @property
+    def approved(self) -> bool:
+        return self._decision == "approved"
+
+    @property
+    def denial_message(self) -> str:
+        return self._denial_message or ""
+
+
+@dataclass
 class StepResult:
-    message: Message
-    tool_calls: list[ToolCall]
-    done: bool
+    """Result of a single agent step.
+
+    All fields have defaults so existing code using positional args
+    (``StepResult(message, tool_calls, done)``) continues to work.
+    """
+
+    message: Message | None = None
+    tool_calls: list[ToolCall] = field(default_factory=list)
+    done: bool = False
+    step: int = 0
+    tool_results: list[ToolResult] = field(default_factory=list)
+    cost: float = 0.0
+    pending_approval: PendingApproval | None = None
+
+
+class ChangeType(Enum):
+    """Type of file change tracked by :class:`FileChange`."""
+
+    CREATE = "create"
+    EDIT = "edit"
+    DELETE = "delete"
+
+
+@dataclass
+class FileChange:
+    """Structured record of a file modification made by a tool."""
+
+    path: str
+    change_type: ChangeType
+    before_content: str | None = None
+    after_content: str | None = None
+    diff: str | None = None
+
+    @staticmethod
+    def compute_diff(path: str, before: str, after: str) -> str:
+        """Compute a unified diff between *before* and *after* content."""
+        return "".join(
+            difflib.unified_diff(
+                before.splitlines(keepends=True),
+                after.splitlines(keepends=True),
+                fromfile=f"a/{path}",
+                tofile=f"b/{path}",
+            )
+        )
 
 
 @dataclass
