@@ -28,7 +28,9 @@ class AnthropicProvider(Provider):
             raise ImportError("pip install chimera-ai[anthropic]")
         self._model = model
         client_kwargs: dict[str, Any] = {
-            "api_key": api_key or os.environ.get("ANTHROPIC_API_KEY"),
+            "api_key": api_key
+            or os.environ.get("ANTHROPIC_API_KEY")
+            or os.environ.get("ANTHROPIC_AUTH_TOKEN"),
         }
         if base_url or os.environ.get("ANTHROPIC_BASE_URL"):
             client_kwargs["base_url"] = base_url or os.environ.get("ANTHROPIC_BASE_URL")

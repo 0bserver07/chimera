@@ -2,9 +2,8 @@
 from __future__ import annotations
 
 from collections import Counter
-from typing import TYPE_CHECKING
+from typing import Callable, TYPE_CHECKING
 
-from chimera.eval.benchmarks.aimo import extract_answer
 from chimera.training.strategies.base import (
     Callback,
     EpochResult,
@@ -19,6 +18,12 @@ if TYPE_CHECKING:
     from chimera.training.spec import Spec
 
 
+def _default_extract_answer(text: str) -> int | None:
+    """Default: delegate to the AIMO extractor for backward compatibility."""
+    from chimera.eval.benchmarks.aimo import extract_answer
+    return extract_answer(text)
+
+
 class MajorityVoting(Strategy):
     """Sample N solutions and pick the consensus answer.
 
@@ -28,6 +33,9 @@ class MajorityVoting(Strategy):
             provider level (e.g. ``provider.temperature = 0.7``) before passing
             the agent to this strategy.
         min_agreement: Minimum votes for a consensus answer.
+        extract_fn: Callable that extracts an integer answer from agent output.
+            Defaults to the AIMO ``extract_answer`` (looks for ANSWER: N,
+            \\boxed{N}, or last integer in text).
     """
 
     def __init__(
@@ -35,10 +43,12 @@ class MajorityVoting(Strategy):
         n_samples: int = 16,
         temperature: float = 0.7,
         min_agreement: int = 2,
+        extract_fn: Callable[[str], int | None] | None = None,
     ) -> None:
         self.n_samples = n_samples
         self.temperature = temperature
         self.min_agreement = min_agreement
+        self._extract_fn = extract_fn or _default_extract_answer
 
     def run(
         self,
@@ -64,7 +74,7 @@ class MajorityVoting(Strategy):
             agent_result = agent.run(task, env)
             total_cost += agent_result.cost
 
-            answer = extract_answer(agent_result.output)
+            answer = self._extract_fn(agent_result.output)
             if answer is not None:
                 votes[answer] += 1
 

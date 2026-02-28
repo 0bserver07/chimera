@@ -392,6 +392,43 @@ class TestBranchFn:
             assert all("Approach" in p for p in prompts_seen)
 
 
+class TestAllBranchesFail:
+    """Regression test: search terminates when all branches raise exceptions."""
+
+    def test_all_branches_fail_terminates(self):
+        from chimera.providers.base import Provider, Response
+
+        class AlwaysFailProvider(Provider):
+            def complete(self, messages, tools=None, temperature=0.0, max_tokens=None):
+                raise RuntimeError("Simulated network failure")
+
+            @property
+            def context_window(self):
+                return 200_000
+
+            @property
+            def supports_tool_use(self):
+                return True
+
+            @property
+            def model_name(self):
+                return "always-fail"
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env = _make_test_env(tmpdir)
+            agent = Agent(
+                provider=AlwaysFailProvider(),
+                tools=[WriteFileTool()],
+                loop=ReAct(max_steps=3),
+            )
+            spec = Spec.from_tests(tmpdir, "Implement calculator")
+            ts = TreeSearch(branch_factor=2, max_depth=2, max_nodes=10)
+
+            result = ts.run(agent, spec, env)
+            assert result.converged is False
+            assert result.iterations == 0
+
+
 class TestExports:
     def test_importable_from_strategies(self):
         from chimera.training.strategies import TreeSearch as TS

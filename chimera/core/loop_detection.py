@@ -1,4 +1,7 @@
 # chimera/core/loop_detection.py
+# NOTE: For new code prefer ``chimera.detection`` which provides a richer API
+# (pluggable strategies, DetectionResult dataclass, OnDetect policy enum).
+# This module is kept for backwards compatibility.
 from __future__ import annotations
 
 import hashlib

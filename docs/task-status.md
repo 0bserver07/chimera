@@ -1,7 +1,7 @@
 # Chimera — Task Status
 
-> 82 tasks across 18 phases. TDD approach: tests first, then implementation.
-> Sources: `docs/plans/2026-02-20-chimera-implementation-plan.md`, `docs/plans/2026-02-20-chimera-extension-plan.md`, `docs/plans/2026-02-22-persistent-shell-plan.md`
+> 101 tasks across 22 phases. TDD approach: tests first, then implementation.
+> Sources: `docs/plans/2026-02-20-chimera-implementation-plan.md`, `docs/plans/2026-02-20-chimera-extension-plan.md`, `docs/plans/2026-02-22-persistent-shell-plan.md`, `docs/plans/2026-02-25-aimo3-implementation-plan.md`
 
 ## Phases 1–8: Core Framework (Original)
 
@@ -118,7 +118,46 @@
 | 79 | 18 - Tree Search | Custom branch_fn | `tests/test_strategy_tree_search.py` | 1 | DONE |
 | 80 | 18 - Tree Search | Package exports | `chimera/__init__.py` | 3 | DONE |
 
-**Total: 448 tests passing** (as of 2026-02-24)
+## Phase 19: AIMO3 Competition
+
+| # | Phase | Task | Files | Tests | Status |
+|---|-------|------|-------|-------|--------|
+| 81 | 19 - AIMO3 | ModalProvider | `chimera/providers/modal.py` | 6 | DONE |
+| 82 | 19 - AIMO3 | VerifyTool | `chimera/tools/verify.py` | 8 | DONE |
+| 83 | 19 - AIMO3 | MajorityVoting strategy | `chimera/training/strategies/majority_voting.py` | 8 | DONE |
+| 84 | 19 - AIMO3 | AIMOBenchmark | `chimera/eval/benchmarks/aimo.py` | 14 | DONE |
+| 85 | 19 - AIMO3 | AIMOEnsemble strategy | `chimera/training/strategies/aimo_ensemble.py` | 3 | DONE |
+| 86 | 19 - AIMO3 | AIMO3 integration test | `tests/test_aimo_integration.py` | 3 | DONE |
+| 87 | 19 - AIMO3 | Kaggle notebook template | `chimera/notebooks/aimo3/` | — | DONE |
+| 88 | 19 - AIMO3 | Package exports | `chimera/__init__.py` | — | DONE |
+
+## Phase 20: Provider Integration + Docs
+
+| # | Phase | Task | Files | Tests | Status |
+|---|-------|------|-------|-------|--------|
+| 89 | 20 - Integration | `ANTHROPIC_AUTH_TOKEN` support | `chimera/providers/anthropic.py` | — | DONE |
+| 90 | 20 - Integration | Env-based provider inference | `chimera/providers/factory.py` | — | DONE |
+| 91 | 20 - Integration | Anthropic provider integration tests | `tests/test_provider_anthropic_integration.py` | 12 | DONE |
+| 92 | 20 - Docs | Getting started guide | `docs/getting-started.md` | — | DONE |
+| 93 | 20 - Docs | Runnable examples | `examples/quickstart_provider.py`, `quickstart_synthesize.py` | — | DONE |
+| 94 | 20 - Docs | README update (providers, env vars) | `README.md` | — | DONE |
+
+## Phase 21: Battle-Testing (Bugfixes + GLM-5 Integration Tests)
+
+| # | Phase | Task | Files | Tests | Status |
+|---|-------|------|-------|-------|--------|
+| 95 | 21 - Bugfix | TreeSearch: fix infinite loop on all-branches-fail | `chimera/training/strategies/tree_search.py` | 1 | DONE |
+| 96 | 21 - Bugfix | TreeSearch: add logging for failed branches | `chimera/training/strategies/tree_search.py` | — | DONE |
+| 97 | 21 - Bugfix | TreeSearch: fix premature convergence with 0 tests | `chimera/training/strategies/tree_search.py` | — | DONE |
+| 98 | 21 - Bugfix | MajorityVoting: decouple from AIMO (`extract_fn`) | `chimera/training/strategies/majority_voting.py` | — | DONE |
+| 99 | 21 - Bugfix | Ensemble: fix misleading "parallel" docstring | `chimera/composition/ensemble.py` | — | DONE |
+| 100 | 21 - GLM-5 | TreeSearch integration test | `tests/test_tree_search_integration.py` | 2 | DONE |
+| 101 | 21 - GLM-5 | MajorityVoting integration test | `tests/test_majority_voting_integration.py` | 3 | DONE |
+| 102 | 21 - GLM-5 | Eval Harness integration test | `tests/test_eval_harness_integration.py` | 3 | DONE |
+
+**Total: 824 tests passing, 20 skipped** (as of 2026-02-26)
+
+Integration tests (skipped without API credentials): 20 tests across 4 files.
 
 ---
 
@@ -143,16 +182,19 @@
 | 15 | Cost Tracking | 65–68 | 14 | DONE |
 | 16 | synthesize() + CLI | 69–71 | 6 | DONE |
 | 17 | Repository Mapping | 72–74 | 13 | DONE |
-| 18 | Tree Search Strategy | 75–80 | 19 | DONE |
+| 18 | Tree Search Strategy | 75–80 | 19+1 | DONE |
+| 19 | AIMO3 Competition | 81–88 | 42 | DONE |
+| 20 | Provider Integration + Docs | 89–94 | 12 | DONE |
+| 21 | Battle-Testing | 95–102 | 8 | DONE |
 
 ---
 
 ## What's Next (not yet planned)
 
-- [ ] Real provider integration tests (with API keys)
 - [ ] Docker environment integration tests
 - [ ] Plugin/extension system
 - [ ] Repository mapping enhancements (non-Python languages)
 - [ ] Multi-file edit transactions
-- [ ] Cost tracking enhancements (budget alerts, per-session tracking)
+- [ ] Cost tracking: add GLM-5 / custom model pricing
 - [ ] Documentation site
+- [ ] Make Ensemble composition actually parallel (ThreadPoolExecutor + env isolation)

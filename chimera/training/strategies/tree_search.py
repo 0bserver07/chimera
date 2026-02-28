@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import concurrent.futures
+import logging
 import shutil
 import tempfile
 import uuid
@@ -11,6 +12,8 @@ from pathlib import Path
 from typing import Any, Callable, TYPE_CHECKING
 
 from chimera.env.local import LocalEnvironment
+
+_logger = logging.getLogger(__name__)
 from chimera.training.strategies.base import (
     Callback,
     EpochResult,
@@ -141,6 +144,11 @@ class TreeSearch(Strategy):
         4. Copy each clone's files back to main env and checkpoint them
         5. Clean up clones
         6. Return list of result dicts
+
+        NOTE: ``agent.provider`` is shared across threads. This is safe for
+        stateless HTTP-based providers (AnthropicProvider, OpenAIProvider)
+        since each ``complete()`` call is an independent request. Providers
+        with mutable per-request state may need external synchronisation.
         """
         env.restore(parent.checkpoint_id)
         n = len(prompts)
@@ -160,8 +168,11 @@ class TreeSearch(Strategy):
                     idx = futures[future]
                     try:
                         branch_results[idx] = future.result()
-                    except Exception:
-                        # Skip failed branches
+                    except Exception as exc:
+                        _logger.warning(
+                            "Branch %d expansion failed (%s: %s); skipping.",
+                            idx, type(exc).__name__, exc,
+                        )
                         branch_results[idx] = None
 
             # Copy each clone's files back to main env and checkpoint
@@ -243,7 +254,7 @@ class TreeSearch(Strategy):
         best_node = root
 
         # If tests already pass at root, converge immediately
-        if test_result.all_passed:
+        if test_result.all_passed and test_result.total > 0:
             constraints_ok = True
             for constraint in constraints:
                 cr = constraint.evaluate(env)
@@ -284,6 +295,12 @@ class TreeSearch(Strategy):
 
             # Run branches in parallel
             branch_results = self._expand_parallel(agent, env, parent, prompts)
+
+            # If all branches failed, mark parent as exhausted so it
+            # drops off the frontier (prevents infinite loop).
+            if not branch_results:
+                parent.children.append("__failed__")
+                continue
 
             converged = False
             for br in branch_results:

@@ -1,3 +1,10 @@
+"""Synthesis specification -- the 'loss function' for code generation.
+
+A :class:`Spec` describes *what* should be synthesized.  It can be built from
+a plain-text description, a file on disk, or a test directory, and rendered
+into a prompt string that an agent can act on via :meth:`Spec.to_prompt`.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -24,6 +31,14 @@ class Spec:
 
     @classmethod
     def from_string(cls, text: str) -> Spec:
+        """Create a Spec from a plain-text description.
+
+        Args:
+            text: Free-form description of what should be synthesized.
+
+        Returns:
+            A new :class:`Spec` instance with the given text.
+        """
         return cls(text=text)
 
     @classmethod
@@ -33,6 +48,16 @@ class Spec:
 
     @classmethod
     def from_tests(cls, tests_dir: str, description: str | None = None) -> Spec:
+        """Create a Spec whose goal is to make a test suite pass.
+
+        Args:
+            tests_dir: Path to the directory containing the test files.
+            description: Optional human-readable description.  When omitted,
+                a generic "make all tests pass" message is generated.
+
+        Returns:
+            A new :class:`Spec` pointing at the given tests directory.
+        """
         if description:
             return cls(text=description, tests_dir=tests_dir)
         return cls(
@@ -45,6 +70,12 @@ class Spec:
     # ------------------------------------------------------------------
 
     def to_prompt(self) -> str:
+        """Render the specification as a prompt string for the agent.
+
+        Returns:
+            A multi-line string combining the text description, tests
+            directory, and any referenced spec files.
+        """
         parts: list[str] = []
         if self.text:
             parts.append(self.text)

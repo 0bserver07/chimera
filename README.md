@@ -2,7 +2,7 @@
 
 A composable coding agent framework. Synthesize codebases from specifications.
 
-**Status: Alpha** — Core framework complete (448 tests passing). API may change before 1.0.
+**Status: Alpha** — Core framework complete (490 tests passing). API may change before 1.0.
 
 ## Quick Start
 
@@ -45,6 +45,35 @@ pip install chimera-ai[all]             # all providers
 
 Requires Python 3.11+.
 
+## Provider Setup
+
+Chimera works with any Anthropic-compatible API. Configure via environment variables:
+
+```bash
+# GLM-5 via api.z.ai
+export ANTHROPIC_BASE_URL="https://api.z.ai/api/anthropic"
+export ANTHROPIC_AUTH_TOKEN="your-token-here"
+
+# Or Claude direct
+export ANTHROPIC_API_KEY="sk-ant-..."
+
+# Or OpenAI
+export OPENAI_API_KEY="sk-..."
+```
+
+The provider auto-detects from model name. For unknown models (e.g. `glm-5`), it falls back to checking environment variables.
+
+```python
+# Auto-detected from env
+provider = chimera.create_provider(model="glm-5")
+
+# Explicit
+provider = chimera.create_provider("anthropic", model="glm-5",
+    base_url="https://api.z.ai/api/anthropic", api_key="...")
+```
+
+See [docs/getting-started.md](docs/getting-started.md) for full configuration reference and [examples/](examples/) for runnable scripts.
+
 ## Architecture
 
 Chimera is a 6-layer stack. Each layer can be used independently or composed:
@@ -64,15 +93,15 @@ Use Layer 1-3 as an agent toolkit. Use Layer 1-5 as a synthesis framework. Use L
 
 **Zero-dependency core.** Optional extras for providers — no bloated dependency tree.
 
-**5 LLM providers.** Anthropic, OpenAI, Google Gemini, Ollama, any OpenAI-compatible endpoint (OpenRouter, vLLM, Groq). Auto-detected via `create_provider()`.
+**6 LLM providers.** Anthropic, OpenAI, Google Gemini, Ollama, Modal, any OpenAI-compatible endpoint (OpenRouter, vLLM, Groq, GLM-5). Auto-detected via `create_provider()`.
 
-**12 built-in tools.** File read/write/edit/search/list, bash, test runner, git, web fetch, regex replace, sub-agent delegation.
+**13 built-in tools.** File read/write/edit/search/list, bash, test runner, git, web fetch, regex replace, sub-agent delegation, answer verification.
 
 **4 loop types.** ReAct (default), PlanAndExecute, Reflexion, TreeOfThought.
 
 **3 composition patterns.** Pipeline (sequential), Ensemble (parallel + selector), Supervisor (coordinator + workers).
 
-**5 training strategies.** TestConvergence (default — iterate until tests pass), TreeSearch (parallel branch exploration), Curriculum (topological ordering), Ensemble (multiple attempts), Passthrough (single-shot).
+**8 training strategies.** TestConvergence (default — iterate until tests pass), TreeSearch (parallel branch exploration), Curriculum (topological ordering), Ensemble (multiple attempts), MajorityVoting (pass@N consensus), AIMOEnsemble (voting + tree search fallback), Passthrough (single-shot).
 
 **Evaluation harness.** Benchmark adapters for SWE-bench, HumanEval, and custom benchmarks. Metrics: pass@k, resolve rate, average cost. Anti-overfit detection.
 
@@ -96,7 +125,7 @@ The core verb is `.synthesize()` — program synthesis, not chat.
 - [x] ~~`chimera.synthesize()` one-liner~~ (done)
 - [x] ~~Tree search strategy~~ (done)
 - [x] ~~Repository mapping~~ (done)
-- [ ] Real provider integration tests (with API keys)
+- [x] ~~Real provider integration tests~~ (done — 12 tests, any Anthropic-compatible endpoint)
 - [ ] Docker environment integration tests
 - [ ] Plugin/extension system
 - [ ] Multi-file edit transactions
@@ -112,6 +141,19 @@ python -m pytest
 ```
 
 The project uses TDD. Tests go in `tests/`, one file per module. Run `ruff check` for linting and `mypy chimera/` for type checking.
+
+### Integration tests
+
+Run real provider tests with credentials:
+
+```bash
+export ANTHROPIC_BASE_URL="https://api.z.ai/api/anthropic"
+export ANTHROPIC_AUTH_TOKEN="your-token"
+export ANTHROPIC_MODEL="glm-5"
+python -m pytest tests/test_provider_anthropic_integration.py -v
+```
+
+These tests are skipped automatically when no credentials are set.
 
 ## License
 
