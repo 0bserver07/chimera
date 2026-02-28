@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from chimera.events.base import EventBus
     from chimera.permissions.base import PermissionPolicy
     from chimera.lsp.manager import LSPManager
+    from chimera.providers.cost_tracker import CostTracker
     from chimera.streaming.base import StreamHandler
 
 __all__ = ["LoopConfig"]
@@ -41,3 +42,4 @@ class LoopConfig:
     event_bus: EventBus | None = None
     auto_compact_threshold: float = 0.8
     lsp: LSPManager | None = None
+    cost_tracker: CostTracker | None = None

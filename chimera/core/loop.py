@@ -14,6 +14,7 @@ from chimera.core.tool_executor import (
 from chimera.env.base import Environment
 from chimera.providers.base import Provider, Response, StreamEvent
 from chimera.providers.cost import calculate_cost
+from chimera.providers.cost_tracker import CostLimitExceeded
 from chimera.types import AgentResult, Message, StepResult, ToolCall, ToolResult
 
 if TYPE_CHECKING:
@@ -77,6 +78,29 @@ class ReAct:
 
             step_cost = calculate_cost(provider.model_name, response.usage)
             total_cost += step_cost
+
+            # Cost tracking
+            if self.config and self.config.cost_tracker:
+                try:
+                    self.config.cost_tracker.record(step_cost, model=provider.model_name)
+                except CostLimitExceeded:
+                    if handler:
+                        handler.on_done()
+                    yield StepResult(
+                        message=Message.assistant(response.content),
+                        done=True,
+                        step=steps,
+                        cost=step_cost,
+                    )
+                    return AgentResult(
+                        output=response.content,
+                        steps=steps,
+                        tool_calls_total=total_tool_calls,
+                        cost=total_cost,
+                        success=False,
+                        error="Cost limit exceeded",
+                    )
+
             context.add(
                 Message.assistant(response.content, tool_calls=response.tool_calls),
             )
@@ -304,6 +328,28 @@ class ReAct:
 
             step_cost = calculate_cost(provider.model_name, response.usage)
             total_cost += step_cost
+
+            # Cost tracking
+            if self.config and self.config.cost_tracker:
+                try:
+                    self.config.cost_tracker.record(step_cost, model=provider.model_name)
+                except CostLimitExceeded:
+                    yield StepResult(
+                        message=Message.assistant(response.content),
+                        done=True,
+                        step=steps,
+                        cost=step_cost,
+                    )
+                    self._async_result = AgentResult(
+                        output=response.content,
+                        steps=steps,
+                        tool_calls_total=total_tool_calls,
+                        cost=total_cost,
+                        success=False,
+                        error="Cost limit exceeded",
+                    )
+                    return
+
             context.add(
                 Message.assistant(response.content, tool_calls=response.tool_calls),
             )

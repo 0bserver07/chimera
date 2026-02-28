@@ -65,3 +65,22 @@ def register_model_cost(
     """
     with _pricing_lock:
         PRICING[model_prefix] = (input_cost_per_mtok, output_cost_per_mtok)
+
+
+def estimate_cost(
+    model: str, input_tokens: int, output_tokens: int = 0,
+) -> float:
+    """Pre-flight cost estimation.
+
+    Args:
+        model: Model identifier.
+        input_tokens: Expected input token count.
+        output_tokens: Expected output token count.
+
+    Returns:
+        Estimated cost in USD. Returns 0.0 for unknown models.
+    """
+    return calculate_cost(model, {
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+    })

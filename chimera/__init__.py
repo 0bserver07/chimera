@@ -34,7 +34,8 @@ from chimera.env import Environment, GitEnvironment, LocalEnvironment, SessionMi
 
 # Providers
 from chimera.providers import ModelConfig, Provider, ProviderCatalog, Response, StreamEvent, create_provider
-from chimera.providers.cost import calculate_cost, register_model_cost
+from chimera.providers.cost import calculate_cost, estimate_cost, register_model_cost
+from chimera.providers.cost_tracker import CostLimitExceeded, CostTracker
 
 # Training
 from chimera.training import Architecture, Constraint, Layer, Spec, Trainer
@@ -151,7 +152,10 @@ __all__ = [
     "Response",
     "StreamEvent",
     "calculate_cost",
+    "estimate_cost",
     "register_model_cost",
+    "CostTracker",
+    "CostLimitExceeded",
     "create_provider",
     "ModelConfig",
     "ProviderCatalog",
