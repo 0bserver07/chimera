@@ -36,5 +36,29 @@ class GitEnvironment(LocalEnvironment):
         self._git(f"checkout {checkpoint_id} -- .")
         self._git("clean -fd")
 
+    def clone(self) -> GitEnvironment:
+        """Create an independent git-based clone.
+
+        Uses ``git clone --local`` for efficiency rather than copying
+        the entire ``.git`` directory.
+        """
+        import tempfile
+
+        clone_dir = Path(tempfile.mkdtemp(
+            prefix="chimera-git-clone-", dir=self.workdir.parent,
+        ))
+        # git clone --local is fast (hardlinks objects)
+        self._git(f"clone --local . {clone_dir}")
+        cloned = GitEnvironment(
+            workdir=str(clone_dir),
+            test_cmd=self.test_cmd,
+            timeout=self.timeout,
+        )
+        # Skip full setup — git clone already initialised the repo
+        cloned.workdir.mkdir(parents=True, exist_ok=True)
+        cloned._checkpoint_dir = cloned.workdir / ".chimera_checkpoints"
+        cloned._checkpoint_dir.mkdir(exist_ok=True)
+        return cloned
+
     def _git(self, cmd: str) -> CommandResult:
         return self.run_command(f"git {cmd}")

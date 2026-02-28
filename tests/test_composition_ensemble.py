@@ -205,3 +205,92 @@ class TestParallelEnsemble:
             assert len(cloned_dirs) == 2
             for d in cloned_dirs:
                 assert not d.exists(), f"Clone dir {d} was not cleaned up"
+
+
+# --- Async + first_success tests ---
+
+import pytest
+from chimera.types import AgentResult
+
+
+class AsyncLabelProvider(LabelProvider):
+    """LabelProvider with async_complete support."""
+
+    async def async_complete(self, messages, tools=None, temperature=0.0, max_tokens=None):
+        return self.complete(messages, tools, temperature, max_tokens)
+
+
+class TestAsyncEnsemble:
+    @pytest.mark.asyncio
+    async def test_async_run_all(self) -> None:
+        """async_run runs all agents and returns results."""
+        agents = [
+            Agent(provider=AsyncLabelProvider("A"), loop=ReAct(max_steps=1)),
+            Agent(provider=AsyncLabelProvider("B"), loop=ReAct(max_steps=1)),
+        ]
+        ensemble = Ensemble(agents)
+        results = await ensemble.async_run("task", None)
+        assert len(results) == 2
+        assert any("A" in r.output for r in results)
+        assert any("B" in r.output for r in results)
+
+    @pytest.mark.asyncio
+    async def test_async_run_with_cloneable_env(self) -> None:
+        """async_run with cloneable env still works."""
+        agents = [
+            Agent(provider=AsyncLabelProvider("X"), loop=ReAct(max_steps=1)),
+            Agent(provider=AsyncLabelProvider("Y"), loop=ReAct(max_steps=1)),
+        ]
+        ensemble = Ensemble(agents)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env = LocalEnvironment(workdir=tmpdir, test_cmd="echo ok")
+            env.setup()
+            results = await ensemble.async_run("task", env)
+            assert len(results) == 2
+
+
+class TestFirstSuccess:
+    def test_first_success_returns_winner(self) -> None:
+        """first_success returns first successful result."""
+        results = [
+            AgentResult(output="fail", steps=1, tool_calls_total=0, cost=0, success=False, error="nope"),
+            AgentResult(output="win", steps=1, tool_calls_total=0, cost=0, success=True),
+            AgentResult(output="also win", steps=1, tool_calls_total=0, cost=0, success=True),
+        ]
+        assert Ensemble.first_success(results).output == "win"
+
+    def test_first_success_returns_first_on_all_fail(self) -> None:
+        """first_success returns first result when none succeed."""
+        results = [
+            AgentResult(output="fail1", steps=1, tool_calls_total=0, cost=0, success=False, error="a"),
+            AgentResult(output="fail2", steps=1, tool_calls_total=0, cost=0, success=False, error="b"),
+        ]
+        assert Ensemble.first_success(results).output == "fail1"
+
+    def test_first_success_empty(self) -> None:
+        """first_success on empty list returns failure result."""
+        result = Ensemble.first_success([])
+        assert not result.success
+
+
+class TestGitEnvironmentClone:
+    def test_git_env_clone(self) -> None:
+        """GitEnvironment.clone() creates a working git-based clone."""
+        from chimera.env.git_env import GitEnvironment
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env = GitEnvironment(workdir=tmpdir, test_cmd="echo ok")
+            env.setup()
+            env.write_file("hello.txt", "world")
+            env.checkpoint()
+
+            cloned = env.clone()
+            try:
+                assert cloned.read_file("hello.txt") == "world"
+                # Verify clone is a git repo
+                result = cloned.run_command("git rev-parse HEAD")
+                assert result.exit_code == 0
+            finally:
+                import shutil
+                shutil.rmtree(str(cloned.workdir), ignore_errors=True)
+                cloned.cleanup()
