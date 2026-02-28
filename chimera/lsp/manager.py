@@ -97,15 +97,22 @@ class LSPManager:
             return None
         return self._sessions.get(name)
 
-    def get_diagnostics(self, file_path: str) -> list[Diagnostic]:
+    def get_diagnostics(self, file_path: str, wait: float = 0.5) -> list[Diagnostic]:
         """Get diagnostics for a file.
+
+        Opens the file in the language server (if not already open),
+        then waits briefly for ``publishDiagnostics`` notifications
+        before returning cached results.
 
         Args:
             file_path: Path to the file.
+            wait: Seconds to wait for diagnostics to arrive (default 0.5).
 
         Returns:
             List of Diagnostic objects.
         """
+        import time
+
         session = self.get_session(file_path)
         if session is None:
             return []
@@ -117,9 +124,9 @@ class LSPManager:
         except (FileNotFoundError, OSError):
             return []
         session.did_open(uri, lang_id, text)
-        # Note: real diagnostics come asynchronously via publishDiagnostics
-        # For now, return empty -- full async support in a future pass
-        return []
+        # Give the server time to publish diagnostics
+        time.sleep(wait)
+        return session.get_diagnostics(uri)
 
     def _detect_language(self, ext: str) -> str:
         """Map file extension to LSP language ID."""

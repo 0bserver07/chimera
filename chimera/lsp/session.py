@@ -14,8 +14,9 @@ class LSPSession:
     """A single LSP server connection over stdin/stdout.
 
     Handles JSON-RPC communication with Content-Length framing.
-    Supports: initialize, didOpen, didChange, didSave,
-    definition, references, hover, documentSymbol.
+    A background reader thread processes all incoming messages,
+    routing responses to pending requests and caching notifications
+    (e.g. ``textDocument/publishDiagnostics``).
     """
 
     def __init__(self, command: list[str]) -> None:
@@ -24,6 +25,11 @@ class LSPSession:
         self._request_id = 0
         self._lock = threading.Lock()
         self._initialized = False
+        # Background reader state
+        self._pending: dict[int, threading.Event] = {}
+        self._responses: dict[int, dict[str, Any]] = {}
+        self._reader_thread: threading.Thread | None = None
+        self._diagnostics_cache: dict[str, list[Diagnostic]] = {}
 
     def start(self, root_path: str) -> None:
         """Start the language server and initialize it."""
@@ -31,6 +37,12 @@ class LSPSession:
             self._command, stdin=subprocess.PIPE,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         )
+        # Start background reader before sending any requests
+        self._reader_thread = threading.Thread(
+            target=self._read_loop, daemon=True,
+        )
+        self._reader_thread.start()
+
         self._send_request("initialize", {
             "processId": None,
             "rootUri": Path(root_path).as_uri(),
@@ -40,6 +52,7 @@ class LSPSession:
                     "references": {"dynamicRegistration": False},
                     "hover": {"dynamicRegistration": False},
                     "documentSymbol": {"dynamicRegistration": False},
+                    "publishDiagnostics": {"relatedInformation": False},
                 },
             },
         })
@@ -61,6 +74,15 @@ class LSPSession:
                 self._process.kill()
             self._process = None
             self._initialized = False
+
+    @property
+    def cached_diagnostics(self) -> dict[str, list[Diagnostic]]:
+        """Return diagnostics cache (URI -> diagnostics)."""
+        return dict(self._diagnostics_cache)
+
+    def get_diagnostics(self, uri: str) -> list[Diagnostic]:
+        """Return cached diagnostics for a given URI."""
+        return list(self._diagnostics_cache.get(uri, []))
 
     def did_open(self, uri: str, language_id: str, text: str) -> None:
         """Notify server that a file was opened."""
@@ -129,11 +151,16 @@ class LSPSession:
     # ---- JSON-RPC helpers ----
 
     def _send_request(self, method: str, params: Any) -> dict[str, Any] | None:
-        with self._lock:
-            self._request_id += 1
-            msg = {"jsonrpc": "2.0", "id": self._request_id, "method": method, "params": params}
-            self._write(msg)
-            return self._read()
+        self._request_id += 1
+        req_id = self._request_id
+        event = threading.Event()
+        self._pending[req_id] = event
+        msg = {"jsonrpc": "2.0", "id": req_id, "method": method, "params": params}
+        self._write(msg)
+        # Wait for response (background reader will set the event)
+        event.wait(timeout=30)
+        self._pending.pop(req_id, None)
+        return self._responses.pop(req_id, None)
 
     def _send_notification(self, method: str, params: Any) -> None:
         msg = {"jsonrpc": "2.0", "method": method, "params": params}
@@ -146,12 +173,15 @@ class LSPSession:
         self._process.stdin.write(header + body)
         self._process.stdin.flush()
 
-    def _read(self) -> dict[str, Any] | None:
+    def _read_one(self) -> dict[str, Any] | None:
+        """Read a single Content-Length framed message from stdout."""
         assert self._process is not None and self._process.stdout is not None
         content_length = None
         while True:
             line = self._process.stdout.readline()
-            if not line or line.strip() == b"":
+            if not line:
+                return None  # EOF
+            if line.strip() == b"":
                 break
             if line.lower().startswith(b"content-length:"):
                 content_length = int(line.split(b":")[1].strip())
@@ -159,3 +189,47 @@ class LSPSession:
             return None
         body = self._process.stdout.read(content_length)
         return json.loads(body)
+
+    def _read_loop(self) -> None:
+        """Background thread: read messages, route responses and notifications."""
+        while self._process is not None:
+            try:
+                msg = self._read_one()
+            except (ValueError, OSError):
+                break
+            if msg is None:
+                break
+
+            if "id" in msg and "method" not in msg:
+                # Response to a request
+                req_id = msg["id"]
+                self._responses[req_id] = msg
+                event = self._pending.get(req_id)
+                if event:
+                    event.set()
+            elif msg.get("method") == "textDocument/publishDiagnostics":
+                self._handle_diagnostics(msg.get("params", {}))
+            # Other notifications silently ignored
+
+    def _handle_diagnostics(self, params: dict[str, Any]) -> None:
+        """Cache diagnostics from a publishDiagnostics notification."""
+        uri = params.get("uri", "")
+        raw_diags = params.get("diagnostics", [])
+        parsed: list[Diagnostic] = []
+        for d in raw_diags:
+            rng = d.get("range", {}).get("start", {})
+            sev_num = d.get("severity", 1)
+            try:
+                sev = Severity(sev_num)
+            except ValueError:
+                sev = Severity.ERROR
+            parsed.append(Diagnostic(
+                file=uri,
+                line=rng.get("line", 0),
+                column=rng.get("character", 0),
+                severity=sev,
+                message=d.get("message", ""),
+                source=d.get("source"),
+                code=str(d["code"]) if "code" in d else None,
+            ))
+        self._diagnostics_cache[uri] = parsed

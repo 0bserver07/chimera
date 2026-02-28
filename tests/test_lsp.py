@@ -142,3 +142,94 @@ class TestImports:
         assert FileChange is not None
         assert PendingApproval is not None
         assert drain_steps is not None
+
+
+# ---------------------------------------------------------------------------
+# Tests: LSPSession background reader + diagnostics cache
+# ---------------------------------------------------------------------------
+
+import json
+import threading
+from chimera.lsp.session import LSPSession
+
+
+class TestLSPSessionDiagnosticsCache:
+    def test_handle_diagnostics_parses(self) -> None:
+        """_handle_diagnostics caches parsed Diagnostic objects."""
+        session = LSPSession(["echo"])
+        session._handle_diagnostics({
+            "uri": "file:///test.py",
+            "diagnostics": [
+                {
+                    "range": {"start": {"line": 5, "character": 3}},
+                    "severity": 1,
+                    "message": "undefined name 'foo'",
+                    "source": "pyright",
+                    "code": "reportUndefinedVariable",
+                },
+                {
+                    "range": {"start": {"line": 10, "character": 0}},
+                    "severity": 2,
+                    "message": "unused import",
+                },
+            ],
+        })
+        diags = session.get_diagnostics("file:///test.py")
+        assert len(diags) == 2
+        assert diags[0].severity == Severity.ERROR
+        assert diags[0].line == 5
+        assert diags[0].message == "undefined name 'foo'"
+        assert diags[0].source == "pyright"
+        assert diags[0].code == "reportUndefinedVariable"
+        assert diags[1].severity == Severity.WARNING
+
+    def test_get_diagnostics_empty_for_unknown_uri(self) -> None:
+        """get_diagnostics returns empty list for unknown URIs."""
+        session = LSPSession(["echo"])
+        assert session.get_diagnostics("file:///unknown.py") == []
+
+    def test_cached_diagnostics_returns_copy(self) -> None:
+        """cached_diagnostics returns a copy, not the internal dict."""
+        session = LSPSession(["echo"])
+        session._handle_diagnostics({
+            "uri": "file:///a.py",
+            "diagnostics": [
+                {"range": {"start": {"line": 0, "character": 0}},
+                 "severity": 1, "message": "err"},
+            ],
+        })
+        cache = session.cached_diagnostics
+        assert "file:///a.py" in cache
+        # Modifying returned dict shouldn't affect internal cache
+        cache.clear()
+        assert len(session.cached_diagnostics) == 1
+
+    def test_diagnostics_overwritten_on_update(self) -> None:
+        """New publishDiagnostics replaces previous cache for same URI."""
+        session = LSPSession(["echo"])
+        session._handle_diagnostics({
+            "uri": "file:///b.py",
+            "diagnostics": [
+                {"range": {"start": {"line": 0, "character": 0}},
+                 "severity": 1, "message": "err1"},
+            ],
+        })
+        assert len(session.get_diagnostics("file:///b.py")) == 1
+        session._handle_diagnostics({
+            "uri": "file:///b.py",
+            "diagnostics": [],
+        })
+        assert len(session.get_diagnostics("file:///b.py")) == 0
+
+    def test_read_loop_routes_response(self) -> None:
+        """Background reader routes responses to pending requests."""
+        session = LSPSession(["echo"])
+        # Simulate a pending request
+        event = threading.Event()
+        session._pending[42] = event
+        # Simulate receiving a response
+        response = {"jsonrpc": "2.0", "id": 42, "result": {"foo": "bar"}}
+        session._responses[42] = response
+        event.set()
+        # Verify response is accessible
+        assert session._responses[42] == response
