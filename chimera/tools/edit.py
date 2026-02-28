@@ -1,11 +1,14 @@
 # chimera/tools/edit.py
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from chimera.core.tool import BaseTool
 from chimera.env.base import Environment
 from chimera.types import ChangeType, FileChange, ToolResult
+
+if TYPE_CHECKING:
+    from chimera.tools.strategies import FuzzyEditor
 
 
 class EditFileTool(BaseTool):
@@ -21,6 +24,9 @@ class EditFileTool(BaseTool):
         "required": ["path", "old_string", "new_string"],
     }
 
+    def __init__(self, editor: FuzzyEditor | None = None) -> None:
+        self._editor = editor
+
     def execute(self, args: dict[str, Any], env: Environment | None) -> ToolResult:
         assert env is not None
         path = args["path"]
@@ -33,12 +39,22 @@ class EditFileTool(BaseTool):
         new = args["new_string"]
         count = content.count(old)
 
-        if count == 0:
+        if count == 1:
+            # Exact match — existing behavior
+            updated = content.replace(old, new, 1)
+            match_strategy = "exact"
+        elif self._editor is not None:
+            # Try fuzzy strategies
+            result = self._editor.find(content, old)
+            if result is None:
+                return ToolResult(output="", error=f"String not found in {path} (tried fuzzy matching)")
+            updated = content[:result.start] + new + content[result.end:]
+            match_strategy = result.strategy_name
+        elif count == 0:
             return ToolResult(output="", error=f"String not found in {path}")
-        if count > 1:
+        else:
             return ToolResult(output="", error=f"Multiple matches ({count}) found — ambiguous. Provide more context.")
 
-        updated = content.replace(old, new, 1)
         env.write_file(path, updated)
 
         fc = FileChange(
@@ -50,5 +66,5 @@ class EditFileTool(BaseTool):
         )
         return ToolResult(
             output=f"Edited {path}",
-            metadata={"file_change": fc},
+            metadata={"file_change": fc, "match_strategy": match_strategy},
         )

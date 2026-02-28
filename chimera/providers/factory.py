@@ -116,6 +116,13 @@ def _infer_provider(model: str) -> str:
     if model_lower.startswith(("llama", "mistral", "qwen", "phi")):
         return "ollama"
 
+    # Catalog fallback: check if model is in default catalog
+    from chimera.providers.catalog import ProviderCatalog
+    catalog = ProviderCatalog.default()
+    config = catalog.get(model)
+    if config is not None:
+        return config.provider_type
+
     # Fall back to env: if Anthropic credentials are set, assume anthropic-compatible
     if os.environ.get("ANTHROPIC_BASE_URL") or os.environ.get("ANTHROPIC_AUTH_TOKEN"):
         return "anthropic"

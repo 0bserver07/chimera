@@ -33,7 +33,7 @@ from chimera.composition import Ensemble, Pipeline, Supervisor
 from chimera.env import Environment, GitEnvironment, LocalEnvironment, SessionMixin
 
 # Providers
-from chimera.providers import Provider, Response, StreamEvent, create_provider
+from chimera.providers import ModelConfig, Provider, ProviderCatalog, Response, StreamEvent, create_provider
 from chimera.providers.cost import calculate_cost, register_model_cost
 
 # Training
@@ -93,6 +93,7 @@ from chimera.sessions import InMemoryStorage, Session
 from chimera.auth import AuthManager, Credential
 from chimera.agents import AgentConfig, AgentRegistry
 from chimera.plugins import BasePlugin, PluginManager
+from chimera.config import ProjectConfig, Skill, SkillRegistry, StructuredOutput
 
 # Transactions
 from chimera.transactions import FileTransaction, StagedChange, TransactionState
@@ -151,6 +152,8 @@ __all__ = [
     "calculate_cost",
     "register_model_cost",
     "create_provider",
+    "ModelConfig",
+    "ProviderCatalog",
     # Training
     "AIMOEnsemble",
     "Architecture",
@@ -230,4 +233,9 @@ __all__ = [
     "FileTransaction",
     "StagedChange",
     "TransactionState",
+    # Config
+    "ProjectConfig",
+    "Skill",
+    "SkillRegistry",
+    "StructuredOutput",
 ]
