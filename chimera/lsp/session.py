@@ -148,6 +148,45 @@ class LSPSession:
             return []
         return result.get("result", []) or []
 
+    def completion(self, uri: str, line: int, character: int) -> list[dict[str, Any]]:
+        """Get completions at a position."""
+        result = self._send_request("textDocument/completion", {
+            "textDocument": {"uri": uri},
+            "position": {"line": line, "character": character},
+        })
+        if result is None:
+            return []
+        items = result.get("result", [])
+        if isinstance(items, dict):
+            items = items.get("items", [])
+        return items or []
+
+    def rename(self, uri: str, line: int, character: int, new_name: str) -> dict[str, Any] | None:
+        """Rename a symbol at a position."""
+        result = self._send_request("textDocument/rename", {
+            "textDocument": {"uri": uri},
+            "position": {"line": line, "character": character},
+            "newName": new_name,
+        })
+        if result is None:
+            return None
+        return result.get("result")
+
+    def code_action(self, uri: str, start_line: int, start_char: int,
+                    end_line: int, end_char: int) -> list[dict[str, Any]]:
+        """Get code actions for a range."""
+        result = self._send_request("textDocument/codeAction", {
+            "textDocument": {"uri": uri},
+            "range": {
+                "start": {"line": start_line, "character": start_char},
+                "end": {"line": end_line, "character": end_char},
+            },
+            "context": {"diagnostics": []},
+        })
+        if result is None:
+            return []
+        return result.get("result", []) or []
+
     # ---- JSON-RPC helpers ----
 
     def _send_request(self, method: str, params: Any) -> dict[str, Any] | None:

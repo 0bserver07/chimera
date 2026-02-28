@@ -233,3 +233,174 @@ class TestLSPSessionDiagnosticsCache:
         event.set()
         # Verify response is accessible
         assert session._responses[42] == response
+
+
+# ---------------------------------------------------------------------------
+# Tests: LSPSession new methods (completion, rename, code_action)
+# ---------------------------------------------------------------------------
+
+from unittest.mock import patch as mock_patch
+
+
+class TestLSPSessionNewMethods:
+    def test_completion_returns_items(self) -> None:
+        """completion() returns list of completion items."""
+        session = LSPSession(["echo"])
+        response = {"result": [
+            {"label": "append", "kind": 2},
+            {"label": "clear", "kind": 2},
+        ]}
+        with mock_patch.object(session, "_send_request", return_value=response):
+            items = session.completion("file:///test.py", 5, 10)
+        assert len(items) == 2
+        assert items[0]["label"] == "append"
+
+    def test_completion_handles_completion_list(self) -> None:
+        """completion() handles CompletionList response."""
+        session = LSPSession(["echo"])
+        response = {"result": {"isIncomplete": False, "items": [
+            {"label": "foo"},
+        ]}}
+        with mock_patch.object(session, "_send_request", return_value=response):
+            items = session.completion("file:///test.py", 0, 0)
+        assert len(items) == 1
+        assert items[0]["label"] == "foo"
+
+    def test_completion_returns_empty_on_none(self) -> None:
+        """completion() returns [] when server returns None."""
+        session = LSPSession(["echo"])
+        with mock_patch.object(session, "_send_request", return_value=None):
+            items = session.completion("file:///test.py", 0, 0)
+        assert items == []
+
+    def test_rename_returns_workspace_edit(self) -> None:
+        """rename() returns workspace edit dict."""
+        session = LSPSession(["echo"])
+        edit = {"changes": {"file:///test.py": [{"range": {}, "newText": "bar"}]}}
+        response = {"result": edit}
+        with mock_patch.object(session, "_send_request", return_value=response):
+            result = session.rename("file:///test.py", 1, 5, "bar")
+        assert result == edit
+
+    def test_rename_returns_none_when_unavailable(self) -> None:
+        """rename() returns None when server returns None."""
+        session = LSPSession(["echo"])
+        with mock_patch.object(session, "_send_request", return_value=None):
+            result = session.rename("file:///test.py", 1, 5, "bar")
+        assert result is None
+
+    def test_code_action_returns_actions(self) -> None:
+        """code_action() returns list of available code actions."""
+        session = LSPSession(["echo"])
+        response = {"result": [
+            {"title": "Import os", "kind": "quickfix"},
+            {"title": "Extract method", "kind": "refactor.extract"},
+        ]}
+        with mock_patch.object(session, "_send_request", return_value=response):
+            actions = session.code_action("file:///test.py", 1, 0, 5, 10)
+        assert len(actions) == 2
+        assert actions[0]["title"] == "Import os"
+
+    def test_code_action_returns_empty_on_none(self) -> None:
+        """code_action() returns [] when server returns None."""
+        session = LSPSession(["echo"])
+        with mock_patch.object(session, "_send_request", return_value=None):
+            actions = session.code_action("file:///test.py", 0, 0, 0, 0)
+        assert actions == []
+
+
+# ---------------------------------------------------------------------------
+# Tests: LSPTool expanded actions
+# ---------------------------------------------------------------------------
+
+from chimera.lsp.tool import LSPTool
+from chimera.lsp.manager import LSPManager
+
+
+class TestLSPToolExpanded:
+    def _make_tool(self) -> tuple[LSPTool, MagicMock]:
+        manager = LSPManager()
+        manager.add("python", ["pyright", "--stdio"], (".py",))
+        mock_session = MagicMock()
+        manager._sessions["python"] = mock_session
+        tool = LSPTool(manager)
+        return tool, mock_session
+
+    def test_diagnostics_action(self) -> None:
+        """diagnostics action returns cached diagnostics."""
+        tool, session = self._make_tool()
+        session.get_diagnostics.return_value = [
+            Diagnostic(file="test.py", line=1, column=0, severity=Severity.ERROR, message="err"),
+        ]
+        result = tool.execute({"action": "diagnostics", "file": "test.py"}, None)
+        assert result.success
+        assert "err" in result.output
+
+    def test_diagnostics_empty(self) -> None:
+        """diagnostics action with no diagnostics."""
+        tool, session = self._make_tool()
+        session.get_diagnostics.return_value = []
+        result = tool.execute({"action": "diagnostics", "file": "test.py"}, None)
+        assert "No diagnostics" in result.output
+
+    def test_completion_action(self) -> None:
+        """completion action returns completion items."""
+        tool, session = self._make_tool()
+        session.completion.return_value = [
+            {"label": "append", "kind": 2},
+            {"label": "clear", "kind": 2},
+        ]
+        result = tool.execute(
+            {"action": "completion", "file": "test.py", "line": 5, "character": 10},
+            None,
+        )
+        assert result.success
+        assert "append" in result.output
+
+    def test_rename_action(self) -> None:
+        """rename action returns edit summary."""
+        tool, session = self._make_tool()
+        session.rename.return_value = {
+            "changes": {
+                "file:///test.py": [{"range": {}, "newText": "bar"}],
+                "file:///other.py": [{"range": {}, "newText": "bar"}, {"range": {}, "newText": "bar"}],
+            },
+        }
+        result = tool.execute(
+            {"action": "rename", "file": "test.py", "line": 1, "character": 5, "new_name": "bar"},
+            None,
+        )
+        assert result.success
+        assert "3 edits" in result.output
+        assert "2 files" in result.output
+
+    def test_rename_missing_new_name(self) -> None:
+        """rename action requires new_name parameter."""
+        tool, session = self._make_tool()
+        result = tool.execute(
+            {"action": "rename", "file": "test.py", "line": 1, "character": 5},
+            None,
+        )
+        assert not result.success
+        assert "new_name" in result.error
+
+    def test_code_action_action(self) -> None:
+        """code_action action returns available actions."""
+        tool, session = self._make_tool()
+        session.code_action.return_value = [
+            {"title": "Import os", "kind": "quickfix"},
+        ]
+        result = tool.execute(
+            {"action": "code_action", "file": "test.py", "line": 1, "character": 0,
+             "end_line": 1, "end_character": 5},
+            None,
+        )
+        assert result.success
+        assert "Import os" in result.output
+
+    def test_unknown_action(self) -> None:
+        """Unknown action returns error."""
+        tool, session = self._make_tool()
+        result = tool.execute({"action": "bogus", "file": "test.py"}, None)
+        assert not result.success
+        assert "Unknown action" in result.error
