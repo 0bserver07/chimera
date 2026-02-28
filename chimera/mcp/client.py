@@ -1,6 +1,7 @@
 """MCP client -- manages server connections and discovers tools/resources."""
 from __future__ import annotations
 
+import time
 from typing import Any
 
 from chimera.mcp.transport import MCPTransport, StdioTransport, HTTPTransport
@@ -120,28 +121,49 @@ class MCPClient:
                 ))
         return result
 
-    def call_tool(self, transport: MCPTransport, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
-        """Call a tool on an MCP server.
+    def call_tool(
+        self,
+        transport: MCPTransport,
+        tool_name: str,
+        arguments: dict[str, Any],
+        max_retries: int = 3,
+    ) -> dict[str, Any]:
+        """Call a tool on an MCP server with retry on transport errors.
+
+        Retries up to *max_retries* times with exponential backoff (1s, 2s, 4s)
+        on transport-level errors (``ConnectionError``, ``TimeoutError``,
+        ``OSError``).  Tool-level errors (returned in the JSON-RPC response)
+        are **not** retried.
 
         Args:
             transport: Transport to the server.
             tool_name: Name of the tool to call.
             arguments: Tool arguments.
+            max_retries: Maximum retry attempts (default 3).
 
         Returns:
             Tool result dict.
         """
-        response = transport.send({
-            "jsonrpc": "2.0",
-            "id": self._next_id(),
-            "method": "tools/call",
-            "params": {"name": tool_name, "arguments": arguments},
-        })
-        if response and "result" in response:
-            return response["result"]
-        if response and "error" in response:
-            return {"error": response["error"].get("message", "Unknown error")}
-        return {"error": "No response from MCP server"}
+        last_exc: Exception | None = None
+        for attempt in range(max_retries):
+            try:
+                response = transport.send({
+                    "jsonrpc": "2.0",
+                    "id": self._next_id(),
+                    "method": "tools/call",
+                    "params": {"name": tool_name, "arguments": arguments},
+                })
+                if response and "result" in response:
+                    return response["result"]
+                if response and "error" in response:
+                    # Tool-level error — don't retry
+                    return {"error": response["error"].get("message", "Unknown error")}
+                return {"error": "No response from MCP server"}
+            except (ConnectionError, TimeoutError, OSError) as exc:
+                last_exc = exc
+                if attempt < max_retries - 1:
+                    time.sleep(2 ** attempt)  # 1s, 2s, 4s
+        return {"error": f"Transport error after {max_retries} attempts: {last_exc}"}
 
     def __enter__(self) -> MCPClient:
         self.connect_all()

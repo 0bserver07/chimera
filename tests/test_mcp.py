@@ -225,3 +225,108 @@ class TestMCPTool:
         result = tool.execute({}, None)
         assert not result.success
         assert "error msg" in result.error
+
+
+# ---- Retry tests ----
+
+
+class FailingTransport(MCPTransport):
+    """Transport that fails N times then succeeds."""
+
+    def __init__(self, fail_count: int, success_response: dict | None = None):
+        self._fail_count = fail_count
+        self._calls = 0
+        self._success_response = success_response or {
+            "jsonrpc": "2.0", "id": 1,
+            "result": {"content": [{"type": "text", "text": "ok"}]},
+        }
+
+    def start(self):
+        pass
+
+    def send(self, message):
+        self._calls += 1
+        if self._calls <= self._fail_count:
+            raise ConnectionError("transport down")
+        return self._success_response
+
+    def close(self):
+        pass
+
+
+class TestMCPRetry:
+    def test_retry_succeeds_after_failure(self):
+        """call_tool retries on transport error and succeeds."""
+        transport = FailingTransport(fail_count=2)
+        client = MCPClient()
+        result = client.call_tool(transport, "test", {}, max_retries=3)
+        assert "content" in result
+        assert transport._calls == 3  # 2 failures + 1 success
+
+    def test_retry_exhausted(self):
+        """call_tool returns error after exhausting retries."""
+        transport = FailingTransport(fail_count=5)
+        client = MCPClient()
+        result = client.call_tool(transport, "test", {}, max_retries=3)
+        assert "error" in result
+        assert "Transport error" in result["error"]
+        assert transport._calls == 3
+
+    def test_no_retry_on_tool_error(self):
+        """Tool-level errors are returned immediately, not retried."""
+        mock = MockTransport([
+            {"jsonrpc": "2.0", "id": 1, "error": {"code": -1, "message": "bad args"}},
+        ])
+        client = MCPClient()
+        result = client.call_tool(mock, "test", {}, max_retries=3)
+        assert result == {"error": "bad args"}
+        assert len(mock.sent) == 1  # No retry
+
+    def test_retry_on_timeout_error(self):
+        """TimeoutError triggers retry."""
+
+        class TimeoutTransport(MCPTransport):
+            def __init__(self):
+                self.calls = 0
+
+            def start(self): pass
+            def close(self): pass
+
+            def send(self, message):
+                self.calls += 1
+                if self.calls <= 1:
+                    raise TimeoutError("timed out")
+                return {"jsonrpc": "2.0", "id": 1, "result": {"ok": True}}
+
+        transport = TimeoutTransport()
+        client = MCPClient()
+        result = client.call_tool(transport, "test", {}, max_retries=3)
+        assert "ok" in result
+        assert transport.calls == 2
+
+
+# ---- Stderr reader tests ----
+
+
+class TestStdioStderrReader:
+    def test_stderr_lines_captured(self):
+        """StdioTransport captures stderr output in background."""
+        import time
+
+        transport = StdioTransport("python3", ["-c", "import sys; sys.stderr.write('warn1\\nwarn2\\n'); import time; time.sleep(0.1)"])
+        transport.start()
+        time.sleep(0.3)  # Let stderr reader thread capture output
+        lines = transport.stderr_lines
+        transport.close()
+        assert "warn1" in lines
+        assert "warn2" in lines
+
+    def test_stderr_lines_bounded(self):
+        """Stderr deque has bounded maxlen."""
+        transport = StdioTransport("echo", [])
+        assert transport._stderr_lines.maxlen == 100
+
+    def test_stderr_empty_initially(self):
+        """Stderr lines empty before any subprocess output."""
+        transport = StdioTransport("echo", [])
+        assert transport.stderr_lines == []

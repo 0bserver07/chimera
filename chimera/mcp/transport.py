@@ -1,6 +1,7 @@
 """MCP transport implementations -- stdio and HTTP."""
 from __future__ import annotations
 
+import collections
 import json
 import subprocess
 import threading
@@ -54,6 +55,8 @@ class StdioTransport(MCPTransport):
         self._env = env
         self._process: subprocess.Popen[bytes] | None = None
         self._lock = threading.Lock()
+        self._stderr_lines: collections.deque[str] = collections.deque(maxlen=100)
+        self._stderr_thread: threading.Thread | None = None
 
     def start(self) -> None:
         self._process = subprocess.Popen(
@@ -63,6 +66,25 @@ class StdioTransport(MCPTransport):
             stderr=subprocess.PIPE,
             env=self._env,
         )
+        # Background thread drains stderr to prevent buffer-fill blocking
+        self._stderr_thread = threading.Thread(
+            target=self._drain_stderr, daemon=True,
+        )
+        self._stderr_thread.start()
+
+    def _drain_stderr(self) -> None:
+        """Read stderr lines in background, storing in bounded deque."""
+        assert self._process is not None and self._process.stderr is not None
+        try:
+            for raw in self._process.stderr:
+                self._stderr_lines.append(raw.decode("utf-8", errors="replace").rstrip("\n"))
+        except (ValueError, OSError):
+            pass  # Process closed
+
+    @property
+    def stderr_lines(self) -> list[str]:
+        """Return recent stderr output (up to 100 lines)."""
+        return list(self._stderr_lines)
 
     def send(self, message: dict[str, Any]) -> dict[str, Any] | None:
         with self._lock:
