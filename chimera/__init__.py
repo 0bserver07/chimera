@@ -100,6 +100,18 @@ from chimera.plugins import BasePlugin, PluginManager
 from chimera.config import ProjectConfig, Skill, SkillRegistry, StructuredOutput
 from chimera.mcp import MCPClient, MCPToolSource
 
+# Docs
+from chimera.docs.generator import DocGenerator, DocSection
+
+# TestGen
+from chimera.testgen import CoverageReport, TestCase, TestGenerator, parse_coverage
+
+# CI
+from chimera.ci import CIFixWorkflow, FailureInfo, parse_ci_log
+
+# Review
+from chimera.review import ReviewComment, ReviewFeedback, ReviewOrchestrator, Severity as ReviewSeverity
+
 # Checkpoints
 from chimera.checkpoints import CheckpointInfo, CheckpointManager
 
@@ -278,4 +290,21 @@ __all__ = [
     # MCP
     "MCPClient",
     "MCPToolSource",
+    # Docs
+    "DocGenerator",
+    "DocSection",
+    # TestGen
+    "CoverageReport",
+    "TestCase",
+    "TestGenerator",
+    "parse_coverage",
+    # CI
+    "CIFixWorkflow",
+    "FailureInfo",
+    "parse_ci_log",
+    # Review
+    "ReviewComment",
+    "ReviewFeedback",
+    "ReviewOrchestrator",
+    "ReviewSeverity",
 ]
