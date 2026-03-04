@@ -77,6 +77,7 @@ from chimera.eval import (
 # Tools
 from chimera.tools.repo_map import RepoMapTool
 from chimera.tools.image_read import ImageReadTool
+from chimera.tools.import_graph import ImportEdge, ImportGraph
 
 # Convenience
 from chimera.synthesize import synthesize
@@ -94,9 +95,13 @@ from chimera.streaming import ConsoleStreamHandler, StreamingReAct
 from chimera.sessions import InMemoryStorage, Session
 from chimera.auth import AuthManager, Credential
 from chimera.agents import AgentConfig, AgentRegistry
+from chimera.agents.loader import create_default_registry, load_custom_agents
 from chimera.plugins import BasePlugin, PluginManager
 from chimera.config import ProjectConfig, Skill, SkillRegistry, StructuredOutput
 from chimera.mcp import MCPClient, MCPToolSource
+
+# Checkpoints
+from chimera.checkpoints import CheckpointInfo, CheckpointManager
 
 # Workflows
 from chimera.workflows import CommitStrategy, GitWorkflow
@@ -201,6 +206,8 @@ __all__ = [
     "resolve_rate",
     # Tools
     "ImageReadTool",
+    "ImportEdge",
+    "ImportGraph",
     "RepoMapTool",
     # Convenience
     "synthesize",
@@ -248,6 +255,11 @@ __all__ = [
     "Credential",
     "AgentConfig",
     "AgentRegistry",
+    "create_default_registry",
+    "load_custom_agents",
+    # Checkpoints
+    "CheckpointInfo",
+    "CheckpointManager",
     # Plugins
     "BasePlugin",
     "PluginManager",
