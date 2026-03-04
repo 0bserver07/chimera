@@ -96,7 +96,7 @@ from chimera.sessions import InMemoryStorage, Session
 from chimera.auth import AuthManager, Credential
 from chimera.agents import AgentConfig, AgentRegistry
 from chimera.agents.loader import create_default_registry, load_custom_agents
-from chimera.plugins import BasePlugin, PluginManager
+from chimera.plugins import BasePlugin, Marketplace, PluginInfo, PluginManager
 from chimera.config import ProjectConfig, Skill, SkillRegistry, StructuredOutput
 from chimera.mcp import MCPClient, MCPToolSource
 
@@ -111,6 +111,12 @@ from chimera.ci import CIFixWorkflow, FailureInfo, parse_ci_log
 
 # Review
 from chimera.review import ReviewComment, ReviewFeedback, ReviewOrchestrator, Severity as ReviewSeverity
+
+# Research
+from chimera.research import Finding, ResearchPlan, Researcher, Source
+
+# Migration
+from chimera.migration import MigrationPlan, MigrationPlanner, MigrationRule
 
 # Checkpoints
 from chimera.checkpoints import CheckpointInfo, CheckpointManager
@@ -269,11 +275,18 @@ __all__ = [
     "AgentRegistry",
     "create_default_registry",
     "load_custom_agents",
+    # Research
+    "Finding",
+    "ResearchPlan",
+    "Researcher",
+    "Source",
     # Checkpoints
     "CheckpointInfo",
     "CheckpointManager",
     # Plugins
     "BasePlugin",
+    "Marketplace",
+    "PluginInfo",
     "PluginManager",
     # Workflows
     "CommitStrategy",
@@ -307,4 +320,8 @@ __all__ = [
     "ReviewFeedback",
     "ReviewOrchestrator",
     "ReviewSeverity",
+    # Migration
+    "MigrationPlan",
+    "MigrationPlanner",
+    "MigrationRule",
 ]
