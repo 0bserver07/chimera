@@ -4,7 +4,7 @@ from __future__ import annotations
 import importlib.metadata
 from typing import TYPE_CHECKING
 
-from chimera.plugins.base import BasePlugin, PluginRegistry
+from chimera.plugins.base import BasePlugin, ComponentRegistry
 
 if TYPE_CHECKING:
     from chimera.core.tool import BaseTool
@@ -26,7 +26,7 @@ class PluginManager:
 
     def __init__(self) -> None:
         self._plugins: dict[str, BasePlugin] = {}
-        self._registry = PluginRegistry()
+        self._registry = ComponentRegistry()
 
     def discover(self) -> list[str]:
         """Discover available plugins via entry points.

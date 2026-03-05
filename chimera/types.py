@@ -14,11 +14,42 @@ class ToolCall:
 
 
 @dataclass
+class ContentBlock:
+    """Base for multi-modal content blocks."""
+
+    type: str = ""
+
+
+@dataclass
+class TextContent(ContentBlock):
+    """Text content block."""
+
+    text: str = ""
+    type: str = "text"
+
+
+@dataclass
+class ImageContent(ContentBlock):
+    """Image content block (base64-encoded).
+
+    Attributes:
+        data: Base64-encoded image data.
+        media_type: MIME type, e.g. ``"image/png"`` or ``"image/jpeg"``.
+        type: Content block discriminator (always ``"image"``).
+    """
+
+    data: str = ""  # base64-encoded image data
+    media_type: str = ""  # e.g. "image/png", "image/jpeg"
+    type: str = "image"
+
+
+@dataclass
 class Message:
     role: str  # "system", "user", "assistant", "tool"
     content: str
     tool_calls: list[ToolCall] = field(default_factory=list)
     call_id: str | None = None  # For tool messages
+    content_blocks: list[ContentBlock] = field(default_factory=list)
 
     @classmethod
     def system(cls, content: str) -> Message:
@@ -35,6 +66,38 @@ class Message:
     @classmethod
     def tool(cls, call_id: str, content: str) -> Message:
         return cls(role="tool", content=content, call_id=call_id)
+
+    @classmethod
+    def user_with_image(
+        cls,
+        text: str,
+        image_data: str,
+        media_type: str = "image/png",
+    ) -> Message:
+        """Create a user message containing both text and an image.
+
+        Args:
+            text: The textual part of the message.
+            image_data: Base64-encoded image bytes.
+            media_type: MIME type of the image (default ``"image/png"``).
+
+        Returns:
+            A ``Message`` with role ``"user"`` and populated
+            :attr:`content_blocks`.
+        """
+        return cls(
+            role="user",
+            content=text,
+            content_blocks=[
+                TextContent(text=text),
+                ImageContent(data=image_data, media_type=media_type),
+            ],
+        )
+
+    @property
+    def has_images(self) -> bool:
+        """Return ``True`` if any content block is an image."""
+        return any(isinstance(b, ImageContent) for b in self.content_blocks)
 
 
 @dataclass

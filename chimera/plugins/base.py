@@ -8,7 +8,7 @@ if TYPE_CHECKING:
     from chimera.core.tool import BaseTool
 
 
-class PluginRegistry:
+class ComponentRegistry:
     """Registry passed to plugins during activation.
 
     Plugins use this to register tools, loop classes, and provider classes
@@ -74,7 +74,7 @@ class BasePlugin(ABC):
             name = "my-plugin"
             version = "1.0.0"
 
-            def activate(self, registry: PluginRegistry) -> None:
+            def activate(self, registry: ComponentRegistry) -> None:
                 registry.register_tool(MyCustomTool())
         ```
     """
@@ -86,7 +86,7 @@ class BasePlugin(ABC):
 
     version: str = "0.1.0"
 
-    def activate(self, registry: PluginRegistry) -> None:
+    def activate(self, registry: ComponentRegistry) -> None:
         """Called when the plugin is loaded.
 
         Args:

@@ -76,6 +76,8 @@ from chimera.eval import (
 
 # Tools
 from chimera.tools.repo_map import RepoMapTool
+from chimera.tools.image_read import ImageReadTool
+from chimera.tools.import_graph import ImportEdge, ImportGraph
 
 # Convenience
 from chimera.synthesize import synthesize
@@ -88,14 +90,39 @@ from chimera.core.loop_config import LoopConfig
 from chimera.events import Event, EventBus
 from chimera.compaction import CompactionStrategy, TokenCounter
 from chimera.detection import DetectionResult, ExactRepeatDetector
-from chimera.permissions import PermissionAction, PermissionRuleset
+from chimera.permissions import AuditLog, PermissionAction, PermissionRuleset, RiskLevel, classify_risk
 from chimera.streaming import ConsoleStreamHandler, StreamingReAct
 from chimera.sessions import InMemoryStorage, Session
 from chimera.auth import AuthManager, Credential
 from chimera.agents import AgentConfig, AgentRegistry
-from chimera.plugins import BasePlugin, PluginManager
+from chimera.agents.loader import create_default_registry, load_custom_agents
+from chimera.plugins import BasePlugin, Marketplace, PluginInfo, PluginManager
 from chimera.config import ProjectConfig, Skill, SkillRegistry, StructuredOutput
 from chimera.mcp import MCPClient, MCPToolSource
+
+# Docs
+from chimera.docs.generator import DocGenerator, DocSection
+
+# TestGen
+from chimera.testgen import CoverageReport, TestCase, TestGenerator, parse_coverage
+
+# CI
+from chimera.ci import CIFixWorkflow, FailureInfo, parse_ci_log
+
+# Review
+from chimera.review import ReviewComment, ReviewFeedback, ReviewOrchestrator, Severity as ReviewSeverity
+
+# Research
+from chimera.research import Finding, ResearchPlan, Researcher, Source
+
+# Migration
+from chimera.migration import MigrationPlan, MigrationPlanner, MigrationRule
+
+# Checkpoints
+from chimera.checkpoints import CheckpointInfo, CheckpointManager
+
+# Workflows
+from chimera.workflows import CommitStrategy, GitWorkflow
 
 # Transactions
 from chimera.transactions import FileTransaction, StagedChange, TransactionState
@@ -106,10 +133,13 @@ from chimera.types import (
     AgentResult,
     ChangeType,
     CommandResult,
+    ContentBlock,
     FileChange,
+    ImageContent,
     Message,
     PendingApproval,
     StepResult,
+    TextContent,
     TestResult,
     ToolCall,
     ToolResult,
@@ -193,13 +223,19 @@ __all__ = [
     "pass_at_k",
     "resolve_rate",
     # Tools
+    "ImageReadTool",
+    "ImportEdge",
+    "ImportGraph",
     "RepoMapTool",
     # Convenience
     "synthesize",
     # Types
     "AgentResult",
     "CommandResult",
+    "ContentBlock",
+    "ImageContent",
     "Message",
+    "TextContent",
     "StepResult",
     "TestResult",
     "ToolCall",
@@ -224,8 +260,11 @@ __all__ = [
     "TokenCounter",
     "DetectionResult",
     "ExactRepeatDetector",
+    "AuditLog",
     "PermissionAction",
     "PermissionRuleset",
+    "RiskLevel",
+    "classify_risk",
     "ConsoleStreamHandler",
     "StreamingReAct",
     "Session",
@@ -234,9 +273,24 @@ __all__ = [
     "Credential",
     "AgentConfig",
     "AgentRegistry",
+    "create_default_registry",
+    "load_custom_agents",
+    # Research
+    "Finding",
+    "ResearchPlan",
+    "Researcher",
+    "Source",
+    # Checkpoints
+    "CheckpointInfo",
+    "CheckpointManager",
     # Plugins
     "BasePlugin",
+    "Marketplace",
+    "PluginInfo",
     "PluginManager",
+    # Workflows
+    "CommitStrategy",
+    "GitWorkflow",
     # Transactions
     "FileTransaction",
     "StagedChange",
@@ -249,4 +303,25 @@ __all__ = [
     # MCP
     "MCPClient",
     "MCPToolSource",
+    # Docs
+    "DocGenerator",
+    "DocSection",
+    # TestGen
+    "CoverageReport",
+    "TestCase",
+    "TestGenerator",
+    "parse_coverage",
+    # CI
+    "CIFixWorkflow",
+    "FailureInfo",
+    "parse_ci_log",
+    # Review
+    "ReviewComment",
+    "ReviewFeedback",
+    "ReviewOrchestrator",
+    "ReviewSeverity",
+    # Migration
+    "MigrationPlan",
+    "MigrationPlanner",
+    "MigrationRule",
 ]

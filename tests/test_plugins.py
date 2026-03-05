@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from chimera.plugins.base import BasePlugin, PluginRegistry
+from chimera.plugins.base import BasePlugin, ComponentRegistry
 from chimera.plugins.manager import PluginManager
 from chimera.core.tool import BaseTool
 from chimera.types import ToolResult
@@ -30,7 +30,7 @@ class ConcretePlugin(BasePlugin):
 
     version = "1.0.0"
 
-    def activate(self, registry: PluginRegistry) -> None:
+    def activate(self, registry: ComponentRegistry) -> None:
         registry.register_tool(DummyTool())
 
 
@@ -53,7 +53,7 @@ def test_base_plugin_is_abstract():
 
 def test_concrete_plugin_activate():
     """ConcretePlugin.activate registers DummyTool in the registry."""
-    registry = PluginRegistry()
+    registry = ComponentRegistry()
     plugin = ConcretePlugin()
     plugin.activate(registry)
     assert len(registry.tools) == 1
@@ -90,7 +90,7 @@ def test_plugin_manager_unload():
 
 def test_plugin_registry_register_tool():
     """register_tool adds a tool to the registry's tools list."""
-    registry = PluginRegistry()
+    registry = ComponentRegistry()
     registry.register_tool(DummyTool())
     assert len(registry.tools) == 1
     assert registry.tools[0].name == "dummy"
@@ -98,7 +98,7 @@ def test_plugin_registry_register_tool():
 
 def test_plugin_registry_register_loop():
     """register_loop adds a loop class to the registry's loops dict."""
-    registry = PluginRegistry()
+    registry = ComponentRegistry()
     registry.register_loop("my-loop", object)
     assert "my-loop" in registry.loops
     assert registry.loops["my-loop"] is object
@@ -106,7 +106,7 @@ def test_plugin_registry_register_loop():
 
 def test_plugin_registry_register_provider():
     """register_provider adds a provider class to the registry's providers dict."""
-    registry = PluginRegistry()
+    registry = ComponentRegistry()
     registry.register_provider("my-provider", object)
     assert "my-provider" in registry.providers
     assert registry.providers["my-provider"] is object

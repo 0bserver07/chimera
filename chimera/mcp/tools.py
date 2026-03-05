@@ -11,6 +11,8 @@ if TYPE_CHECKING:
     from chimera.mcp.client import MCPClient
     from chimera.mcp.transport import MCPTransport
 
+_ACTIVE_CLIENTS: list = []  # Hold references to prevent GC
+
 
 class MCPTool(BaseTool):
     """Wraps an MCP tool definition as a Chimera BaseTool.
@@ -101,4 +103,41 @@ class MCPToolSource:
         client = MCPClient()
         client.add_stdio("default", command, args, env)
         client.connect_all()
+        _ACTIVE_CLIENTS.append(client)  # prevent GC
         return client.tools
+
+    @staticmethod
+    def from_config(config: dict) -> tuple[MCPClient, list[BaseTool]]:
+        """Load MCP servers from a config dict.
+
+        Config format::
+
+            {"servers": {"name": {"command": "...", "args": [...]}}}
+
+        or::
+
+            {"servers": {"name": {"url": "https://..."}}}
+
+        Args:
+            config: Dictionary with a ``servers`` key mapping server names
+                to their connection parameters.
+
+        Returns:
+            ``(client, tools)`` tuple. Caller owns the client lifecycle.
+        """
+        from chimera.mcp.client import MCPClient
+        client = MCPClient()
+        servers = config.get("servers", {})
+        for name, server_config in servers.items():
+            if "command" in server_config:
+                client.add_stdio(
+                    name,
+                    server_config["command"],
+                    server_config.get("args"),
+                    server_config.get("env"),
+                )
+            elif "url" in server_config:
+                client.add_http(name, server_config["url"], server_config.get("auth"))
+        client.connect_all()
+        _ACTIVE_CLIENTS.append(client)
+        return client, client.tools

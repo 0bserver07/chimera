@@ -5,7 +5,14 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from chimera.cli.code import _COMMANDS, _dispatch_command, _complete_command
+from chimera.cli.code import (
+    _COMMANDS,
+    _dispatch_command,
+    _complete_command,
+    cmd_audit,
+    cmd_checkpoint,
+    cmd_agent,
+)
 
 
 class TestCommandDispatch:
@@ -118,3 +125,138 @@ class TestDebugCommand:
 
         _COMMANDS["debug"](session, env, "", output.append)
         assert session.debug is False
+
+
+class TestCmdAudit:
+    def test_no_audit_log(self) -> None:
+        session = MagicMock(spec=[])
+        messages: list[str] = []
+        cmd_audit(session, None, "", messages.append)
+        assert messages == ["No audit log active."]
+
+    def test_audit_summary(self) -> None:
+        session = MagicMock()
+        session.audit_log.summary.return_value = {"approved": 3, "denied": 1}
+        messages: list[str] = []
+        cmd_audit(session, None, "", messages.append)
+        assert messages[0] == "Audit summary:"
+        assert any("approved: 3" in m for m in messages)
+        assert any("denied: 1" in m for m in messages)
+
+    def test_audit_empty_summary(self) -> None:
+        session = MagicMock()
+        session.audit_log.summary.return_value = {}
+        messages: list[str] = []
+        cmd_audit(session, None, "", messages.append)
+        assert messages == ["Audit log is empty."]
+
+    def test_audit_clear(self) -> None:
+        session = MagicMock()
+        messages: list[str] = []
+        cmd_audit(session, None, "clear", messages.append)
+        session.audit_log.clear.assert_called_once()
+        assert messages == ["Audit log cleared."]
+
+
+class TestCmdCheckpoint:
+    def test_no_checkpoint_manager(self) -> None:
+        session = MagicMock(spec=[])
+        messages: list[str] = []
+        cmd_checkpoint(session, None, "", messages.append)
+        assert messages == ["No checkpoint manager active."]
+
+    def test_checkpoint_save(self) -> None:
+        session = MagicMock()
+        info = MagicMock()
+        info.name = "my-cp"
+        info.id = "abc123"
+        session.checkpoint_manager.create.return_value = info
+        messages: list[str] = []
+        cmd_checkpoint(session, None, "save my-cp", messages.append)
+        session.checkpoint_manager.create.assert_called_once_with(name="my-cp")
+        assert "my-cp" in messages[0]
+
+    def test_checkpoint_list_empty(self) -> None:
+        session = MagicMock()
+        session.checkpoint_manager.list_checkpoints.return_value = []
+        messages: list[str] = []
+        cmd_checkpoint(session, None, "list", messages.append)
+        assert messages == ["No checkpoints."]
+
+    def test_checkpoint_list(self) -> None:
+        session = MagicMock()
+        cp = MagicMock()
+        cp.id = "abc"
+        cp.name = "first"
+        cp.time_str = "2026-01-01 12:00:00"
+        session.checkpoint_manager.list_checkpoints.return_value = [cp]
+        messages: list[str] = []
+        cmd_checkpoint(session, None, "list", messages.append)
+        assert any("first" in m for m in messages)
+
+    def test_checkpoint_undo(self) -> None:
+        session = MagicMock()
+        info = MagicMock()
+        info.name = "cp-1"
+        session.checkpoint_manager.undo.return_value = info
+        messages: list[str] = []
+        cmd_checkpoint(session, None, "undo", messages.append)
+        session.checkpoint_manager.undo.assert_called_once()
+        assert "cp-1" in messages[0]
+
+    def test_checkpoint_undo_none(self) -> None:
+        session = MagicMock()
+        session.checkpoint_manager.undo.return_value = None
+        messages: list[str] = []
+        cmd_checkpoint(session, None, "undo", messages.append)
+        assert messages == ["No checkpoints to undo."]
+
+    def test_checkpoint_restore(self) -> None:
+        session = MagicMock()
+        info = MagicMock()
+        info.name = "saved"
+        session.checkpoint_manager.restore_by_name.return_value = info
+        messages: list[str] = []
+        cmd_checkpoint(session, None, "restore saved", messages.append)
+        session.checkpoint_manager.restore_by_name.assert_called_once_with("saved")
+        assert "saved" in messages[0]
+
+    def test_checkpoint_restore_no_name(self) -> None:
+        session = MagicMock()
+        messages: list[str] = []
+        cmd_checkpoint(session, None, "restore", messages.append)
+        assert "Usage" in messages[0]
+
+
+class TestCmdAgent:
+    def test_agent_list(self) -> None:
+        messages: list[str] = []
+        cmd_agent(MagicMock(), None, "list", messages.append)
+        assert messages[0] == "Available agent presets:"
+        preset_names = [m.strip() for m in messages[1:]]
+        assert "build" in preset_names
+        assert "explore" in preset_names
+        assert "general" in preset_names
+        assert "plan" in preset_names
+        assert "review" in preset_names
+
+    def test_agent_set_placeholder(self) -> None:
+        messages: list[str] = []
+        cmd_agent(MagicMock(), None, "set build", messages.append)
+        assert "not yet supported" in messages[0]
+
+    def test_agent_default_is_list(self) -> None:
+        messages: list[str] = []
+        cmd_agent(MagicMock(), None, "", messages.append)
+        assert messages[0] == "Available agent presets:"
+
+
+class TestNewCommandsRegistry:
+    def test_commands_contains_audit(self) -> None:
+        assert "audit" in _COMMANDS
+
+    def test_commands_contains_checkpoint(self) -> None:
+        assert "checkpoint" in _COMMANDS
+
+    def test_commands_contains_agent(self) -> None:
+        assert "agent" in _COMMANDS
