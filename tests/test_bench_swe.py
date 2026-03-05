@@ -82,7 +82,7 @@ class TestSWEBench:
 
     def test_evaluate_without_env(self):
         bench = SWEBench()
-        assert bench.evaluate({"id": "t1"}, "output", None) is False
+        assert bench.evaluate({"id": "t1"}, "output") is False
 
     def test_empty_dataset(self):
         bench = SWEBench()  # No dataset_path

@@ -101,6 +101,16 @@ def execute_tool_calls(
         content = result.output if result.success else f"Error: {result.error}\n{result.output}"
         context.add(Message.tool(tc.id, content))
 
+        # -- Audit log --
+        if config and config.audit_log:
+            config.audit_log.record(
+                tool_name=tc.name, arguments=tc.arguments, decision="allowed"
+            )
+
+        # -- Checkpoint --
+        if config and config.checkpoint_manager and result.success:
+            config.checkpoint_manager.create(description=f"After {tc.name}")
+
         # -- Event: tool result --
         if config and config.event_bus:
             from chimera.events.types import ToolResultEvent
@@ -223,6 +233,16 @@ def execute_tool_calls_incremental(
         context.add(Message.tool(tc.id, content))
         result.results.append(tr)
         result.executed += 1
+
+        # -- Audit log --
+        if config and config.audit_log:
+            config.audit_log.record(
+                tool_name=tc.name, arguments=tc.arguments, decision="allowed"
+            )
+
+        # -- Checkpoint --
+        if config and config.checkpoint_manager and tr.success:
+            config.checkpoint_manager.create(description=f"After {tc.name}")
 
         # -- Event: tool result --
         if config and config.event_bus:

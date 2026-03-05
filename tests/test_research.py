@@ -123,3 +123,80 @@ class TestResearcher:
         assert len(plan.sub_questions) >= 2
         # First sub-question should reference first keyword.
         assert "authentication" in plan.sub_questions[0].lower()
+
+
+class _MockProvider:
+    """Minimal mock provider for integration tests."""
+
+    def __init__(self, responses=None):
+        from chimera.providers.base import Response
+        self._responses = responses or [
+            Response(content="Done.", tool_calls=[], usage={"input_tokens": 0, "output_tokens": 0}),
+        ]
+        self._idx = 0
+
+    @property
+    def model_name(self):
+        return "mock"
+
+    def complete(self, messages, tools=None, **kwargs):
+        resp = self._responses[min(self._idx, len(self._responses) - 1)]
+        self._idx += 1
+        return resp
+
+
+class TestResearcherRun:
+    def test_run_returns_output(self):
+        from chimera.core.agent import Agent
+        from chimera.providers.base import Response
+
+        provider = _MockProvider([
+            Response(
+                content="Authentication uses JWT tokens for session management.",
+                tool_calls=[],
+                usage={"input_tokens": 10, "output_tokens": 20},
+            ),
+        ])
+        agent = Agent(provider=provider, name="researcher")
+        r = Researcher()
+
+        output = r.run("How does authentication work?", agent)
+        assert "JWT" in output
+        assert len(output) > 0
+
+    def test_run_without_env(self):
+        from chimera.core.agent import Agent
+        from chimera.providers.base import Response
+
+        provider = _MockProvider([
+            Response(content="Result.", tool_calls=[], usage={"input_tokens": 5, "output_tokens": 5}),
+        ])
+        agent = Agent(provider=provider, name="researcher")
+        r = Researcher()
+
+        output = r.run("What is X?", agent, env=None)
+        assert output == "Result."
+
+    def test_run_uses_plan(self):
+        from chimera.core.agent import Agent
+        from chimera.providers.base import Response
+
+        captured_messages = []
+        original_complete = _MockProvider.complete
+
+        def capturing_complete(self, messages, tools=None, **kwargs):
+            captured_messages.extend(messages)
+            return original_complete(self, messages, tools, **kwargs)
+
+        provider = _MockProvider([
+            Response(content="Found info.", tool_calls=[], usage={"input_tokens": 5, "output_tokens": 5}),
+        ])
+        provider.complete = lambda messages, tools=None, **kwargs: capturing_complete(provider, messages, tools, **kwargs)
+        agent = Agent(provider=provider, name="researcher")
+        r = Researcher()
+
+        r.run("How does authentication work in the system?", agent)
+
+        # The prompt should contain search terms from the plan
+        all_content = " ".join(m.content for m in captured_messages)
+        assert "authentication" in all_content.lower()

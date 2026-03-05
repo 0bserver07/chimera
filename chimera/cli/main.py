@@ -118,6 +118,136 @@ def build_parser() -> argparse.ArgumentParser:
         help="Maximum agent steps per turn (default: 50)",
     )
 
+    # ---- review subcommand ----
+    review_parser = subparsers.add_parser(
+        "review",
+        help="Run AI code review on a diff",
+    )
+    review_parser.add_argument(
+        "--diff",
+        required=True,
+        help="Path to diff file",
+    )
+    review_parser.add_argument(
+        "--model",
+        default="claude-sonnet-4-20250514",
+        help="Model to use (default: claude-sonnet-4-20250514)",
+    )
+    review_parser.add_argument(
+        "--max-rounds",
+        type=int,
+        default=3,
+        help="Maximum review rounds (default: 3)",
+    )
+
+    # ---- ci-fix subcommand ----
+    cifix_parser = subparsers.add_parser(
+        "ci-fix",
+        help="Diagnose and fix CI failures",
+    )
+    cifix_parser.add_argument(
+        "--log",
+        required=True,
+        help="Path to CI log file",
+    )
+    cifix_parser.add_argument(
+        "--model",
+        default="claude-sonnet-4-20250514",
+        help="Model to use (default: claude-sonnet-4-20250514)",
+    )
+    cifix_parser.add_argument(
+        "--max-attempts",
+        type=int,
+        default=3,
+        help="Maximum fix attempts (default: 3)",
+    )
+
+    # ---- research subcommand ----
+    research_parser = subparsers.add_parser(
+        "research",
+        help="Research a question using AI",
+    )
+    research_parser.add_argument(
+        "--question",
+        required=True,
+        help="Research question",
+    )
+    research_parser.add_argument(
+        "--model",
+        default="claude-sonnet-4-20250514",
+        help="Model to use (default: claude-sonnet-4-20250514)",
+    )
+    research_parser.add_argument(
+        "--workdir",
+        default=".",
+        help="Working directory (default: current directory)",
+    )
+
+    # ---- docs subcommand ----
+    docs_parser = subparsers.add_parser(
+        "docs",
+        help="Generate API documentation from source code",
+    )
+    docs_parser.add_argument(
+        "--source",
+        required=True,
+        help="Source directory to scan",
+    )
+    docs_parser.add_argument(
+        "--output",
+        default="docs/api",
+        help="Output directory (default: docs/api)",
+    )
+
+    # ---- testgen subcommand ----
+    testgen_parser = subparsers.add_parser(
+        "testgen",
+        help="Generate test case skeletons from source code",
+    )
+    testgen_parser.add_argument(
+        "--source",
+        required=True,
+        help="Source directory to scan",
+    )
+    testgen_parser.add_argument(
+        "--output",
+        default="tests/generated",
+        help="Output directory (default: tests/generated)",
+    )
+
+    # ---- migrate subcommand ----
+    migrate_parser = subparsers.add_parser(
+        "migrate",
+        help="Apply migration rules to source files",
+    )
+    migrate_parser.add_argument(
+        "--source",
+        required=True,
+        help="Source directory to migrate",
+    )
+    migrate_parser.add_argument(
+        "--preset",
+        required=True,
+        help="Migration preset (e.g. python2-to-3, commonjs-to-esm)",
+    )
+
+    # ---- plugins subcommand ----
+    plugins_parser = subparsers.add_parser(
+        "plugins",
+        help="Manage plugins (search, install, uninstall)",
+    )
+    plugins_parser.add_argument(
+        "action",
+        choices=["search", "install", "uninstall"],
+        help="Plugin action",
+    )
+    plugins_parser.add_argument(
+        "query",
+        nargs="?",
+        default="",
+        help="Plugin name or search query",
+    )
+
     return parser
 
 
@@ -322,6 +452,207 @@ def run_bench(args: argparse.Namespace) -> int:
     return 0 if result.passed == result.total else 1
 
 
+def run_review(args: argparse.Namespace) -> int:
+    """Execute the review command."""
+    from chimera.core.agent import Agent
+    from chimera.core.prompt import Prompt
+    from chimera.env.local import LocalEnvironment
+    from chimera.providers.factory import create_provider
+    from chimera.review.orchestrator import ReviewOrchestrator
+
+    try:
+        with open(args.diff) as f:
+            diff = f.read()
+    except FileNotFoundError:
+        print(f"Error: diff file not found: {args.diff}", file=sys.stderr)
+        return 1
+
+    provider = create_provider(model=args.model)
+    reviewer = Agent(provider=provider, prompt=Prompt("You are a code reviewer. Review diffs for bugs, style issues, and improvements."))
+    author = Agent(provider=provider)
+    env = LocalEnvironment(workdir=".")
+
+    orchestrator = ReviewOrchestrator(max_rounds=args.max_rounds)
+    approved = orchestrator.run(diff, reviewer, author, env)
+
+    if approved:
+        print("Review: APPROVED")
+        return 0
+    else:
+        print(f"Review: NOT APPROVED after {orchestrator.current_round} rounds")
+        return 1
+
+
+def run_ci_fix(args: argparse.Namespace) -> int:
+    """Execute the ci-fix command."""
+    from chimera.ci.fix_workflow import CIFixWorkflow
+    from chimera.core.agent import Agent
+    from chimera.env.local import LocalEnvironment
+    from chimera.providers.factory import create_provider
+
+    try:
+        with open(args.log) as f:
+            log = f.read()
+    except FileNotFoundError:
+        print(f"Error: log file not found: {args.log}", file=sys.stderr)
+        return 1
+
+    provider = create_provider(model=args.model)
+    agent = Agent(provider=provider)
+    env = LocalEnvironment(workdir=".")
+
+    workflow = CIFixWorkflow(max_attempts=args.max_attempts)
+    success = workflow.run(log, agent, env)
+
+    if success:
+        print("CI fix: SUCCESS")
+        return 0
+    else:
+        print(f"CI fix: FAILED after {len(workflow.attempts)} attempts")
+        return 1
+
+
+def run_research(args: argparse.Namespace) -> int:
+    """Execute the research command."""
+    from chimera.core.agent import Agent
+    from chimera.env.local import LocalEnvironment
+    from chimera.providers.factory import create_provider
+    from chimera.research.researcher import Researcher
+
+    provider = create_provider(model=args.model)
+    agent = Agent(provider=provider)
+    env = LocalEnvironment(workdir=args.workdir)
+
+    researcher = Researcher()
+    result = researcher.run(args.question, agent, env)
+    print(result)
+    return 0
+
+
+def run_docs(args: argparse.Namespace) -> int:
+    """Execute the docs command."""
+    from chimera.docs.generator import DocGenerator
+
+    generator = DocGenerator(root=args.source, output_dir=args.output)
+    sections = generator.scan()
+    written = generator.write(sections)
+
+    print(f"Generated {len(written)} documentation files:")
+    for path in written:
+        print(f"  {path}")
+    return 0
+
+
+def run_testgen(args: argparse.Namespace) -> int:
+    """Execute the testgen command."""
+    from pathlib import Path
+
+    from chimera.testgen.generator import TestGenerator
+
+    source_dir = Path(args.source)
+    output_dir = Path(args.output)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    generator = TestGenerator()
+    total_cases = 0
+
+    for filepath in sorted(source_dir.rglob("*.py")):
+        if any(part.startswith(".") or part in ("__pycache__", "venv")
+               for part in filepath.parts):
+            continue
+        cases = generator.analyze(str(filepath))
+        if cases:
+            total_cases += len(cases)
+            test_filename = f"test_{filepath.stem}.py"
+            out_path = output_dir / test_filename
+            lines = [f"# Auto-generated tests for {filepath}\n"]
+            for case in cases:
+                lines.append(case.test_code)
+                lines.append("")
+            out_path.write_text("\n".join(lines))
+
+    print(f"Generated {total_cases} test cases from {args.source}")
+    return 0
+
+
+def run_migrate(args: argparse.Namespace) -> int:
+    """Execute the migrate command."""
+    from pathlib import Path
+
+    from chimera.migration.planner import MigrationPlanner
+
+    try:
+        planner = MigrationPlanner.from_preset(args.preset)
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+    source_dir = Path(args.source)
+    files: dict[str, str] = {}
+    for filepath in sorted(source_dir.rglob("*")):
+        if filepath.is_file():
+            try:
+                files[str(filepath.relative_to(source_dir))] = filepath.read_text()
+            except Exception:
+                continue
+
+    result = planner.apply(files)
+
+    changed = 0
+    for rel_path, content in result.items():
+        if content != files.get(rel_path, ""):
+            out_path = source_dir / rel_path
+            out_path.write_text(content)
+            changed += 1
+            print(f"  migrated: {rel_path}")
+
+    print(f"Migration '{args.preset}': {changed} files changed")
+    return 0
+
+
+def run_plugins(args: argparse.Namespace) -> int:
+    """Execute the plugins command."""
+    from chimera.plugins.marketplace import Marketplace
+
+    marketplace = Marketplace()
+
+    if args.action == "search":
+        if not args.query:
+            print("Error: search requires a query", file=sys.stderr)
+            return 1
+        results = marketplace.search(args.query)
+        if results:
+            for info in results:
+                print(f"  {info.name} v{info.version} - {info.description}")
+        else:
+            print("No plugins found.")
+        return 0
+    elif args.action == "install":
+        if not args.query:
+            print("Error: install requires a plugin name", file=sys.stderr)
+            return 1
+        success = marketplace.install(args.query)
+        if success:
+            print(f"Installed: {args.query}")
+        else:
+            print(f"Plugin not found: {args.query}", file=sys.stderr)
+            return 1
+        return 0
+    elif args.action == "uninstall":
+        if not args.query:
+            print("Error: uninstall requires a plugin name", file=sys.stderr)
+            return 1
+        success = marketplace.uninstall(args.query)
+        if success:
+            print(f"Uninstalled: {args.query}")
+        else:
+            print(f"Plugin not installed: {args.query}", file=sys.stderr)
+            return 1
+        return 0
+
+    return 1
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """CLI entry point."""
     parser = build_parser()
@@ -340,6 +671,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     elif args.command == "code":
         from chimera.cli.code import run_code
         return run_code(args)
+    elif args.command == "review":
+        return run_review(args)
+    elif args.command == "ci-fix":
+        return run_ci_fix(args)
+    elif args.command == "research":
+        return run_research(args)
+    elif args.command == "docs":
+        return run_docs(args)
+    elif args.command == "testgen":
+        return run_testgen(args)
+    elif args.command == "migrate":
+        return run_migrate(args)
+    elif args.command == "plugins":
+        return run_plugins(args)
     else:
         parser.print_help()
         return 1

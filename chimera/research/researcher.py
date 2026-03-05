@@ -3,6 +3,11 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from chimera.core.agent import Agent
+    from chimera.env.base import Environment
 
 __all__ = ["Finding", "ResearchPlan", "Researcher", "Source"]
 
@@ -211,6 +216,29 @@ class Researcher:
                 seen.add(token)
                 terms.append(token)
         return terms
+
+    def run(self, question: str, agent: Agent, env: Environment | None = None) -> str:
+        """Research a question using the agent.
+
+        Args:
+            question: The research question to investigate.
+            agent: Agent to use for research.
+            env: Optional environment for the agent to execute in.
+
+        Returns:
+            The agent's research output as a string.
+        """
+        research_plan = self.plan(question)
+        prompt_parts = [f"Research the following question: {research_plan.question}\n"]
+        if research_plan.search_terms:
+            prompt_parts.append(f"Search terms: {', '.join(research_plan.search_terms)}")
+        if research_plan.sub_questions:
+            prompt_parts.append("Sub-questions to investigate:")
+            for sq in research_plan.sub_questions:
+                prompt_parts.append(f"  - {sq}")
+        prompt = "\n".join(prompt_parts)
+        result = agent.run(prompt, env)
+        return result.output
 
     def _generate_sub_questions(self, question: str) -> list[str]:
         """Produce aspect-oriented sub-questions from *question*.

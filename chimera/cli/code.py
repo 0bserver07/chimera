@@ -106,6 +106,83 @@ def cmd_compact(session: Any, env: Any, args: str, out: PrintFn) -> None:
         out("Compaction not available.")
 
 
+def cmd_audit(session: Any, env: Any, args: str, out: PrintFn) -> None:
+    audit_log = getattr(session, "audit_log", None)
+    if audit_log is None:
+        out("No audit log active.")
+        return
+    if args.strip() == "clear":
+        audit_log.clear()
+        out("Audit log cleared.")
+    else:
+        summary = audit_log.summary()
+        if not summary:
+            out("Audit log is empty.")
+        else:
+            out("Audit summary:")
+            for decision, count in sorted(summary.items()):
+                out(f"  {decision}: {count}")
+
+
+def cmd_checkpoint(session: Any, env: Any, args: str, out: PrintFn) -> None:
+    manager = getattr(session, "checkpoint_manager", None)
+    if manager is None:
+        out("No checkpoint manager active.")
+        return
+    parts = args.strip().split(maxsplit=1)
+    sub = parts[0] if parts else "list"
+
+    if sub == "save":
+        name = parts[1] if len(parts) > 1 else ""
+        info = manager.create(name=name)
+        out(f"Checkpoint saved: {info.name} ({info.id})")
+    elif sub == "list":
+        checkpoints = manager.list_checkpoints()
+        if not checkpoints:
+            out("No checkpoints.")
+        else:
+            for cp in checkpoints:
+                out(f"  {cp.id}  {cp.name}  {cp.time_str}")
+    elif sub == "restore":
+        name = parts[1] if len(parts) > 1 else ""
+        if not name:
+            out("Usage: /checkpoint restore <name>")
+            return
+        try:
+            info = manager.restore_by_name(name)
+            out(f"Restored to checkpoint: {info.name}")
+        except KeyError as exc:
+            out(str(exc))
+    elif sub == "undo":
+        info = manager.undo()
+        if info:
+            out(f"Undone to checkpoint: {info.name}")
+        else:
+            out("No checkpoints to undo.")
+    else:
+        out(f"Unknown checkpoint command: {sub}")
+
+
+def cmd_agent(session: Any, env: Any, args: str, out: PrintFn) -> None:
+    parts = args.strip().split(maxsplit=1)
+    sub = parts[0] if parts else "list"
+
+    if sub == "list":
+        try:
+            from chimera.agents.loader import create_default_registry
+            registry = create_default_registry()
+            names = registry.list()
+            out("Available agent presets:")
+            for name in names:
+                out(f"  {name}")
+        except Exception as exc:
+            out(f"Error loading agent presets: {exc}")
+    elif sub == "set":
+        out("Agent preset switching not yet supported in REPL.")
+    else:
+        out(f"Unknown agent command: {sub}")
+
+
 def cmd_session(session: Any, env: Any, args: str, out: PrintFn) -> None:
     parts = args.strip().split(maxsplit=1)
     sub = parts[0] if parts else "list"
@@ -146,6 +223,9 @@ _COMMANDS: dict[str, CommandHandler] = {
     "debug": cmd_debug,
     "session": cmd_session,
     "compact": cmd_compact,
+    "audit": cmd_audit,
+    "checkpoint": cmd_checkpoint,
+    "agent": cmd_agent,
     "exit": cmd_exit,
     "quit": cmd_exit,
 }
@@ -217,6 +297,18 @@ def run_code(args: Any) -> int:
     provider = create_provider(model=getattr(args, "model", None))
     env = LocalEnvironment(workdir=workdir)
     env.setup()
+
+    # Best-effort MCP tool loading
+    try:
+        mcp_config_path = Path.home() / ".chimera" / "mcp.json"
+        if mcp_config_path.exists():
+            import json
+            mcp_config = json.loads(mcp_config_path.read_text())
+            from chimera.mcp.tools import MCPToolSource
+            mcp_tools = MCPToolSource.from_config(mcp_config)
+            # tools would be added here
+    except Exception:
+        pass
 
     # Auto-discover project context
     system = _DEFAULT_SYSTEM

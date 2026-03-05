@@ -9,6 +9,7 @@ from chimera.ci.failure_parser import FailureInfo, parse_ci_log
 if TYPE_CHECKING:
     from chimera.core.agent import Agent
     from chimera.env.base import Environment
+    from chimera.types import AgentResult
 
 
 @dataclass
@@ -80,3 +81,34 @@ class CIFixWorkflow:
         )
         self._attempts.append(attempt)
         return attempt
+
+    def run(self, log: str, agent: Agent, env: Environment) -> bool:
+        """Diagnose CI failures and attempt to fix them using the agent.
+
+        Args:
+            log: Raw CI log output to parse for failures.
+            agent: Agent to use for generating fixes.
+            env: Environment for the agent to execute in.
+
+        Returns:
+            True if any attempt succeeded, False otherwise.
+        """
+        failures = self.diagnose(log)
+        if not failures:
+            return True
+
+        for _ in range(self._max_attempts):
+            prompt = self.build_prompt(failures)
+            result: AgentResult = agent.run(prompt, env)
+            self.record_attempt(
+                failures=failures,
+                prompt=prompt,
+                success=result.success,
+                cost=result.cost,
+            )
+            if result.success:
+                return True
+            if self._budget is not None and self.total_cost >= self._budget:
+                break
+
+        return False

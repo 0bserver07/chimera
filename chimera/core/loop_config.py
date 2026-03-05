@@ -5,13 +5,16 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from chimera.checkpoints import CheckpointManager
     from chimera.compaction.base import CompactionStrategy
     from chimera.detection.actions import LoopDetector
     from chimera.events.base import EventBus
+    from chimera.permissions.audit import AuditLog
     from chimera.permissions.base import PermissionPolicy
     from chimera.lsp.manager import LSPManager
     from chimera.providers.cost_tracker import CostTracker
     from chimera.streaming.base import StreamHandler
+    from chimera.workflows.git_workflow import GitWorkflow
 
 __all__ = ["LoopConfig"]
 
@@ -43,3 +46,6 @@ class LoopConfig:
     auto_compact_threshold: float = 0.8
     lsp: LSPManager | None = None
     cost_tracker: CostTracker | None = None
+    audit_log: AuditLog | None = None
+    checkpoint_manager: CheckpointManager | None = None
+    git_workflow: GitWorkflow | None = None

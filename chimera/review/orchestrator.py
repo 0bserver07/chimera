@@ -7,7 +7,8 @@ from typing import TYPE_CHECKING
 from chimera.review.feedback import ReviewFeedback
 
 if TYPE_CHECKING:
-    pass
+    from chimera.core.agent import Agent
+    from chimera.env.base import Environment
 
 
 @dataclass
@@ -74,6 +75,42 @@ class ReviewOrchestrator:
         if self.current_round >= self._max_rounds:
             return False
         return True
+
+    def run(
+        self,
+        diff: str,
+        reviewer: Agent,
+        author: Agent,
+        env: Environment | None = None,
+    ) -> bool:
+        """Run the review-fix iteration cycle.
+
+        Args:
+            diff: The code diff to review.
+            reviewer: Agent that reviews the diff and produces feedback.
+            author: Agent that fixes issues found by the reviewer.
+            env: Optional environment for agents to execute in.
+
+        Returns:
+            True if the review is approved, False otherwise.
+        """
+        while self.needs_another_round():
+            review_result = reviewer.run(
+                f"Review this diff:\n\n{diff}", env
+            )
+            feedback = ReviewFeedback.parse_from_text(review_result.output)
+            self.add_review(feedback)
+
+            if feedback.approved:
+                break
+
+            fix_prompt = "Fix these review comments:\n"
+            for comment in feedback.comments:
+                fix_prompt += f"- {comment.summary}\n"
+            author.run(fix_prompt, env)
+            self.mark_fixed()
+
+        return self.is_approved
 
     @property
     def total_comments(self) -> int:

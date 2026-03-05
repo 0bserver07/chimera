@@ -12,6 +12,7 @@ from chimera.tools.delegate import DelegateTool
 from chimera.tools.repo_map import RepoMapTool
 from chimera.tools.verify import VerifyTool
 from chimera.tools.image_read import ImageReadTool
+from chimera.tools.import_graph import ImportGraph
 
 read_file = ReadFileTool()
 write_file = WriteFileTool()
@@ -32,4 +33,5 @@ __all__ = [
     "VerifyTool", "ImageReadTool",
     "read_file", "write_file", "bash", "edit_file", "search", "list_files",
     "test", "web_fetch", "git", "replace_in_file", "verify", "read_image",
+    "ImportGraph",
 ]

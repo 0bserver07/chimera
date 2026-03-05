@@ -34,7 +34,8 @@ def _make_default_tools() -> ToolGroup:
     from chimera.tools.read import ReadFileTool
     from chimera.tools.write import WriteFileTool
     from chimera.tools.bash import BashTool
-    return ToolGroup("default", [ReadFileTool(), WriteFileTool(), BashTool()])
+    from chimera.tools.image_read import ImageReadTool
+    return ToolGroup("default", [ReadFileTool(), WriteFileTool(), BashTool(), ImageReadTool()])
 
 
 DEFAULT_TOOLS = _make_default_tools()

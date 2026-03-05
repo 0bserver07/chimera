@@ -119,3 +119,101 @@ class TestReviewOrchestrator:
             ReviewComment(file="c.py"),
         ]))
         assert orch.total_comments == 3
+
+
+class _MockProvider:
+    """Minimal mock provider for integration tests."""
+
+    def __init__(self, responses=None):
+        from chimera.providers.base import Response
+        self._responses = responses or [
+            Response(content="Done.", tool_calls=[], usage={"input_tokens": 0, "output_tokens": 0}),
+        ]
+        self._idx = 0
+
+    @property
+    def model_name(self):
+        return "mock"
+
+    def complete(self, messages, tools=None, **kwargs):
+        resp = self._responses[min(self._idx, len(self._responses) - 1)]
+        self._idx += 1
+        return resp
+
+
+class TestReviewOrchestratorRun:
+    def test_run_approved_immediately(self):
+        from chimera.core.agent import Agent
+        from chimera.providers.base import Response
+
+        reviewer_provider = _MockProvider([
+            Response(
+                content="[SUGGESTION] a.py: minor style\nApproved.",
+                tool_calls=[],
+                usage={"input_tokens": 10, "output_tokens": 10},
+            ),
+        ])
+        author_provider = _MockProvider()
+
+        reviewer = Agent(provider=reviewer_provider, name="reviewer")
+        author = Agent(provider=author_provider, name="author")
+        orch = ReviewOrchestrator(max_rounds=3)
+
+        result = orch.run("diff --git a/x.py\n+new line", reviewer, author, env=None)
+        assert result is True
+        assert orch.is_approved
+        assert len(orch.rounds) == 1
+
+    def test_run_fix_then_approve(self):
+        from chimera.core.agent import Agent
+        from chimera.providers.base import Response
+
+        reviewer_provider = _MockProvider([
+            Response(
+                content="[WARNING] a.py:10: needs refactor",
+                tool_calls=[],
+                usage={"input_tokens": 10, "output_tokens": 10},
+            ),
+            Response(
+                content="[SUGGESTION] a.py: minor\nApproved.",
+                tool_calls=[],
+                usage={"input_tokens": 10, "output_tokens": 10},
+            ),
+        ])
+        author_provider = _MockProvider([
+            Response(content="Fixed.", tool_calls=[], usage={"input_tokens": 5, "output_tokens": 5}),
+        ])
+
+        reviewer = Agent(provider=reviewer_provider, name="reviewer")
+        author = Agent(provider=author_provider, name="author")
+        orch = ReviewOrchestrator(max_rounds=3)
+
+        result = orch.run("diff content", reviewer, author, env=None)
+        assert result is True
+        assert orch.is_approved
+        assert len(orch.rounds) == 2
+        assert orch.rounds[0].fixed
+
+    def test_run_max_rounds_not_approved(self):
+        from chimera.core.agent import Agent
+        from chimera.providers.base import Response
+
+        reviewer_provider = _MockProvider([
+            Response(
+                content="[ERROR] a.py: critical bug",
+                tool_calls=[],
+                usage={"input_tokens": 10, "output_tokens": 10},
+            ),
+        ])
+        author_provider = _MockProvider([
+            Response(content="Trying...", tool_calls=[], usage={"input_tokens": 5, "output_tokens": 5}),
+        ])
+
+        reviewer = Agent(provider=reviewer_provider, name="reviewer")
+        author = Agent(provider=author_provider, name="author")
+        orch = ReviewOrchestrator(max_rounds=2)
+
+        result = orch.run("diff content", reviewer, author, env=None)
+        assert result is False
+        assert not orch.is_approved
+        assert len(orch.rounds) == 2

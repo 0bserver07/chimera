@@ -37,3 +37,12 @@ class TestToolGroup:
     def test_predefined_default_group(self):
         from chimera.core.tool_group import DEFAULT_TOOLS
         assert len(DEFAULT_TOOLS.tools) >= 3
+
+    def test_image_read_in_default_tools(self):
+        from chimera.core.tool_group import DEFAULT_TOOLS
+        names = [t.name for t in DEFAULT_TOOLS]
+        assert "read_image" in names
+
+    def test_import_graph_importable(self):
+        from chimera.tools import ImportGraph
+        assert ImportGraph is not None
