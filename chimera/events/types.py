@@ -7,6 +7,10 @@ from typing import Any
 from chimera.events.base import Event
 
 __all__ = [
+    "CriticEvent",
+    "ExternalAgentCompleteEvent",
+    "ExternalAgentStartEvent",
+    "ExternalAgentToolCallEvent",
     "ToolCallEvent",
     "ToolResultEvent",
     "StepEvent",
@@ -15,7 +19,9 @@ __all__ = [
     "LoopDetectedEvent",
     "CompactionEvent",
     "PermissionEvent",
+    "SecurityEvent",
     "SessionEvent",
+    "StepCostEvent",
 ]
 
 
@@ -100,3 +106,70 @@ class SessionEvent(Event):
     type: str = field(default="session", init=False)
     action: str = ""
     session_id: str = ""
+
+
+@dataclass
+class CriticEvent(Event):
+    """A critic evaluation was performed."""
+
+    type: str = field(default="critic", init=False)
+    score: float = 0.0
+    passed: bool = False
+    feedback: str | None = None
+    iteration: int = 0
+
+
+@dataclass
+class ExternalAgentStartEvent(Event):
+    """An external agent task was started."""
+
+    type: str = field(default="external_agent_start", init=False)
+    agent_name: str = ""
+    task: str = ""
+
+
+@dataclass
+class ExternalAgentCompleteEvent(Event):
+    """An external agent task completed."""
+
+    type: str = field(default="external_agent_complete", init=False)
+    agent_name: str = ""
+    response_text: str = ""
+    cost: float = 0.0
+    tool_calls_count: int = 0
+
+
+@dataclass
+class ExternalAgentToolCallEvent(Event):
+    """An external agent made a tool call."""
+
+    type: str = field(default="external_agent_tool_call", init=False)
+    agent_name: str = ""
+    tool_call_id: str = ""
+    title: str = ""
+    status: str = ""
+
+
+@dataclass
+class SecurityEvent(Event):
+    """A security analysis decision was made for a tool call."""
+
+    type: str = field(default="security", init=False)
+    tool_name: str = ""
+    arguments: dict[str, Any] = field(default_factory=dict)
+    risk: str = ""
+    action: str = ""  # "blocked", "confirmed", "allowed"
+
+
+@dataclass
+class StepCostEvent(Event):
+    """Cost and token usage for an agent step."""
+
+    type: str = field(default="step_cost", init=False)
+    step_index: int = 0
+    cost: float = 0.0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    reasoning_tokens: int = 0
+    cache_hit_rate: float = 0.0
+    duration: float = 0.0

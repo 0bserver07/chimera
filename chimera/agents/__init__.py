@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from chimera.agents.config import AgentConfig
+from chimera.agents.loader import AgentFactory, AgentLoader, FileAgentDef
 from chimera.agents.presets import (
     BuildAgent,
     ExploreAgent,
@@ -13,9 +14,12 @@ from chimera.agents.registry import AgentRegistry
 
 __all__ = [
     "AgentConfig",
+    "AgentFactory",
+    "AgentLoader",
     "AgentRegistry",
     "BuildAgent",
     "ExploreAgent",
+    "FileAgentDef",
     "GeneralAgent",
     "PlanAgent",
     "ReviewAgent",

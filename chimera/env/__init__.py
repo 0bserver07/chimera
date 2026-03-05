@@ -12,3 +12,19 @@ try:
     __all__ += ["DockerEnvironment"]  # type: ignore[assignment]
 except ImportError:
     pass
+
+# RemoteEnvironment is conditionally available (requires `httpx` package)
+try:
+    from chimera.env.remote import RemoteEnvironment
+
+    __all__ += ["RemoteEnvironment"]  # type: ignore[assignment]
+except ImportError:
+    pass
+
+# CloudEnvironment is conditionally available (requires `httpx` package)
+try:
+    from chimera.env.cloud import CloudEnvironment
+
+    __all__ += ["CloudEnvironment"]  # type: ignore[assignment]
+except ImportError:
+    pass

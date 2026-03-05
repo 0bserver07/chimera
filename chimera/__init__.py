@@ -32,10 +32,15 @@ from chimera.composition import Ensemble, Pipeline, Supervisor
 # Environment
 from chimera.env import Environment, GitEnvironment, LocalEnvironment, SessionMixin
 
+try:
+    from chimera.env import CloudEnvironment, RemoteEnvironment
+except ImportError:
+    pass
+
 # Providers
 from chimera.providers import ModelConfig, Provider, ProviderCatalog, Response, StreamEvent, create_provider
 from chimera.providers.cost import calculate_cost, estimate_cost, register_model_cost
-from chimera.providers.cost_tracker import CostLimitExceeded, CostTracker
+from chimera.providers.cost_tracker import CostLimitExceeded, CostTracker, StepUsage, TokenUsage
 
 # Training
 from chimera.training import Architecture, Constraint, Layer, Spec, Trainer
@@ -78,6 +83,7 @@ from chimera.eval import (
 from chimera.tools.repo_map import RepoMapTool
 from chimera.tools.image_read import ImageReadTool
 from chimera.tools.import_graph import ImportEdge, ImportGraph
+from chimera.tools.browser import BrowserTool
 
 # Convenience
 from chimera.synthesize import synthesize
@@ -85,20 +91,49 @@ from chimera.synthesize import synthesize
 # LSP
 from chimera.lsp import Diagnostic, LSPClient, LSPManager, LSPTool, Severity
 
+# Critic
+from chimera.critic import ChecklistCritic, Critic, CriticConfig, CriticMixin, CriticMode, CriticResult, LLMCritic
+
+# ACP
+from chimera.acp import ACPClient, ACPResponse, ACPSessionConfig, ACPToolCall, ExternalAgentTool
+
 # Extension modules
 from chimera.core.loop_config import LoopConfig
 from chimera.events import Event, EventBus
-from chimera.compaction import CompactionStrategy, TokenCounter
+from chimera.compaction import (
+    AtomicGroup,
+    CompactionStrategy,
+    CompactionUrgency,
+    CompactionView,
+    InsufficientCompactionError,
+    ThresholdCompaction,
+    TokenCounter,
+)
 from chimera.detection import DetectionResult, ExactRepeatDetector
 from chimera.permissions import AuditLog, PermissionAction, PermissionRuleset, RiskLevel, classify_risk
 from chimera.streaming import ConsoleStreamHandler, StreamingReAct
-from chimera.sessions import InMemoryStorage, Session
+from chimera.sessions import EventLog, EventSourcedSession, InMemoryStorage, Session
 from chimera.auth import AuthManager, Credential
-from chimera.agents import AgentConfig, AgentRegistry
+from chimera.agents import AgentConfig, AgentFactory, AgentLoader, AgentRegistry, FileAgentDef
 from chimera.agents.loader import create_default_registry, load_custom_agents
-from chimera.plugins import BasePlugin, Marketplace, PluginInfo, PluginManager
-from chimera.config import ProjectConfig, Skill, SkillRegistry, StructuredOutput
+from chimera.plugins import BasePlugin, DirectoryPluginLoader, Hook, MCPServerConfig, Marketplace, PluginExtensionRegistry, PluginInfo, PluginManager
+from chimera.config import ChimeraConfig, DiscriminatedUnion, ProjectConfig, Skill, SkillRegistry, StructuredOutput
 from chimera.mcp import MCPClient, MCPToolSource
+
+# Security
+from chimera.security import (
+    CompositeSecurityAnalyzer,
+    ConfirmAboveThreshold,
+    ConfirmationPolicy,
+    LLMSecurityAnalyzer,
+    NeverConfirm,
+    RuleBasedSecurityAnalyzer,
+    SecurityAnalyzer,
+    SecurityRisk,
+)
+
+# Secrets
+from chimera.secrets import RedactionMiddleware, SecretDetector, SecretRegistry
 
 # Docs
 from chimera.docs.generator import DocGenerator, DocSection
@@ -223,6 +258,7 @@ __all__ = [
     "pass_at_k",
     "resolve_rate",
     # Tools
+    "BrowserTool",
     "ImageReadTool",
     "ImportEdge",
     "ImportGraph",
@@ -252,11 +288,30 @@ __all__ = [
     "PendingApproval",
     "async_drain_steps",
     "drain_steps",
+    # Critic
+    "ChecklistCritic",
+    "Critic",
+    "CriticConfig",
+    "CriticMixin",
+    "CriticMode",
+    "CriticResult",
+    "LLMCritic",
+    # ACP
+    "ACPClient",
+    "ACPResponse",
+    "ACPSessionConfig",
+    "ACPToolCall",
+    "ExternalAgentTool",
     # Extension modules
     "LoopConfig",
     "EventBus",
     "Event",
+    "AtomicGroup",
     "CompactionStrategy",
+    "CompactionUrgency",
+    "CompactionView",
+    "InsufficientCompactionError",
+    "ThresholdCompaction",
     "TokenCounter",
     "DetectionResult",
     "ExactRepeatDetector",
@@ -268,11 +323,16 @@ __all__ = [
     "ConsoleStreamHandler",
     "StreamingReAct",
     "Session",
+    "EventLog",
+    "EventSourcedSession",
     "InMemoryStorage",
     "AuthManager",
     "Credential",
     "AgentConfig",
+    "AgentFactory",
+    "AgentLoader",
     "AgentRegistry",
+    "FileAgentDef",
     "create_default_registry",
     "load_custom_agents",
     # Research
@@ -285,7 +345,11 @@ __all__ = [
     "CheckpointManager",
     # Plugins
     "BasePlugin",
+    "DirectoryPluginLoader",
+    "Hook",
+    "MCPServerConfig",
     "Marketplace",
+    "PluginExtensionRegistry",
     "PluginInfo",
     "PluginManager",
     # Workflows
@@ -296,6 +360,8 @@ __all__ = [
     "StagedChange",
     "TransactionState",
     # Config
+    "ChimeraConfig",
+    "DiscriminatedUnion",
     "ProjectConfig",
     "Skill",
     "SkillRegistry",
@@ -324,4 +390,20 @@ __all__ = [
     "MigrationPlan",
     "MigrationPlanner",
     "MigrationRule",
+    # Security
+    "CompositeSecurityAnalyzer",
+    "ConfirmAboveThreshold",
+    "ConfirmationPolicy",
+    "LLMSecurityAnalyzer",
+    "NeverConfirm",
+    "RuleBasedSecurityAnalyzer",
+    "SecurityAnalyzer",
+    "SecurityRisk",
+    # Secrets
+    "RedactionMiddleware",
+    "SecretDetector",
+    "SecretRegistry",
+    # Granular token tracking
+    "StepUsage",
+    "TokenUsage",
 ]

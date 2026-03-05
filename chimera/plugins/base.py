@@ -1,12 +1,55 @@
-"""Plugin base classes and registry."""
+"""Plugin base classes, registry, and extension dataclasses."""
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from chimera.core.tool import BaseTool
 
+
+# ---------------------------------------------------------------------------
+# Extension dataclasses
+# ---------------------------------------------------------------------------
+
+@dataclass
+class Hook:
+    """Shell command triggered by an event.
+
+    Args:
+        command: Shell command to execute.
+        event_type: Event type that triggers this hook.
+        working_dir: Working directory for the command.
+        timeout: Max seconds to wait for the command.
+        env: Extra environment variables.
+    """
+
+    command: str
+    event_type: str
+    working_dir: str | None = None
+    timeout: int = 30
+    env: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass
+class MCPServerConfig:
+    """MCP server configuration provided by a plugin.
+
+    Args:
+        command: Command to start the server.
+        args: Additional arguments.
+        env: Environment variables.
+    """
+
+    command: list[str]
+    args: list[str] = field(default_factory=list)
+    env: dict[str, str] = field(default_factory=dict)
+
+
+# ---------------------------------------------------------------------------
+# Component registry (per-instance, passed during activation)
+# ---------------------------------------------------------------------------
 
 class ComponentRegistry:
     """Registry passed to plugins during activation.
@@ -62,11 +105,17 @@ class ComponentRegistry:
         return dict(self._providers)
 
 
+# ---------------------------------------------------------------------------
+# Base plugin
+# ---------------------------------------------------------------------------
+
 class BasePlugin(ABC):
     """Abstract base class for Chimera plugins.
 
     Subclass this and implement :meth:`activate` to register tools,
-    loops, or providers with the plugin registry.
+    loops, or providers with the plugin registry. Override the
+    ``register_*`` methods to provide agents, strategies, skills,
+    MCP servers, and hooks.
 
     Example:
         ```python
@@ -85,13 +134,58 @@ class BasePlugin(ABC):
         """Unique plugin name."""
 
     version: str = "0.1.0"
+    description: str = ""
+    author: str = ""
 
     def activate(self, registry: ComponentRegistry) -> None:
         """Called when the plugin is loaded.
 
+        Override individual ``register_*`` methods to provide extensions,
+        or override this method entirely for custom behaviour.
+
         Args:
             registry: Use to register tools, loops, and providers.
         """
+        self.register_tools(registry)
+        self.register_loops(registry)
+        self.register_providers(registry)
+        self.register_agents(registry)
+        self.register_strategies(registry)
+        self.register_constraints(registry)
+        self.register_middleware(registry)
+        self.register_skills(registry)
+        self.register_mcp_servers(registry)
+        self.register_hooks(registry)
+
+    def register_tools(self, registry: ComponentRegistry) -> None:
+        """Override to register tools."""
+
+    def register_loops(self, registry: ComponentRegistry) -> None:
+        """Override to register loop classes."""
+
+    def register_providers(self, registry: ComponentRegistry) -> None:
+        """Override to register provider classes."""
+
+    def register_agents(self, registry: ComponentRegistry) -> None:
+        """Override to register agent configs."""
+
+    def register_strategies(self, registry: ComponentRegistry) -> None:
+        """Override to register strategy classes."""
+
+    def register_constraints(self, registry: ComponentRegistry) -> None:
+        """Override to register constraint classes."""
+
+    def register_middleware(self, registry: ComponentRegistry) -> None:
+        """Override to register event middleware."""
+
+    def register_skills(self, registry: ComponentRegistry) -> None:
+        """Override to register skills."""
+
+    def register_mcp_servers(self, registry: ComponentRegistry) -> None:
+        """Override to register MCP server configs."""
+
+    def register_hooks(self, registry: ComponentRegistry) -> None:
+        """Override to register hooks."""
 
     def deactivate(self) -> None:
         """Called when the plugin is unloaded."""
