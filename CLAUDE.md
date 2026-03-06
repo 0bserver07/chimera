@@ -141,7 +141,7 @@ Layer 1: Environment     Local, Docker, Git, Remote, Cloud, PersistentShell
 - `manager.py` — PluginManager (load, unload, discover)
 - `registry.py` — PluginExtensionRegistry (agents, strategies, constraints, middleware, skills, MCP, hooks)
 - `dir_loader.py` — DirectoryPluginLoader (agents/*.md, .mcp.json, hooks/)
-- `marketplace.py` — PluginInfo, PluginRegistry, Marketplace (search, install, uninstall)
+- `marketplace.py` — PluginInfo, MarketplaceRegistry, Marketplace (search, install, uninstall)
 
 ### Other Infrastructure
 - `chimera/streaming/` — Stream handlers, StreamingReAct

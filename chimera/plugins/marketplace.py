@@ -29,7 +29,7 @@ class PluginInfo:
     rating: float = 0.0
 
 
-class PluginRegistry:
+class MarketplaceRegistry:
     """Registry of available plugins with search and filtering.
 
     Stores :class:`PluginInfo` entries and provides methods to search,
@@ -37,7 +37,7 @@ class PluginRegistry:
 
     Example:
         ```python
-        registry = PluginRegistry()
+        registry = MarketplaceRegistry()
         registry.register(PluginInfo(name="my-tool", version="1.0.0"))
         results = registry.search("tool")
         ```
@@ -140,7 +140,7 @@ class PluginRegistry:
 class Marketplace:
     """Plugin marketplace for publishing, searching, and installing plugins.
 
-    Wraps a :class:`PluginRegistry` and adds install/uninstall tracking.
+    Wraps a :class:`MarketplaceRegistry` and adds install/uninstall tracking.
 
     Example:
         ```python
@@ -151,12 +151,12 @@ class Marketplace:
         ```
     """
 
-    def __init__(self, registry: PluginRegistry | None = None) -> None:
-        self._registry = registry or PluginRegistry()
+    def __init__(self, registry: MarketplaceRegistry | None = None) -> None:
+        self._registry = registry or MarketplaceRegistry()
         self._installed: set[str] = set()
 
     @property
-    def registry(self) -> PluginRegistry:
+    def registry(self) -> MarketplaceRegistry:
         """Access the underlying plugin registry."""
         return self._registry
 

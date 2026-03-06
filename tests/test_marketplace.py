@@ -1,7 +1,7 @@
 """Tests for the plugin marketplace."""
 from __future__ import annotations
 
-from chimera.plugins.marketplace import Marketplace, PluginInfo, PluginRegistry
+from chimera.plugins.marketplace import Marketplace, PluginInfo, MarketplaceRegistry
 
 
 # ---------------------------------------------------------------------------
@@ -45,13 +45,13 @@ def test_plugin_info_with_fields():
 
 
 # ---------------------------------------------------------------------------
-# PluginRegistry tests
+# MarketplaceRegistry tests
 # ---------------------------------------------------------------------------
 
 
 def test_registry_register_and_get():
     """register() adds a plugin and get() retrieves it by name."""
-    registry = PluginRegistry()
+    registry = MarketplaceRegistry()
     info = PluginInfo(name="foo", version="1.0.0")
     registry.register(info)
     assert registry.get("foo") is info
@@ -60,7 +60,7 @@ def test_registry_register_and_get():
 
 def test_registry_unregister():
     """unregister() removes a plugin from the registry."""
-    registry = PluginRegistry()
+    registry = MarketplaceRegistry()
     info = PluginInfo(name="bar", version="1.0.0")
     registry.register(info)
     registry.unregister("bar")
@@ -71,7 +71,7 @@ def test_registry_unregister():
 
 def test_registry_search_by_name():
     """search() matches against plugin names (case-insensitive)."""
-    registry = PluginRegistry()
+    registry = MarketplaceRegistry()
     registry.register(PluginInfo(name="code-formatter", version="1.0.0"))
     registry.register(PluginInfo(name="linter", version="1.0.0"))
     results = registry.search("CODE")
@@ -81,7 +81,7 @@ def test_registry_search_by_name():
 
 def test_registry_search_by_description():
     """search() matches against plugin descriptions."""
-    registry = PluginRegistry()
+    registry = MarketplaceRegistry()
     registry.register(
         PluginInfo(
             name="alpha",
@@ -99,7 +99,7 @@ def test_registry_search_by_description():
 
 def test_registry_search_by_tag():
     """search() matches against tag values."""
-    registry = PluginRegistry()
+    registry = MarketplaceRegistry()
     registry.register(
         PluginInfo(name="widget", version="1.0.0", tags=["ui", "dashboard"])
     )
@@ -113,7 +113,7 @@ def test_registry_search_by_tag():
 
 def test_registry_list_all():
     """list_all() returns every registered plugin."""
-    registry = PluginRegistry()
+    registry = MarketplaceRegistry()
     registry.register(PluginInfo(name="a", version="1.0.0"))
     registry.register(PluginInfo(name="b", version="2.0.0"))
     all_plugins = registry.list_all()
@@ -124,7 +124,7 @@ def test_registry_list_all():
 
 def test_registry_by_tag():
     """by_tag() filters plugins that have a specific tag."""
-    registry = PluginRegistry()
+    registry = MarketplaceRegistry()
     registry.register(
         PluginInfo(name="p1", version="1.0.0", tags=["tool", "ai"])
     )
@@ -142,7 +142,7 @@ def test_registry_by_tag():
 
 def test_registry_top_rated():
     """top_rated() returns plugins sorted by rating descending."""
-    registry = PluginRegistry()
+    registry = MarketplaceRegistry()
     registry.register(PluginInfo(name="low", version="1.0.0", rating=1.0))
     registry.register(PluginInfo(name="mid", version="1.0.0", rating=3.0))
     registry.register(PluginInfo(name="high", version="1.0.0", rating=5.0))

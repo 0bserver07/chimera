@@ -33,7 +33,7 @@ from chimera.composition import Ensemble, Pipeline, Supervisor
 from chimera.env import Environment, GitEnvironment, LocalEnvironment, SessionMixin
 
 try:
-    from chimera.env import CloudEnvironment, RemoteEnvironment
+    from chimera.env import CloudEnvironment, RemoteEnvironment  # noqa: F401
 except ImportError:
     pass
 
@@ -116,7 +116,7 @@ from chimera.sessions import EventLog, EventSourcedSession, InMemoryStorage, Ses
 from chimera.auth import AuthManager, Credential
 from chimera.agents import AgentConfig, AgentFactory, AgentLoader, AgentRegistry, FileAgentDef
 from chimera.agents.loader import create_default_registry, load_custom_agents
-from chimera.plugins import BasePlugin, DirectoryPluginLoader, Hook, MCPServerConfig, Marketplace, PluginExtensionRegistry, PluginInfo, PluginManager
+from chimera.plugins import BasePlugin, DirectoryPluginLoader, Hook, MCPServerConfig, Marketplace, MarketplaceRegistry, PluginExtensionRegistry, PluginInfo, PluginManager
 from chimera.config import ChimeraConfig, DiscriminatedUnion, ProjectConfig, Skill, SkillRegistry, StructuredOutput
 from chimera.mcp import MCPClient, MCPToolSource
 
@@ -351,6 +351,7 @@ __all__ = [
     "Marketplace",
     "PluginExtensionRegistry",
     "PluginInfo",
+    "MarketplaceRegistry",
     "PluginManager",
     # Workflows
     "CommitStrategy",
