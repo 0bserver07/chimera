@@ -1,6 +1,6 @@
 # Extension Modules
 
-Chimera ships with eight extension modules that were added to support building
+Chimera ships with eighteen extension modules that were added to support building
 interactive coding agents (like Claude Code or OpenCode) on top of the core
 framework.  Every loop-level feature -- events, permissions, compaction,
 detection, and streaming -- is wired through `LoopConfig` so that the agent
@@ -18,6 +18,16 @@ loop can be configured declaratively.
 | [Sessions](sessions.md) | `chimera.sessions` | Multi-turn conversation persistence |
 | [Auth](auth.md) | `chimera.auth` | Credential management for LLM providers |
 | [Agents & Config](agents-config.md) | `chimera.agents` | Declarative agent definitions and presets |
+| [Security](security.md) | `chimera.security` | Tool call risk analysis and confirmation policies |
+| [Secrets](secrets.md) | `chimera.secrets` | Secret detection and redaction in event streams |
+| [Critic](critic.md) | `chimera.critic` | In-loop action evaluation with LLM or rule-based critics |
+| [ACP](acp.md) | `chimera.acp` | Agent Client Protocol for external agent interop |
+| [Plugins](plugins.md) | `chimera.plugins` | Plugin lifecycle, extension registry, marketplace |
+| [Config](config.md) | `chimera.config` | Polymorphic config serialization, project config |
+| [Checkpoints](checkpoints.md) | `chimera.checkpoints` | Named checkpoints with create/restore/undo |
+| [Cost Tracking](cost-tracking.md) | `chimera.providers.cost_tracker` | Granular token and cost tracking with budgets |
+| [MCP](mcp.md) | `chimera.mcp` | Model Context Protocol client (stdio/HTTP) |
+| [LSP](lsp.md) | `chimera.lsp` | Language Server Protocol for diagnostics, completion, rename |
 
 ## Dependency diagram
 
@@ -32,11 +42,23 @@ graph TD
     LC --> DT[Detection]
     LC --> CP[Compaction]
     LC --> ST[Streaming]
+    LC --> CR[Critic]
     SS[Sessions] --> LC
     SS --> AG[Agent]
     AU[Auth] --> PR[Providers]
     AC[AgentConfig] --> AG
     AC --> LC
+    SE[Security] --> PM
+    SE --> EV
+    SC[Secrets] --> EV
+    PL[Plugins] --> AC
+    PL --> MC[MCP]
+    ACP[ACP] --> AG
+    MC --> AG
+    LS[LSP] --> AG
+    CT[Cost Tracking] --> PR
+    CK[Checkpoints] --> SS
+    CF[Config] --> AC
 ```
 
 ## Quick start

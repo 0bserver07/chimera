@@ -90,11 +90,13 @@ Requires **Python 3.11+**.
 | Category             | Count | Highlights                                                                 |
 |----------------------|------:|----------------------------------------------------------------------------|
 | **Providers**        |     6 | Anthropic, OpenAI, Google, Ollama, Modal, OpenAI-compatible               |
-| **Tools**            |    13 | read, write, edit, bash, search, git, test, web_fetch, repo_map, delegate |
+| **Tools**            |    16 | read, write, edit, bash, search, git, test, web_fetch, repo_map, delegate, browser, image_read, import_graph, replace_in_file, verify, list_files |
 | **Loops**            |     4 | ReAct, PlanAndExecute, Reflexion, TreeOfThought                           |
 | **Composition**      |     3 | Pipeline, Ensemble, Supervisor                                            |
-| **Strategies**       |     8 | TestConvergence, Curriculum, Ensemble, Passthrough, TreeSearch, MajorityVoting, AIMOEnsemble, Streaming |
-| **Extension Modules**|     8 | Events, Compaction, Detection, Permissions, Streaming, Sessions, Auth, Agent Config |
+| **Strategies**       |     7 | TestConvergence, Curriculum, Ensemble, Passthrough, TreeSearch, MajorityVoting, AIMOEnsemble |
+| **Environments**     |     6 | Local, Docker, Git, Remote, Cloud, PersistentShell                        |
+| **Workflows**        |     6 | CI Fix, Code Review, Research, Migration, Doc Generation, Test Generation |
+| **Infrastructure**   |    14 | Security, Secrets, Permissions, Events, Sessions, Compaction, Streaming, Detection, Config, Plugins, MCP, LSP, Auth, Checkpoints |
 
 ---
 
@@ -125,7 +127,8 @@ Requires **Python 3.11+**.
     ---
 
     Events, compaction, detection, permissions, streaming, sessions, auth,
-    and agent configuration.
+    agent configuration, security, secrets, critic, ACP, plugins, config,
+    checkpoints, cost tracking, MCP, and LSP.
 
     [:octicons-arrow-right-24: Modules](modules/index.md)
 
@@ -136,5 +139,23 @@ Requires **Python 3.11+**.
     Full autodoc reference for every public class and function.
 
     [:octicons-arrow-right-24: Reference](reference/index.md)
+
+-   :material-cog-sync:{ .lg .middle } **Workflows**
+
+    ---
+
+    CI fix, code review, research, migration planning, doc generation,
+    and test generation -- ready-made pipelines for common tasks.
+
+    [:octicons-arrow-right-24: Workflows](workflows/index.md)
+
+-   :material-console:{ .lg .middle } **CLI & REPL**
+
+    ---
+
+    11 subcommands and an interactive REPL with 14 slash commands for
+    hands-on agent interaction.
+
+    [:octicons-arrow-right-24: CLI & REPL](modules/cli.md)
 
 </div>
