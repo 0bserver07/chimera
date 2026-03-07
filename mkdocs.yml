@@ -90,12 +90,36 @@ nav:
     - Sessions: modules/sessions.md
     - Auth: modules/auth.md
     - Agent Config: modules/agents-config.md
+    - Security: modules/security.md
+    - Secrets: modules/secrets.md
+    - Critic: modules/critic.md
+    - ACP: modules/acp.md
+    - Plugins: modules/plugins.md
+    - Config: modules/config.md
+    - Checkpoints: modules/checkpoints.md
+    - Cost Tracking: modules/cost-tracking.md
+    - MCP: modules/mcp.md
+    - LSP: modules/lsp.md
+    - CLI & REPL: modules/cli.md
+  - Workflows:
+    - workflows/index.md
+    - CI Fix: workflows/ci-fix.md
+    - Code Review: workflows/review.md
+    - Research: workflows/research.md
+    - Migration: workflows/migration.md
+    - Doc Generation: workflows/docgen.md
+    - Test Generation: workflows/testgen.md
   - Guides:
     - guides/index.md
     - Build a Coding Agent: guides/build-a-coding-agent.md
     - Add a Custom Tool: guides/add-custom-tool.md
     - Compose Agents: guides/compose-agents.md
     - Configure Permissions: guides/configure-permissions.md
+    - Use the REPL: guides/use-the-repl.md
+    - Add Security Policies: guides/add-security-policies.md
+    - Build a Plugin: guides/build-a-plugin.md
+    - Connect External Agents: guides/connect-external-agents.md
+    - Automate CI Fixes: guides/automate-ci-fixes.md
   - API Reference:
     - reference/index.md
     - Core: reference/core.md
@@ -114,4 +138,16 @@ nav:
     - Auth: reference/auth.md
     - Agents: reference/agents.md
     - Types: reference/types.md
+    - Security: reference/security.md
+    - Secrets: reference/secrets.md
+    - Critic: reference/critic.md
+    - ACP: reference/acp.md
+    - Plugins: reference/plugins.md
+    - Config: reference/config.md
+    - Checkpoints: reference/checkpoints.md
+    - Cost Tracking: reference/cost-tracking.md
+    - MCP: reference/mcp.md
+    - LSP: reference/lsp.md
+    - Workflows: reference/workflows.md
+    - CLI: reference/cli.md
   - Architecture: architecture.md
