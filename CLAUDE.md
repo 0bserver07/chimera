@@ -7,7 +7,7 @@ A composable coding agent framework. Synthesize codebases from specifications.
 - **Language:** Python 3.11+
 - **Build:** hatchling
 - **License:** AGPL-3.0
-- **Tests:** `python -m pytest` (1712 tests)
+- **Tests:** `python -m pytest` (1744 tests)
 - **Lint:** `ruff check chimera/`
 - **Types:** `mypy chimera/`
 - **Docs:** `pip install -e ".[docs]" && mkdocs serve`
@@ -25,7 +25,7 @@ Layer 6: Synthesis       Trainer, Strategy, Spec, Architecture, Constraint
 Layer 5: Evaluation      Harness, Metrics, Benchmarks (SWE-bench, HumanEval, AIMO)
 Layer 4: Agent           Agent, Tools, Loops, Prompt, Context, Critic, ACP
 Layer 3: Provider        Anthropic, OpenAI, Google, Ollama, Modal, OpenAI-compat
-Layer 2: Infrastructure  Security, Secrets, Permissions, Events, Sessions,
+Layer 2: Infrastructure  Security, Secrets, Permissions, Events, Sessions, Wire,
                          Compaction, Streaming, Detection, Config, Plugins, MCP, LSP
 Layer 1: Environment     Local, Docker, Git, Remote, Cloud, PersistentShell
 ```
@@ -51,7 +51,7 @@ Layer 1: Environment     Local, Docker, Git, Remote, Cloud, PersistentShell
 - `cost_tracker.py` — Granular token tracking (cache, reasoning, per-step breakdown)
 
 ### Tools (`chimera/tools/`)
-16 built-in tools: read, write, edit, bash, search, list_files, test, git, web_fetch, replace_in_file, verify, delegate, repo_map, image_read, browser, import_graph
+20 built-in tools: read, write, edit, bash, search, list_files, test, git, web_fetch, replace_in_file, verify, delegate, repo_map, image_read, browser, import_graph, think, ask_user, todo, dmail
 
 ### Environments (`chimera/env/`)
 - `base.py` — Environment ABC
@@ -143,6 +143,13 @@ Layer 1: Environment     Local, Docker, Git, Remote, Cloud, PersistentShell
 - `dir_loader.py` — DirectoryPluginLoader (agents/*.md, .mcp.json, hooks/)
 - `marketplace.py` — PluginInfo, MarketplaceRegistry, Marketplace (search, install, uninstall)
 
+### Wire (`chimera/wire/`)
+- `types.py` — WireMessage, WireRequest/Response, TurnBegin/End, StepBegin/End, ApprovalRequest/Response, UserQuestion/Answer, StatusUpdate
+- `wire.py` — Wire bidirectional channel (send, request/response, listeners)
+
+### Skills (`chimera/skills/`)
+- `flow.py` — Flow (Mermaid flowchart → decision tree → agent prompt), FlowNode, FlowEdge
+
 ### Other Infrastructure
 - `chimera/streaming/` — Stream handlers, StreamingReAct
 - `chimera/detection/` — Loop detection (exact repeat, pattern cycle)
@@ -152,7 +159,7 @@ Layer 1: Environment     Local, Docker, Git, Remote, Cloud, PersistentShell
 
 ### CLI (`chimera/cli/`)
 - `main.py` — 11 subcommands: synthesize, eval, bench, code, review, ci-fix, research, docs, testgen, migrate, plugins
-- `code.py` — Interactive REPL with 14 slash commands: /help, /model, /cost, /clear, /history, /tools, /context, /debug, /session, /compact, /audit, /checkpoint, /agent, /exit
+- `code.py` — Interactive REPL with 16 slash commands: /help, /model, /cost, /clear, /history, /tools, /context, /debug, /session, /compact, /audit, /checkpoint, /agent, /init, /yolo, /exit
 
 ## Key Conventions
 

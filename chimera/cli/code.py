@@ -210,6 +210,51 @@ def cmd_exit(session: Any, env: Any, args: str, out: PrintFn) -> None:
     raise SystemExit(0)
 
 
+def cmd_init(session: Any, env: Any, args: str, out: PrintFn) -> None:
+    """Analyze the working directory and generate a project summary."""
+    workdir = getattr(env, "workdir", os.getcwd())
+    out(f"Analyzing {workdir}...")
+
+    init_prompt = (
+        "Analyze this project directory and provide a concise summary. "
+        "List: 1) Project type and language, 2) Key files and structure, "
+        "3) Build/test commands, 4) Any configuration files found. "
+        "Be brief and factual."
+    )
+
+    try:
+        result = drain_steps(session.iter_chat(init_prompt))
+        out(f"\n  [cost: ${result.cost:.4f}]")
+    except Exception as exc:
+        out(f"Error during init: {exc}")
+
+
+def cmd_yolo(session: Any, env: Any, args: str, out: PrintFn) -> None:
+    """Toggle auto-approve mode for tool calls."""
+    # Use a simple session-level flag
+    current = getattr(session, "_yolo_mode", False)
+    session._yolo_mode = not current
+
+    if session._yolo_mode:
+        # Store original permission policy and swap to auto-approve
+        from chimera.permissions.presets import AutoApprove
+        agent = getattr(session, "agent", None)
+        if agent and hasattr(agent, "loop") and hasattr(agent.loop, "config"):
+            config = agent.loop.config
+            if config:
+                session._original_policy = getattr(config, "permissions", None)
+                config.permissions = AutoApprove()
+        out("YOLO mode ON — all tool calls auto-approved. Use /yolo again to disable.")
+    else:
+        # Restore original policy
+        agent = getattr(session, "agent", None)
+        if agent and hasattr(agent, "loop") and hasattr(agent.loop, "config"):
+            config = agent.loop.config
+            if config and hasattr(session, "_original_policy"):
+                config.permissions = session._original_policy
+        out("YOLO mode OFF — tool calls require approval again.")
+
+
 # -- Command Registry --
 
 _COMMANDS: dict[str, CommandHandler] = {
@@ -228,6 +273,8 @@ _COMMANDS: dict[str, CommandHandler] = {
     "agent": cmd_agent,
     "exit": cmd_exit,
     "quit": cmd_exit,
+    "init": cmd_init,
+    "yolo": cmd_yolo,
 }
 
 

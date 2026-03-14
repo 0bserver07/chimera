@@ -84,6 +84,16 @@ from chimera.tools.repo_map import RepoMapTool
 from chimera.tools.image_read import ImageReadTool
 from chimera.tools.import_graph import ImportEdge, ImportGraph
 from chimera.tools.browser import BrowserTool
+from chimera.tools.think import ThinkTool
+from chimera.tools.ask_user import AskUserTool
+from chimera.tools.todo import TodoTool
+from chimera.tools.dmail import DMailTool
+
+# Wire
+from chimera.wire import Wire, WireMessage, WireRequest, WireResponse
+
+# Skills
+from chimera.skills.flow import Flow, FlowEdge, FlowError, FlowNode, parse_choice
 
 # Convenience
 from chimera.synthesize import synthesize
@@ -258,11 +268,26 @@ __all__ = [
     "pass_at_k",
     "resolve_rate",
     # Tools
+    "AskUserTool",
     "BrowserTool",
+    "DMailTool",
     "ImageReadTool",
     "ImportEdge",
     "ImportGraph",
     "RepoMapTool",
+    "ThinkTool",
+    "TodoTool",
+    # Wire
+    "Wire",
+    "WireMessage",
+    "WireRequest",
+    "WireResponse",
+    # Skills
+    "Flow",
+    "FlowEdge",
+    "FlowError",
+    "FlowNode",
+    "parse_choice",
     # Convenience
     "synthesize",
     # Types
