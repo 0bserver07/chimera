@@ -23,7 +23,7 @@ from collections.abc import Generator
 from chimera.core.context import Context
 from chimera.core.loop import ReAct
 from chimera.core.prompt import Prompt
-from chimera.core.tool import BaseTool
+from chimera.core.tool import BaseTool, ContextAwareTool
 from chimera.env.base import Environment
 from chimera.providers.base import Provider
 from chimera.types import AgentResult, Message, StepResult
@@ -93,6 +93,9 @@ class Agent:
         system = self.prompt.render(tools=[t.name for t in self.tools])
         context = Context(system=system)
         context.add(Message.user(task))
+        for t in self.tools:
+            if isinstance(t, ContextAwareTool):
+                t.bind_context(context)
         return self.loop.run(self.provider, self.tools, context, env)
 
     def iter_steps(
@@ -105,6 +108,9 @@ class Agent:
         system = self.prompt.render(tools=[t.name for t in self.tools])
         context = Context(system=system)
         context.add(Message.user(task))
+        for t in self.tools:
+            if isinstance(t, ContextAwareTool):
+                t.bind_context(context)
         return (yield from self.loop.iter_steps(self.provider, self.tools, context, env))
 
     async def async_run(self, task: str, env: Environment | None) -> AgentResult:
@@ -112,4 +118,7 @@ class Agent:
         system = self.prompt.render(tools=[t.name for t in self.tools])
         context = Context(system=system)
         context.add(Message.user(task))
+        for t in self.tools:
+            if isinstance(t, ContextAwareTool):
+                t.bind_context(context)
         return await self.loop.async_run(self.provider, self.tools, context, env)

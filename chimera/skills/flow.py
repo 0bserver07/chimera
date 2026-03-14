@@ -1,4 +1,39 @@
-"""Parse Mermaid flowcharts into executable decision trees for agent prompts."""
+"""Parse Mermaid flowcharts into executable decision trees for agent prompts.
+
+Flow Skills let you define agent workflows as Mermaid flowcharts, then
+execute them step-by-step with an agent. The Flow class is a composable
+utility — it doesn't require deep framework integration.
+
+Usage example::
+
+    from chimera import Agent, Flow, parse_choice, create_provider
+
+    flow = Flow.from_mermaid('''
+    flowchart TD
+        A([BEGIN]) --> B[Read the codebase]
+        B --> C{Has tests?}
+        C -->|yes| D[Run tests]
+        C -->|no| E[Write tests]
+        D --> F([END])
+        E --> F
+    ''')
+
+    provider = create_provider(model="claude-sonnet-4-20250514")
+    agent = Agent(provider=provider)
+
+    current = flow.begin_id
+    while current != flow.end_id:
+        prompt = flow.to_prompt(current_node_id=current)
+        result = agent.run(prompt, env=env)
+
+        # For decision nodes, parse the agent's choice
+        nexts = flow.next_nodes(current)
+        if len(nexts) > 1:
+            choice = parse_choice(result.output)
+            current = flow.advance(current, choice)
+        else:
+            current = flow.advance(current)
+"""
 from __future__ import annotations
 
 import re

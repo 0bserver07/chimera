@@ -61,9 +61,18 @@ class ReAct:
         total_cost = 0.0
         event_bus = self.config.event_bus if self.config else None
         handler: StreamHandler | None = self.config.handler if self.config else None
+        wire = self.config.wire if self.config else None
+
+        if wire:
+            from chimera.wire.types import TurnBegin
+            wire.send(TurnBegin(turn_id=id(context)))
 
         for _ in range(self.max_steps):
             steps += 1
+
+            if wire:
+                from chimera.wire.types import StepBegin
+                wire.send(StepBegin(step=steps))
 
             if handler:
                 handler.on_step_start(steps)
@@ -86,12 +95,18 @@ class ReAct:
                 except CostLimitExceeded:
                     if handler:
                         handler.on_done()
+                    if wire:
+                        from chimera.wire.types import StepEnd
+                        wire.send(StepEnd(step=steps))
                     yield StepResult(
                         message=Message.assistant(response.content),
                         done=True,
                         step=steps,
                         cost=step_cost,
                     )
+                    if wire:
+                        from chimera.wire.types import TurnEnd
+                        wire.send(TurnEnd(turn_id=id(context), steps=steps, output=response.content))
                     return AgentResult(
                         output=response.content,
                         steps=steps,
@@ -112,6 +127,9 @@ class ReAct:
                 if handler:
                     handler.on_step_end(steps)
                     handler.on_done()
+                if wire:
+                    from chimera.wire.types import StepEnd
+                    wire.send(StepEnd(step=steps))
                 yield StepResult(
                     message=Message.assistant(response.content),
                     tool_calls=[],
@@ -119,6 +137,9 @@ class ReAct:
                     step=steps,
                     cost=step_cost,
                 )
+                if wire:
+                    from chimera.wire.types import TurnEnd
+                    wire.send(TurnEnd(turn_id=id(context), steps=steps, output=response.content))
                 return AgentResult(
                     output=response.content,
                     steps=steps,
@@ -136,6 +157,9 @@ class ReAct:
                 if handler:
                     handler.on_step_end(steps)
                     handler.on_done()
+                if wire:
+                    from chimera.wire.types import StepEnd
+                    wire.send(StepEnd(step=steps))
                 yield StepResult(
                     message=Message.assistant(response.content),
                     tool_calls=response.tool_calls,
@@ -143,6 +167,9 @@ class ReAct:
                     step=steps,
                     cost=step_cost,
                 )
+                if wire:
+                    from chimera.wire.types import TurnEnd
+                    wire.send(TurnEnd(turn_id=id(context), steps=steps, output=response.content))
                 return AgentResult(
                     output=response.content,
                     steps=steps,
@@ -186,6 +213,10 @@ class ReAct:
                             remaining, tool_map, context, env, None,
                         )
                     except LoopBreak:
+                        if wire:
+                            from chimera.wire.types import StepEnd, TurnEnd
+                            wire.send(StepEnd(step=steps))
+                            wire.send(TurnEnd(turn_id=id(context), steps=steps, output=response.content))
                         return AgentResult(
                             output=response.content,
                             steps=steps,
@@ -205,6 +236,9 @@ class ReAct:
                 if event_bus:
                     from chimera.events.types import StepEvent
                     event_bus.publish(StepEvent(step_number=steps, content=response.content))
+                if wire:
+                    from chimera.wire.types import StepEnd
+                    wire.send(StepEnd(step=steps))
                 yield StepResult(
                     message=Message.assistant(response.content),
                     tool_calls=response.tool_calls,
@@ -220,6 +254,9 @@ class ReAct:
         # Max steps
         if handler:
             handler.on_done()
+        if wire:
+            from chimera.wire.types import StepEnd
+            wire.send(StepEnd(step=steps))
         yield StepResult(
             message=Message.assistant("Max steps reached"),
             tool_calls=[],
@@ -227,6 +264,9 @@ class ReAct:
             step=steps,
             cost=0.0,
         )
+        if wire:
+            from chimera.wire.types import TurnEnd
+            wire.send(TurnEnd(turn_id=id(context), steps=steps, output="Max steps reached"))
         return AgentResult(
             output="Max steps reached",
             steps=steps,

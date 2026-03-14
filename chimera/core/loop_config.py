@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from chimera.lsp.manager import LSPManager
     from chimera.providers.cost_tracker import CostTracker
     from chimera.streaming.base import StreamHandler
+    from chimera.wire.wire import Wire
     from chimera.workflows.git_workflow import GitWorkflow
 
 __all__ = ["LoopConfig"]
@@ -49,3 +50,4 @@ class LoopConfig:
     audit_log: AuditLog | None = None
     checkpoint_manager: CheckpointManager | None = None
     git_workflow: GitWorkflow | None = None
+    wire: Wire | None = None

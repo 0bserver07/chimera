@@ -7,12 +7,12 @@ from chimera.core.loop_config import LoopConfig
 from chimera.core.loop_detection import LoopDetector
 from chimera.core.prompt import Prompt
 from chimera.core.streaming import StreamHandler, PrintStreamHandler, CollectStreamHandler
-from chimera.core.tool import BaseTool, tool
-from chimera.core.tool_group import ToolGroup, DEFAULT_TOOLS
+from chimera.core.tool import BaseTool, ContextAwareTool, tool
+from chimera.core.tool_group import ToolGroup, DEFAULT_TOOLS, AGENT_TOOLS
 
 __all__ = [
-    "Agent", "ApprovalPolicy", "AutoApprove", "AlwaysDeny", "AllowList",
-    "BaseTool", "CollectStreamHandler", "Context", "ContextCompressor",
+    "AGENT_TOOLS", "Agent", "ApprovalPolicy", "AutoApprove", "AlwaysDeny", "AllowList",
+    "BaseTool", "CollectStreamHandler", "Context", "ContextAwareTool", "ContextCompressor",
     "DEFAULT_TOOLS", "LoopConfig", "LoopDetector", "PrintStreamHandler",
     "Prompt", "ReAct", "StreamHandler", "tool", "ToolGroup",
 ]

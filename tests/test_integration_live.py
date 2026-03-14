@@ -158,7 +158,8 @@ def test_think_tool_no_side_effects(provider):
 def test_dmail_context_rewind():
     """DMailTool correctly rewinds context to a checkpoint."""
     ctx = Context(system="You are helpful.")
-    dmail = DMailTool(ctx)
+    dmail = DMailTool()
+    dmail.bind_context(ctx)
 
     # Build conversation
     ctx.add(Message.user("Step 1"))
@@ -170,6 +171,7 @@ def test_dmail_context_rewind():
 
     # Send D-Mail
     result = dmail.execute({
+        "action": "send",
         "checkpoint_id": cp0,
         "message": "Skip the noise. The answer from step 1 was X.",
     })

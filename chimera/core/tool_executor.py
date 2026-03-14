@@ -234,6 +234,14 @@ def execute_tool_calls_incremental(
         result.results.append(tr)
         result.executed += 1
 
+        # -- Wire: status update --
+        if config and config.wire:
+            from chimera.wire.types import StatusUpdate
+            config.wire.send(StatusUpdate(
+                step=0,  # not known at this level
+                metadata={"tool": tc.name, "success": tr.success},
+            ))
+
         # -- Audit log --
         if config and config.audit_log:
             config.audit_log.record(

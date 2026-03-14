@@ -11,7 +11,7 @@ from chimera.core.agent import Agent
 from chimera.core.loop import ReAct, drain_steps
 from chimera.core.loop_config import LoopConfig
 from chimera.core.prompt import Prompt
-from chimera.core.tool_group import DEFAULT_TOOLS
+from chimera.core.tool_group import AGENT_TOOLS
 from chimera.env.local import LocalEnvironment
 from chimera.providers.cost_tracker import CostTracker
 from chimera.providers.factory import create_provider
@@ -374,11 +374,28 @@ def run_code(args: Any) -> int:
     loop = ReAct(max_steps=max_steps, config=config)
 
     prompt = Prompt.from_string(system)
-    agent = Agent(provider=provider, tools=list(DEFAULT_TOOLS), loop=loop, prompt=prompt)
+
+    # Build tool list: AGENT_TOOLS + AskUserTool with REPL callback
+    from chimera.tools.ask_user import AskUserTool
+
+    def _repl_ask_callback(question: str, choices: list[str] | None = None) -> str:
+        if choices:
+            print(f"\n[Agent asks] {question}")
+            for i, c in enumerate(choices, 1):
+                print(f"  {i}. {c}")
+            return input("Your answer: ").strip()
+        else:
+            print(f"\n[Agent asks] {question}")
+            return input("Your answer: ").strip()
+
+    ask_tool = AskUserTool(callback=_repl_ask_callback)
+    tools = list(AGENT_TOOLS) + [ask_tool]
+
+    agent = Agent(provider=provider, tools=tools, loop=loop, prompt=prompt)
     session = Session(agent=agent, env=env)
     session.provider = provider  # type: ignore[attr-defined]
     session.cost_tracker = cost_tracker  # type: ignore[attr-defined]
-    session.tools = list(DEFAULT_TOOLS)  # type: ignore[attr-defined]
+    session.tools = tools  # type: ignore[attr-defined]
     session.debug = False  # type: ignore[attr-defined]
 
     _setup_readline()

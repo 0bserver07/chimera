@@ -46,3 +46,31 @@ class TestToolGroup:
     def test_import_graph_importable(self):
         from chimera.tools import ImportGraph
         assert ImportGraph is not None
+
+
+class TestAgentTools:
+    def test_agent_tools_contains_default_tools(self):
+        from chimera.core.tool_group import DEFAULT_TOOLS, AGENT_TOOLS
+        default_names = {t.name for t in DEFAULT_TOOLS}
+        agent_names = {t.name for t in AGENT_TOOLS}
+        assert default_names.issubset(agent_names)
+
+    def test_agent_tools_includes_think(self):
+        from chimera.core.tool_group import AGENT_TOOLS
+        names = {t.name for t in AGENT_TOOLS}
+        assert "think" in names
+
+    def test_agent_tools_includes_todo(self):
+        from chimera.core.tool_group import AGENT_TOOLS
+        names = {t.name for t in AGENT_TOOLS}
+        assert "todo" in names
+
+    def test_agent_tools_does_not_include_dmail(self):
+        from chimera.core.tool_group import AGENT_TOOLS
+        names = {t.name for t in AGENT_TOOLS}
+        assert "dmail" not in names
+
+    def test_agent_tools_does_not_include_ask_user(self):
+        from chimera.core.tool_group import AGENT_TOOLS
+        names = {t.name for t in AGENT_TOOLS}
+        assert "ask_user" not in names

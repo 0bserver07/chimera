@@ -4,6 +4,7 @@ __version__ = "0.1.0"
 
 # Core
 from chimera.core import (
+    AGENT_TOOLS,
     Agent,
     AllowList,
     AlwaysDeny,
@@ -12,6 +13,7 @@ from chimera.core import (
     BaseTool,
     CollectStreamHandler,
     Context,
+    ContextAwareTool,
     ContextCompressor,
     DEFAULT_TOOLS,
     LoopDetector,
@@ -192,6 +194,7 @@ from chimera.types import (
 
 __all__ = [
     # Core
+    "AGENT_TOOLS",
     "Agent",
     "AllowList",
     "AlwaysDeny",
@@ -200,6 +203,7 @@ __all__ = [
     "BaseTool",
     "CollectStreamHandler",
     "Context",
+    "ContextAwareTool",
     "ContextCompressor",
     "DEFAULT_TOOLS",
     "LoopDetector",

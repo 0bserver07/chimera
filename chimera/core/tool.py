@@ -22,10 +22,13 @@ from __future__ import annotations
 
 import asyncio
 from abc import ABC, abstractmethod
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any, Callable
 
 from chimera.env.base import Environment
 from chimera.types import ToolResult
+
+if TYPE_CHECKING:
+    from chimera.core.context import Context
 
 
 class BaseTool(ABC):
@@ -90,6 +93,18 @@ class BaseTool(ABC):
             "description": self.description,
             "input_schema": self.parameters,
         }
+
+
+class ContextAwareTool(BaseTool):
+    """Tool that needs access to the agent's conversation context.
+
+    The agent calls :meth:`bind_context` before the loop starts, giving
+    the tool a reference to the actual context being used.
+    """
+
+    def bind_context(self, context: Context) -> None:
+        """Bind the agent's context to this tool. Called by Agent before the loop."""
+        self._context = context
 
 
 class _FunctionTool(BaseTool):
