@@ -103,8 +103,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     code_parser.add_argument(
         "--model",
-        default="claude-sonnet-4-20250514",
-        help="Model to use (default: claude-sonnet-4-20250514)",
+        default=None,
+        help="Model to use (default: ANTHROPIC_MODEL env var, or claude-sonnet-4-20250514)",
     )
     code_parser.add_argument(
         "--workdir",

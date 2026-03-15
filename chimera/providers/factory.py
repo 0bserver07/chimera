@@ -23,7 +23,7 @@ from chimera.providers.base import Provider
 def create_provider(
     provider_type: str | None = None,
     *,
-    model: str,
+    model: str | None = None,
     api_key: str | None = None,
     base_url: str | None = None,
     **kwargs: Any,
@@ -52,6 +52,15 @@ def create_provider(
         ValueError: If *provider_type* is unknown or cannot be inferred from
             the model name.
     """
+    # Fall back to env var if model not specified
+    if model is None:
+        import os
+        model = os.environ.get("ANTHROPIC_MODEL") or os.environ.get("OPENAI_MODEL")
+        if model is None:
+            raise ValueError(
+                "No model specified. Pass model= or set ANTHROPIC_MODEL / OPENAI_MODEL."
+            )
+
     # Infer provider from model name if not specified
     if provider_type is None:
         provider_type = _infer_provider(model)
