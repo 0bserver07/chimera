@@ -2,7 +2,27 @@
 
 A composable coding agent framework. Synthesize codebases from specifications.
 
-**Status: Alpha** -- Core framework complete (1700+ tests passing). API may change before 1.0.
+**Status: Alpha** -- Core framework complete (1780+ tests passing). API may change before 1.0.
+
+## What You Can Build
+
+```bash
+# A coding agent -- like a mini Claude Code / Codex, in 150 lines:
+source .env
+python examples/coding_agent.py "Build a REST API with Flask" --workdir /tmp/project
+python examples/coding_agent.py "Fix the failing test" --workdir .
+python examples/coding_agent.py "Review this code" --workdir .
+python examples/coding_agent.py -i --workdir .  # interactive REPL
+```
+
+```python
+# Or programmatically:
+import chimera
+
+provider = chimera.create_provider(model="glm-5")
+agent = chimera.Agent(provider=provider, tools=list(chimera.AGENT_TOOLS))
+result = agent.run("Write unit tests for utils.py", env=env)
+```
 
 ## Quick Start
 
@@ -74,6 +94,27 @@ provider = chimera.create_provider("anthropic", model="glm-5",
 
 See [docs/getting-started.md](docs/getting-started.md) for full configuration reference and [examples/](examples/) for runnable scripts.
 
+## Examples
+
+All verified against real GLM-5. Run with `source .env` first:
+
+| Example | What it does |
+|---------|-------------|
+| `examples/coding_agent.py` | Full coding agent -- one-shot tasks or interactive REPL |
+| `examples/agent_with_tools.py` | Agent creates files and runs them (13 tools) |
+| `examples/composition_pipeline.py` | Chain agents: coder -> reviewer |
+| `examples/think_and_ask.py` | Agent reasons internally + asks user questions |
+| `examples/wire_monitoring.py` | Real-time monitoring of agent steps via Wire |
+| `examples/dmail_context_rewind.py` | Agent rewinds its own context to save tokens |
+| `examples/flow_skills.py` | Guide an agent through a Mermaid decision tree |
+| `examples/quickstart_synthesize.py` | Generate code from test specifications |
+
+```bash
+python examples/run_all.py        # interactive menu
+python examples/run_all.py 1      # run a specific example
+python examples/run_all.py all    # run everything
+```
+
 ## Architecture
 
 Chimera is an 8-layer stack. Each layer can be used independently or composed:
@@ -87,7 +128,7 @@ Layer 6: Synthesis       Trainer, Strategy, Spec, Architecture, Constraint
 Layer 5: Evaluation      Harness, Metrics, Benchmarks (SWE-bench, HumanEval, AIMO)
 Layer 4: Agent           Agent, Tools, Loops, Prompt, Context, Critic, ACP
 Layer 3: Provider        Anthropic, OpenAI, Google, Ollama, Modal, OpenAI-compat
-Layer 2: Infrastructure  Security, Secrets, Permissions, Events, Sessions,
+Layer 2: Infrastructure  Security, Secrets, Permissions, Events, Sessions, Wire,
                          Compaction, Streaming, Detection, Config, Plugins, MCP, LSP
 Layer 1: Environment     Local, Docker, Git, Remote, Cloud, PersistentShell
 ```
@@ -100,7 +141,7 @@ Use Layer 1-4 as an agent toolkit. Use Layer 1-6 as a synthesis framework. Use L
 
 **6 LLM providers.** Anthropic, OpenAI, Google Gemini, Ollama, Modal, any OpenAI-compatible endpoint (OpenRouter, vLLM, Groq, GLM-5). Auto-detected via `create_provider()`.
 
-**16 built-in tools.** File read/write/edit/search/list, bash, test runner, git, web fetch, regex replace, sub-agent delegation, answer verification, repo map, image read, browser, import graph.
+**20 built-in tools.** File read/write/edit/search/list, bash, test runner, git, web fetch, regex replace, sub-agent delegation, answer verification, repo map, image read, browser, import graph, think (reasoning scratchpad), ask_user (pause for input), todo (task tracking), dmail (context rewind). `AGENT_TOOLS` preset gives coding agents 13 tools out of the box.
 
 **4 loop types.** ReAct (default), PlanAndExecute, Reflexion, TreeOfThought.
 
@@ -124,7 +165,7 @@ Use Layer 1-4 as an agent toolkit. Use Layer 1-6 as a synthesis framework. Use L
 
 **Plugins.** Plugin lifecycle management, extension registry (agents, strategies, constraints, middleware, skills, MCP, hooks), directory loader, marketplace (search, install, uninstall).
 
-**Interactive REPL.** `chimera code` with 14 slash commands: /help, /model, /cost, /clear, /history, /tools, /context, /debug, /session, /compact, /audit, /checkpoint, /agent, /exit.
+**Interactive REPL.** `chimera code` with 16 slash commands: /help, /model, /cost, /clear, /history, /tools, /context, /debug, /session, /compact, /audit, /checkpoint, /agent, /init, /yolo, /exit.
 
 **MCP and LSP.** Model Context Protocol client (stdio/HTTP) for tool sources. Language Server Protocol integration for diagnostics, completion, and rename.
 
@@ -136,7 +177,13 @@ Use Layer 1-4 as an agent toolkit. Use Layer 1-6 as a synthesis framework. Use L
 
 **Persistent shell.** tmux-based session management for stateful shell operations across agent steps.
 
-**Repository mapping.** aider-style structural overview -- classes, functions, and imports extracted via AST.
+**Repository mapping.** aider-style structural overview -- classes, functions, and imports extracted via AST. Multi-language support: Python, TypeScript, Go, Rust.
+
+**Wire protocol.** Bidirectional agent-UI communication channel with fire-and-forget and request/response patterns. Real-time step lifecycle events (TurnBegin/End, StepBegin/End), tool status updates, approval request/response.
+
+**D-Mail.** Context rewind -- agent creates checkpoints during a conversation, then "sends a message to its past self" to truncate context back to a checkpoint with only the useful findings. Inspired by Kimi CLI.
+
+**Flow Skills.** Parse Mermaid flowcharts into executable decision trees. Convert to agent prompts with current position tracking, advance through flows with choice selection.
 
 ## Philosophy
 
@@ -154,12 +201,14 @@ The core verb is `.synthesize()` -- program synthesis, not chat.
 - [x] ~~Plugin/extension system~~ (done)
 - [x] ~~Documentation site~~ (done)
 - [x] ~~CI agent~~ (done -- CIFixWorkflow)
-- [ ] Docker environment integration tests
+- [x] ~~Docker environment integration tests~~ (done -- 8 tests, skip without Docker)
+- [x] ~~Wire protocol, D-Mail, Flow Skills~~ (done -- ported from Kimi CLI)
+- [x] ~~Runnable examples with real LLM tests~~ (done -- 8 examples, 14 tests)
 
 ## Contributing
 
 ```bash
-git clone https://github.com/your-username/chimera.git
+git clone https://github.com/0bserver07/chimera.git
 cd chimera
 pip install -e ".[dev]"
 python -m pytest
@@ -175,10 +224,12 @@ Run real provider tests with credentials:
 export ANTHROPIC_BASE_URL="https://api.z.ai/api/anthropic"
 export ANTHROPIC_AUTH_TOKEN="your-token"
 export ANTHROPIC_MODEL="glm-5"
-python -m pytest tests/test_provider_anthropic_integration.py -v
+python -m pytest tests/test_examples.py -v                     # examples against real LLM
+python -m pytest tests/test_integration_live.py -v              # provider integration tests
+python -m pytest tests/test_provider_anthropic_integration.py -v # full provider tests
 ```
 
-These tests are skipped automatically when no credentials are set.
+Tests auto-detect credentials -- they use the real provider when available, mock when not.
 
 ## License
 
