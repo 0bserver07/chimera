@@ -23,7 +23,7 @@ class TestCodeParser:
         parser = build_parser()
         args = parser.parse_args(["code"])
         assert args.command == "code"
-        assert args.model == "claude-sonnet-4-20250514"
+        assert args.model is None  # falls back to ANTHROPIC_MODEL env var
         assert args.workdir == "."
         assert args.max_steps == 50
 
