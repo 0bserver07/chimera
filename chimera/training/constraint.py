@@ -304,6 +304,162 @@ class Constraint:
         )
 
     @staticmethod
+    def type_check(tool: str = "mypy", strict: bool = False) -> Constraint:
+        """Run type checker on generated code. Score decreases with errors.
+
+        Args:
+            tool: Type checker binary name (default ``mypy``).
+            strict: If True, pass ``--strict`` to the type checker.
+
+        Returns:
+            A Constraint that runs the type checker across all ``*.py``
+            files (excluding test files) and penalizes type errors.
+        """
+
+        def _check(env: Any) -> ConstraintResult:
+            import subprocess
+
+            files = [f for f in env.list_files("**/*.py") if not f.startswith("test_")]
+            if not files:
+                return ConstraintResult(
+                    name="type_check",
+                    satisfied=True,
+                    message="No Python files",
+                    score=1.0,
+                )
+            cmd = [tool, "--no-error-summary"]
+            if strict:
+                cmd.append("--strict")
+            cmd.extend(files)
+            try:
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    cwd=getattr(env, "workdir", "."),
+                    timeout=30,
+                )
+            except (subprocess.TimeoutExpired, FileNotFoundError):
+                return ConstraintResult(
+                    name="type_check",
+                    satisfied=True,
+                    message=f"{tool} not available",
+                    score=1.0,
+                )
+            errors = [l for l in result.stdout.splitlines() if ": error:" in l]
+            score = max(0.0, 1.0 - len(errors) * 0.1)
+            return ConstraintResult(
+                name="type_check",
+                satisfied=len(errors) == 0,
+                message=f"{len(errors)} type errors" if errors else "Clean",
+                value={"errors": errors[:10]},
+                score=score,
+            )
+
+        return Constraint(
+            name="type_check",
+            check=_check,
+            description=f"Run {tool} type checker on generated code.",
+        )
+
+    @staticmethod
+    def lint_check(tool: str = "ruff", max_warnings: int = 0) -> Constraint:
+        """Run linter during synthesis. Score decreases with warnings.
+
+        Args:
+            tool: Linter binary name (default ``ruff``).
+            max_warnings: Maximum number of acceptable warnings.
+
+        Returns:
+            A Constraint that runs the linter across all ``*.py`` files
+            (excluding test files) and penalizes lint warnings.
+        """
+
+        def _check(env: Any) -> ConstraintResult:
+            import subprocess
+
+            files = [f for f in env.list_files("**/*.py") if not f.startswith("test_")]
+            if not files:
+                return ConstraintResult(
+                    name="lint_check",
+                    satisfied=True,
+                    message="No files to lint",
+                    score=1.0,
+                )
+            cmd = [tool, "check", "--no-fix"] + files
+            try:
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    cwd=getattr(env, "workdir", "."),
+                    timeout=30,
+                )
+            except (subprocess.TimeoutExpired, FileNotFoundError):
+                return ConstraintResult(
+                    name="lint_check",
+                    satisfied=True,
+                    message=f"{tool} not available",
+                    score=1.0,
+                )
+            warnings = [l for l in result.stdout.splitlines() if l.strip() and ":" in l]
+            score = max(0.0, 1.0 - len(warnings) * 0.05)
+            return ConstraintResult(
+                name="lint_check",
+                satisfied=len(warnings) <= max_warnings,
+                message=f"{len(warnings)} lint warnings" if warnings else "Clean",
+                value={"warnings": warnings[:10]},
+                score=score,
+            )
+
+        return Constraint(
+            name="lint_check",
+            check=_check,
+            description=f"Run {tool} linter on generated code.",
+        )
+
+    @staticmethod
+    def security_scan() -> Constraint:
+        """Check for common security issues using AST analysis.
+
+        Returns:
+            A Constraint that walks the AST of all ``*.py`` files looking
+            for dangerous calls (``eval``, ``exec``, ``os.system``).
+        """
+
+        def _check(env: Any) -> ConstraintResult:
+            import ast
+
+            issues: list[str] = []
+            for f in env.list_files("**/*.py"):
+                try:
+                    source = env.read_file(f)
+                    tree = ast.parse(source)
+                    for node in ast.walk(tree):
+                        if isinstance(node, ast.Call):
+                            func = node.func
+                            if isinstance(func, ast.Name) and func.id in ("eval", "exec"):
+                                issues.append(f"{f}:{node.lineno}: {func.id}() call")
+                            if isinstance(func, ast.Attribute) and func.attr == "system":
+                                issues.append(f"{f}:{node.lineno}: os.system() call")
+                except SyntaxError:
+                    pass
+            score = max(0.0, 1.0 - len(issues) * 0.2)
+            return ConstraintResult(
+                name="security_scan",
+                satisfied=len(issues) == 0,
+                message=f"{len(issues)} security issues" if issues else "Clean",
+                value={"issues": issues},
+                score=score,
+            )
+
+        return Constraint(
+            name="security_scan",
+            check=_check,
+            description="Check for common security issues using AST analysis.",
+        )
+
+    @staticmethod
     def custom(
         name: str,
         fn: Callable[..., bool],

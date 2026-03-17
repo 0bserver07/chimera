@@ -6,6 +6,7 @@ from chimera.training.constraint import Constraint
 from chimera.training.trainer import Trainer
 from chimera.training.tuner import SearchSpace, SynthesisTuner, TrialResult, TunerResult
 from chimera.training.validation import ValidationResult, ValidationSplit
+from chimera.training.mutation import Mutation, MutationResult, MutationTester
 
 __all__ = [
     "Spec",
@@ -19,4 +20,7 @@ __all__ = [
     "TunerResult",
     "ValidationResult",
     "ValidationSplit",
+    "Mutation",
+    "MutationResult",
+    "MutationTester",
 ]
