@@ -15,9 +15,11 @@ chimera review --diff changes.patch --model claude-sonnet-4 --max-rounds 3
 ```python
 from chimera.review import ReviewOrchestrator, ReviewFeedback
 from chimera.core.agent import Agent
+from chimera.providers.factory import create_provider
 
-reviewer = Agent(model="claude-sonnet-4")
-author = Agent(model="claude-sonnet-4")
+provider = create_provider(model="claude-sonnet-4-20250514")
+reviewer = Agent(provider=provider)
+author = Agent(provider=provider)
 
 orchestrator = ReviewOrchestrator(max_rounds=3)
 approved = orchestrator.run(

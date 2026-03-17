@@ -1,6 +1,6 @@
 # CLI & REPL
 
-Chimera's command-line interface provides 11 subcommands for code synthesis, evaluation, interactive coding, code review, CI fixing, and more. The `chimera code` subcommand launches an interactive REPL with 14 slash commands for session management, debugging, and agent control.
+Chimera's command-line interface provides 11 subcommands for code synthesis, evaluation, interactive coding, code review, CI fixing, and more. The `chimera code` subcommand launches an interactive REPL with 16 slash commands for session management, debugging, and agent control.
 
 ## Quick Start
 
@@ -128,7 +128,7 @@ Launch with `chimera code`:
 chimera code --model claude-sonnet-4-20250514 --workdir ./myproject --max-steps 50
 ```
 
-The REPL loads all `DEFAULT_TOOLS` (read, write, edit, bash, search, etc.), auto-discovers project context from `chimera.yaml`/`.chimera/`, and loads MCP servers from `~/.chimera/mcp.json` if present.
+The REPL loads `AGENT_TOOLS` -- a 13-tool preset that extends `DEFAULT_TOOLS` with edit, search, list_files, test, git, replace_in_file, repo_map, think, and todo -- plus `AskUserTool` for interactive prompts. It also auto-discovers project context from `chimera.yaml`/`.chimera/`, and loads MCP servers from `~/.chimera/mcp.json` if present.
 
 ### REPL Slash Commands
 
@@ -153,6 +153,8 @@ The REPL loads all `DEFAULT_TOOLS` (read, write, edit, bash, search, etc.), auto
 | `/checkpoint restore <name>` | Restore to a named checkpoint |
 | `/checkpoint undo` | Undo to the most recent checkpoint |
 | `/agent list` | List available agent presets |
+| `/init` | Re-initialize the agent with updated project context |
+| `/yolo` | Toggle YOLO mode (auto-approve all tool calls) |
 | `/exit` or `/quit` | Exit the REPL |
 
 ### REPL example session

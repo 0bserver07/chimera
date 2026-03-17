@@ -23,8 +23,10 @@ from chimera import create_provider
 provider = create_provider(model="claude-sonnet-4-20250514")
 ```
 
-`create_provider` infers the backend from the model name.  You can also pass
-`provider_type` explicitly (e.g. `"openai"`, `"google"`, `"ollama"`).
+`create_provider` infers the backend from the model name.  The `model`
+parameter is optional -- when omitted, it falls back to the `ANTHROPIC_MODEL`
+environment variable.  You can also pass `provider_type` explicitly
+(e.g. `"openai"`, `"google"`, `"ollama"`).
 
 ---
 
@@ -40,7 +42,7 @@ provider = create_provider(model="claude-sonnet-4-20250514")
 
 agent = Agent(
     provider=provider,
-    tools=list(DEFAULT_TOOLS),        # read_file, write_file, bash
+    tools=list(DEFAULT_TOOLS),        # read_file, write_file, bash, image_read
     prompt=Prompt.from_string("You are a helpful coding assistant."),
 )
 
@@ -50,8 +52,11 @@ print(f"Steps: {result.steps}, Cost: ${result.cost:.4f}")
 ```
 
 `DEFAULT_TOOLS` is a `ToolGroup` containing `ReadFileTool`, `WriteFileTool`,
-and `BashTool`.  Pass `env=None` when you do not need a managed workspace, or
-supply a `LocalEnvironment("./workspace")` for sandboxed file access.
+`BashTool`, and `ImageReadTool`.  For interactive sessions with more tools
+(edit, search, git, think, todo, etc.), use `AGENT_TOOLS` instead -- a 13-tool
+preset that the REPL uses by default.  Pass `env=None` when you do not need a
+managed workspace, or supply a `LocalEnvironment("./workspace")` for sandboxed
+file access.
 
 ---
 

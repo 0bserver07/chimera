@@ -149,7 +149,7 @@ class MyAgent(Agent):
 ```
 
 !!! tip "Default Tools"
-    `DEFAULT_TOOLS` is a `ToolGroup` containing `ReadFileTool`, `WriteFileTool`, and `BashTool` -- the minimum set for most coding tasks. Import it from `chimera.core.tool_group`.
+    `DEFAULT_TOOLS` is a `ToolGroup` containing `ReadFileTool`, `WriteFileTool`, `BashTool`, and `ImageReadTool` -- the minimum set for most coding tasks. For interactive sessions, use `AGENT_TOOLS` (13 tools including edit, search, git, think, todo, and more). Import both from `chimera.core.tool_group`.
 
 ## API Reference
 

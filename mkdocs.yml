@@ -100,6 +100,11 @@ nav:
     - Cost Tracking: modules/cost-tracking.md
     - MCP: modules/mcp.md
     - LSP: modules/lsp.md
+    - Wire: modules/wire.md
+    - D-Mail: modules/dmail.md
+    - Flow Skills: modules/flow-skills.md
+    - Context-Aware Tools: modules/context-aware-tools.md
+    - Agent Tools: modules/agent-tools.md
     - CLI & REPL: modules/cli.md
   - Workflows:
     - workflows/index.md
@@ -120,6 +125,7 @@ nav:
     - Build a Plugin: guides/build-a-plugin.md
     - Connect External Agents: guides/connect-external-agents.md
     - Automate CI Fixes: guides/automate-ci-fixes.md
+    - Use with Third-Party Providers: guides/use-with-third-party-providers.md
   - API Reference:
     - reference/index.md
     - Core: reference/core.md

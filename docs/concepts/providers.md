@@ -50,10 +50,13 @@ There is also a `StreamEvent` dataclass for streaming responses, with types `"te
 
 ## The `create_provider()` Factory
 
-The recommended way to create a provider is through the factory function, which auto-detects the provider type from the model name:
+The recommended way to create a provider is through the factory function, which auto-detects the provider type from the model name. The `model` parameter is optional -- when omitted, it falls back to the `ANTHROPIC_MODEL` environment variable:
 
 ```python
 from chimera.providers.factory import create_provider
+
+# Model from ANTHROPIC_MODEL env var (default fallback)
+provider = create_provider()
 
 # Auto-detected as Anthropic
 provider = create_provider(model="claude-sonnet-4-20250514")

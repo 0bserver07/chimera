@@ -16,8 +16,9 @@ chimera ci-fix --log build.log --model claude-sonnet-4 --max-attempts 3
 from chimera.ci import CIFixWorkflow, parse_ci_log
 from chimera.core.agent import Agent
 from chimera.env.local import LocalEnvironment
+from chimera.providers.factory import create_provider
 
-agent = Agent(model="claude-sonnet-4")
+agent = Agent(provider=create_provider(model="claude-sonnet-4-20250514"))
 env = LocalEnvironment(".")
 
 workflow = CIFixWorkflow(max_attempts=3, budget=1.0)

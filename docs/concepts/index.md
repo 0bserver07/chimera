@@ -8,7 +8,7 @@ Chimera is a framework for building LLM-powered coding agents that can synthesiz
 |---------|-------------|
 | [Agents](agents.md) | The central orchestrator. An Agent wires together a Provider, Tools, a Loop, and a Prompt, then runs tasks in an Environment. |
 | [Providers](providers.md) | LLM backend abstraction. Any class implementing `complete()` can serve as a provider -- Anthropic, OpenAI, Google Gemini, Ollama, or any OpenAI-compatible API. |
-| [Tools](tools.md) | Capabilities the agent can invoke during reasoning -- file I/O, shell commands, search, git, and more. Chimera ships 13 built-in tools and supports custom tools via a class or decorator. |
+| [Tools](tools.md) | Capabilities the agent can invoke during reasoning -- file I/O, shell commands, search, git, and more. Chimera ships 20 built-in tools and supports custom tools via a class or decorator. |
 | [Loops](loops.md) | Execution strategies that control how the agent reasons and acts. Choose from ReAct (default), PlanAndExecute, Reflexion, or TreeOfThought. |
 | [Environments](environments.md) | Where generated code lives and gets tested. Local filesystem, git-based checkpointing, or Docker container isolation. |
 | [Training](training.md) | The synthesis engine. A Spec defines what to build, a Strategy controls how to iterate, and Constraints act as guardrails -- together they drive an agent toward passing tests. |

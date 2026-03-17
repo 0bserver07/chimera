@@ -155,7 +155,10 @@
 | 101 | 21 - GLM-5 | MajorityVoting integration test | `tests/test_majority_voting_integration.py` | 3 | DONE |
 | 102 | 21 - GLM-5 | Eval Harness integration test | `tests/test_eval_harness_integration.py` | 3 | DONE |
 
-**Total: 824 tests passing, 20 skipped** (as of 2026-02-26)
+**Total: 824 tests passing, 20 skipped** (as of 2026-02-26, Phases 1-21 only)
+
+!!! note "Current test count"
+    The project now has 1780+ tests (as of 2026-03-16). The 824 count above reflects only Phases 1-21. Later phases (production features, workflows, CLI, Kimi features) added ~1000 additional tests.
 
 Integration tests (skipped without API credentials): 20 tests across 4 files.
 

@@ -34,9 +34,9 @@ per-turn tool-call limit (default 50).
 
 ## Asking Questions
 
-Type naturally at the `>` prompt.  The agent has access to all 16 built-in
-tools (read, write, edit, bash, search, git, etc.) and will use them
-automatically.
+Type naturally at the `>` prompt.  The agent has access to all 20 built-in
+tools (read, write, edit, bash, search, git, think, todo, etc.) and will use
+them automatically.
 
 ```
 > Find all TODO comments in the codebase and list them by file
@@ -79,6 +79,8 @@ All commands start with `/` and support tab completion.
 | `/clear` | Clear the entire conversation context and start fresh. |
 | `/compact` | Compress context when the token window fills up. |
 | `/debug` | Toggle debug mode on/off (shows raw tool calls). |
+| `/init` | Re-initialize the agent with updated project context. |
+| `/yolo` | Toggle YOLO mode (auto-approve all tool calls). |
 | `/exit` | Quit the REPL and print total session cost. |
 
 ### Persistence

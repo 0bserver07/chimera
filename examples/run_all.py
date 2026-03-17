@@ -19,14 +19,19 @@ import subprocess
 import sys
 
 EXAMPLES = [
-    ("quickstart_provider.py",   "Provider basics — text, tool use, multi-turn"),
-    ("agent_with_tools.py",      "Agent with 13 tools — creates and runs code"),
-    ("composition_pipeline.py",  "Pipeline — chain coder → reviewer agents"),
-    ("think_and_ask.py",         "ThinkTool + AskUserTool — reasoning + user interaction"),
-    ("wire_monitoring.py",       "Wire protocol — real-time agent monitoring"),
-    ("dmail_context_rewind.py",  "D-Mail — agent rewinds its own context"),
-    ("flow_skills.py",           "Flow Skills — Mermaid flowchart decision tree"),
-    ("quickstart_synthesize.py", "Synthesis — generate code from test specs"),
+    ("quickstart_provider.py",    "Provider basics — text, tool use, multi-turn"),
+    ("agent_with_tools.py",       "Agent with 13 tools — creates and runs code"),
+    ("composition_pipeline.py",   "Pipeline — chain coder → reviewer agents"),
+    ("think_and_ask.py",          "ThinkTool + AskUserTool — reasoning + user interaction"),
+    ("wire_monitoring.py",        "Wire protocol — real-time agent monitoring"),
+    ("dmail_context_rewind.py",   "D-Mail — agent rewinds its own context"),
+    ("flow_skills.py",            "Flow Skills — Mermaid flowchart decision tree"),
+    ("quickstart_synthesize.py",  "Synthesis — generate code from test specs"),
+    ("coding_agent_minimal.py",   "Minimal coding agent — REPL in under 80 lines"),
+    ("supervisor_delegation.py",  "Supervisor — coordinator delegates to workers"),
+    ("ci_fix.py",                 "CI Fix — parse failure logs and auto-fix bugs"),
+    ("session_persistence.py",    "Sessions — save and resume conversations"),
+    ("streaming_agent.py",        "Streaming — real-time step output"),
 ]
 
 

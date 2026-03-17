@@ -90,7 +90,7 @@ Requires **Python 3.11+**.
 | Category             | Count | Highlights                                                                 |
 |----------------------|------:|----------------------------------------------------------------------------|
 | **Providers**        |     6 | Anthropic, OpenAI, Google, Ollama, Modal, OpenAI-compatible               |
-| **Tools**            |    16 | read, write, edit, bash, search, git, test, web_fetch, repo_map, delegate, browser, image_read, import_graph, replace_in_file, verify, list_files |
+| **Tools**            |    20 | read, write, edit, bash, search, git, test, web_fetch, repo_map, delegate, browser, image_read, import_graph, replace_in_file, verify, list_files, think, ask_user, todo, dmail |
 | **Loops**            |     4 | ReAct, PlanAndExecute, Reflexion, TreeOfThought                           |
 | **Composition**      |     3 | Pipeline, Ensemble, Supervisor                                            |
 | **Strategies**       |     7 | TestConvergence, Curriculum, Ensemble, Passthrough, TreeSearch, MajorityVoting, AIMOEnsemble |
@@ -153,7 +153,7 @@ Requires **Python 3.11+**.
 
     ---
 
-    11 subcommands and an interactive REPL with 14 slash commands for
+    11 subcommands and an interactive REPL with 16 slash commands for
     hands-on agent interaction.
 
     [:octicons-arrow-right-24: CLI & REPL](modules/cli.md)

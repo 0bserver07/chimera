@@ -7,7 +7,7 @@ A composable coding agent framework. Synthesize codebases from specifications.
 - **Language:** Python 3.11+
 - **Build:** hatchling
 - **License:** AGPL-3.0
-- **Tests:** `python -m pytest` (1767 tests)
+- **Tests:** `python -m pytest` (1820 tests)
 - **Lint:** `ruff check chimera/`
 - **Types:** `mypy chimera/`
 - **Docs:** `pip install -e ".[docs]" && mkdocs serve`

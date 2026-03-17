@@ -1,6 +1,6 @@
 # Tools
 
-**Tools** give agents the ability to interact with the world -- reading files, writing code, running shell commands, searching codebases, and more. Chimera ships 13 built-in tools and provides two ways to define custom tools: a class-based approach via `BaseTool` and a decorator-based shortcut via `@tool`.
+**Tools** give agents the ability to interact with the world -- reading files, writing code, running shell commands, searching codebases, and more. Chimera ships 20 built-in tools and provides two ways to define custom tools: a class-based approach via `BaseTool` and a decorator-based shortcut via `@tool`.
 
 ## The BaseTool ABC
 
@@ -81,21 +81,35 @@ list(coding_tools)             # Iterate over tools
 
 ### DEFAULT_TOOLS
 
-Chimera provides a pre-built `DEFAULT_TOOLS` group with the three essential tools:
+Chimera provides a pre-built `DEFAULT_TOOLS` group with the essential tools:
 
 ```python
 from chimera.core.tool_group import DEFAULT_TOOLS
 
-# Contains: ReadFileTool, WriteFileTool, BashTool
+# Contains: ReadFileTool, WriteFileTool, BashTool, ImageReadTool
 agent = Agent(provider=provider, tools=list(DEFAULT_TOOLS))
 ```
 
 !!! tip "Use `list()` when passing to Agent"
     `Agent` expects a `list[BaseTool]`, so wrap `DEFAULT_TOOLS` with `list()` to convert from `ToolGroup`.
 
+### AGENT_TOOLS
+
+For interactive sessions (like the REPL), Chimera provides `AGENT_TOOLS` -- a 13-tool preset that extends `DEFAULT_TOOLS` with edit, search, list_files, test, git, replace_in_file, repo_map, think, and todo:
+
+```python
+from chimera.core.tool_group import AGENT_TOOLS
+
+# Contains all DEFAULT_TOOLS plus EditFileTool, SearchTool, ListFilesTool,
+# TestTool, GitTool, ReplaceInFileTool, RepoMapTool, ThinkTool, TodoTool
+agent = Agent(provider=provider, tools=list(AGENT_TOOLS))
+```
+
+The REPL (`chimera code`) uses `AGENT_TOOLS` by default.
+
 ## Built-in Tools
 
-Chimera ships 13 tools in `chimera.tools`:
+Chimera ships 20 tools in `chimera.tools`:
 
 | Tool | Class | Description |
 |------|-------|-------------|
@@ -112,6 +126,13 @@ Chimera ships 13 tools in `chimera.tools`:
 | `delegate` | `DelegateTool` | Delegate a subtask to another agent |
 | `repo_map` | `RepoMapTool` | Generate a structural map of the repository |
 | `verify` | `VerifyTool` | Verify code correctness |
+| `image_read` | `ImageReadTool` | Read and describe image files |
+| `browser` | `BrowserTool` | Interact with web pages via a browser |
+| `import_graph` | `ImportGraphTool` | Analyze module import dependencies |
+| `think` | `ThinkTool` | Scratchpad for agent reasoning (no external action) |
+| `ask_user` | `AskUserTool` | Pause and ask the user a question |
+| `todo` | `TodoTool` | Manage a task checklist during agent execution |
+| `dmail` | `DmailTool` | Send structured messages between agents |
 
 All built-in tools are importable from `chimera.tools`:
 
@@ -120,6 +141,8 @@ from chimera.tools import (
     ReadFileTool, WriteFileTool, BashTool, EditFileTool,
     SearchTool, ListFilesTool, TestTool, WebFetchTool,
     GitTool, ReplaceInFileTool, DelegateTool, RepoMapTool, VerifyTool,
+    ImageReadTool, BrowserTool, ImportGraphTool, ThinkTool, AskUserTool,
+    TodoTool, DmailTool,
 )
 ```
 
@@ -179,5 +202,6 @@ agent = Agent(
 - `chimera.core.tool.BaseTool` -- abstract base class for tools
 - `chimera.core.tool.tool` -- decorator for function-based tools
 - `chimera.core.tool_group.ToolGroup` -- named collection of tools
-- `chimera.core.tool_group.DEFAULT_TOOLS` -- pre-built default toolset
+- `chimera.core.tool_group.DEFAULT_TOOLS` -- pre-built default toolset (4 tools)
+- `chimera.core.tool_group.AGENT_TOOLS` -- extended toolset for interactive sessions (13 tools)
 - `chimera.types.ToolResult` -- return type from `execute()`

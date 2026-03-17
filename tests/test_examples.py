@@ -362,6 +362,215 @@ def test_synthesize_imports():
 
 
 # ---------------------------------------------------------------
+# 9. Minimal coding agent (coding_agent_minimal.py)
+# ---------------------------------------------------------------
+
+def test_minimal_coding_agent_imports():
+    """Verify the minimal coding agent imports and its main() is callable."""
+    import importlib.util
+    examples_dir = os.path.join(os.path.dirname(__file__), "..", "examples")
+    path = os.path.join(examples_dir, "coding_agent_minimal.py")
+    spec = importlib.util.spec_from_file_location("coding_agent_minimal", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    assert hasattr(mod, "main")
+    assert callable(mod.main)
+
+
+# ---------------------------------------------------------------
+# 10. Supervisor delegation (supervisor_delegation.py)
+# ---------------------------------------------------------------
+
+def test_supervisor_delegation():
+    from chimera.composition import Supervisor
+
+    if _LIVE:
+        provider = _real_provider()
+        researcher = chimera.Agent(
+            provider=provider, loop=chimera.ReAct(max_steps=3), name="researcher",
+        )
+        coder = chimera.Agent(
+            provider=provider, loop=chimera.ReAct(max_steps=3), name="coder",
+        )
+        coordinator = chimera.Agent(
+            provider=provider, loop=chimera.ReAct(max_steps=6), name="coordinator",
+        )
+    else:
+        # The coordinator calls researcher, then coder, then responds
+        research_call = ToolCall(id="tc1", name="researcher", arguments={
+            "task": "Research LRU cache approaches"
+        })
+        code_call = ToolCall(id="tc2", name="coder", arguments={
+            "task": "Implement an LRU cache"
+        })
+        coordinator = chimera.Agent(
+            provider=_mock_provider(
+                ("Delegating research", [research_call]),
+                ("Delegating coding", [code_call]),
+                "Done. LRU cache implemented with OrderedDict.",
+            ),
+            loop=chimera.ReAct(max_steps=6), name="coordinator",
+        )
+        researcher = chimera.Agent(
+            provider=_mock_provider("Use collections.OrderedDict for O(1) LRU."),
+            loop=chimera.ReAct(max_steps=2), name="researcher",
+        )
+        coder = chimera.Agent(
+            provider=_mock_provider("class LRUCache:\n    pass"),
+            loop=chimera.ReAct(max_steps=2), name="coder",
+        )
+
+    sup = Supervisor(
+        coordinator=coordinator,
+        workers={"researcher": researcher, "coder": coder},
+    )
+    result = sup.run("Research and implement an LRU cache.", env=None)
+    assert result.success
+
+
+# ---------------------------------------------------------------
+# 11. CI fix workflow (ci_fix.py)
+# ---------------------------------------------------------------
+
+def test_ci_fix_workflow():
+    from chimera.ci import CIFixWorkflow
+
+    ci_log = (
+        "FAILED test_calculator.py::test_add - AssertionError: Expected 5\n"
+        "test_calculator.py:4: AssertionError\n"
+    )
+
+    workflow = CIFixWorkflow(max_attempts=2)
+
+    # Test diagnosis
+    failures = workflow.diagnose(ci_log)
+    assert len(failures) >= 1
+    assert failures[0].file_path == "test_calculator.py"
+
+    # Test prompt building
+    prompt = workflow.build_prompt(failures)
+    assert "Fix the following CI failures" in prompt
+    assert "test_calculator.py" in prompt
+
+    # Test the run method with mock agent
+    if _LIVE:
+        provider = _real_provider()
+    else:
+        edit_call = ToolCall(id="tc1", name="edit_file", arguments={
+            "path": "calculator.py",
+            "old_string": "return a - b",
+            "new_string": "return a + b",
+        })
+        provider = _mock_provider(
+            ("Fixing the bug", [edit_call]),
+            "Fixed: changed subtraction to addition.",
+        )
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Write buggy file
+        with open(os.path.join(tmpdir, "calculator.py"), "w") as f:
+            f.write("def add(a, b):\n    return a - b\n")
+        with open(os.path.join(tmpdir, "test_calculator.py"), "w") as f:
+            f.write("from calculator import add\ndef test_add():\n    assert add(2,3)==5\n")
+
+        env = chimera.LocalEnvironment(workdir=tmpdir)
+        env.setup()
+        agent = chimera.Agent(
+            provider=provider,
+            tools=list(chimera.AGENT_TOOLS),
+            loop=chimera.ReAct(max_steps=8),
+        )
+        workflow2 = CIFixWorkflow(max_attempts=1)
+        workflow2.run(ci_log, agent=agent, env=env)
+        assert len(workflow2.attempts) >= 1
+        env.cleanup()
+
+
+# ---------------------------------------------------------------
+# 12. Session persistence (session_persistence.py)
+# ---------------------------------------------------------------
+
+def test_session_persistence():
+    from chimera.sessions.storage.file import FileStorage
+
+    if _LIVE:
+        provider = _real_provider()
+    else:
+        provider = _mock_provider(
+            "Nice to meet you, Bob! Rust is great.",
+            "Your name is Bob and your favorite language is Rust.",
+        )
+
+    agent = chimera.Agent(
+        provider=provider,
+        loop=chimera.ReAct(max_steps=5),
+        prompt=chimera.Prompt.from_string("You are a helpful assistant."),
+    )
+
+    with tempfile.TemporaryDirectory() as session_dir:
+        storage = FileStorage(session_dir)
+
+        # Turn 1
+        session = chimera.Session(agent=agent, env=None, storage=storage)
+        sid = session.session_id
+        result1 = chimera.drain_steps(session.iter_chat(
+            "My name is Bob and I like Rust."
+        ))
+        assert result1.success
+        session.save()
+
+        # Verify save
+        assert sid in storage.list_sessions()
+
+        # Resume
+        session2 = chimera.Session.resume(sid, agent=agent, storage=storage)
+        assert len(session2.messages) == len(session.messages)
+
+        # Turn 2
+        if not _LIVE:
+            # Reset provider mock for second turn
+            agent._provider = _mock_provider(
+                "Your name is Bob and your favorite language is Rust.",
+            )
+
+        result2 = chimera.drain_steps(session2.iter_chat(
+            "What is my name?"
+        ))
+        assert result2.success
+        session2.save()
+
+
+# ---------------------------------------------------------------
+# 13. Streaming agent (streaming_agent.py)
+# ---------------------------------------------------------------
+
+def test_streaming_agent():
+    from chimera.streaming.handlers import ConsoleStreamHandler
+
+    config = chimera.LoopConfig(handler=ConsoleStreamHandler())
+
+    if _LIVE:
+        provider = _real_provider()
+    else:
+        think_call = ToolCall(id="tc1", name="think", arguments={
+            "thought": "Fibonacci is 0,1,1,2,3,5,8..."
+        })
+        provider = _mock_provider(
+            ("Let me think", [think_call]),
+            "Three facts about Fibonacci: ratios approach golden ratio, "
+            "appears in nature, used in algorithms.",
+        )
+
+    agent = chimera.Agent(
+        provider=provider,
+        tools=[chimera.ThinkTool()],
+        loop=chimera.ReAct(max_steps=10, config=config),
+    )
+    result = agent.run("Tell me about Fibonacci.", env=None)
+    assert result.success
+
+
+# ---------------------------------------------------------------
 # Meta: all examples exist and are importable
 # ---------------------------------------------------------------
 
@@ -376,6 +585,11 @@ def test_all_example_files_exist():
         "dmail_context_rewind.py",
         "flow_skills.py",
         "quickstart_synthesize.py",
+        "coding_agent_minimal.py",
+        "supervisor_delegation.py",
+        "ci_fix.py",
+        "session_persistence.py",
+        "streaming_agent.py",
         "run_all.py",
     ]
     for name in expected:
@@ -395,6 +609,11 @@ def test_all_examples_have_main():
         "dmail_context_rewind.py",
         "flow_skills.py",
         "quickstart_synthesize.py",
+        "coding_agent_minimal.py",
+        "supervisor_delegation.py",
+        "ci_fix.py",
+        "session_persistence.py",
+        "streaming_agent.py",
     ]
     for name in scripts:
         path = os.path.join(examples_dir, name)
