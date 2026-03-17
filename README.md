@@ -57,10 +57,10 @@ class MyStrategy(chimera.Strategy):
 ## Install
 
 ```bash
-pip install chimera-ai                  # core (zero dependencies)
-pip install chimera-ai[anthropic]       # + Claude support
-pip install chimera-ai[openai]          # + OpenAI support
-pip install chimera-ai[all]             # all providers
+uv add chimera-ai                       # core (zero dependencies)
+uv add chimera-ai[anthropic]            # + Claude support
+uv add chimera-ai[openai]              # + OpenAI support
+uv add chimera-ai[all]                 # all providers
 ```
 
 Requires Python 3.11+.
@@ -210,8 +210,8 @@ The core verb is `.synthesize()` -- program synthesis, not chat.
 ```bash
 git clone https://github.com/0bserver07/chimera.git
 cd chimera
-pip install -e ".[dev]"
-python -m pytest
+uv sync --extra dev --extra anthropic
+uv run pytest
 ```
 
 The project uses TDD. Tests go in `tests/`, one file per module. Run `ruff check chimera/` for linting and `mypy chimera/` for type checking.
@@ -224,9 +224,9 @@ Run real provider tests with credentials:
 export ANTHROPIC_BASE_URL="https://api.z.ai/api/anthropic"
 export ANTHROPIC_AUTH_TOKEN="your-token"
 export ANTHROPIC_MODEL="glm-5"
-python -m pytest tests/test_examples.py -v                     # examples against real LLM
-python -m pytest tests/test_integration_live.py -v              # provider integration tests
-python -m pytest tests/test_provider_anthropic_integration.py -v # full provider tests
+uv run pytest tests/test_examples.py -v                     # examples against real LLM
+uv run pytest tests/test_integration_live.py -v              # provider integration tests
+uv run pytest tests/test_provider_anthropic_integration.py -v # full provider tests
 ```
 
 Tests auto-detect credentials -- they use the real provider when available, mock when not.

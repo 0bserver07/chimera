@@ -5,12 +5,13 @@ A composable coding agent framework. Synthesize codebases from specifications.
 ## Quick Reference
 
 - **Language:** Python 3.11+
-- **Build:** hatchling
+- **Build:** hatchling + uv
 - **License:** AGPL-3.0
-- **Tests:** `python -m pytest` (1820 tests)
-- **Lint:** `ruff check chimera/`
-- **Types:** `mypy chimera/`
-- **Docs:** `pip install -e ".[docs]" && mkdocs serve`
+- **Setup:** `uv sync --extra dev --extra anthropic`
+- **Tests:** `uv run pytest` (1785 tests)
+- **Lint:** `uv run ruff check chimera/`
+- **Types:** `uv run mypy chimera/`
+- **Docs:** `uv sync --extra docs && uv run mkdocs serve`
 
 ## Architecture
 

@@ -325,7 +325,7 @@ def _setup_readline() -> None:
 
     try:
         readline.read_history_file(str(history_file))
-    except FileNotFoundError:
+    except (FileNotFoundError, OSError):
         pass
 
     readline.set_history_length(1000)

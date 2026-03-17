@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "chimera-ai"
-dynamic = ["version"]
+version = "0.1.0"
 description = "A composable coding agent framework. Synthesize codebases from specifications."
 requires-python = ">=3.11"
 license = {text = "AGPL-3.0"}
@@ -23,15 +23,21 @@ browser = ["playwright>=1.40"]
 remote = ["httpx>=0.27"]
 all = ["chimera-ai[anthropic,openai,browser,remote]"]
 dev = ["pytest>=8.0", "pytest-asyncio>=0.23", "ruff>=0.4", "mypy>=1.10"]
+docs = ["mkdocs>=1.6", "mkdocs-material>=9.5", "mkdocstrings[python]>=0.25"]
 
 [project.scripts]
 chimera = "chimera.cli.main:main"
 
-[tool.hatch.version]
-path = "chimera/__init__.py"
-
 [tool.hatch.build.targets.wheel]
 packages = ["chimera"]
+
+[tool.uv]
+dev-dependencies = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.4",
+    "mypy>=1.10",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
