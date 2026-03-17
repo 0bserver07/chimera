@@ -158,7 +158,7 @@
 **Total: 824 tests passing, 20 skipped** (as of 2026-02-26, Phases 1-21 only)
 
 !!! note "Current test count"
-    The project now has 1780+ tests (as of 2026-03-16). The 824 count above reflects only Phases 1-21. Later phases (production features, workflows, CLI, Kimi features) added ~1000 additional tests.
+    The project now has 1870+ tests (as of 2026-03-17). The 824 count above reflects only Phases 1-21. Later phases (production features, workflows, CLI, Kimi features, ML/synthesis primitives) added ~1000+ additional tests.
 
 Integration tests (skipped without API credentials): 20 tests across 4 files.
 
@@ -192,12 +192,16 @@ Integration tests (skipped without API credentials): 20 tests across 4 files.
 
 ---
 
-## What's Next (not yet planned)
+## What's Next
 
-- [ ] Docker environment integration tests
-- [ ] Plugin/extension system
-- [ ] Repository mapping enhancements (non-Python languages)
-- [ ] Multi-file edit transactions
-- [ ] Cost tracking: add GLM-5 / custom model pricing
-- [ ] Documentation site
-- [ ] Make Ensemble composition actually parallel (ThreadPoolExecutor + env isolation)
+- [x] ~~Docker environment integration tests~~ (done)
+- [x] ~~Plugin/extension system~~ (done)
+- [x] ~~Repository mapping enhancements~~ (done)
+- [x] ~~Multi-file edit transactions~~ (done)
+- [x] ~~Cost tracking: GLM-5 pricing~~ (done)
+- [x] ~~Documentation site~~ (done)
+- [x] ~~Parallel Ensemble~~ (done)
+- [ ] Verify ML/synthesis primitives with real LLM synthesis runs
+- [ ] Verify remaining workflows (Review, Research, Migration, DocGen, TestGen)
+- [ ] PyPI publishing
+- [ ] CI/CD pipeline

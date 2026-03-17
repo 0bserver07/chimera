@@ -106,6 +106,15 @@ nav:
     - Context-Aware Tools: modules/context-aware-tools.md
     - Agent Tools: modules/agent-tools.md
     - CLI & REPL: modules/cli.md
+    - Validation: modules/validation.md
+    - Regularization: modules/regularization.md
+    - Tuner: modules/tuner.md
+    - Sketch: modules/sketch.md
+    - Oracle: modules/oracle.md
+    - Fault Localization: modules/fault-localization.md
+    - Impact Analysis: modules/impact-analysis.md
+    - Mutation Testing: modules/mutation-testing.md
+    - Spec Inference: modules/spec-inference.md
   - Workflows:
     - workflows/index.md
     - CI Fix: workflows/ci-fix.md
@@ -126,6 +135,7 @@ nav:
     - Connect External Agents: guides/connect-external-agents.md
     - Automate CI Fixes: guides/automate-ci-fixes.md
     - Use with Third-Party Providers: guides/use-with-third-party-providers.md
+    - Module Integration Checklist: guides/module-integration-checklist.md
   - API Reference:
     - reference/index.md
     - Core: reference/core.md

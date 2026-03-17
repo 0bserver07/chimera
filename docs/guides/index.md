@@ -8,6 +8,7 @@ Hands-on walkthroughs that take you from zero to a working Chimera application.
 | [Add a Custom Tool](add-custom-tool.md) | Extend agent capabilities with your own tools -- from a quick decorator to a full `BaseTool` subclass. |
 | [Compose Agents](compose-agents.md) | Multi-agent patterns: pipelines, ensembles, and supervisor/worker topologies. |
 | [Configure Permissions](configure-permissions.md) | Safe tool execution with permission rules, presets, and event monitoring. |
+| [Module Integration Checklist](module-integration-checklist.md) | Step-by-step checklist for adding new modules, tools, strategies, or features. |
 
 **Prerequisites** -- Install chimera and have an Anthropic API key (or another supported provider) ready:
 

@@ -2,7 +2,7 @@
 
 A composable coding agent framework. Synthesize codebases from specifications.
 
-**Status: Alpha** -- Core framework complete (1780+ tests passing). API may change before 1.0.
+**Status: Alpha** -- Core framework complete (1870+ tests passing). API may change before 1.0.
 
 ## What You Can Build
 
@@ -108,6 +108,10 @@ All verified against real GLM-5. Run with `source .env` first:
 | `examples/dmail_context_rewind.py` | Agent rewinds its own context to save tokens |
 | `examples/flow_skills.py` | Guide an agent through a Mermaid decision tree |
 | `examples/quickstart_synthesize.py` | Generate code from test specifications |
+| `examples/synthesis_with_diagnostics.py` | Synthesis with training curves + complexity constraint |
+| `examples/cegis_synthesis.py` | CEGIS — counterexample-guided synthesis |
+| `examples/sketch_synthesis.py` | Sketch — fill holes in partial code |
+| `examples/validation_split.py` | Validation split — detect overfitting |
 
 ```bash
 python examples/run_all.py        # interactive menu
@@ -147,7 +151,7 @@ Use Layer 1-4 as an agent toolkit. Use Layer 1-6 as a synthesis framework. Use L
 
 **3 composition patterns.** Pipeline (sequential), Ensemble (parallel + selector), Supervisor (coordinator + workers).
 
-**7 training strategies.** TestConvergence (default -- iterate until tests pass), TreeSearch (parallel branch exploration), Curriculum (topological ordering), Ensemble (multiple attempts), MajorityVoting (pass@N consensus), AIMOEnsemble (voting + tree search fallback), Passthrough (single-shot).
+**9 training strategies.** TestConvergence (default -- iterate until tests pass), TreeSearch (parallel branch exploration), Curriculum (topological ordering), Ensemble (multiple attempts), MajorityVoting (pass@N consensus), AIMOEnsemble (voting + tree search fallback), Passthrough (single-shot), CEGISStrategy (counterexample-guided -- one failing test at a time), IncrementalStrategy (targeted re-synthesis of failing functions only).
 
 **6 environments.** Local, Docker, Git (branch isolation), Remote (HTTP client), Cloud (managed sandbox), PersistentShell (tmux sessions).
 

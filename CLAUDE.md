@@ -8,7 +8,7 @@ A composable coding agent framework. Synthesize codebases from specifications.
 - **Build:** hatchling + uv
 - **License:** AGPL-3.0
 - **Setup:** `uv sync --extra dev --extra anthropic`
-- **Tests:** `uv run pytest` (1785 tests)
+- **Tests:** `uv run pytest` (1874 tests)
 - **Lint:** `uv run ruff check chimera/`
 - **Types:** `uv run mypy chimera/`
 - **Docs:** `uv sync --extra docs && uv run mkdocs serve`
@@ -67,7 +67,7 @@ Layer 1: Environment     Local, Docker, Git, Remote, Cloud, PersistentShell
 - `trainer.py` — Trainer orchestrator
 - `spec.py` — Spec (task specification)
 - `architecture.py` — Architecture (multi-layer builds)
-- `strategies/` — TestConvergence, TreeSearch, Curriculum, Ensemble, MajorityVoting, AIMOEnsemble, Passthrough
+- `strategies/` — TestConvergence, TreeSearch, Curriculum, Ensemble, MajorityVoting, AIMOEnsemble, Passthrough, CEGISStrategy, IncrementalStrategy
 
 ### Composition (`chimera/composition/`)
 - Pipeline (sequential), Ensemble (parallel), Supervisor (coordinator + workers)

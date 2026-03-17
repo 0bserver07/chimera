@@ -96,6 +96,8 @@ A `Strategy` controls how the agent iterates toward a solution. All strategies i
 | `MajorityVoting` | Sample N solutions, extract answers, pick the consensus via majority vote. Includes early stopping. |
 | `AIMOEnsemble` | Two-phase: MajorityVoting first, TreeSearch fallback if no consensus is reached. |
 | `Passthrough` | Single-shot: run the agent once, no iteration. |
+| `CEGISStrategy` | Counterexample-Guided Inductive Synthesis. Each epoch focuses on the first failing test (the counterexample) rather than showing all failures. Reduces oscillation where fixing one test breaks another. |
+| `IncrementalStrategy` | Identifies which functions are covered by failing tests and asks the agent to rewrite only those functions, rather than re-prompting with the whole codebase. |
 
 ### Strategy Examples
 
@@ -115,6 +117,14 @@ strategy = MajorityVoting(n_samples=16, temperature=0.7, min_agreement=2)
 
 # AIMOEnsemble: MajorityVoting first, TreeSearch fallback
 strategy = AIMOEnsemble(voting_samples=8, min_agreement=2, tree_branch_factor=3)
+
+# CEGISStrategy: one counterexample at a time
+from chimera.training.strategies.cegis import CEGISStrategy
+strategy = CEGISStrategy(max_iterations=50, patience=10)
+
+# IncrementalStrategy: re-synthesize only failing functions
+from chimera.training.strategies.incremental import IncrementalStrategy
+strategy = IncrementalStrategy(max_iterations=20, patience=5)
 ```
 
 ## Constraints

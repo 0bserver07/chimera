@@ -36,6 +36,10 @@ EXAMPLES = [
     ("cegis_synthesis.py",        "CEGIS — counterexample-guided, one failure at a time"),
     ("sketch_synthesis.py",       "Sketch — fill holes in partial code"),
     ("validation_split.py",       "Validation split — detect overfitting"),
+    ("fault_localization_demo.py", "Fault localization — rank suspicious code from test failures"),
+    ("impact_analysis_demo.py",   "Impact analysis — blast radius of changing a function"),
+    ("mutation_testing_demo.py",  "Mutation testing — find weak tests via code mutations"),
+    ("spec_inference_demo.py",    "Spec inference — auto-generate regression tests from code"),
 ]
 
 
