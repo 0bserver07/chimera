@@ -7,6 +7,7 @@ from chimera.training.strategies.base import (
     Strategy,
     SynthesisResult,
 )
+from chimera.training.strategies.cegis import CEGISStrategy
 from chimera.training.strategies.convergence import TestConvergence
 from chimera.training.strategies.curriculum import CurriculumStrategy
 from chimera.training.strategies.ensemble import EnsembleStrategy
@@ -16,6 +17,7 @@ from chimera.training.strategies.tree_search import TreeSearch
 
 __all__ = [
     "AIMOEnsemble",
+    "CEGISStrategy",
     "Callback",
     "EpochResult",
     "MajorityVoting",

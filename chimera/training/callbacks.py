@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from chimera.training.strategies.base import Callback, EpochResult, SynthesisResult
 
 
@@ -156,3 +158,150 @@ class HistoryRecorder(Callback):
     def on_synthesis_end(self, result: SynthesisResult) -> None:
         self.finished = True
         self.final_result = result
+
+
+class TrainingCurveCallback(Callback):
+    """Log per-epoch metrics and diagnose training patterns.
+
+    Records every ``EpochResult`` and exposes helpers to summarise
+    progress, detect common pathologies (plateau, oscillation, cost
+    explosion, instant convergence), and export data as JSON.
+
+    Args:
+        output_path: Optional filesystem path.  When set, ``to_dict()``
+            is written there as JSON at synthesis end.
+    """
+
+    def __init__(self, output_path: str | None = None) -> None:
+        self.epochs: list[EpochResult] = []
+        self._output_path = output_path
+
+    def on_epoch_end(self, epoch: int | EpochResult, result: EpochResult | None = None) -> bool:
+        """Record the epoch result."""
+        er = result if result is not None else epoch
+        self.epochs.append(er)
+        return True
+
+    def on_synthesis_end(self, result: SynthesisResult) -> None:
+        """Write JSON output if an output path was configured."""
+        if self._output_path:
+            self._write_json()
+
+    # ------------------------------------------------------------------
+    # Public helpers
+    # ------------------------------------------------------------------
+
+    def summary(self) -> str:
+        """Text summary with per-epoch pass_rate and cost.
+
+        Returns:
+            A multi-line string with one line per epoch showing a
+            visual progress bar, the pass rate, and the dollar cost.
+        """
+        lines = []
+        for e in self.epochs:
+            bar = "#" * int(e.pass_rate * 20)
+            lines.append(
+                f"  Epoch {e.epoch:2d}: {e.pass_rate:5.1%} |{bar:<20}| ${e.cost:.4f}"
+            )
+        return "\n".join(lines)
+
+    def diagnose(self) -> list[str]:
+        """Detect common training pathologies.
+
+        Checks for:
+        - **Plateau**: ``pass_rate`` unchanged for 3+ consecutive epochs.
+        - **Oscillation**: ``pass_rate`` alternates up/down for 4+
+          consecutive epochs.
+        - **Cost explosion**: per-epoch cost increases >2x between
+          consecutive epochs.
+        - **Instant convergence**: ``pass_rate`` reaches 1.0 on
+          epoch 1 (may indicate a trivial spec or the agent cheating).
+
+        Returns:
+            A list of human-readable warning strings.  Empty when no
+            issues are detected.
+        """
+        warnings: list[str] = []
+        rates = [e.pass_rate for e in self.epochs]
+        costs = [e.cost for e in self.epochs]
+
+        # Instant convergence
+        if rates and rates[0] == 1.0:
+            warnings.append(
+                "Instant convergence: pass_rate=1.0 on epoch 1. "
+                "Spec may be too easy or agent may be cheating."
+            )
+
+        # Plateau: 3+ consecutive epochs with the same pass_rate
+        if len(rates) >= 3:
+            run = 1
+            for i in range(1, len(rates)):
+                if rates[i] == rates[i - 1]:
+                    run += 1
+                    if run >= 3:
+                        warnings.append(
+                            f"Plateau detected: pass_rate unchanged at "
+                            f"{rates[i]:.1%} for {run} consecutive epochs "
+                            f"(epochs {i - run + 2}-{i + 1}). "
+                            f"Try a different strategy or model."
+                        )
+                        break
+                else:
+                    run = 1
+
+        # Oscillation: 4+ consecutive epochs where direction alternates
+        if len(rates) >= 4:
+            alternating = 1
+            for i in range(2, len(rates)):
+                prev_dir = rates[i - 1] - rates[i - 2]
+                curr_dir = rates[i] - rates[i - 1]
+                if prev_dir != 0 and curr_dir != 0 and (
+                    (prev_dir > 0 and curr_dir < 0)
+                    or (prev_dir < 0 and curr_dir > 0)
+                ):
+                    alternating += 1
+                    if alternating >= 4:
+                        warnings.append(
+                            "Oscillation detected: pass_rate alternating "
+                            f"up/down for {alternating}+ epochs. "
+                            "Agent may be fixing one test while breaking another."
+                        )
+                        break
+                else:
+                    alternating = 1
+
+        # Cost explosion: any consecutive pair where cost increases >2x
+        for i in range(1, len(costs)):
+            if costs[i - 1] > 0 and costs[i] > 2 * costs[i - 1]:
+                warnings.append(
+                    f"Cost explosion: epoch {i + 1} cost (${costs[i]:.4f}) "
+                    f"is >{2}x epoch {i} cost (${costs[i - 1]:.4f}). "
+                    "Context may be bloated — consider compaction."
+                )
+                break
+
+        return warnings
+
+    def to_dict(self) -> list[dict]:
+        """JSON-serializable list of epoch data.
+
+        Returns:
+            A list of dicts, one per epoch, with keys ``epoch``,
+            ``pass_rate``, ``passed``, ``total``, and ``cost``.
+        """
+        return [
+            {
+                "epoch": e.epoch,
+                "pass_rate": e.pass_rate,
+                "passed": e.passed,
+                "total": e.total,
+                "cost": e.cost,
+            }
+            for e in self.epochs
+        ]
+
+    def _write_json(self) -> None:
+        """Write ``to_dict()`` to ``self._output_path``."""
+        with open(self._output_path, "w") as f:
+            json.dump(self.to_dict(), f, indent=2)

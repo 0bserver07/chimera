@@ -15,6 +15,7 @@ class ConstraintResult:
     satisfied: bool
     message: str
     value: Any = None
+    score: float = 1.0
 
 
 @dataclass
@@ -153,6 +154,153 @@ class Constraint:
             name=f"max_total_lines({n})",
             check=_check,
             description=f"Max {n} total lines.",
+        )
+
+    @staticmethod
+    def complexity_penalty(max_complexity: int = 10) -> Constraint:
+        """Score decreases as cyclomatic complexity exceeds max.
+
+        Args:
+            max_complexity: Average complexity threshold. Score is 1.0 at or
+                below this value and decreases linearly to 0.0 as actual
+                complexity rises above it.
+
+        Returns:
+            A Constraint that evaluates cyclomatic complexity across all
+            ``*.py`` files in the environment.
+        """
+
+        def _check(env: Any) -> ConstraintResult:
+            import ast
+
+            total_complexity = 0
+            count = 0
+            for f in env.list_files("**/*.py"):
+                try:
+                    source = env.read_file(f)
+                    tree = ast.parse(source)
+                    for node in ast.walk(tree):
+                        if isinstance(
+                            node,
+                            (
+                                ast.If,
+                                ast.While,
+                                ast.For,
+                                ast.ExceptHandler,
+                                ast.With,
+                                ast.Assert,
+                                ast.BoolOp,
+                            ),
+                        ):
+                            total_complexity += 1
+                    count += 1
+                except Exception:
+                    pass
+            avg = total_complexity / max(count, 1)
+            score = max(0.0, 1.0 - max(0, avg - max_complexity) / max_complexity)
+            satisfied = avg <= max_complexity
+            return ConstraintResult(
+                name="complexity_penalty",
+                satisfied=satisfied,
+                message=f"Avg complexity {avg:.1f} (max {max_complexity})",
+                value=avg,
+                score=score,
+            )
+
+        return Constraint(
+            name="complexity_penalty",
+            check=_check,
+            description=f"Score decreases as cyclomatic complexity exceeds {max_complexity}.",
+        )
+
+    @staticmethod
+    def line_count_penalty(target: int = 200, hard_max: int = 500) -> Constraint:
+        """Score = 1.0 at target, decreases to 0.0 at hard_max.
+
+        Args:
+            target: Line count at which score is 1.0.
+            hard_max: Line count at which score is 0.0 and constraint fails.
+
+        Returns:
+            A Constraint that penalizes total line count above ``target``.
+        """
+
+        def _check(env: Any) -> ConstraintResult:
+            total = sum(
+                len(env.read_file(f).splitlines())
+                for f in env.list_files("**/*.py")
+            )
+            if total <= target:
+                score = 1.0
+            elif total >= hard_max:
+                score = 0.0
+            else:
+                score = 1.0 - (total - target) / (hard_max - target)
+            return ConstraintResult(
+                name="line_count_penalty",
+                satisfied=total <= hard_max,
+                message=f"{total} lines (target {target}, max {hard_max})",
+                value=total,
+                score=score,
+            )
+
+        return Constraint(
+            name="line_count_penalty",
+            check=_check,
+            description=f"Score = 1.0 at {target} lines, 0.0 at {hard_max} lines.",
+        )
+
+    @staticmethod
+    def duplication_penalty(threshold: float = 0.1) -> Constraint:
+        """Penalize files with >threshold fraction of duplicate lines.
+
+        Args:
+            threshold: Maximum tolerated duplication ratio.  Score is 1.0 when
+                there is no duplication and decreases linearly to 0.0 as the
+                ratio reaches ``threshold``.
+
+        Returns:
+            A Constraint that measures line-level code duplication.
+        """
+
+        def _check(env: Any) -> ConstraintResult:
+            all_lines: list[str] = []
+            for f in env.list_files("**/*.py"):
+                lines = [
+                    line.strip()
+                    for line in env.read_file(f).splitlines()
+                    if line.strip()
+                ]
+                all_lines.extend(lines)
+            if not all_lines:
+                return ConstraintResult(
+                    name="duplication_penalty",
+                    satisfied=True,
+                    message="No code",
+                    score=1.0,
+                )
+            from collections import Counter
+
+            counts = Counter(all_lines)
+            dup_count = sum(c - 1 for c in counts.values() if c > 1)
+            dup_ratio = dup_count / len(all_lines)
+            score = (
+                max(0.0, 1.0 - dup_ratio / threshold)
+                if dup_ratio > 0
+                else 1.0
+            )
+            return ConstraintResult(
+                name="duplication_penalty",
+                satisfied=dup_ratio <= threshold,
+                message=f"{dup_ratio:.1%} duplication (threshold {threshold:.0%})",
+                value=dup_ratio,
+                score=score,
+            )
+
+        return Constraint(
+            name="duplication_penalty",
+            check=_check,
+            description=f"Penalize duplication above {threshold:.0%}.",
         )
 
     @staticmethod

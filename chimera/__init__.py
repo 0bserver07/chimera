@@ -45,13 +45,14 @@ from chimera.providers.cost import calculate_cost, estimate_cost, register_model
 from chimera.providers.cost_tracker import CostLimitExceeded, CostTracker, StepUsage, TokenUsage
 
 # Training
-from chimera.training import Architecture, Constraint, Layer, Spec, Trainer
+from chimera.training import Architecture, Constraint, Layer, SearchSpace, Spec, SynthesisTuner, Trainer, TrialResult, TunerResult, ValidationResult, ValidationSplit
 from chimera.training.callbacks import (
     CheckpointCallback,
     CostLimitCallback,
     ProgressBar,
     ProgressCallback,
 )
+from chimera.training.oracle import OracleCallback
 from chimera.training.strategies import (
     AIMOEnsemble,
     Callback,
@@ -250,6 +251,7 @@ __all__ = [
     "EpochResult",
     "Layer",
     "MajorityVoting",
+    "OracleCallback",
     "Passthrough",
     "ProgressBar",
     "ProgressCallback",
@@ -259,6 +261,12 @@ __all__ = [
     "TestConvergence",
     "Trainer",
     "TreeSearch",
+    "TrialResult",
+    "TunerResult",
+    "SearchSpace",
+    "SynthesisTuner",
+    "ValidationResult",
+    "ValidationSplit",
     # Evaluation
     "Benchmark",
     "EvalResult",
