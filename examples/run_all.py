@@ -32,6 +32,10 @@ EXAMPLES = [
     ("ci_fix.py",                 "CI Fix — parse failure logs and auto-fix bugs"),
     ("session_persistence.py",    "Sessions — save and resume conversations"),
     ("streaming_agent.py",        "Streaming — real-time step output"),
+    ("synthesis_with_diagnostics.py", "Synthesis — training curves + complexity penalty"),
+    ("cegis_synthesis.py",        "CEGIS — counterexample-guided, one failure at a time"),
+    ("sketch_synthesis.py",       "Sketch — fill holes in partial code"),
+    ("validation_split.py",       "Validation split — detect overfitting"),
 ]
 
 
