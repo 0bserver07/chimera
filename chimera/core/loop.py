@@ -54,6 +54,8 @@ class ReAct:
         The :class:`AgentResult` is the generator return value (accessible
         via ``StopIteration.value``).
         """
+        from chimera.core.middleware import MiddlewareChain
+
         tool_map = {t.name: t for t in tools}
         schemas = [t.to_anthropic_schema() for t in tools]
         steps = 0
@@ -62,6 +64,7 @@ class ReAct:
         event_bus = self.config.event_bus if self.config else None
         handler: StreamHandler | None = self.config.handler if self.config else None
         wire = self.config.wire if self.config else None
+        mw_chain = MiddlewareChain(self.config.middleware if self.config else None)
 
         if wire:
             from chimera.wire.types import TurnBegin
@@ -74,6 +77,8 @@ class ReAct:
                 from chimera.wire.types import StepBegin
                 wire.send(StepBegin(step=steps))
 
+            context = mw_chain.run_before_model(context, tools)
+
             if handler:
                 handler.on_step_start(steps)
                 events = provider.stream(
@@ -84,6 +89,8 @@ class ReAct:
                 response = provider.complete(
                     context.to_messages(), tools=schemas if schemas else None,
                 )
+
+            response = mw_chain.run_after_model(response, context)
 
             step_cost = calculate_cost(provider.model_name, response.usage)
             total_cost += step_cost
@@ -332,7 +339,12 @@ class ReAct:
         env: Environment | None,
     ) -> AgentResult:
         """Run the loop to completion, auto-denying ASK permissions."""
-        return drain_steps(self.iter_steps(provider, tools, context, env))
+        from chimera.core.middleware import MiddlewareChain
+
+        result = drain_steps(self.iter_steps(provider, tools, context, env))
+        mw_chain = MiddlewareChain(self.config.middleware if self.config else None)
+        result = mw_chain.run_after_agent(result, env)
+        return result
 
 
     async def async_iter_steps(

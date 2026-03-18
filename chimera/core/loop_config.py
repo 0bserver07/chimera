@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from chimera.checkpoints import CheckpointManager
     from chimera.compaction.base import CompactionStrategy
+    from chimera.core.middleware import LoopMiddleware
     from chimera.detection.actions import LoopDetector
     from chimera.events.base import EventBus
     from chimera.permissions.audit import AuditLog
@@ -51,3 +52,4 @@ class LoopConfig:
     checkpoint_manager: CheckpointManager | None = None
     git_workflow: GitWorkflow | None = None
     wire: Wire | None = None
+    middleware: list[LoopMiddleware] | None = None

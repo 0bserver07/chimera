@@ -16,11 +16,16 @@ from chimera.core import (
     ContextAwareTool,
     ContextCompressor,
     DEFAULT_TOOLS,
+    EnsureToolCallMiddleware,
     InstructionLayer,
+    LoggingMiddleware,
     LoopDetector,
+    LoopMiddleware,
+    MiddlewareChain,
     PrintStreamHandler,
     Prompt,
     ReAct,
+    SafetyNetMiddleware,
     StreamHandler,
     ToolGroup,
     tool,
@@ -183,8 +188,15 @@ from chimera.context.history import (
 )
 from chimera.context.mentions import Mention, MentionResolver
 
+# Message Queue
+from chimera.core.message_queue import MessageQueue
+from chimera.core.queue_middleware import MessageQueueMiddleware
+
 # Checkpoints
 from chimera.checkpoints import CheckpointInfo, CheckpointManager
+
+# Server
+from chimera.server import AgentServer, WebhookEvent
 
 # Workflows
 from chimera.workflows import CommitStrategy, GitWorkflow
@@ -224,11 +236,16 @@ __all__ = [
     "ContextAwareTool",
     "ContextCompressor",
     "DEFAULT_TOOLS",
+    "EnsureToolCallMiddleware",
     "InstructionLayer",
+    "LoggingMiddleware",
     "LoopDetector",
+    "LoopMiddleware",
+    "MiddlewareChain",
     "PrintStreamHandler",
     "Prompt",
     "ReAct",
+    "SafetyNetMiddleware",
     "StreamHandler",
     "ToolGroup",
     "tool",
@@ -422,6 +439,9 @@ __all__ = [
     "PluginInfo",
     "MarketplaceRegistry",
     "PluginManager",
+    # Server
+    "AgentServer",
+    "WebhookEvent",
     # Workflows
     "CommitStrategy",
     "GitWorkflow",
@@ -477,6 +497,9 @@ __all__ = [
     "RedactionMiddleware",
     "SecretDetector",
     "SecretRegistry",
+    # Message Queue
+    "MessageQueue",
+    "MessageQueueMiddleware",
     # Granular token tracking
     "StepUsage",
     "TokenUsage",
