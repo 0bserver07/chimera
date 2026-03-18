@@ -115,6 +115,19 @@ nav:
     - Impact Analysis: modules/impact-analysis.md
     - Mutation Testing: modules/mutation-testing.md
     - Spec Inference: modules/spec-inference.md
+    - Focus Chain: modules/focus-chain.md
+    - History Processor: modules/history-processor.md
+    - Context Mention: modules/context-mention.md
+    - Retry Loop: modules/retry-loop.md
+    - Plan/Act Loop: modules/plan-act-loop.md
+    - Lint Feedback Loop: modules/lint-feedback-loop.md
+    - Tree-Sitter Parser: modules/tree-sitter-parser.md
+    - Definition Lookup: modules/definition-lookup.md
+    - Demonstration Prompt: modules/demonstration-prompt.md
+    - Sandbox Policy: modules/sandbox-policy.md
+    - Long-Term Memory: modules/long-term-memory.md
+    - Instruction Layer: modules/instruction-layer.md
+    - Agent Presets: modules/agent-presets.md
   - Workflows:
     - workflows/index.md
     - CI Fix: workflows/ci-fix.md

@@ -2,7 +2,7 @@
 
 A composable coding agent framework. Synthesize codebases from specifications.
 
-**Status: Alpha** -- Core framework complete (1870+ tests passing). API may change before 1.0.
+**Status: Alpha** -- Core framework complete (2040+ tests passing). API may change before 1.0.
 
 ## What You Can Build
 
@@ -147,7 +147,7 @@ Use Layer 1-4 as an agent toolkit. Use Layer 1-6 as a synthesis framework. Use L
 
 **20 built-in tools.** File read/write/edit/search/list, bash, test runner, git, web fetch, regex replace, sub-agent delegation, answer verification, repo map, image read, browser, import graph, think (reasoning scratchpad), ask_user (pause for input), todo (task tracking), dmail (context rewind). `AGENT_TOOLS` preset gives coding agents 13 tools out of the box.
 
-**4 loop types.** ReAct (default), PlanAndExecute, Reflexion, TreeOfThought.
+**7 loop types.** ReAct (default), PlanAndExecute, Reflexion, TreeOfThought, RetryLoop (retry + scoring wrapper), PlanActLoop (read-only planning then full execution), LintFeedbackLoop (run linter after edits, feed errors back).
 
 **3 composition patterns.** Pipeline (sequential), Ensemble (parallel + selector), Supervisor (coordinator + workers).
 
