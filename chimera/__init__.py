@@ -166,6 +166,17 @@ from chimera.research import Finding, ResearchPlan, Researcher, Source
 # Migration
 from chimera.migration import MigrationPlan, MigrationPlanner, MigrationRule
 
+# Context
+from chimera.context.focus import ContextItem, FocusChain
+from chimera.context.history import (
+    CompressProcessor,
+    CompositeProcessor,
+    HistoryProcessor,
+    PruneProcessor,
+    TruncateProcessor,
+)
+from chimera.context.mentions import Mention, MentionResolver
+
 # Checkpoints
 from chimera.checkpoints import CheckpointInfo, CheckpointManager
 
@@ -377,6 +388,16 @@ __all__ = [
     "ResearchPlan",
     "Researcher",
     "Source",
+    # Context
+    "CompressProcessor",
+    "CompositeProcessor",
+    "ContextItem",
+    "FocusChain",
+    "HistoryProcessor",
+    "Mention",
+    "MentionResolver",
+    "PruneProcessor",
+    "TruncateProcessor",
     # Checkpoints
     "CheckpointInfo",
     "CheckpointManager",
