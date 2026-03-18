@@ -3,6 +3,7 @@ from chimera.tools.parsers.python_parser import PythonParser
 from chimera.tools.parsers.typescript import TypeScriptParser
 from chimera.tools.parsers.go import GoParser
 from chimera.tools.parsers.rust import RustParser
+from chimera.tools.parsers.tree_sitter import TreeSitterParser
 
 __all__ = [
     "LanguageParser",
@@ -11,4 +12,5 @@ __all__ = [
     "TypeScriptParser",
     "GoParser",
     "RustParser",
+    "TreeSitterParser",
 ]

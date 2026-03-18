@@ -91,6 +91,7 @@ from chimera.tools.think import ThinkTool
 from chimera.tools.ask_user import AskUserTool
 from chimera.tools.todo import TodoTool
 from chimera.tools.dmail import DMailTool
+from chimera.tools.definition_lookup import DefinitionLookupTool
 
 # Wire
 from chimera.wire import Wire, WireMessage, WireRequest, WireResponse
@@ -293,6 +294,7 @@ __all__ = [
     # Tools
     "AskUserTool",
     "BrowserTool",
+    "DefinitionLookupTool",
     "DMailTool",
     "ImageReadTool",
     "ImportEdge",

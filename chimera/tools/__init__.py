@@ -14,6 +14,7 @@ from chimera.tools.verify import VerifyTool
 from chimera.tools.image_read import ImageReadTool
 from chimera.tools.import_graph import ImportGraph
 from chimera.tools.browser import BrowserTool
+from chimera.tools.definition_lookup import DefinitionLookupTool
 
 read_file = ReadFileTool()
 write_file = WriteFileTool()
@@ -36,4 +37,5 @@ __all__ = [
     "test", "web_fetch", "git", "replace_in_file", "verify", "read_image",
     "ImportGraph",
     "BrowserTool",
+    "DefinitionLookupTool",
 ]
