@@ -129,7 +129,7 @@ from chimera.permissions import AuditLog, PermissionAction, PermissionRuleset, R
 from chimera.streaming import ConsoleStreamHandler, StreamingReAct
 from chimera.sessions import EventLog, EventSourcedSession, InMemoryStorage, LongTermMemory, MemoryEntry, Session
 from chimera.auth import AuthManager, Credential
-from chimera.agents import AgentConfig, AgentFactory, AgentLoader, AgentRegistry, FileAgentDef
+from chimera.agents import AgentConfig, AgentFactory, AgentLoader, AgentPreset, AgentRegistry, FileAgentDef
 from chimera.agents.loader import create_default_registry, load_custom_agents
 from chimera.plugins import BasePlugin, DirectoryPluginLoader, Hook, MCPServerConfig, Marketplace, MarketplaceRegistry, PluginExtensionRegistry, PluginInfo, PluginManager
 from chimera.config import ChimeraConfig, DiscriminatedUnion, ProjectConfig, Skill, SkillRegistry, StructuredOutput
@@ -389,6 +389,7 @@ __all__ = [
     "AgentConfig",
     "AgentFactory",
     "AgentLoader",
+    "AgentPreset",
     "AgentRegistry",
     "FileAgentDef",
     "create_default_registry",
