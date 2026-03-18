@@ -16,6 +16,7 @@ from chimera.core import (
     ContextAwareTool,
     ContextCompressor,
     DEFAULT_TOOLS,
+    InstructionLayer,
     LoopDetector,
     PrintStreamHandler,
     Prompt,
@@ -126,7 +127,7 @@ from chimera.compaction import (
 from chimera.detection import DetectionResult, ExactRepeatDetector
 from chimera.permissions import AuditLog, PermissionAction, PermissionRuleset, RiskLevel, classify_risk
 from chimera.streaming import ConsoleStreamHandler, StreamingReAct
-from chimera.sessions import EventLog, EventSourcedSession, InMemoryStorage, Session
+from chimera.sessions import EventLog, EventSourcedSession, InMemoryStorage, LongTermMemory, MemoryEntry, Session
 from chimera.auth import AuthManager, Credential
 from chimera.agents import AgentConfig, AgentFactory, AgentLoader, AgentRegistry, FileAgentDef
 from chimera.agents.loader import create_default_registry, load_custom_agents
@@ -136,12 +137,16 @@ from chimera.mcp import MCPClient, MCPToolSource
 
 # Security
 from chimera.security import (
+    AccessLevel,
     CompositeSecurityAnalyzer,
     ConfirmAboveThreshold,
     ConfirmationPolicy,
     LLMSecurityAnalyzer,
+    NetworkRule,
     NeverConfirm,
+    PathRule,
     RuleBasedSecurityAnalyzer,
+    SandboxPolicy,
     SecurityAnalyzer,
     SecurityRisk,
 )
@@ -219,6 +224,7 @@ __all__ = [
     "ContextAwareTool",
     "ContextCompressor",
     "DEFAULT_TOOLS",
+    "InstructionLayer",
     "LoopDetector",
     "PrintStreamHandler",
     "Prompt",
@@ -376,6 +382,8 @@ __all__ = [
     "EventLog",
     "EventSourcedSession",
     "InMemoryStorage",
+    "LongTermMemory",
+    "MemoryEntry",
     "AuthManager",
     "Credential",
     "AgentConfig",
@@ -452,12 +460,16 @@ __all__ = [
     "MigrationPlanner",
     "MigrationRule",
     # Security
+    "AccessLevel",
     "CompositeSecurityAnalyzer",
     "ConfirmAboveThreshold",
     "ConfirmationPolicy",
     "LLMSecurityAnalyzer",
+    "NetworkRule",
     "NeverConfirm",
+    "PathRule",
     "RuleBasedSecurityAnalyzer",
+    "SandboxPolicy",
     "SecurityAnalyzer",
     "SecurityRisk",
     # Secrets
