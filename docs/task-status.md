@@ -1,6 +1,6 @@
 # Chimera — Task Status
 
-> 231 tasks across 37 phases. TDD approach: tests first, then implementation.
+> 256 tasks across 39 phases. TDD approach: tests first, then implementation.
 > Sources: `docs/plans/2026-02-20-chimera-implementation-plan.md`, `docs/plans/2026-02-20-chimera-extension-plan.md`, `docs/plans/2026-02-22-persistent-shell-plan.md`, `docs/plans/2026-02-25-aimo3-implementation-plan.md`
 
 ## Phases 1–8: Core Framework (Original)
@@ -367,7 +367,35 @@
 
 ---
 
-**Total: 2181 tests passing, 49 skipped** (as of 2026-03-18)
+## Phase 38: Close Codex/Gemini/Aider/OpenCode Gaps
+
+| # | Phase | Task | Files | Tests | Status |
+|---|-------|------|-------|-------|--------|
+| 231 | 38 - L2 | Head+tail output truncation | `chimera/core/truncation.py` | 4 | DONE |
+| 232 | 38 - L2 | Ghost commits (snapshot-based undo) | `chimera/checkpoints_ghost.py` | 5 | DONE |
+| 233 | 38 - L4 | Repo map context injection | `chimera/context/repo_map.py` | 4 | DONE |
+| 234 | 38 - L1 | Commit message style inference | `chimera/workflows/commit_style.py` | 7 | DONE |
+| 235 | 38 - L4 | Structured subagent investigator | `chimera/agents/investigator.py` | 2 | DONE |
+| 236 | 38 - L2 | Thought stripping from context | `chimera/compaction/thought_strip.py` | 3 | DONE |
+| 237 | 38 - L3 | Response caching (SHA-based dedup) | `chimera/providers/cached.py` | 4 | DONE |
+| 238 | 38 - L4 | LSP diagnostics in the agent loop | `chimera/core/lsp_feedback.py` | 2 | DONE |
+| 239 | 38 - L1 | File watcher (reactive re-run) | `chimera/env/watcher.py` | 5 | DONE |
+
+## Phase 39: Integration Wiring
+
+| # | Phase | Task | Files | Tests | Status |
+|---|-------|------|-------|-------|--------|
+| 240 | 39 - Exports | 43 new exports in chimera/__init__.py | `chimera/__init__.py` | — | DONE |
+| 241 | 39 - Tools | WebSearchTool + VerifyTool in AGENT_TOOLS (15 total) | `chimera/core/tool_group.py` | — | DONE |
+| 242 | 39 - Loop | Truncation wired into tool_executor | `chimera/core/tool_executor.py` | — | DONE |
+| 243 | 39 - Loop | Ghost commits wired into tool_executor | `chimera/core/tool_executor.py` | — | DONE |
+| 244 | 39 - Events | FileWatcher → EventBus bridge | `chimera/env/watcher.py` | — | DONE |
+| 245 | 39 - LoopConfig | truncation + ghost_commits fields | `chimera/core/loop_config.py` | — | DONE |
+| 246–256 | 39 - Tests | 25 integration wiring tests | `tests/test_integration_wiring.py` | 25 | DONE |
+
+---
+
+**Total: 2242 tests passing, 49 skipped** (as of 2026-03-19)
 
 Integration tests (skipped without API credentials): 43 tests across multiple files.
 
@@ -414,6 +442,8 @@ Integration tests (skipped without API credentials): 43 tests across multiple fi
 | 35 | Layer Integration (Prove the Stack) | 207–212 | 6 | DONE |
 | 36 | Coding Agent Replication | 213–224 | 71 | DONE |
 | 37 | Gemini CLI + Cursor/Windsurf | 225–230 | 30 | DONE |
+| 38 | Codex/Gemini/Aider/OpenCode Gaps | 231–239 | 36 | DONE |
+| 39 | Integration Wiring | 240–256 | 25 | DONE |
 
 ---
 
@@ -466,13 +496,28 @@ Many of these are pure logic modules that don't need an LLM:
 
 ---
 
+## Agent Replication Status
+
+| Agent | Status | Primitives |
+|-------|--------|------------|
+| SWE-Agent | **Full** | RetryLoop, SWE_TOOLS, DemonstrationPrompt, trajectory logging |
+| Aider | **Full** | LintFeedbackLoop, TreeSitter, Git, RepoMap, commit style inference, file watcher |
+| Cline | **Full** | PlanActLoop, FocusChain, DefinitionLookup, InstructionLayer, interactive approval |
+| Codex CLI | **Full** | SandboxPolicy (Docker enforced), ghost commits, head+tail truncation, response caching, prompt caching |
+| OpenHands | **Full** | AgentController FSM, microagents, ACP, Critic, Docker, EventBus |
+| Gemini CLI | **Full** | WebSearch, GroundedSearch, ContextCache, thought stripping, subagent investigator, extended thinking |
+| OpenCode | **Full** | LSP feedback middleware, SemanticSearch, ApplyMiddleware |
+| Kimi CLI | **Full** | Wire protocol, DMailTool, Flow skills, ThinkTool, multi-provider |
+
 ## What's Next
 
-- [x] ~~End-to-end layer integration demo (prove layers compose practically)~~ (6 tests, Phase 35)
-- [x] ~~Close all coding agent gaps (Phase 36)~~ — 12 features, 71 tests
+- [x] ~~Layer integration demo~~ (Phase 35)
+- [x] ~~Close coding agent gaps~~ (Phases 36–38)
+- [x] ~~Wire all modules into loop + exports~~ (Phase 39)
 - [ ] SWE-bench end-to-end run (prove Chimera can fix real GitHub issues)
+- [ ] Analyze remaining agents: Qwen Code, AiChat, AutoGPT, MetaGPT, Continue, DeepCode
 - [ ] Verify ML/synthesis primitives with real LLM synthesis runs
 - [ ] Verify remaining workflows (Review, Research, Migration, DocGen, TestGen) with real LLM
 - [ ] PyPI publishing
 - [ ] CI/CD pipeline (GitHub Actions)
-- [ ] Full agent replication benchmarks (SWE-Agent, Aider, Cline, Codex presets on real tasks)
+- [ ] Full agent replication benchmarks on real tasks
