@@ -268,6 +268,6 @@ python coding_agent.py
 
 ## Next Steps
 
-- [Add a Custom Tool](add-custom-tool.md) -- give your agent new capabilities.
-- [Configure Permissions](configure-permissions.md) -- fine-tune what the agent can do.
-- [Compose Agents](compose-agents.md) -- chain multiple agents together.
+- [Add a Custom Tool](/add-custom-tool/) -- give your agent new capabilities.
+- [Configure Permissions](/configure-permissions/) -- fine-tune what the agent can do.
+- [Compose Agents](/compose-agents/) -- chain multiple agents together.

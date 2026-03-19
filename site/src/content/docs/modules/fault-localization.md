@@ -61,5 +61,5 @@ result = agent.run(prompt, env=env)
 
 ## Related
 
-- [Impact Analysis](impact-analysis.md) -- analyze blast radius of changes
-- [Training concepts](../concepts/training.md) -- strategies that use test feedback
+- [Impact Analysis](/impact-analysis/) -- analyze blast radius of changes
+- [Training concepts](/../concepts/training/) -- strategies that use test feedback

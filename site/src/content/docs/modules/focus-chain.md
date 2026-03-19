@@ -71,6 +71,6 @@ section = chain.to_prompt_section()
 
 ## Related
 
-- [Compaction](compaction.md) -- token-level history compression
-- [Context Mention](context-mention.md) -- @-mention context injection
-- [History Processor](history-processor.md) -- conversation history transforms
+- [Compaction](/compaction/) -- token-level history compression
+- [Context Mention](/context-mention/) -- @-mention context injection
+- [History Processor](/history-processor/) -- conversation history transforms

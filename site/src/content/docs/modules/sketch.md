@@ -64,5 +64,5 @@ result = trainer.synthesize(spec=spec, strategy=TestConvergence())
 
 ## Related
 
-- [Training concepts](../concepts/training.md) -- Spec and strategies
+- [Training concepts](/../concepts/training/) -- Spec and strategies
 - `examples/sketch_synthesis.py` -- runnable example

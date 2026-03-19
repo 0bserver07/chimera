@@ -68,5 +68,5 @@ from chimera.tools.definition_lookup import DefinitionLookupTool, DefinitionFind
 
 ## Related
 
-- [Tree-Sitter Parser](tree-sitter-parser.md) -- AST-based symbol extraction
-- [Agent Tools](agent-tools.md) -- built-in tool catalogue
+- [Tree-Sitter Parser](/tree-sitter-parser/) -- AST-based symbol extraction
+- [Agent Tools](/agent-tools/) -- built-in tool catalogue

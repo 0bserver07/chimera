@@ -256,6 +256,6 @@ print(result.output)
 
 ## Next Steps
 
-- [Build a Coding Agent](build-a-coding-agent.md) -- see permissions in a full interactive agent.
-- [Add a Custom Tool](add-custom-tool.md) -- create tools that respect `requires_approval`.
-- [Compose Agents](compose-agents.md) -- apply permissions across multi-agent systems.
+- [Build a Coding Agent](/build-a-coding-agent/) -- see permissions in a full interactive agent.
+- [Add a Custom Tool](/add-custom-tool/) -- create tools that respect `requires_approval`.
+- [Compose Agents](/compose-agents/) -- apply permissions across multi-agent systems.

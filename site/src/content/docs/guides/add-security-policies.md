@@ -10,7 +10,7 @@ approval before executing dangerous tool calls.
 
 ## Prerequisites
 
-A working agent setup.  See [Build a Coding Agent](build-a-coding-agent.md)
+A working agent setup.  See [Build a Coding Agent](/build-a-coding-agent/)
 if you need one.
 
 ---
@@ -208,7 +208,7 @@ user confirmation.
 
 ## Next Steps
 
-- [Configure Permissions](configure-permissions.md) -- permission presets and
+- [Configure Permissions](/configure-permissions/) -- permission presets and
   audit logging.
-- [Build a Plugin](build-a-plugin.md) -- package security policies as a
+- [Build a Plugin](/build-a-plugin/) -- package security policies as a
   reusable plugin.

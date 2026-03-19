@@ -72,7 +72,7 @@ from chimera.agents.presets.agent_styles import AgentPreset
 
 ## Related
 
-- [Agent Config](agents-config.md) -- markdown-based agent configuration
-- [Retry Loop](retry-loop.md) -- retry wrapper with scoring
-- [Plan/Act Loop](plan-act-loop.md) -- two-phase plan then execute
-- [Lint Feedback Loop](lint-feedback-loop.md) -- linter-driven iteration
+- [Agent Config](/agents-config/) -- markdown-based agent configuration
+- [Retry Loop](/retry-loop/) -- retry wrapper with scoring
+- [Plan/Act Loop](/plan-act-loop/) -- two-phase plan then execute
+- [Lint Feedback Loop](/lint-feedback-loop/) -- linter-driven iteration

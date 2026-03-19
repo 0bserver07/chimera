@@ -75,5 +75,5 @@ from chimera.core.demonstration import DemonstrationPrompt, Example
 
 ## Related
 
-- [Instruction Layer](instruction-layer.md) -- composable prompt layers
-- [Agent Config](agents-config.md) -- agent configuration with presets
+- [Instruction Layer](/instruction-layer/) -- composable prompt layers
+- [Agent Config](/agents-config/) -- agent configuration with presets

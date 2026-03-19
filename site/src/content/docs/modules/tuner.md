@@ -69,5 +69,5 @@ print(f"Total cost:  ${result.total_cost:.2f}")
 
 ## Related
 
-- [Training concepts](../concepts/training.md) -- strategies and the Trainer
-- [Cost Tracking](cost-tracking.md) -- per-model pricing
+- [Training concepts](/../concepts/training/) -- strategies and the Trainer
+- [Cost Tracking](/cost-tracking/) -- per-model pricing

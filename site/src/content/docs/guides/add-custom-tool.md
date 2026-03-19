@@ -219,5 +219,5 @@ print(result.output)
 
 ## Next Steps
 
-- [Build a Coding Agent](build-a-coding-agent.md) -- use tools inside a full agent.
-- [Configure Permissions](configure-permissions.md) -- control which tools the agent may call.
+- [Build a Coding Agent](/build-a-coding-agent/) -- use tools inside a full agent.
+- [Configure Permissions](/configure-permissions/) -- control which tools the agent may call.

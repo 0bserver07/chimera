@@ -131,7 +131,7 @@ All commands start with `/` and support tab completion.
 
 ## Next Steps
 
-- [Add Security Policies](add-security-policies.md) -- control what the agent
+- [Add Security Policies](/add-security-policies/) -- control what the agent
   is allowed to do.
-- [Build a Coding Agent](build-a-coding-agent.md) -- use the same components
+- [Build a Coding Agent](/build-a-coding-agent/) -- use the same components
   programmatically.

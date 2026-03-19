@@ -117,10 +117,9 @@ Each provider reads credentials from environment variables when no explicit `api
 | `OPENAI_API_KEY` | OpenAI |
 | `GOOGLE_API_KEY` | Google Gemini |
 
-!!! note "Ollama runs locally"
-    The Ollama provider defaults to `http://localhost:11434` and requires no API key. Override with `base_url`.
-
-## Cost Tracking
+:::note[Ollama runs locally]
+The Ollama provider defaults to `http://localhost:11434` and requires no API key. Override with `base_url`.
+:::## Cost Tracking
 
 Chimera tracks token costs automatically via `chimera.providers.cost.calculate_cost()`:
 

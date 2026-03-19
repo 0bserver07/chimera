@@ -155,10 +155,9 @@ source .env
 chimera code
 ```
 
-!!! tip
-    `.env` is included in `.gitignore` by default. Never commit API keys.
-
----
+:::tip
+`.env` is included in `.gitignore` by default. Never commit API keys.
+:::---
 
 ## CLI Usage
 
@@ -178,6 +177,6 @@ from the environment.
 
 ## Next Steps
 
-- [Build a Coding Agent](build-a-coding-agent.md) -- use providers
+- [Build a Coding Agent](/build-a-coding-agent/) -- use providers
   programmatically inside an agent loop.
-- [Use the REPL](use-the-repl.md) -- interactive session with any provider.
+- [Use the REPL](/use-the-repl/) -- interactive session with any provider.

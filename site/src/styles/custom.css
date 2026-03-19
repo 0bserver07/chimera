@@ -50,19 +50,99 @@
 	--sl-text-4xl: 3rem;
 }
 
-/* ── Hero / landing page ── */
+/* ── Splash page full-width override ── */
+
+/*
+ * Starlight's sidebar layout offsets the main pane even on splash pages.
+ * Force full-width centering when there's a hero (splash template).
+ */
+[data-has-hero] .main-frame {
+	padding-inline-start: 0 !important;
+}
+
+[data-has-hero] .main-pane {
+	width: 100% !important;
+	--sl-content-margin-inline: auto !important;
+}
+
+[data-has-hero] .content-panel {
+	max-width: 100% !important;
+}
+
+[data-has-hero] .sl-container {
+	max-width: 72rem !important;
+	width: 100% !important;
+	margin-inline: auto !important;
+}
+
+/* ── Hero (centered, Mintlify-style) ── */
+
 .hero {
-	padding-block: 4rem;
+	display: grid !important;
+	grid-template-columns: 1fr !important;
+	justify-items: center !important;
+	padding-block: 5rem 3rem !important;
+}
+
+.hero .stack {
+	text-align: center !important;
+	align-items: center !important;
+}
+
+.hero .copy {
+	align-items: center !important;
 }
 
 .hero h1 {
-	font-size: var(--sl-text-4xl);
+	font-size: var(--sl-text-4xl) !important;
 	font-weight: 800;
 	letter-spacing: -0.03em;
 	background: linear-gradient(135deg, var(--sl-color-accent), #c4b5fd, #fbbf24);
 	-webkit-background-clip: text;
 	-webkit-text-fill-color: transparent;
 	background-clip: text;
+}
+
+.hero .tagline {
+	font-size: 1.25rem;
+	color: var(--sl-color-gray-2);
+	max-width: 40rem;
+	text-align: center !important;
+}
+
+.hero .tagline small {
+	font-size: 0.95rem;
+	color: var(--sl-color-gray-3);
+	display: block;
+	margin-top: 0.5rem;
+}
+
+.hero .actions {
+	justify-content: center !important;
+}
+
+/* Center the content below the hero on splash pages */
+[data-has-hero] .sl-markdown-content {
+	max-width: 56rem;
+	margin-inline: auto;
+}
+
+[data-has-hero] .sl-markdown-content h2,
+[data-has-hero] .sl-markdown-content .sl-heading-wrapper {
+	text-align: center;
+	justify-content: center;
+}
+
+[data-has-hero] .sl-markdown-content > p {
+	text-align: center;
+	max-width: 42rem;
+	margin-inline: auto;
+}
+
+/* Don't center code blocks or cards */
+[data-has-hero] .sl-markdown-content pre,
+[data-has-hero] .sl-markdown-content .card-grid {
+	text-align: left;
 }
 
 /* ── Sidebar refinements ── */
@@ -154,6 +234,67 @@ nav.sidebar .top-level > li > a {
 .card-grid .card:hover {
 	border-color: var(--sl-color-accent);
 	box-shadow: 0 0 20px rgba(167, 139, 250, 0.1);
+}
+
+/* ── Mermaid diagrams ── */
+.mermaid-container {
+	border-radius: 10px;
+	border: 1px solid var(--sl-color-hairline-light);
+	margin-block: 1.5rem;
+	overflow: hidden;
+}
+
+[data-theme='dark'] .mermaid-container {
+	background: #12100d;
+}
+
+[data-theme='light'] .mermaid-container {
+	background: #faf8f5;
+}
+
+.mermaid-controls {
+	display: flex;
+	gap: 2px;
+	padding: 4px 8px;
+	border-bottom: 1px solid var(--sl-color-hairline-light);
+	background: var(--sl-color-gray-6);
+	justify-content: flex-end;
+}
+
+.mermaid-btn {
+	font-size: 11px;
+	font-weight: 500;
+	padding: 1px 8px;
+	border: 1px solid var(--sl-color-gray-4);
+	border-radius: 3px;
+	background: transparent;
+	color: var(--sl-color-gray-2);
+	cursor: pointer;
+	line-height: 1.6;
+}
+
+.mermaid-btn:hover {
+	background: var(--sl-color-gray-5);
+	color: var(--sl-color-white);
+}
+
+.mermaid-viewport {
+	overflow: auto;
+	padding: 1.5rem;
+	cursor: grab;
+}
+
+.mermaid-viewport:active {
+	cursor: grabbing;
+}
+
+.mermaid {
+	transition: transform 0.15s ease;
+}
+
+.mermaid svg {
+	max-width: 100%;
+	height: auto;
 }
 
 /* ── Smooth scrolling ── */

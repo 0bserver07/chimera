@@ -76,5 +76,5 @@ from chimera.security.sandbox import SandboxPolicy, PathRule, NetworkRule, Acces
 
 ## Related
 
-- [Security](security.md) -- risk classification and security analysis
-- [Permissions](permissions.md) -- tool-level permission policies
+- [Security](/security/) -- risk classification and security analysis
+- [Permissions](/permissions/) -- tool-level permission policies

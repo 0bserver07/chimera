@@ -79,5 +79,5 @@ class DropSystemProcessor(HistoryProcessor):
 
 ## Related
 
-- [Compaction](compaction.md) -- threshold-based context compaction
-- [Focus Chain](focus-chain.md) -- token-budget context selection
+- [Compaction](/compaction/) -- threshold-based context compaction
+- [Focus Chain](/focus-chain/) -- token-budget context selection

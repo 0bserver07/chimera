@@ -93,10 +93,9 @@ from chimera.core.tool_group import DEFAULT_TOOLS
 agent = Agent(provider=provider, tools=list(DEFAULT_TOOLS))
 ```
 
-!!! tip "Use `list()` when passing to Agent"
-    `Agent` expects a `list[BaseTool]`, so wrap `DEFAULT_TOOLS` with `list()` to convert from `ToolGroup`.
-
-### AGENT_TOOLS
+:::tip[Use `list()` when passing to Agent]
+`Agent` expects a `list[BaseTool]`, so wrap `DEFAULT_TOOLS` with `list()` to convert from `ToolGroup`.
+:::### AGENT_TOOLS
 
 For interactive sessions (like the REPL), Chimera provides `AGENT_TOOLS` -- a 13-tool preset that extends `DEFAULT_TOOLS` with edit, search, list_files, test, git, replace_in_file, repo_map, think, and todo:
 
@@ -197,10 +196,9 @@ agent = Agent(
 )
 ```
 
-!!! warning "Tool names must be unique"
-    If two tools share the same `name`, the agent's tool dispatch will use whichever appears last. Give each tool a distinct name.
-
-## API Reference
+:::caution[Tool names must be unique]
+If two tools share the same `name`, the agent's tool dispatch will use whichever appears last. Give each tool a distinct name.
+:::## API Reference
 
 - `chimera.core.tool.BaseTool` -- abstract base class for tools
 - `chimera.core.tool.tool` -- decorator for function-based tools

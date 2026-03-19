@@ -62,6 +62,6 @@ from chimera.core.loops.plan_act import PlanActLoop, READ_ONLY_TOOLS
 
 ## Related
 
-- [Loops](../concepts/loops.md) -- overview of all loop types
-- [Retry Loop](retry-loop.md) -- retry wrapper with scoring
-- [Lint Feedback Loop](lint-feedback-loop.md) -- linter-driven iteration
+- [Loops](/../concepts/loops/) -- overview of all loop types
+- [Retry Loop](/retry-loop/) -- retry wrapper with scoring
+- [Lint Feedback Loop](/lint-feedback-loop/) -- linter-driven iteration

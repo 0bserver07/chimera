@@ -3,9 +3,9 @@ title: Chimera
 description: A composable coding agent framework. Synthesize codebases from specifications.
 template: splash
 hero:
-  tagline: A composable coding agent framework. Compose any coding agent architecture in Python.
-  image:
-    file: ../../assets/logo-dark.svg
+  tagline: |
+    Build, compose, and deploy coding agents from modular primitives.
+    <br/><small>A composable coding agent framework. Compose any coding agent architecture in Python.</small>
   actions:
     - text: Get Started
       link: /getting-started/
@@ -20,7 +20,7 @@ import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
 
 ## What is Chimera?
 
-Chimera is a Python framework for building coding agents. It provides composable primitives — providers, tools, loops, environments, and strategies — that let you recreate any coding agent architecture (SWE-Agent, Aider, Cline, Codex, OpenHands) or invent your own.
+An open-source Python framework for building coding agents. Pick your provider, pick your tools, pick your loop. Chimera wires them together. Recreate SWE-Agent, Aider, Cline, or Codex in a few lines, or design something entirely new.
 
 ```python
 import chimera
@@ -40,7 +40,7 @@ result = agent.run("Fix the authentication bug", env=env)
 
 <CardGrid stagger>
   <Card title="8-Layer Stack" icon="seti:config">
-    CLI, Workflows, Synthesis, Eval, Agent, Provider, Infrastructure, Environment — each layer usable independently.
+    CLI, Workflows, Synthesis, Eval, Agent, Provider, Infrastructure, Environment. Each layer usable independently.
   </Card>
   <Card title="Any Agent Architecture" icon="puzzle">
     Presets for SWE-Agent, Aider, Cline, and Codex. Mix and match loops, tools, and strategies.

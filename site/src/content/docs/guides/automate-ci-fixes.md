@@ -196,5 +196,5 @@ else:
 
 ## Next steps
 
-- [Compose Agents](compose-agents.md) -- chain CI fix with review using a Pipeline
-- [Configure Permissions](configure-permissions.md) -- add guardrails to agent file edits
+- [Compose Agents](/compose-agents/) -- chain CI fix with review using a Pipeline
+- [Configure Permissions](/configure-permissions/) -- add guardrails to agent file edits

@@ -10,7 +10,7 @@ extensions to any Chimera-based project.
 
 ## Prerequisites
 
-Familiarity with `BaseTool`.  See [Add a Custom Tool](add-custom-tool.md)
+Familiarity with `BaseTool`.  See [Add a Custom Tool](/add-custom-tool/)
 for the basics.
 
 ---
@@ -256,7 +256,7 @@ print(manager.tools[0].name)  # "uptime"
 
 ## Next Steps
 
-- [Add a Custom Tool](add-custom-tool.md) -- tool basics (decorator and
+- [Add a Custom Tool](/add-custom-tool/) -- tool basics (decorator and
   subclass patterns).
-- [Configure Permissions](configure-permissions.md) -- control which
+- [Configure Permissions](/configure-permissions/) -- control which
   plugin-provided tools the agent can call.

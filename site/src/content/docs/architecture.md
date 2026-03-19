@@ -92,12 +92,12 @@ graph TD
 
     subgraph Layer3["Layer 3: Provider"]
         direction LR
-        Anthropic["Anthropic<br/>Claude"]
-        OpenAI["OpenAI<br/>GPT"]
-        Google["Google<br/>Gemini"]
+        Anthropic["Anthropic / Claude"]
+        OpenAI["OpenAI / GPT"]
+        Google["Google / Gemini"]
         Ollama["Ollama"]
         Modal["Modal"]
-        Compatible["OpenAI-<br/>compatible"]
+        Compatible["OpenAI-compatible"]
         Anthropic -.-> OpenAI
         OpenAI -.-> Google
         Google -.-> Ollama
@@ -139,7 +139,7 @@ graph TD
         Git["Git"]
         Remote["Remote"]
         Cloud["Cloud"]
-        Shell["Persistent<br/>Shell"]
+        Shell["Persistent Shell"]
         Local --> Docker
         Docker --> Git
         Git --> Remote
@@ -154,6 +154,24 @@ graph TD
     Layer4 --> Layer3
     Layer3 --> Layer2
     Layer2 --> Layer1
+
+    classDef layer8 fill:#7c3aed,stroke:#a78bfa,color:#fff
+    classDef layer7 fill:#2563eb,stroke:#60a5fa,color:#fff
+    classDef layer6 fill:#0891b2,stroke:#22d3ee,color:#fff
+    classDef layer5 fill:#059669,stroke:#34d399,color:#fff
+    classDef layer4 fill:#d97706,stroke:#fbbf24,color:#000
+    classDef layer3 fill:#dc2626,stroke:#f87171,color:#fff
+    classDef layer2 fill:#4f46e5,stroke:#818cf8,color:#fff
+    classDef layer1 fill:#0d9488,stroke:#2dd4bf,color:#fff
+
+    class CLI1,CLI2,CLI3,CLI4,CLI5,CLI6,CLI7,CLI8,CLI9,CLI10,CLI11 layer8
+    class CIFix,Review,Research,Migration,DocGen,TestGen layer7
+    class Trainer,Strategy,Spec,Architecture,Constraint layer6
+    class Harness,Metrics,Benchmarks layer5
+    class Agent,Tools,Loops,Prompt,Context,Critic,ACP layer4
+    class Anthropic,OpenAI,Google,Ollama,Modal,Compatible layer3
+    class Security,Secrets,Permissions,Events,Sessions,Compaction,Streaming,Detection,Config,PluginsInfra,MCPInfra,LSPInfra layer2
+    class Local,Docker,Git,Remote,Cloud,Shell layer1
 ```
 
 ### Layer Descriptions
@@ -197,7 +215,7 @@ flowchart TD
 
     HasTools -->|No| Return["Return AgentResult"]
 
-    HasTools -->|Yes| Permission{Permission Check<br/>via LoopConfig}
+    HasTools -->|Yes| Permission{Permission Check via LoopConfig}
 
     Permission -->|Deny| SkipTool["Skip Tool Execution"]
     SkipTool --> LoopDetect
@@ -207,7 +225,7 @@ flowchart TD
     Emit --> Results["Add Results to Context"]
     Results --> LoopDetect
 
-    LoopDetect{Loop Detection<br/>via LoopConfig}
+    LoopDetect{Loop Detection via LoopConfig}
 
     LoopDetect -->|Detected| Break["Break Loop"]
     Break --> ReturnFail["Return with Loop Flag"]
@@ -220,11 +238,21 @@ flowchart TD
     Return --> End["Done"]
     ReturnFail --> End
 
-    style Start fill:#e1f5ff
-    style End fill:#c8e6c9
-    style Complete fill:#fff9c4
-    style Execute fill:#ffe0b2
-    style Break fill:#ffccbc
+    style Start fill:#2563eb,stroke:#60a5fa,color:#fff
+    style End fill:#059669,stroke:#34d399,color:#fff
+    style Complete fill:#d97706,stroke:#fbbf24,color:#000
+    style Execute fill:#7c3aed,stroke:#a78bfa,color:#fff
+    style Break fill:#dc2626,stroke:#f87171,color:#fff
+    style Return fill:#059669,stroke:#34d399,color:#fff
+    style ReturnFail fill:#dc2626,stroke:#f87171,color:#fff
+    style SkipTool fill:#dc2626,stroke:#f87171,color:#fff
+    style HasTools fill:#0891b2,stroke:#22d3ee,color:#fff
+    style Permission fill:#0891b2,stroke:#22d3ee,color:#fff
+    style LoopDetect fill:#0891b2,stroke:#22d3ee,color:#fff
+    style HasSteps fill:#0891b2,stroke:#22d3ee,color:#fff
+    style StepLimit fill:#dc2626,stroke:#f87171,color:#fff
+    style Emit fill:#7c3aed,stroke:#a78bfa,color:#fff
+    style Results fill:#7c3aed,stroke:#a78bfa,color:#fff
 ```
 
 ### Loop Mechanics
@@ -253,31 +281,31 @@ Chimera's modules are organized around `LoopConfig`, which acts as a central hub
 
 ```mermaid
 graph LR
-    LoopConfig["LoopConfig<br/>(central hub)"]
+    LoopConfig["LoopConfig (central hub)"]
 
-    Events["Events<br/>EventBus, Event types"]
-    Permissions["Permissions<br/>ApprovalPolicy variants"]
-    Detection["Detection<br/>LoopDetector, Signals"]
-    Compaction["Compaction<br/>CompactionStrategy"]
-    Streaming["Streaming<br/>StreamHandler"]
-    AuditLog["AuditLog<br/>AuditEntry, summary"]
-    CheckpointMgr["CheckpointManager<br/>create, restore, undo"]
-    GitWorkflow["GitWorkflow<br/>branch isolation, diffs"]
-    SecurityMod["Security<br/>SecurityAnalyzer,<br/>ConfirmationPolicy"]
-    CriticMod["Critic<br/>CriticMixin,<br/>LLMCritic"]
+    Events["Events EventBus, Event types"]
+    Permissions["Permissions ApprovalPolicy variants"]
+    Detection["Detection LoopDetector, Signals"]
+    Compaction["Compaction CompactionStrategy"]
+    Streaming["Streaming StreamHandler"]
+    AuditLog["AuditLog AuditEntry, summary"]
+    CheckpointMgr["CheckpointManager create, restore, undo"]
+    GitWorkflow["GitWorkflow branch isolation, diffs"]
+    SecurityMod["Security SecurityAnalyzer, ConfirmationPolicy"]
+    CriticMod["Critic CriticMixin, LLMCritic"]
 
-    Sessions["Sessions<br/>SessionMixin, storage"]
-    Auth["Auth<br/>ProviderAuth, Credentials"]
-    AgentConfig["AgentConfig<br/>Agent configuration"]
+    Sessions["Sessions SessionMixin, storage"]
+    Auth["Auth ProviderAuth, Credentials"]
+    AgentConfig["AgentConfig Agent configuration"]
 
-    Agent["Agent<br/>Core agent loop"]
+    Agent["Agent Core agent loop"]
 
-    Secrets["Secrets<br/>SecretDetector,<br/>RedactionMiddleware"]
-    Plugins["Plugins<br/>PluginExtensionRegistry"]
-    ACPMod["ACP<br/>ExternalAgentTool"]
-    MCPMod["MCP<br/>MCPToolSource"]
-    LSPMod["LSP<br/>LSPTool"]
-    CostTracker["CostTracker<br/>Token tracking"]
+    Secrets["Secrets SecretDetector, RedactionMiddleware"]
+    Plugins["Plugins PluginExtensionRegistry"]
+    ACPMod["ACP ExternalAgentTool"]
+    MCPMod["MCP MCPToolSource"]
+    LSPMod["LSP LSPTool"]
+    CostTracker["CostTracker Token tracking"]
 
     LoopConfig --> Events
     LoopConfig --> Permissions
@@ -295,7 +323,7 @@ graph LR
     Sessions --> LoopConfig
     Sessions --> Agent
 
-    Auth --> Providers["Providers<br/>Anthropic, OpenAI, etc."]
+    Auth --> Providers["Providers Anthropic, OpenAI, etc."]
     CostTracker --> Providers
 
     AgentConfig --> Agent
@@ -306,26 +334,26 @@ graph LR
     MCPMod --> Agent
     LSPMod --> Agent
 
-    CheckpointMgr --> Environments["Environments<br/>Local, Docker, Git,<br/>Remote, Cloud"]
+    CheckpointMgr --> Environments["Environments Local, Docker, Git, Remote, Cloud"]
 
-    style LoopConfig fill:#fff9c4,stroke:#f57f17,stroke-width:3px
-    style Agent fill:#f0f4c3,stroke:#558b2f,stroke-width:2px
-    style Events fill:#e8f5e9
-    style Permissions fill:#e8f5e9
-    style Detection fill:#e8f5e9
-    style Compaction fill:#e8f5e9
-    style Streaming fill:#e8f5e9
-    style AuditLog fill:#e8f5e9
-    style CheckpointMgr fill:#e8f5e9
-    style GitWorkflow fill:#e8f5e9
-    style SecurityMod fill:#e8f5e9
-    style CriticMod fill:#e8f5e9
-    style Secrets fill:#e1f5fe
-    style Plugins fill:#e1f5fe
-    style ACPMod fill:#e1f5fe
-    style MCPMod fill:#e1f5fe
-    style LSPMod fill:#e1f5fe
-    style CostTracker fill:#e1f5fe
+    style LoopConfig fill:#d97706,stroke:#fbbf24,color:#000,stroke-width:3px
+    style Agent fill:#059669,stroke:#34d399,color:#fff,stroke-width:2px
+    style Events fill:#7c3aed,stroke:#a78bfa,color:#fff
+    style Permissions fill:#7c3aed,stroke:#a78bfa,color:#fff
+    style Detection fill:#7c3aed,stroke:#a78bfa,color:#fff
+    style Compaction fill:#7c3aed,stroke:#a78bfa,color:#fff
+    style Streaming fill:#7c3aed,stroke:#a78bfa,color:#fff
+    style AuditLog fill:#7c3aed,stroke:#a78bfa,color:#fff
+    style CheckpointMgr fill:#7c3aed,stroke:#a78bfa,color:#fff
+    style GitWorkflow fill:#7c3aed,stroke:#a78bfa,color:#fff
+    style SecurityMod fill:#dc2626,stroke:#f87171,color:#fff
+    style CriticMod fill:#dc2626,stroke:#f87171,color:#fff
+    style Secrets fill:#2563eb,stroke:#60a5fa,color:#fff
+    style Plugins fill:#2563eb,stroke:#60a5fa,color:#fff
+    style ACPMod fill:#2563eb,stroke:#60a5fa,color:#fff
+    style MCPMod fill:#2563eb,stroke:#60a5fa,color:#fff
+    style LSPMod fill:#2563eb,stroke:#60a5fa,color:#fff
+    style CostTracker fill:#0891b2,stroke:#22d3ee,color:#fff
 ```
 
 ### Module Roles
@@ -378,34 +406,34 @@ The synthesis process (Layer 6) orchestrates agents with specifications and cons
 
 ```mermaid
 flowchart LR
-    Spec["Spec<br/>(requirements)"]
-    Strategy["Strategy<br/>(algorithm)"]
+    Spec["Spec (requirements)"]
+    Strategy["Strategy (algorithm)"]
 
     Spec --> Synthesize["Trainer.synthesize()"]
     Strategy --> Synthesize
 
-    Synthesize --> AgentRun["Agent.run()<br/>(ReAct loop)"]
+    Synthesize --> AgentRun["Agent.run() (ReAct loop)"]
 
-    AgentRun --> Env["Environment<br/>(execute + test)"]
+    AgentRun --> Env["Environment (execute + test)"]
 
-    Env --> TestPass{Tests Pass?<br/>+ Constraints<br/>Satisfied?}
+    Env --> TestPass{Tests Pass? + Constraints Satisfied?}
 
-    TestPass -->|No| Iterate["Iterate<br/>(next epoch)"]
+    TestPass -->|No| Iterate["Iterate (next epoch)"]
     Iterate --> AgentRun
 
-    TestPass -->|Yes| Return["Return SynthesisResult<br/>(code + metadata)"]
+    TestPass -->|Yes| Return["Return SynthesisResult (code + metadata)"]
 
     Return --> End["Done"]
 
-    style Spec fill:#e3f2fd
-    style Strategy fill:#e3f2fd
-    style Synthesize fill:#fff9c4
-    style AgentRun fill:#ffe0b2
-    style Env fill:#ffe0b2
-    style TestPass fill:#ffccbc
-    style Iterate fill:#ffccbc
-    style Return fill:#c8e6c9
-    style End fill:#a5d6a7
+    style Spec fill:#2563eb,stroke:#60a5fa,color:#fff
+    style Strategy fill:#2563eb,stroke:#60a5fa,color:#fff
+    style Synthesize fill:#d97706,stroke:#fbbf24,color:#000
+    style AgentRun fill:#7c3aed,stroke:#a78bfa,color:#fff
+    style Env fill:#0d9488,stroke:#2dd4bf,color:#fff
+    style TestPass fill:#0891b2,stroke:#22d3ee,color:#fff
+    style Iterate fill:#dc2626,stroke:#f87171,color:#fff
+    style Return fill:#059669,stroke:#34d399,color:#fff
+    style End fill:#059669,stroke:#34d399,color:#fff
 ```
 
 ### Pipeline Stages

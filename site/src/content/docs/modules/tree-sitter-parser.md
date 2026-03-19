@@ -68,5 +68,5 @@ from chimera.tools.parsers.base import LanguageParser, Symbol
 
 ## Related
 
-- [Definition Lookup](definition-lookup.md) -- find symbol definitions across a codebase
-- [Agent Tools](agent-tools.md) -- built-in tool catalogue
+- [Definition Lookup](/definition-lookup/) -- find symbol definitions across a codebase
+- [Agent Tools](/agent-tools/) -- built-in tool catalogue

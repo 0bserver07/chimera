@@ -21,50 +21,44 @@ Requires **Python 3.11+**.
 Chimera auto-detects the provider from the model name. Set the appropriate
 environment variables for your backend:
 
-=== "Anthropic (Claude)"
+### Anthropic (Claude)
+```bash
+export ANTHROPIC_API_KEY="sk-ant-..."
+```
 
-    ```bash
-    export ANTHROPIC_API_KEY="sk-ant-..."
-    ```
+### OpenAI
+```bash
+export OPENAI_API_KEY="sk-..."
+```
 
-=== "OpenAI"
+### Google (Gemini)
+```bash
+export GOOGLE_API_KEY="..."
+```
 
-    ```bash
-    export OPENAI_API_KEY="sk-..."
-    ```
+### Ollama (local)
+No credentials needed -- Chimera connects to `http://localhost:11434`
+by default.
 
-=== "Google (Gemini)"
+### Anthropic-compatible (e.g. GLM-5)
+```bash
+export ANTHROPIC_BASE_URL="https://api.z.ai/api/anthropic"
+export ANTHROPIC_AUTH_TOKEN="your-token-here"
+export ANTHROPIC_MODEL="glm-5"
+```
 
-    ```bash
-    export GOOGLE_API_KEY="..."
-    ```
+:::tip[Explicit provider creation]
+You can skip environment variables entirely and pass credentials in code:
 
-=== "Ollama (local)"
-
-    No credentials needed -- Chimera connects to `http://localhost:11434`
-    by default.
-
-=== "Anthropic-compatible (e.g. GLM-5)"
-
-    ```bash
-    export ANTHROPIC_BASE_URL="https://api.z.ai/api/anthropic"
-    export ANTHROPIC_AUTH_TOKEN="your-token-here"
-    export ANTHROPIC_MODEL="glm-5"
-    ```
-
-!!! tip "Explicit provider creation"
-    You can skip environment variables entirely and pass credentials in code:
-
-    ```python
-    provider = chimera.create_provider(
-        "anthropic",
-        model="glm-5",
-        base_url="https://api.z.ai/api/anthropic",
-        api_key="...",
-    )
-    ```
-
-### Supported Providers
+```python
+provider = chimera.create_provider(
+    "anthropic",
+    model="glm-5",
+    base_url="https://api.z.ai/api/anthropic",
+    api_key="...",
+)
+```
+:::### Supported Providers
 
 | Provider | Model Prefixes | Auto-detected |
 |----------|---------------|---------------|
@@ -86,30 +80,33 @@ workspace directory, and asks it to generate a Python script.
 ```python
 import chimera
 
-# 1. Create a provider (model name auto-selects the backend)
-provider = chimera.create_provider("claude-sonnet-4")
+# 1. Create a provider (auto-detects from env vars)
+provider = chimera.create_provider()
 
 # 2. Build an agent with the built-in tools
 agent = chimera.Agent(
     provider=provider,
-    tools=chimera.DEFAULT_TOOLS,
+    tools=list(chimera.DEFAULT_TOOLS),
 )
 
 # 3. Run the agent in a local environment
+env = chimera.LocalEnvironment("./workspace")
+env.setup()
+
 result = agent.run(
     "Create a hello world Python script",
-    env=chimera.LocalEnvironment("./workspace"),
+    env=env,
 )
 
 print(result.output)
+env.cleanup()
 ```
 
-!!! note "What happens under the hood"
-    The agent enters a **ReAct loop** -- it thinks, picks a tool (e.g.
-    `write_file`), observes the result, and repeats until the task is done or
-    the step limit is reached. Every tool call is recorded in `result.steps`.
-
----
+:::note[What happens under the hood]
+The agent enters a **ReAct loop** -- it thinks, picks a tool (e.g.
+`write_file`), observes the result, and repeats until the task is done or
+the step limit is reached. Every tool call is recorded in `result.steps`.
+:::---
 
 ## Direct Provider Usage
 
@@ -118,7 +115,7 @@ If you only need LLM completions (no agent loop), use the provider directly:
 ```python
 import chimera
 
-provider = chimera.create_provider(model="claude-sonnet-4")
+provider = chimera.create_provider()
 response = provider.complete([chimera.Message.user("What is 2+2?")])
 print(response.content)        # "4"
 print(response.usage)          # {"input_tokens": 12, "output_tokens": 1}
@@ -134,7 +131,7 @@ them:
 ```python
 import chimera
 
-provider = chimera.create_provider(model="claude-sonnet-4")
+provider = chimera.create_provider()
 
 tool = {
     "name": "calculator",
@@ -168,7 +165,7 @@ import chimera
 result = chimera.synthesize(
     "Build a REST API for tasks",
     tests="./tests/",
-    model="claude-sonnet-4",
+    # uses ANTHROPIC_MODEL env var, or pass model="glm-5" explicitly
 )
 print(f"Converged: {result.converged}, Cost: ${result.total_cost:.4f}")
 ```
@@ -185,7 +182,7 @@ import chimera
 trainer = chimera.Trainer(
     spec=chimera.Spec.from_tests("./tests/", "Build a task manager"),
     agent=chimera.Agent(
-        provider=chimera.create_provider(model="claude-sonnet-4"),
+        provider=chimera.create_provider(),
         tools=list(chimera.DEFAULT_TOOLS),
         loop=chimera.ReAct(max_steps=50),
     ),
@@ -193,13 +190,12 @@ trainer = chimera.Trainer(
 result = trainer.synthesize(strategy=chimera.TestConvergence(max_epochs=10))
 ```
 
-!!! tip "Strategies"
-    Chimera ships with several synthesis strategies beyond `TestConvergence`:
-    `CurriculumStrategy`, `EnsembleStrategy`, `Passthrough`, `TreeSearch`,
-    `MajorityVoting`, and `AIMOEnsemble`. See the
-    [Training concepts](concepts/training.md) page for details.
-
----
+:::tip[Strategies]
+Chimera ships with several synthesis strategies beyond `TestConvergence`:
+`CurriculumStrategy`, `EnsembleStrategy`, `Passthrough`, `TreeSearch`,
+`MajorityVoting`, and `AIMOEnsemble`. See the
+[Training concepts](/concepts/training/) page for details.
+:::---
 
 ## Run the Examples
 
@@ -207,10 +203,10 @@ Runnable scripts live in `examples/`:
 
 ```bash
 # Test provider connection (text, tool use, multi-turn)
-python examples/quickstart_provider.py --model claude-sonnet-4
+python examples/quickstart_provider.py --model glm-5
 
 # Synthesize a calculator from tests (end-to-end)
-python examples/quickstart_synthesize.py --model claude-sonnet-4
+python examples/quickstart_synthesize.py --model glm-5
 ```
 
 ---
@@ -230,11 +226,7 @@ python examples/quickstart_synthesize.py --model claude-sonnet-4
 
 ## Next Steps
 
-- **[Core Concepts](concepts/index.md)** -- understand agents, providers, tools,
-  loops, environments, and the training layer.
-- **[Build a Coding Agent](guides/build-a-coding-agent.md)** -- step-by-step
-  guide to building a production agent.
-- **[Extension Modules](modules/index.md)** -- events, compaction, detection,
-  permissions, streaming, sessions, auth.
-- **[API Reference](reference/index.md)** -- full autodoc for every public
-  class and function.
+- **[Core Concepts](/concepts/agents/)** -- understand agents, providers, tools, loops, environments, and the training layer.
+- **[Build a Coding Agent](/guides/build-a-coding-agent/)** -- step-by-step guide to building a production agent.
+- **[Modules](/modules/acp/)** -- events, compaction, detection, permissions, streaming, sessions, auth.
+- **[API Reference](/reference/core/)** -- full reference for every public class and function.

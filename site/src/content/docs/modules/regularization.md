@@ -52,5 +52,5 @@ score = reg.combined_score(pass_rate=0.95, critic_score=0.8)
 
 ## Related
 
-- [Critic module](critic.md) -- LLMCritic and ChecklistCritic
-- [Training concepts](../concepts/training.md) -- callbacks and strategies
+- [Critic module](/critic/) -- LLMCritic and ChecklistCritic
+- [Training concepts](/../concepts/training/) -- callbacks and strategies

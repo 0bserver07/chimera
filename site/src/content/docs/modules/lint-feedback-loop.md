@@ -71,6 +71,6 @@ from chimera.core.loops.lint_feedback import LintFeedbackLoop
 
 ## Related
 
-- [Loops](../concepts/loops.md) -- overview of all loop types
-- [Retry Loop](retry-loop.md) -- retry wrapper with scoring
-- [Plan/Act Loop](plan-act-loop.md) -- two-phase plan then execute
+- [Loops](/../concepts/loops/) -- overview of all loop types
+- [Retry Loop](/retry-loop/) -- retry wrapper with scoring
+- [Plan/Act Loop](/plan-act-loop/) -- two-phase plan then execute

@@ -56,10 +56,9 @@ from chimera.core.loops.plan_execute import PlanAndExecute
 loop = PlanAndExecute(max_steps=50)
 ```
 
-!!! tip "When to use PlanAndExecute"
-    Use this loop for complex, multi-step tasks where you want the model to think through the full approach before taking action. It reduces "wandering" on tasks with many interdependent steps.
-
-## Reflexion
+:::tip[When to use PlanAndExecute]
+Use this loop for complex, multi-step tasks where you want the model to think through the full approach before taking action. It reduces "wandering" on tasks with many interdependent steps.
+:::## Reflexion
 
 **Reflexion** adds periodic self-reflection to the standard loop. After every `reflect_every` tool calls, the model is asked:
 
@@ -88,10 +87,9 @@ from chimera.core.loops.tree_of_thought import TreeOfThought
 loop = TreeOfThought(max_steps=50, n_candidates=3)
 ```
 
-!!! warning "Cost considerations"
-    TreeOfThought calls the LLM N times per step (plus an evaluation call), so it costs significantly more than ReAct. Use it for high-value tasks where quality matters more than cost.
-
-## LoopConfig
+:::caution[Cost considerations]
+TreeOfThought calls the LLM N times per step (plus an evaluation call), so it costs significantly more than ReAct. Use it for high-value tasks where quality matters more than cost.
+:::## LoopConfig
 
 `LoopConfig` is a dataclass that injects optional behaviors into any loop variant. All fields default to `None`, so the loop works without any configuration.
 

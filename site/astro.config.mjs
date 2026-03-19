@@ -6,8 +6,8 @@ export default defineConfig({
 	integrations: [
 		starlight({
 			title: 'Chimera',
-			tagline: 'A composable coding agent framework',
-			description: 'Synthesize codebases from specifications. Compose any coding agent architecture.',
+			tagline: 'Composable coding agents in Python',
+			description: 'Build, compose, and deploy coding agents from modular primitives.',
 			social: [
 				{ icon: 'github', label: 'GitHub', href: 'https://github.com/0bserver07/chimera' },
 			],
@@ -28,6 +28,10 @@ export default defineConfig({
 							localStorage.setItem('starlight-theme', 'dark');
 						}
 					`,
+				},
+				{
+					tag: 'script',
+					attrs: { src: '/mermaid-init.js', type: 'module', defer: true },
 				},
 			],
 			sidebar: [

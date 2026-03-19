@@ -65,6 +65,6 @@ oracle = OracleCallback(
 
 ## Related
 
-- [Training concepts](../concepts/training.md) -- callbacks and the synthesis loop
-- [Validation](validation.md) -- detect overfitting with held-out tests
-- [Spec Inference](spec-inference.md) -- infer invariants from source code
+- [Training concepts](/../concepts/training/) -- callbacks and the synthesis loop
+- [Validation](/validation/) -- detect overfitting with held-out tests
+- [Spec Inference](/spec-inference/) -- infer invariants from source code

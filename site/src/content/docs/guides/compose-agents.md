@@ -186,6 +186,6 @@ Ensemble whose agents are themselves Pipelines.
 
 ## Next Steps
 
-- [Build a Coding Agent](build-a-coding-agent.md) -- master the single-agent fundamentals first.
-- [Add a Custom Tool](add-custom-tool.md) -- give your workers specialised tools.
-- [Configure Permissions](configure-permissions.md) -- add guardrails to multi-agent systems.
+- [Build a Coding Agent](/build-a-coding-agent/) -- master the single-agent fundamentals first.
+- [Add a Custom Tool](/add-custom-tool/) -- give your workers specialised tools.
+- [Configure Permissions](/configure-permissions/) -- add guardrails to multi-agent systems.

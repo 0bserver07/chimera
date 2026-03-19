@@ -90,10 +90,9 @@ env = GitEnvironment(
 
 On `setup()`, it initializes a git repo if one does not exist. Checkpoints are created via `git add . && git commit`, and restore uses `git checkout <sha> -- .`.
 
-!!! tip "When to use GitEnvironment"
-    Use `GitEnvironment` when you want full version history of every synthesis iteration. It is especially useful for debugging failed synthesis runs, since you can inspect the diff at every checkpoint.
-
-## DockerEnvironment
+:::tip[When to use GitEnvironment]
+Use `GitEnvironment` when you want full version history of every synthesis iteration. It is especially useful for debugging failed synthesis runs, since you can inspect the diff at every checkpoint.
+:::## DockerEnvironment
 
 Runs code inside a Docker container for full isolation. Requires the `docker` Python package.
 
@@ -115,10 +114,9 @@ env = DockerEnvironment(
 
 On `setup()`, it starts a detached container running `sleep infinity`. File operations and commands are executed inside the container via `exec_run`. Checkpointing is in-memory (stores file contents in a Python dict).
 
-!!! warning "Docker must be running"
-    `DockerEnvironment` requires a running Docker daemon. Install the `docker` Python package: `pip install docker`.
-
-## SessionMixin (Persistent Shells)
+:::caution[Docker must be running]
+`DockerEnvironment` requires a running Docker daemon. Install the `docker` Python package: `pip install docker`.
+:::## SessionMixin (Persistent Shells)
 
 `SessionMixin` adds persistent shell sessions to any environment using tmux. Instead of running each command as an isolated subprocess, commands run inside a persistent tmux session where state (environment variables, working directory, running processes) is preserved.
 
@@ -144,10 +142,9 @@ with env:
 
 The mixin provides `start_session()`, `end_session()`, `create_shell(name)`, `list_shells()`, and `run_in_session()`. It uses sentinel markers to detect command completion, with polling that backs off from 50ms to 500ms.
 
-!!! note "Requires tmux"
-    Persistent sessions require `tmux` to be installed on the system. A `FileNotFoundError` is raised if tmux is not found.
-
-## Code Example: Full Workflow
+:::note[Requires tmux]
+Persistent sessions require `tmux` to be installed on the system. A `FileNotFoundError` is raised if tmux is not found.
+:::## Code Example: Full Workflow
 
 ```python
 from chimera.core.agent import Agent

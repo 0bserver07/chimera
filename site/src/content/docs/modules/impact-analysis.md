@@ -55,5 +55,5 @@ result = agent.run(prompt, env=env)
 
 ## Related
 
-- [Fault Localization](fault-localization.md) -- find where bugs are
-- [Mutation Testing](mutation-testing.md) -- test suite quality analysis
+- [Fault Localization](/fault-localization/) -- find where bugs are
+- [Mutation Testing](/mutation-testing/) -- test suite quality analysis

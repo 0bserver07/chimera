@@ -75,5 +75,5 @@ from chimera.sessions.long_term_memory import LongTermMemory, MemoryEntry
 
 ## Related
 
-- [Sessions](sessions.md) -- multi-turn conversation persistence
-- [Checkpoints](checkpoints.md) -- named context snapshots
+- [Sessions](/sessions/) -- multi-turn conversation persistence
+- [Checkpoints](/checkpoints/) -- named context snapshots

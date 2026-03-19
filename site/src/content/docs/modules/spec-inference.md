@@ -63,6 +63,6 @@ inferrer.write_test_file("tests/test_invariants.py")
 
 ## Related
 
-- [Oracle](oracle.md) -- grow the test suite during synthesis
-- [Mutation Testing](mutation-testing.md) -- evaluate test suite quality
-- [Validation](validation.md) -- detect overfitting with held-out tests
+- [Oracle](/oracle/) -- grow the test suite during synthesis
+- [Mutation Testing](/mutation-testing/) -- evaluate test suite quality
+- [Validation](/validation/) -- detect overfitting with held-out tests

@@ -65,6 +65,6 @@ print(f"Survivors: {result.survived}")
 
 ## Related
 
-- [Spec Inference](spec-inference.md) -- auto-generate tests from invariants
-- [Fault Localization](fault-localization.md) -- find where bugs are
-- [Validation](validation.md) -- detect overfitting with held-out tests
+- [Spec Inference](/spec-inference/) -- auto-generate tests from invariants
+- [Fault Localization](/fault-localization/) -- find where bugs are
+- [Validation](/validation/) -- detect overfitting with held-out tests

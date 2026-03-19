@@ -208,5 +208,5 @@ ext_tool.cleanup()
 
 ## Next steps
 
-- [Compose Agents](compose-agents.md) -- Pipeline, Ensemble, and Supervisor patterns
-- [Add a Custom Tool](add-custom-tool.md) -- build native Chimera tools
+- [Compose Agents](/compose-agents/) -- Pipeline, Ensemble, and Supervisor patterns
+- [Add a Custom Tool](/add-custom-tool/) -- build native Chimera tools

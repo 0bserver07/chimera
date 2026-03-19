@@ -73,6 +73,6 @@ from chimera.context.mentions import MentionResolver, Mention
 
 ## Related
 
-- [Focus Chain](focus-chain.md) -- budget-aware context selection
-- [History Processor](history-processor.md) -- conversation history transforms
-- [Context-Aware Tools](context-aware-tools.md) -- tools with context access
+- [Focus Chain](/focus-chain/) -- budget-aware context selection
+- [History Processor](/history-processor/) -- conversation history transforms
+- [Context-Aware Tools](/context-aware-tools/) -- tools with context access
