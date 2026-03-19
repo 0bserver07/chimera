@@ -6,6 +6,7 @@ import uuid
 from typing import Any
 
 from chimera.env.base import Environment
+from chimera.security.sandbox import SandboxPolicy
 from chimera.types import CommandResult, TestResult
 
 try:
@@ -27,12 +28,14 @@ class DockerEnvironment(Environment):
         image: str = "python:3.11-slim",
         workdir: str = "/workspace",
         test_cmd: str = "python -m pytest",
+        sandbox: SandboxPolicy | None = None,
     ) -> None:
         if docker is None:
             raise ImportError("pip install docker")
         self._image = image
         self._workdir = workdir
         self._test_cmd = test_cmd
+        self._sandbox = sandbox
         self._container: Any = None
         self._client: Any = None
         self._checkpoints: dict[str, dict[str, str]] = {}
@@ -42,15 +45,48 @@ class DockerEnvironment(Environment):
     # Lifecycle
     # ------------------------------------------------------------------
 
+    def _build_container_kwargs(self) -> dict[str, Any]:
+        """Build Docker container kwargs from sandbox policy."""
+        kwargs: dict[str, Any] = {
+            "image": self._image,
+            "command": "sleep infinity",
+            "detach": True,
+            "working_dir": self._workdir,
+            "remove": True,
+        }
+        if self._sandbox is None:
+            return kwargs
+
+        # Network isolation
+        if self._sandbox.network_rules:
+            all_denied = all(not r.allow for r in self._sandbox.network_rules)
+            if all_denied:
+                kwargs["network_mode"] = "none"
+
+        # Resource limits
+        if self._sandbox.max_memory_mb:
+            kwargs["mem_limit"] = f"{self._sandbox.max_memory_mb}m"
+        if self._sandbox.max_processes:
+            kwargs["pids_limit"] = self._sandbox.max_processes
+        if self._sandbox.timeout_seconds:
+            kwargs["stop_timeout"] = self._sandbox.timeout_seconds
+
+        # Filesystem: read-only root if no write rules
+        write_rules = [
+            r for r in self._sandbox.path_rules
+            if r.access.value in ("write", "execute")
+        ]
+        if not write_rules:
+            kwargs["read_only"] = True
+            # Still need a writable tmpfs for /tmp
+            kwargs["tmpfs"] = {"/tmp": "size=100m"}
+
+        return kwargs
+
     def setup(self) -> None:
         self._client = docker.from_env()
-        self._container = self._client.containers.run(
-            self._image,
-            command="sleep infinity",
-            detach=True,
-            working_dir=self._workdir,
-            remove=True,
-        )
+        container_kwargs = self._build_container_kwargs()
+        self._container = self._client.containers.run(**container_kwargs)
 
     def cleanup(self) -> None:
         if self._container:

@@ -23,10 +23,21 @@ class AnthropicProvider(Provider):
         "claude-haiku-3.5": 200_000,
     }
 
-    def __init__(self, model: str, api_key: str | None = None, base_url: str | None = None) -> None:
+    def __init__(
+        self,
+        model: str,
+        api_key: str | None = None,
+        base_url: str | None = None,
+        enable_cache: bool = False,
+        enable_thinking: bool = False,
+        thinking_budget: int = 10_000,
+    ) -> None:
         if anthropic is None:
             raise ImportError("pip install chimera-ai[anthropic]")
         self._model = model
+        self._enable_cache = enable_cache
+        self._enable_thinking = enable_thinking
+        self._thinking_budget = thinking_budget
         client_kwargs: dict[str, Any] = {
             "api_key": api_key
             or os.environ.get("ANTHROPIC_API_KEY")
@@ -81,12 +92,36 @@ class AnthropicProvider(Provider):
             "model": self._model,
             "messages": api_messages,
             "max_tokens": max_tokens or 4096,
-            "temperature": temperature,
         }
+
+        # Extended thinking — requires temperature=1 and uses budget_tokens
+        if self._enable_thinking:
+            kwargs["thinking"] = {
+                "type": "enabled",
+                "budget_tokens": self._thinking_budget,
+            }
+            kwargs["temperature"] = 1  # Required for extended thinking
+        else:
+            kwargs["temperature"] = temperature
+
+        # System message — with optional prompt caching
         if system_msg:
-            kwargs["system"] = system_msg
+            if self._enable_cache:
+                kwargs["system"] = [
+                    {"type": "text", "text": system_msg, "cache_control": {"type": "ephemeral"}},
+                ]
+            else:
+                kwargs["system"] = system_msg
+
+        # Tools — with optional prompt caching on last tool definition
         if tools:
-            kwargs["tools"] = tools
+            if self._enable_cache and tools:
+                cached_tools = [*tools]
+                cached_tools[-1] = {**cached_tools[-1], "cache_control": {"type": "ephemeral"}}
+                kwargs["tools"] = cached_tools
+            else:
+                kwargs["tools"] = tools
+
         return kwargs
 
     @staticmethod
@@ -94,6 +129,7 @@ class AnthropicProvider(Provider):
         """Convert an Anthropic API response into a :class:`Response`."""
         text_parts: list[str] = []
         tool_calls: list[ToolCall] = []
+        thinking_text = ""
         for block in response.content:
             if block.type == "text":
                 text_parts.append(block.text)
@@ -103,14 +139,29 @@ class AnthropicProvider(Provider):
                     name=block.name,
                     arguments=block.input,
                 ))
-        return Response(
+            elif block.type == "thinking":
+                thinking_text = getattr(block, "thinking", "")
+
+        usage: dict[str, int] = {
+            "input_tokens": response.usage.input_tokens,
+            "output_tokens": response.usage.output_tokens,
+        }
+        # Cache tokens (prompt caching)
+        cache_creation = getattr(response.usage, "cache_creation_input_tokens", None)
+        cache_read = getattr(response.usage, "cache_read_input_tokens", None)
+        if cache_creation is not None:
+            usage["cache_creation_input_tokens"] = cache_creation
+        if cache_read is not None:
+            usage["cache_read_input_tokens"] = cache_read
+
+        resp = Response(
             content="".join(text_parts),
             tool_calls=tool_calls,
-            usage={
-                "input_tokens": response.usage.input_tokens,
-                "output_tokens": response.usage.output_tokens,
-            },
+            usage=usage,
         )
+        if thinking_text:
+            resp.usage["thinking_tokens"] = len(thinking_text.split())  # approximate
+        return resp
 
     # ------------------------------------------------------------------
     # Public API

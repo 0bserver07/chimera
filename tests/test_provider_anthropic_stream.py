@@ -123,6 +123,9 @@ def provider():
         p = AnthropicProvider.__new__(AnthropicProvider)
         p._model = "claude-sonnet-4"
         p._client = MagicMock()
+        p._enable_cache = False
+        p._enable_thinking = False
+        p._thinking_budget = 10_000
         return p
 
 
@@ -280,6 +283,9 @@ def async_provider():
         p = AnthropicProvider.__new__(AnthropicProvider)
         p._model = "claude-sonnet-4"
         p._client = MagicMock()
+        p._enable_cache = False
+        p._enable_thinking = False
+        p._thinking_budget = 10_000
         p._async_client = MagicMock()
         p._async_client.messages.create = AsyncMock()
         return p

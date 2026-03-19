@@ -51,6 +51,7 @@ class TestDockerEnvironmentSetup:
         env._image = "python:3.11-slim"
         env._workdir = "/workspace"
         env._test_cmd = "python -m pytest"
+        env._sandbox = None
         env._container = None
         env._client = None
         env._checkpoints = {}

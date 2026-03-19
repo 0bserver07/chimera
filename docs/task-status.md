@@ -1,6 +1,6 @@
 # Chimera — Task Status
 
-> 101 tasks across 22 phases. TDD approach: tests first, then implementation.
+> 224 tasks across 36 phases. TDD approach: tests first, then implementation.
 > Sources: `docs/plans/2026-02-20-chimera-implementation-plan.md`, `docs/plans/2026-02-20-chimera-extension-plan.md`, `docs/plans/2026-02-22-persistent-shell-plan.md`, `docs/plans/2026-02-25-aimo3-implementation-plan.md`
 
 ## Phases 1–8: Core Framework (Original)
@@ -155,12 +155,208 @@
 | 101 | 21 - GLM-5 | MajorityVoting integration test | `tests/test_majority_voting_integration.py` | 3 | DONE |
 | 102 | 21 - GLM-5 | Eval Harness integration test | `tests/test_eval_harness_integration.py` | 3 | DONE |
 
-**Total: 824 tests passing, 20 skipped** (as of 2026-02-26, Phases 1-21 only)
+## Phase 22: API Gaps (Streaming, Async, Step Iteration)
 
-!!! note "Current test count"
-    The project now has 1870+ tests (as of 2026-03-17). The 824 count above reflects only Phases 1-21. Later phases (production features, workflows, CLI, Kimi features, ML/synthesis primitives) added ~1000+ additional tests.
+| # | Phase | Task | Files | Tests | Status |
+|---|-------|------|-------|-------|--------|
+| 103 | 22 - Streaming | Provider streaming (Anthropic, OpenAI, default) | `chimera/providers/anthropic.py`, `openai_provider.py` | 29 | DONE |
+| 104 | 22 - Async | Async provider + async loops | `chimera/providers/base.py`, `chimera/core/loops/` | 9 | DONE |
+| 105 | 22 - Step Iter | iter_steps + iter_steps for loops | `chimera/core/loop.py`, `chimera/core/loops/` | 21 | DONE |
+| 106 | 22 - Tools | Incremental tool executor | `chimera/core/tool_executor.py` | 10 | DONE |
+| 107 | 22 - Types | FileChange, extended types, tool result metadata | `chimera/types.py` | 21 | DONE |
+| 108 | 22 - LSP | LSP client (initial) | `chimera/lsp/client.py` | 10 | DONE |
+| 109 | 22 - Infra | Agents module, auth, compaction, detection, events, loop config, permissions, sessions | multiple | 311 | DONE |
 
-Integration tests (skipped without API credentials): 20 tests across 4 files.
+## Phase 23: Infrastructure Hardening
+
+| # | Phase | Task | Files | Tests | Status |
+|---|-------|------|-------|-------|--------|
+| 110 | 23 - Pricing | Custom model pricing | `chimera/providers/cost.py` | 4 | DONE |
+| 111 | 23 - Ensemble | Parallel ensemble (ThreadPoolExecutor) | `chimera/composition/ensemble.py` | 14 | DONE |
+| 112 | 23 - Parsers | Multi-language parsers | `chimera/tools/parsers/` | 28 | DONE |
+| 113 | 23 - Plugins | Plugin system | `chimera/plugins/` | 10 | DONE |
+| 114 | 23 - Transactions | Multi-file edit transactions | `chimera/core/transactions.py` | 14 | DONE |
+| 115 | 23 - Docker | Docker integration tests | `tests/test_env_docker_integration.py` | 9 | DONE |
+
+## Phase 24: Agent Intelligence
+
+| # | Phase | Task | Files | Tests | Status |
+|---|-------|------|-------|-------|--------|
+| 116 | 24 - Edits | Fuzzy edit strategies | `chimera/tools/edit_strategies.py` | 15 | DONE |
+| 117 | 24 - Catalog | Provider catalog | `chimera/providers/catalog.py` | 14 | DONE |
+| 118 | 24 - Config | Project config (YAML/JSON loading) | `chimera/config/` | 22 | DONE |
+| 119 | 24 - MCP | MCP client rewrite (stdio + HTTP, retry, ping) | `chimera/mcp/` | 28 | DONE |
+| 120 | 24 - LSP | LSP rewrite (completion, rename, code_action, background) | `chimera/lsp/` | 27 | DONE |
+
+## Phase 25: Serving Layer
+
+| # | Phase | Task | Files | Tests | Status |
+|---|-------|------|-------|-------|--------|
+| 121 | 25 - Streaming | StreamingReAct (merge into loop) | `chimera/streaming/` | 7 | DONE |
+| 122 | 25 - CLI | `chimera eval` + `chimera bench` CLI wiring | `chimera/cli/main.py` | 8 | DONE |
+| 123 | 25 - REPL | `chimera code` REPL with streaming | `chimera/cli/code.py` | 7 | DONE |
+
+## Phase 26: Production Polish (Async + MCP + LSP + CostTracker + REPL)
+
+| # | Phase | Task | Files | Tests | Status |
+|---|-------|------|-------|-------|--------|
+| 124 | 26 - Async | BaseTool.async_execute + incremental | `chimera/core/tool.py`, `tool_executor.py` | 8 | DONE |
+| 125 | 26 - Async | ReAct.async_iter_steps + async_drain_steps | `chimera/core/loop.py` | 6 | DONE |
+| 126 | 26 - Async | Ensemble.async_run + first_success | `chimera/composition/ensemble.py` | 6 | DONE |
+| 127 | 26 - MCP | MCP retry with backoff + ping + refresh_tools | `chimera/mcp/client.py` | 12 | DONE |
+| 128 | 26 - LSP | LSP background reader + completion + rename + code_action | `chimera/lsp/client.py` | 19 | DONE |
+| 129 | 26 - Cost | CostTracker with budgets + estimate_cost + LoopConfig | `chimera/providers/cost_tracker.py` | 10 | DONE |
+| 130 | 26 - REPL | Readline integration + 12 slash commands | `chimera/cli/code.py` | 12 | DONE |
+
+## Phase 27: Production Features (15 Features)
+
+| # | Phase | Task | Files | Tests | Status |
+|---|-------|------|-------|-------|--------|
+| 131 | 27 - Git | GitWorkflow (branch isolation, diffs, commits) | `chimera/workflows/git_workflow.py` | 11 | DONE |
+| 132 | 27 - Image | Image support (read, display) | `chimera/tools/image_read.py` | 11 | DONE |
+| 133 | 27 - Permissions | Permission UX (interactive, policy presets) | `chimera/permissions/` | 20 | DONE |
+| 134 | 27 - Graph | Import graph analysis | `chimera/tools/import_graph.py` | 12 | DONE |
+| 135 | 27 - Checkpoints | CheckpointManager (create, restore, undo) | `chimera/checkpoints.py` | 14 | DONE |
+| 136 | 27 - Agents | AgentLoader (file-based agent definitions) | `chimera/agents/loader.py` | 9 | DONE |
+| 137 | 27 - MCP | MCP from_config() | `chimera/mcp/config.py` | 4 | DONE |
+| 138 | 27 - SWE | SWE-bench runner | `chimera/eval/benchmarks/swe_bench.py` | 11 | DONE |
+| 139 | 27 - CI | CIFixWorkflow | `chimera/ci/fix_workflow.py` | 16 | DONE |
+| 140 | 27 - Review | ReviewOrchestrator | `chimera/review/orchestrator.py` | 18 | DONE |
+| 141 | 27 - Docs | DocGenerator | `chimera/docs/generator.py` | 8 | DONE |
+| 142 | 27 - TestGen | TestGenerator | `chimera/testgen/generator.py` | 15 | DONE |
+| 143 | 27 - Migration | MigrationPlanner | `chimera/migration/planner.py` | 14 | DONE |
+| 144 | 27 - Research | Researcher | `chimera/research/researcher.py` | 15 | DONE |
+| 145 | 27 - Marketplace | Plugin marketplace | `chimera/plugins/marketplace.py` | 14 | DONE |
+| 146 | 27 - CLI | 6 new CLI subcommands (review, ci-fix, research, docs, testgen, migrate) | `chimera/cli/main.py` | 22 | DONE |
+| 147 | 27 - LoopConfig | LoopConfig hooks (events, audit, checkpoints, git) | `chimera/core/loop_config.py` | 6 | DONE |
+
+## Phase 28: OpenHands-Inspired Features (12 Modules)
+
+| # | Phase | Task | Files | Tests | Status |
+|---|-------|------|-------|-------|--------|
+| 148 | 28 - Security | SecurityAnalyzer (LLM, rule-based, composite) | `chimera/security/` | 32 | DONE |
+| 149 | 28 - Secrets | SecretRegistry + SecretDetector + RedactionMiddleware | `chimera/secrets/` | 30 | DONE |
+| 150 | 28 - ACP | Agent Client Protocol (JSON-RPC 2.0 subprocess) | `chimera/acp/` | 19 | DONE |
+| 151 | 28 - Critic | Critic ABC + LLMCritic + ChecklistCritic | `chimera/critic/` | 22 | DONE |
+| 152 | 28 - Compaction | CompactionStrategy + ThresholdCompaction + atomicity | `chimera/compaction/` | 21 | DONE |
+| 153 | 28 - EventLog | Event-sourced persistence (append-only, crash recovery) | `chimera/sessions/eventlog/` | 27 | DONE |
+| 154 | 28 - CostTracker | Granular token tracking (cache, reasoning, per-step) | `chimera/providers/cost_tracker.py` | 38 | DONE |
+| 155 | 28 - Config | DiscriminatedUnion (from_config/to_config dispatch) | `chimera/config/union.py` | 16 | DONE |
+| 156 | 28 - Agents | FileAgentDef + AgentRegistry + loader priority | `chimera/agents/` | 17 | DONE |
+| 157 | 28 - Plugins | PluginExtensionRegistry (agents, strategies, middleware, hooks, MCP) | `chimera/plugins/` | 21 | DONE |
+| 158 | 28 - Env | CloudEnvironment + RemoteEnvironment | `chimera/env/cloud.py`, `remote.py` | 29 | DONE |
+| 159 | 28 - Browser | BrowserTool (Playwright-based) | `chimera/tools/browser.py` | 34 | DONE |
+
+## Phase 29: Documentation Overhaul
+
+| # | Phase | Task | Files | Tests | Status |
+|---|-------|------|-------|-------|--------|
+| 160 | 29 - Docs | CLAUDE.md — full 8-layer architecture | `CLAUDE.md` | — | DONE |
+| 161 | 29 - Docs | README + landing page + modules index | `README.md`, `docs/` | — | DONE |
+| 162 | 29 - Docs | Architecture page (8-layer stack) | `docs/architecture.md` | — | DONE |
+| 163 | 29 - Docs | Module + workflow + reference pages | `docs/modules/`, `docs/reference/` | — | DONE |
+| 164 | 29 - Docs | 5 practical how-to guides | `docs/guides/` | — | DONE |
+| 165 | 29 - Docs | MkDocs nav update | `mkdocs.yml` | — | DONE |
+
+## Phase 30: Kimi CLI Features
+
+| # | Phase | Task | Files | Tests | Status |
+|---|-------|------|-------|-------|--------|
+| 166 | 30 - Wire | Wire protocol (bidirectional channel) | `chimera/wire/` | 13 | DONE |
+| 167 | 30 - Todo | TodoTool (task tracking in-loop) | `chimera/tools/todo.py` | 11 | DONE |
+| 168 | 30 - DMail | DMailTool (context rewind) | `chimera/tools/dmail.py` | 15 | DONE |
+| 169 | 30 - Flow | Flow skills (Mermaid → decision tree → prompt) | `chimera/skills/flow.py` | 15 | DONE |
+| 170 | 30 - Think | ThinkTool + AskUserTool | `chimera/tools/think.py`, `ask_user.py` | 9 | DONE |
+| 171 | 30 - Integration | Kimi e2e integration + wire integration | `tests/test_kimi_e2e.py`, `test_wire_integration.py` | 12 | DONE |
+| 172 | 30 - Examples | 8 runnable examples + example tests | `examples/`, `tests/test_examples.py` | 14 | DONE |
+
+## Phase 31: ML & Program Synthesis Primitives (14 Modules)
+
+| # | Phase | Task | Files | Tests | Status |
+|---|-------|------|-------|-------|--------|
+| 173 | 31 - ML | Training curves (epoch logging + diagnostics) | `chimera/training/curves.py` | 13 | DONE |
+| 174 | 31 - ML | Validation split (test file splitting) | `chimera/training/validation_split.py` | 9 | DONE |
+| 175 | 31 - ML | Regularization (score computation) | `chimera/training/regularization.py` | 6 | DONE |
+| 176 | 31 - ML | Tuner (grid search) | `chimera/training/tuner.py` | 8 | DONE |
+| 177 | 31 - ML | Sketch (partial program templates) | `chimera/training/sketch.py` | 6 | DONE |
+| 178 | 31 - ML | Oracle (test generation triggers) | `chimera/training/oracle.py` | 7 | DONE |
+| 179 | 31 - Synthesis | CEGIS strategy (counterexample-guided) | `chimera/training/strategies/cegis.py` | 5 | DONE |
+| 180 | 31 - Synthesis | Incremental strategy (function targeting) | `chimera/training/strategies/incremental.py` | 9 | DONE |
+| 181 | 31 - Synthesis | Fault localization (suspiciousness ranking) | `chimera/training/fault_localization.py` | 5 | DONE |
+| 182 | 31 - Synthesis | Impact analysis (caller/importer finding) | `chimera/training/impact.py` | 6 | DONE |
+| 183 | 31 - Synthesis | Mutation testing (mutant generation) | `chimera/training/mutation.py` | 5 | DONE |
+| 184 | 31 - Synthesis | Spec inference (invariant detection) | `chimera/training/spec_inference.py` | 6 | DONE |
+| 185 | 31 - Constraints | Static analysis constraints (type-check, lint) | `chimera/training/constraint.py` | 8 | DONE |
+
+## Phase 32: Real LLM Verification
+
+| # | Phase | Task | Files | Tests | Status |
+|---|-------|------|-------|-------|--------|
+| 186 | 32 - Verify | 4 synthesis verification examples (GLM-5) | `examples/synthesis_*.py`, `examples/validation_split.py` | — | DONE |
+| 187 | 32 - Verify | Full feature verification with real LLM | `examples/workflow_verification.py` | — | DONE |
+| 188 | 32 - Verify | 11 live integration tests | `tests/test_integration_live.py` | 11 | DONE |
+| 189 | 32 - Docs | Module integration checklist | `docs/guides/module-integration-checklist.md` | — | DONE |
+
+## Phase 33: Coding Agent Primitives (Waves 1–5)
+
+| # | Phase | Task | Files | Tests | Status |
+|---|-------|------|-------|-------|--------|
+| 190 | 33 - Wave 1 | FocusChain (token budgeting) | `chimera/context/focus_chain.py` | 6 | DONE |
+| 191 | 33 - Wave 1 | HistoryProcessor (truncate/prune/compress) | `chimera/context/history_processor.py` | 6 | DONE |
+| 192 | 33 - Wave 1 | ContextMention (@file/@folder parsing) | `chimera/context/mentions.py` | 12 | DONE |
+| 193 | 33 - Wave 2 | RetryLoop (retry with backoff) | `chimera/core/loops/retry.py` | 11 | DONE |
+| 194 | 33 - Wave 2 | PlanActLoop (plan → act phases) | `chimera/core/loops/plan_act.py` | 15 | DONE |
+| 195 | 33 - Wave 2 | LintFeedbackLoop (ruff integration) | `chimera/core/loops/lint_feedback.py` | 10 | DONE |
+| 196 | 33 - Wave 3 | TreeSitterParser (graceful fallback) | `chimera/tools/parsers/tree_sitter.py` | 13 | DONE |
+| 197 | 33 - Wave 3 | DefinitionLookup (AST symbol finding) | `chimera/tools/parsers/definition_lookup.py` | 26 | DONE |
+| 198 | 33 - Wave 3 | DemonstrationPrompt (few-shot formatting) | `chimera/core/demonstration_prompt.py` | 17 | DONE |
+| 199 | 33 - Wave 4 | SandboxPolicy (path/network/command checking) | `chimera/security/sandbox.py` | 11 | DONE |
+| 200 | 33 - Wave 4 | LongTermMemory (JSON persistence) | `chimera/sessions/long_term_memory.py` | 16 | DONE |
+| 201 | 33 - Wave 4 | InstructionLayer (layer composition) | `chimera/core/instruction_layer.py` | 13 | DONE |
+| 202 | 33 - Wave 5 | AgentPreset (SWE_AGENT, AIDER, CLINE, CODEX) | `chimera/agents/presets/agent_styles.py` | 12 | DONE |
+
+## Phase 34: Production Agent Infrastructure
+
+| # | Phase | Task | Files | Tests | Status |
+|---|-------|------|-------|-------|--------|
+| 203 | 34 - Middleware | Middleware system (before/after hooks) | `chimera/core/middleware.py` | 13 | DONE |
+| 204 | 34 - Queue | MessageQueue (thread-safe injection) | `chimera/core/message_queue.py` | 10 | DONE |
+| 205 | 34 - Server | AgentServer (webhook HTTP server) | `chimera/server/webhook.py` | 11 | DONE |
+| 206 | 34 - E2E | Preset e2e tests (4 presets verified with real GLM-5) | `tests/test_presets_e2e.py` | 9 | DONE |
+
+## Phase 35: Layer Integration (Prove the Stack Works)
+
+| # | Phase | Task | Files | Tests | Status |
+|---|-------|------|-------|-------|--------|
+| 207 | 35 - Integration | Agent + EventBus + CostTracker + Middleware + Env | `tests/test_layer_integration.py` | 1 | DONE |
+| 208 | 35 - Integration | Pipeline + EventBus (two-agent composition) | `tests/test_layer_integration.py` | 1 | DONE |
+| 209 | 35 - Integration | synthesize() end-to-end (Trainer + TestConvergence) | `tests/test_layer_integration.py` | 1 | DONE |
+| 210 | 35 - Integration | AgentPreset + Wire protocol monitoring | `tests/test_layer_integration.py` | 1 | DONE |
+| 211 | 35 - Integration | Ensemble + shared CostTracker + EventBus | `tests/test_layer_integration.py` | 1 | DONE |
+| 212 | 35 - Integration | Full vertical slice (6 layers: Env → Secrets → Events → Agent → Synthesis) | `tests/test_layer_integration.py` | 1 | DONE |
+
+## Phase 36: Coding Agent Replication (Close All Gaps)
+
+| # | Phase | Task | Files | Tests | Status |
+|---|-------|------|-------|-------|--------|
+| 213 | 36 - Search | WebSearchTool (DuckDuckGo, no API key) | `chimera/tools/web_search.py` | 10 | DONE |
+| 214 | 36 - Provider | Prompt caching (cache_control on system/tools) | `chimera/providers/anthropic.py` | 6 | DONE |
+| 215 | 36 - Provider | Extended thinking (thinking budget, temp=1) | `chimera/providers/anthropic.py` | 5 | DONE |
+| 216 | 36 - Sandbox | Docker sandbox enforcement (network, memory, pids, read-only) | `chimera/env/docker.py` | 5 | DONE |
+| 217 | 36 - Permissions | Interactive approval UX (y/n/always, memory) | `chimera/permissions/interactive.py` | 5 | DONE |
+| 218 | 36 - Config | Project config auto-discovery (CHIMERA.md/CLAUDE.md) | `chimera/config/project_discovery.py` | 6 | DONE |
+| 219 | 36 - Agents | Microagent spawning (scoped, budget-limited sub-agents) | `chimera/agents/microagent.py` | 3 | DONE |
+| 220 | 36 - Controller | AgentController FSM (7 states, hooks, serialization) | `chimera/core/controller.py` | 9 | DONE |
+| 221 | 36 - Trajectory | Trajectory logging (JSON/JSONL, filter, sort) | `chimera/core/trajectory.py` | 5 | DONE |
+| 222 | 36 - Edits | Diff proposal workflow (stage, accept/reject, apply) | `chimera/core/proposed_edit.py` | 8 | DONE |
+| 223 | 36 - Compaction | Smart compaction (preserve recent, summarize old) | `chimera/compaction/smart.py` | 3 | DONE |
+| 224 | 36 - Index | Codebase indexing with TF-IDF semantic search | `chimera/tools/codebase_index.py` | 6 | DONE |
+
+---
+
+**Total: 2151 tests passing, 49 skipped** (as of 2026-03-18)
+
+Integration tests (skipped without API credentials): 43 tests across multiple files.
 
 ---
 
@@ -185,23 +381,84 @@ Integration tests (skipped without API credentials): 20 tests across 4 files.
 | 15 | Cost Tracking | 65–68 | 14 | DONE |
 | 16 | synthesize() + CLI | 69–71 | 6 | DONE |
 | 17 | Repository Mapping | 72–74 | 13 | DONE |
-| 18 | Tree Search Strategy | 75–80 | 19+1 | DONE |
+| 18 | Tree Search Strategy | 75–80 | 20 | DONE |
 | 19 | AIMO3 Competition | 81–88 | 42 | DONE |
 | 20 | Provider Integration + Docs | 89–94 | 12 | DONE |
-| 21 | Battle-Testing | 95–102 | 8 | DONE |
+| 21 | Battle-Testing | 95–102 | 9 | DONE |
+| 22 | API Gaps (Streaming, Async, Step Iter) | 103–109 | 411 | DONE |
+| 23 | Infrastructure Hardening | 110–115 | 79 | DONE |
+| 24 | Agent Intelligence | 116–120 | 106 | DONE |
+| 25 | Serving Layer | 121–123 | 22 | DONE |
+| 26 | Production Polish | 124–130 | 73 | DONE |
+| 27 | Production Features (15 Features) | 131–147 | 195 | DONE |
+| 28 | OpenHands-Inspired Features | 148–159 | 306 | DONE |
+| 29 | Documentation Overhaul | 160–165 | — | DONE |
+| 30 | Kimi CLI Features | 166–172 | 89 | DONE |
+| 31 | ML & Program Synthesis Primitives | 173–185 | 93 | DONE |
+| 32 | Real LLM Verification | 186–189 | 11 | DONE |
+| 33 | Coding Agent Primitives (Waves 1–5) | 190–202 | 168 | DONE |
+| 34 | Production Agent Infrastructure | 203–206 | 43 | DONE |
+| 35 | Layer Integration (Prove the Stack) | 207–212 | 6 | DONE |
+| 36 | Coding Agent Replication | 213–224 | 71 | DONE |
+
+---
+
+## What's Proven with Real LLM (38 tests against GLM-5)
+
+| Feature | Test |
+|---------|------|
+| Provider text/tools/multi-turn | `test_provider_anthropic_integration.py` |
+| Agent creates files + runs them | `test_integration_live.py` |
+| Pipeline (coder → reviewer) | `test_integration_live.py` |
+| Ensemble (2 agents) | `test_integration_live.py` |
+| Supervisor delegation | `test_integration_live.py` |
+| CIFixWorkflow | `test_integration_live.py` |
+| Session persistence | `test_integration_live.py` |
+| Streaming | `test_integration_live.py` |
+| Wire monitoring | `test_wire_integration.py` |
+| DMailTool rewind | `test_integration_live.py` |
+| Flow Skills | `test_integration_live.py` |
+| ThinkTool + AskUserTool | `test_integration_live.py` |
+| SWE_AGENT preset | `test_presets_e2e.py` |
+| AIDER preset | `test_presets_e2e.py` |
+| CLINE preset | `test_presets_e2e.py` |
+| CODEX preset | `test_presets_e2e.py` |
+| Custom preset | `test_presets_e2e.py` |
+| synthesize() | `test_integration_live.py` |
+| TreeSearch strategy | `test_tree_search_integration.py` |
+| MajorityVoting strategy | `test_majority_voting_integration.py` |
+| Eval Harness | `test_eval_harness_integration.py` |
+| **Agent + EventBus + CostTracker + Middleware** | `test_layer_integration.py` |
+| **Pipeline + Events (two-agent)** | `test_layer_integration.py` |
+| **synthesize() end-to-end** | `test_layer_integration.py` |
+| **AgentPreset + Wire protocol** | `test_layer_integration.py` |
+| **Ensemble + shared infrastructure** | `test_layer_integration.py` |
+| **Full 6-layer vertical slice** | `test_layer_integration.py` |
+
+## What's NOT Proven with Real LLM (mock-only, pure logic)
+
+Many of these are pure logic modules that don't need an LLM:
+
+- Middleware, MessageQueue, AgentServer (stdlib, no LLM needed)
+- FocusChain, HistoryProcessor, ContextMention (pure logic)
+- SandboxPolicy, LongTermMemory, InstructionLayer (pure logic)
+- TreeSitterParser, DefinitionLookup, DemonstrationPrompt (pure logic)
+- Training Curves, Validation Split, Regularization (pure logic)
+- CEGIS, Incremental, Tuner, Oracle (mock agent — could use real LLM)
+- Fault Localization, Impact, Mutation, Spec Inference (real AST, no LLM)
+- ReviewOrchestrator, Researcher, MigrationPlanner, DocGenerator, TestGenerator (mock agent)
+- WebSearchTool, InteractiveApprover, ProjectDiscovery, Microagent, AgentController (pure logic)
+- Trajectory, ProposedEdit, SmartCompaction, CodebaseIndex (pure logic)
 
 ---
 
 ## What's Next
 
-- [x] ~~Docker environment integration tests~~ (done)
-- [x] ~~Plugin/extension system~~ (done)
-- [x] ~~Repository mapping enhancements~~ (done)
-- [x] ~~Multi-file edit transactions~~ (done)
-- [x] ~~Cost tracking: GLM-5 pricing~~ (done)
-- [x] ~~Documentation site~~ (done)
-- [x] ~~Parallel Ensemble~~ (done)
+- [x] ~~End-to-end layer integration demo (prove layers compose practically)~~ (6 tests, Phase 35)
+- [x] ~~Close all coding agent gaps (Phase 36)~~ — 12 features, 71 tests
+- [ ] SWE-bench end-to-end run (prove Chimera can fix real GitHub issues)
 - [ ] Verify ML/synthesis primitives with real LLM synthesis runs
-- [ ] Verify remaining workflows (Review, Research, Migration, DocGen, TestGen)
+- [ ] Verify remaining workflows (Review, Research, Migration, DocGen, TestGen) with real LLM
 - [ ] PyPI publishing
-- [ ] CI/CD pipeline
+- [ ] CI/CD pipeline (GitHub Actions)
+- [ ] Full agent replication benchmarks (SWE-Agent, Aider, Cline, Codex presets on real tasks)
