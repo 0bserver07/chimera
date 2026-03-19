@@ -1,10 +1,13 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from chimera.core.tool import BaseTool
 from chimera.env.base import Environment
 from chimera.types import ToolResult
+
+if TYPE_CHECKING:
+    from chimera.core.operations import BashOps
 
 
 class BashTool(BaseTool):
@@ -19,9 +22,21 @@ class BashTool(BaseTool):
         "required": ["command"],
     }
 
+    def __init__(self, ops: BashOps | None = None) -> None:
+        self._ops = ops
+
     def execute(self, args: dict[str, Any], env: Environment | None) -> ToolResult:
-        assert env is not None
         timeout = args.get("timeout", 120)
+        if self._ops is not None:
+            result = self._ops.run_command(args["command"], timeout=timeout)
+            output = result.stdout
+            if result.stderr:
+                output += f"\nSTDERR:\n{result.stderr}"
+            if result.success:
+                return ToolResult(output=output)
+            else:
+                return ToolResult(output=output, error=f"Exit code {result.exit_code}")
+        assert env is not None
         result = env.run_command(args["command"], timeout=timeout)
         output = result.stdout
         if result.stderr:

@@ -8,6 +8,7 @@ from chimera.env.base import Environment
 from chimera.types import ChangeType, FileChange, ToolResult
 
 if TYPE_CHECKING:
+    from chimera.core.operations import ReadOps, WriteOps
     from chimera.tools.strategies import FuzzyEditor
 
 
@@ -24,16 +25,31 @@ class EditFileTool(BaseTool):
         "required": ["path", "old_string", "new_string"],
     }
 
-    def __init__(self, editor: FuzzyEditor | None = None) -> None:
+    def __init__(
+        self,
+        editor: FuzzyEditor | None = None,
+        read_ops: ReadOps | None = None,
+        write_ops: WriteOps | None = None,
+    ) -> None:
         self._editor = editor
+        self._read_ops = read_ops
+        self._write_ops = write_ops
 
     def execute(self, args: dict[str, Any], env: Environment | None) -> ToolResult:
-        assert env is not None
         path = args["path"]
-        try:
-            content = env.read_file(path)
-        except FileNotFoundError:
-            return ToolResult(output="", error=f"File not found: {path}")
+
+        # Read content via ops or env
+        if self._read_ops is not None:
+            try:
+                content = self._read_ops.read_file(path)
+            except FileNotFoundError:
+                return ToolResult(output="", error=f"File not found: {path}")
+        else:
+            assert env is not None
+            try:
+                content = env.read_file(path)
+            except FileNotFoundError:
+                return ToolResult(output="", error=f"File not found: {path}")
 
         old = args["old_string"]
         new = args["new_string"]
@@ -55,7 +71,12 @@ class EditFileTool(BaseTool):
         else:
             return ToolResult(output="", error=f"Multiple matches ({count}) found — ambiguous. Provide more context.")
 
-        env.write_file(path, updated)
+        # Write via ops or env
+        if self._write_ops is not None:
+            self._write_ops.write_file(path, updated)
+        else:
+            assert env is not None
+            env.write_file(path, updated)
 
         fc = FileChange(
             path=path,

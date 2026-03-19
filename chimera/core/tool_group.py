@@ -69,3 +69,32 @@ def _make_agent_tools() -> ToolGroup:
 
 
 AGENT_TOOLS = _make_agent_tools()
+
+
+def create_default_tools(
+    read_ops=None,
+    write_ops=None,
+    bash_ops=None,
+    search_ops=None,
+) -> ToolGroup:
+    """Create default tool set with optional operation backends.
+
+    Args:
+        read_ops: Optional ReadOps backend for file reading.
+        write_ops: Optional WriteOps backend for file writing.
+        bash_ops: Optional BashOps backend for command execution.
+        search_ops: Optional SearchOps backend for file listing/search.
+
+    Returns:
+        ToolGroup configured with the given backends.
+    """
+    from chimera.tools.read import ReadFileTool
+    from chimera.tools.write import WriteFileTool
+    from chimera.tools.bash import BashTool
+    from chimera.tools.image_read import ImageReadTool
+    return ToolGroup("default", [
+        ReadFileTool(ops=read_ops),
+        WriteFileTool(read_ops=read_ops, write_ops=write_ops),
+        BashTool(ops=bash_ops),
+        ImageReadTool(),
+    ])
