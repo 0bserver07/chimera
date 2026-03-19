@@ -56,12 +56,15 @@ def _make_agent_tools() -> ToolGroup:
     from chimera.tools.repo_map import RepoMapTool
     from chimera.tools.think import ThinkTool
     from chimera.tools.todo import TodoTool
+    from chimera.tools.verify import VerifyTool
+    from chimera.tools.web_search import WebSearchTool
     return ToolGroup("agent", [
         ReadFileTool(), WriteFileTool(), EditFileTool(),
         BashTool(), SearchTool(), ListFilesTool(),
         TestTool(), GitTool(), ReplaceInFileTool(),
         ImageReadTool(), RepoMapTool(),
         ThinkTool(), TodoTool(),
+        VerifyTool(), WebSearchTool(),
     ])
 
 

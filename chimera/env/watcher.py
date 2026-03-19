@@ -15,7 +15,10 @@ import time
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
+
+if TYPE_CHECKING:
+    from chimera.events.base import EventBus
 
 
 class ChangeType(Enum):
@@ -167,3 +170,45 @@ class FileWatcher:
         changes = self._diff(self._snapshots, new_snapshot)
         self._snapshots = new_snapshot
         return changes
+
+
+def connect_watcher_to_event_bus(
+    watcher: FileWatcher,
+    event_bus: "EventBus",
+) -> None:
+    """Bridge file watcher events to an EventBus.
+
+    Registers a callback on *watcher* that publishes an
+    :class:`~chimera.events.base.Event` with ``type="file_change"`` for
+    each :class:`FileChange` detected.
+
+    Args:
+        watcher: The FileWatcher instance to connect.
+        event_bus: The EventBus to publish events to.
+
+    Example::
+
+        from chimera.env.watcher import FileWatcher, connect_watcher_to_event_bus
+        from chimera.events.base import EventBus
+
+        bus = EventBus()
+        watcher = FileWatcher("/path/to/project", patterns=["*.py"])
+        connect_watcher_to_event_bus(watcher, bus)
+        watcher.start()
+    """
+    from chimera.events.base import Event
+
+    def _on_changes(changes: list[FileChange]) -> None:
+        for change in changes:
+            event_bus.publish(
+                Event(
+                    type="file_change",
+                    metadata={
+                        "path": change.path,
+                        "change_type": change.change_type.value,
+                        "timestamp": change.timestamp,
+                    },
+                )
+            )
+
+    watcher.on_change(_on_changes)

@@ -15,6 +15,9 @@ from chimera.tools.image_read import ImageReadTool
 from chimera.tools.import_graph import ImportGraph
 from chimera.tools.browser import BrowserTool
 from chimera.tools.definition_lookup import DefinitionLookupTool
+from chimera.tools.web_search import WebSearchTool
+from chimera.tools.grounded_search import GroundedSearchTool
+from chimera.tools.codebase_index import SemanticSearchTool
 
 read_file = ReadFileTool()
 write_file = WriteFileTool()
@@ -28,6 +31,7 @@ git = GitTool()
 replace_in_file = ReplaceInFileTool()
 verify = VerifyTool()
 read_image = ImageReadTool()
+web_search = WebSearchTool()
 
 __all__ = [
     "ReadFileTool", "WriteFileTool", "BashTool", "EditFileTool", "SearchTool", "ListFilesTool",
@@ -38,4 +42,8 @@ __all__ = [
     "ImportGraph",
     "BrowserTool",
     "DefinitionLookupTool",
+    "WebSearchTool",
+    "GroundedSearchTool",
+    "SemanticSearchTool",
+    "web_search",
 ]

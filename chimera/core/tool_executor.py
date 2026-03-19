@@ -20,6 +20,9 @@ __all__ = [
     "ToolExecutionResult",
 ]
 
+# Tools that modify files on disk — used for ghost commit snapshots.
+_FILE_MODIFYING_TOOLS = frozenset({"write_file", "edit_file", "replace_in_file"})
+
 
 class PermissionDenied(Exception):
     """Raised when a tool call is denied by the permission policy."""
@@ -96,9 +99,23 @@ def execute_tool_calls(
             context.add(Message.tool(tc.id, f"Error: unknown tool {tc.name}"))
             continue
 
+        # -- Ghost commit: snapshot before file-modifying tools --
+        if config and config.ghost_commits and tc.name in _FILE_MODIFYING_TOOLS:
+            path = tc.arguments.get("path", "")
+            if path:
+                config.ghost_commits.snapshot(f"{tc.name}: {path}", [path])
+
         # -- Execute --
         result = tool.execute(tc.arguments, env)
         content = result.output if result.success else f"Error: {result.error}\n{result.output}"
+
+        # -- Truncation --
+        if result.success:
+            from chimera.core.truncation import truncate_output
+
+            trunc_cfg = config.truncation if config else None
+            content = truncate_output(content, trunc_cfg)
+
         context.add(Message.tool(tc.id, content))
 
         # -- Audit log --
@@ -227,9 +244,23 @@ def execute_tool_calls_incremental(
             result.executed += 1
             continue
 
+        # -- Ghost commit: snapshot before file-modifying tools --
+        if config and config.ghost_commits and tc.name in _FILE_MODIFYING_TOOLS:
+            path = tc.arguments.get("path", "")
+            if path:
+                config.ghost_commits.snapshot(f"{tc.name}: {path}", [path])
+
         # -- Execute --
         tr = tool.execute(tc.arguments, env)
         content = tr.output if tr.success else f"Error: {tr.error}\n{tr.output}"
+
+        # -- Truncation --
+        if tr.success:
+            from chimera.core.truncation import truncate_output
+
+            trunc_cfg = config.truncation if config else None
+            content = truncate_output(content, trunc_cfg)
+
         context.add(Message.tool(tc.id, content))
         result.results.append(tr)
         result.executed += 1
@@ -360,6 +391,12 @@ async def async_execute_tool_calls_incremental(
             result.executed += 1
             continue
 
+        # -- Ghost commit: snapshot before file-modifying tools --
+        if config and config.ghost_commits and tc.name in _FILE_MODIFYING_TOOLS:
+            path = tc.arguments.get("path", "")
+            if path:
+                config.ghost_commits.snapshot(f"{tc.name}: {path}", [path])
+
         approved.append((i, tc, tool))
 
     if not approved:
@@ -379,6 +416,14 @@ async def async_execute_tool_calls_incremental(
     # Phase 3: post-process — add to context, emit events, detect loops
     for (_, tc, _tool), tr in zip(approved, tool_results):
         content = tr.output if tr.success else f"Error: {tr.error}\n{tr.output}"
+
+        # -- Truncation --
+        if tr.success:
+            from chimera.core.truncation import truncate_output
+
+            trunc_cfg = config.truncation if config else None
+            content = truncate_output(content, trunc_cfg)
+
         context.add(Message.tool(tc.id, content))
         result.results.append(tr)
         result.executed += 1

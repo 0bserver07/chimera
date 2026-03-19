@@ -39,6 +39,7 @@ from chimera.composition import Ensemble, Pipeline, Supervisor
 
 # Environment
 from chimera.env import Environment, GitEnvironment, LocalEnvironment, SessionMixin
+from chimera.env.watcher import FileWatcher, FileChange as WatcherFileChange
 
 try:
     from chimera.env import CloudEnvironment, RemoteEnvironment  # noqa: F401
@@ -47,6 +48,7 @@ except ImportError:
 
 # Providers
 from chimera.providers import ModelConfig, Provider, ProviderCatalog, Response, StreamEvent, create_provider
+from chimera.providers.cached import CachedProvider, CacheStats
 from chimera.providers.cost import calculate_cost, estimate_cost, register_model_cost
 from chimera.providers.cost_tracker import CostLimitExceeded, CostTracker, StepUsage, TokenUsage
 
@@ -98,6 +100,10 @@ from chimera.tools.ask_user import AskUserTool
 from chimera.tools.todo import TodoTool
 from chimera.tools.dmail import DMailTool
 from chimera.tools.definition_lookup import DefinitionLookupTool
+from chimera.tools.web_search import WebSearchTool
+from chimera.tools.grounded_search import GroundedSearchTool
+from chimera.tools.codebase_index import SemanticSearchTool, CodebaseIndex
+from chimera.tools.embedding_index import EmbeddingIndex
 
 # Wire
 from chimera.wire import Wire, WireMessage, WireRequest, WireResponse
@@ -129,12 +135,17 @@ from chimera.compaction import (
     ThresholdCompaction,
     TokenCounter,
 )
+from chimera.compaction.smart import SmartCompaction, SmartCompactionConfig
+from chimera.compaction.thought_strip import ThoughtStripCompaction
 from chimera.detection import DetectionResult, ExactRepeatDetector
 from chimera.permissions import AuditLog, PermissionAction, PermissionRuleset, RiskLevel, classify_risk
+from chimera.permissions.interactive import InteractiveApprover, ApprovalMemory, ApprovalDecision
 from chimera.streaming import ConsoleStreamHandler, StreamingReAct
 from chimera.sessions import EventLog, EventSourcedSession, InMemoryStorage, LongTermMemory, MemoryEntry, Session
 from chimera.auth import AuthManager, Credential
 from chimera.agents import AgentConfig, AgentFactory, AgentLoader, AgentPreset, AgentRegistry, FileAgentDef
+from chimera.agents.investigator import InvestigatorAgent, Investigation
+from chimera.agents.microagent import MicroagentSpawner, MicroagentConfig
 from chimera.agents.loader import create_default_registry, load_custom_agents
 from chimera.plugins import BasePlugin, DirectoryPluginLoader, Hook, MCPServerConfig, Marketplace, MarketplaceRegistry, PluginExtensionRegistry, PluginInfo, PluginManager
 from chimera.config import ChimeraConfig, DiscriminatedUnion, ProjectConfig, Skill, SkillRegistry, StructuredOutput
@@ -187,19 +198,31 @@ from chimera.context.history import (
     TruncateProcessor,
 )
 from chimera.context.mentions import Mention, MentionResolver
+from chimera.context.repo_map import RepoMapMiddleware, generate_repo_map
+from chimera.context.cache import ContextCache, CacheEntry
 
 # Message Queue
 from chimera.core.message_queue import MessageQueue
 from chimera.core.queue_middleware import MessageQueueMiddleware
 
+# Core extensions (Phase 36-38)
+from chimera.core.truncation import TruncationConfig, truncate_output, truncate_result_output
+from chimera.core.controller import AgentController, AgentState, StateTransition
+from chimera.core.trajectory import Trajectory, TrajectoryStep, filter_successful, sort_by_cost
+from chimera.core.proposed_edit import EditProposal, ProposedEdit, EditStatus
+from chimera.core.apply_middleware import ApplyMiddleware
+from chimera.core.lsp_feedback import LSPFeedbackMiddleware
+
 # Checkpoints
 from chimera.checkpoints import CheckpointInfo, CheckpointManager
+from chimera.checkpoints_ghost import GhostCommitManager, GhostSnapshot
 
 # Server
 from chimera.server import AgentServer, WebhookEvent
 
 # Workflows
 from chimera.workflows import CommitStrategy, GitWorkflow
+from chimera.workflows.commit_style import CommitStyle, infer_and_generate, analyze_style
 
 # Transactions
 from chimera.transactions import FileTransaction, StagedChange, TransactionState
@@ -503,4 +526,58 @@ __all__ = [
     # Granular token tracking
     "StepUsage",
     "TokenUsage",
+    # Phase 36-38 modules
+    # Tools
+    "WebSearchTool",
+    "GroundedSearchTool",
+    "SemanticSearchTool",
+    "CodebaseIndex",
+    "EmbeddingIndex",
+    # Permissions
+    "InteractiveApprover",
+    "ApprovalMemory",
+    "ApprovalDecision",
+    # Compaction
+    "SmartCompaction",
+    "SmartCompactionConfig",
+    "ThoughtStripCompaction",
+    # Providers
+    "CachedProvider",
+    "CacheStats",
+    # Checkpoints
+    "GhostCommitManager",
+    "GhostSnapshot",
+    # Agents
+    "InvestigatorAgent",
+    "Investigation",
+    "MicroagentSpawner",
+    "MicroagentConfig",
+    # Context
+    "RepoMapMiddleware",
+    "generate_repo_map",
+    "ContextCache",
+    "CacheEntry",
+    # Core extensions
+    "TruncationConfig",
+    "truncate_output",
+    "truncate_result_output",
+    "AgentController",
+    "AgentState",
+    "StateTransition",
+    "Trajectory",
+    "TrajectoryStep",
+    "filter_successful",
+    "sort_by_cost",
+    "EditProposal",
+    "ProposedEdit",
+    "EditStatus",
+    "ApplyMiddleware",
+    "LSPFeedbackMiddleware",
+    # Workflows
+    "CommitStyle",
+    "infer_and_generate",
+    "analyze_style",
+    # Environment
+    "FileWatcher",
+    "WatcherFileChange",
 ]
