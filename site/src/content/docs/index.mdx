@@ -1,0 +1,63 @@
+---
+title: Chimera
+description: A composable coding agent framework. Synthesize codebases from specifications.
+template: splash
+hero:
+  tagline: A composable coding agent framework. Compose any coding agent architecture in Python.
+  image:
+    file: ../../assets/logo-dark.svg
+  actions:
+    - text: Get Started
+      link: /getting-started/
+      icon: right-arrow
+      variant: primary
+    - text: View on GitHub
+      link: https://github.com/0bserver07/chimera
+      icon: external
+---
+
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+## What is Chimera?
+
+Chimera is a Python framework for building coding agents. It provides composable primitives — providers, tools, loops, environments, and strategies — that let you recreate any coding agent architecture (SWE-Agent, Aider, Cline, Codex, OpenHands) or invent your own.
+
+```python
+import chimera
+
+# One-liner: synthesize code from a spec
+result = chimera.synthesize(
+    spec="Implement a fibonacci function",
+    tests="python -m pytest tests/",
+)
+
+# Or build a custom agent
+agent = chimera.AgentPreset.SWE_AGENT.build(provider)
+result = agent.run("Fix the authentication bug", env=env)
+```
+
+## Key Features
+
+<CardGrid stagger>
+  <Card title="8-Layer Stack" icon="seti:config">
+    CLI, Workflows, Synthesis, Eval, Agent, Provider, Infrastructure, Environment — each layer usable independently.
+  </Card>
+  <Card title="Any Agent Architecture" icon="puzzle">
+    Presets for SWE-Agent, Aider, Cline, and Codex. Mix and match loops, tools, and strategies.
+  </Card>
+  <Card title="20+ Tools" icon="setting">
+    Read, write, edit, bash, search, git, browser, web search, semantic search, and more.
+  </Card>
+  <Card title="6 Providers" icon="cloud">
+    Anthropic, OpenAI, Google, Ollama, Modal, and any OpenAI-compatible endpoint.
+  </Card>
+</CardGrid>
+
+## Quick Links
+
+<CardGrid>
+  <LinkCard title="Getting Started" href="/getting-started/" description="Install Chimera and run your first agent in 5 minutes." />
+  <LinkCard title="Build a Coding Agent" href="/guides/build-a-coding-agent/" description="Compose tools, loops, and strategies into a custom agent." />
+  <LinkCard title="Architecture" href="/architecture/" description="Understand the 8-layer stack and how modules compose." />
+  <LinkCard title="API Reference" href="/reference/core/" description="Complete API reference for all modules." />
+</CardGrid>

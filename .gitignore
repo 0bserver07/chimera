@@ -13,4 +13,7 @@ build/
 venv/
 .env
 .worktrees/
-site/
+# Starlight docs build output + deps
+site/dist/
+site/node_modules/
+site/.astro/
