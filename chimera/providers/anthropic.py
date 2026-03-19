@@ -392,3 +392,7 @@ class AnthropicProvider(Provider):
     @property
     def model_name(self) -> str:
         return self._model
+
+
+from chimera.providers.registry import register_provider as _register  # noqa: E402
+_register("anthropic", lambda model="", api_key=None, base_url=None, **kw: AnthropicProvider(model=model, api_key=api_key, base_url=base_url))
