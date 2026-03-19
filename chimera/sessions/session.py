@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from chimera.compaction.base import CompactionStrategy
     from chimera.core.agent import Agent
     from chimera.env.base import Environment
+    from chimera.sessions.tree import SessionTree
 
 __all__ = ["Session"]
 
@@ -53,6 +54,7 @@ class Session:
         session_id: SessionID | None = None,
         auto_compact: bool = False,
         compaction: CompactionStrategy | None = None,
+        tree: SessionTree | None = None,
     ) -> None:
         self._agent = agent
         self._env = env
@@ -61,6 +63,7 @@ class Session:
         self._auto_compact = auto_compact
         self._compaction = compaction
         self._parent_id: SessionID | None = None
+        self._tree = tree
 
         # Build initial context from the agent's prompt.
         system = agent.prompt.render(tools=[t.name for t in agent.tools])
@@ -77,9 +80,13 @@ class Session:
         agent sees the full multi-turn history.
         """
         self._context.add(Message.user(message))
+        if self._tree:
+            self._tree.add_message(Message.user(message))
         result = self._agent.loop.run(
             self._agent.provider, self._agent.tools, self._context, self._env,
         )
+        if self._tree:
+            self._tree.add_message(Message.assistant(result.output))
         return result
 
     def iter_chat(self, message: str) -> Generator[StepResult, None, AgentResult]:
@@ -90,6 +97,8 @@ class Session:
         :attr:`~StepResult.pending_approval` interactively.
         """
         self._context.add(Message.user(message))
+        if self._tree:
+            self._tree.add_message(Message.user(message))
         return (
             yield from self._agent.loop.iter_steps(
                 self._agent.provider,
@@ -118,6 +127,23 @@ class Session:
             forked._context.add(msg)
         forked._parent_id = self._session_id
         return forked
+
+    def switch_branch(self, leaf_id: str) -> None:
+        """Switch to a different branch and rebuild context from tree.
+
+        Args:
+            leaf_id: The entry ID of the leaf to switch to.
+
+        Raises:
+            ValueError: If *leaf_id* is not found in the tree.
+        """
+        if self._tree is None:
+            return
+        self._tree.switch_branch(leaf_id)
+        messages = self._tree.get_messages(leaf_id)
+        self._context = Context(system=self._context.system)
+        for msg in messages:
+            self._context.add(msg)
 
     def save(self) -> None:
         """Persist the current session state to storage."""
