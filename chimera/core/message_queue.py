@@ -63,3 +63,60 @@ class MessageQueue:
         """Remove all queued messages."""
         with self._lock:
             self._queue.clear()
+
+
+from dataclasses import dataclass, field  # noqa: E402
+
+
+@dataclass
+class MessageQueues:
+    """Thread-safe steering and follow-up message queues.
+
+    Provides two separate queues:
+
+    - **steering** — injected mid-turn to redirect the running agent.
+    - **follow_up** — queued for after the current turn completes.
+
+    Both queues are thread-safe; any thread can call :meth:`steer` or
+    :meth:`follow_up` while the loop is running.
+    """
+
+    _steering: deque[Message] = field(default_factory=deque)
+    _follow_up: deque[Message] = field(default_factory=deque)
+    _lock: threading.Lock = field(default_factory=threading.Lock)
+
+    def steer(self, message: Message) -> None:
+        """Enqueue a steering message. Thread-safe."""
+        with self._lock:
+            self._steering.append(message)
+
+    def follow_up(self, message: Message) -> None:
+        """Enqueue a follow-up message. Thread-safe."""
+        with self._lock:
+            self._follow_up.append(message)
+
+    def drain_steering(self) -> list[Message]:
+        """Remove and return all steering messages. Thread-safe."""
+        with self._lock:
+            msgs = list(self._steering)
+            self._steering.clear()
+            return msgs
+
+    def drain_follow_up(self) -> list[Message]:
+        """Remove and return all follow-up messages. Thread-safe."""
+        with self._lock:
+            msgs = list(self._follow_up)
+            self._follow_up.clear()
+            return msgs
+
+    @property
+    def has_steering(self) -> bool:
+        """Return ``True`` if there are steering messages pending."""
+        with self._lock:
+            return len(self._steering) > 0
+
+    @property
+    def has_follow_up(self) -> bool:
+        """Return ``True`` if there are follow-up messages pending."""
+        with self._lock:
+            return len(self._follow_up) > 0

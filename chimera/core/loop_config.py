@@ -8,7 +8,9 @@ if TYPE_CHECKING:
     from chimera.checkpoints import CheckpointManager
     from chimera.checkpoints_ghost import GhostCommitManager
     from chimera.compaction.base import CompactionStrategy
+    from chimera.core.cancellation import CancellationToken
     from chimera.core.file_tracker import FileTracker
+    from chimera.core.message_queue import MessageQueues
     from chimera.core.middleware import LoopMiddleware
     from chimera.core.truncation import TruncationConfig
     from chimera.detection.actions import LoopDetector
@@ -59,3 +61,5 @@ class LoopConfig:
     truncation: TruncationConfig | None = None
     ghost_commits: GhostCommitManager | None = None
     file_tracker: FileTracker | None = None
+    cancellation: CancellationToken | None = None
+    message_queues: MessageQueues | None = None
