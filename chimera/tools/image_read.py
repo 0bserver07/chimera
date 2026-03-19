@@ -37,13 +37,13 @@ class ImageReadTool(BaseTool):
     """
 
     name = "read_image"
-    description = "Read an image file and return its base64-encoded content."
+    description = "Read an image from a file path or URL and return its base64-encoded content."
     parameters: dict[str, Any] = {
         "type": "object",
         "properties": {
             "path": {
                 "type": "string",
-                "description": "Path to the image file",
+                "description": "Path to the image file, or a URL (http/https)",
             },
         },
         "required": ["path"],
@@ -64,6 +64,10 @@ class ImageReadTool(BaseTool):
         path = args.get("path", "")
         if not path:
             return ToolResult(output="", error="path is required")
+
+        # Handle URLs
+        if path.startswith(("http://", "https://")):
+            return self._read_from_url(path)
 
         # Determine media type
         ext = os.path.splitext(path)[1].lower()
@@ -98,5 +102,36 @@ class ImageReadTool(BaseTool):
                 "image_data": b64_data,
                 "media_type": media_type,
                 "path": path,
+            },
+        )
+
+    def _read_from_url(self, url: str) -> ToolResult:
+        """Fetch an image from a URL and return base64-encoded content."""
+        try:
+            import httpx as _httpx
+        except ImportError:
+            return ToolResult(output="", error="httpx not installed for URL image fetching")
+
+        # Guess media type from URL
+        ext = os.path.splitext(url.split("?")[0])[1].lower()
+        media_type = _MIME_TYPES.get(ext, "image/png")
+
+        try:
+            resp = _httpx.get(url, timeout=15, follow_redirects=True)
+            resp.raise_for_status()
+            # Use content-type header if available
+            ct = resp.headers.get("content-type", "")
+            if ct.startswith("image/"):
+                media_type = ct.split(";")[0].strip()
+            b64_data = base64.b64encode(resp.content).decode()
+        except Exception as e:
+            return ToolResult(output="", error=f"Failed to fetch image URL: {e}")
+
+        return ToolResult(
+            output=f"[Image: {url} ({media_type}, {len(b64_data)} bytes base64)]",
+            metadata={
+                "image_data": b64_data,
+                "media_type": media_type,
+                "path": url,
             },
         )

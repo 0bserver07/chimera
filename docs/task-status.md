@@ -1,6 +1,6 @@
 # Chimera — Task Status
 
-> 224 tasks across 36 phases. TDD approach: tests first, then implementation.
+> 231 tasks across 37 phases. TDD approach: tests first, then implementation.
 > Sources: `docs/plans/2026-02-20-chimera-implementation-plan.md`, `docs/plans/2026-02-20-chimera-extension-plan.md`, `docs/plans/2026-02-22-persistent-shell-plan.md`, `docs/plans/2026-02-25-aimo3-implementation-plan.md`
 
 ## Phases 1–8: Core Framework (Original)
@@ -354,7 +354,20 @@
 
 ---
 
-**Total: 2151 tests passing, 49 skipped** (as of 2026-03-18)
+## Phase 37: Gemini CLI + Cursor/Windsurf Gap Closure
+
+| # | Phase | Task | Files | Tests | Status |
+|---|-------|------|-------|-------|--------|
+| 225 | 37 - Gemini | GroundedSearchTool (search → fetch → cite) | `chimera/tools/grounded_search.py` | 4 | DONE |
+| 226 | 37 - Gemini | ContextCache (client-side, hash dedup, LRU) | `chimera/context/cache.py` | 8 | DONE |
+| 227 | 37 - Gemini | Image URL support (http/https fetch) | `chimera/tools/image_read.py` | 3 | DONE |
+| 228 | 37 - Cursor | EmbeddingIndex (vector search + TF-IDF fallback) | `chimera/tools/embedding_index.py` | 5 | DONE |
+| 229 | 37 - Cursor | ApplyMiddleware (intercept writes, stage as proposals) | `chimera/core/apply_middleware.py` | 4 | DONE |
+| 230 | 37 - Cursor | ReplCompleter (tab: commands, files, @mentions) | `chimera/cli/completer.py` | 6 | DONE |
+
+---
+
+**Total: 2181 tests passing, 49 skipped** (as of 2026-03-18)
 
 Integration tests (skipped without API credentials): 43 tests across multiple files.
 
@@ -400,6 +413,7 @@ Integration tests (skipped without API credentials): 43 tests across multiple fi
 | 34 | Production Agent Infrastructure | 203–206 | 43 | DONE |
 | 35 | Layer Integration (Prove the Stack) | 207–212 | 6 | DONE |
 | 36 | Coding Agent Replication | 213–224 | 71 | DONE |
+| 37 | Gemini CLI + Cursor/Windsurf | 225–230 | 30 | DONE |
 
 ---
 
