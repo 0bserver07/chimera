@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 
 from chimera.types import Message
@@ -139,3 +139,45 @@ class CompactionView:
             m for i, m in enumerate(self.messages) if i not in actual_removals
         ]
         return CompactionView(new_messages)
+
+
+@dataclass
+class CompactionMetadata:
+    """Metadata preserved across compaction boundaries."""
+
+    read_files: list[str] = field(default_factory=list)
+    modified_files: list[str] = field(default_factory=list)
+    tokens_before: int = 0
+    tokens_after: int = 0
+
+    def merge(self, other: CompactionMetadata) -> CompactionMetadata:
+        return CompactionMetadata(
+            read_files=list(dict.fromkeys(self.read_files + other.read_files)),
+            modified_files=list(dict.fromkeys(self.modified_files + other.modified_files)),
+            tokens_before=other.tokens_before,
+            tokens_after=other.tokens_after,
+        )
+
+    def to_prompt_section(self) -> str:
+        if not self.read_files and not self.modified_files:
+            return ""
+        lines = ["## Files you've been working with"]
+        if self.modified_files:
+            lines.append("Modified: " + ", ".join(self.modified_files))
+        if self.read_files:
+            lines.append("Read: " + ", ".join(self.read_files))
+        return "\n".join(lines)
+
+
+class FileAwareCompaction(CompactionStrategy):
+    """Mixin for compaction strategies that use file tracking metadata."""
+
+    _file_metadata: CompactionMetadata | None = None
+
+    def set_metadata(self, metadata: CompactionMetadata) -> None:
+        self._file_metadata = metadata
+
+    def get_file_prompt_section(self) -> str:
+        if self._file_metadata is None:
+            return ""
+        return self._file_metadata.to_prompt_section()

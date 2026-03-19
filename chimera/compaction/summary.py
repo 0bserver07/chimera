@@ -4,13 +4,13 @@ from typing import TYPE_CHECKING
 
 from chimera.types import Message
 
-from chimera.compaction.base import CompactionStrategy
+from chimera.compaction.base import CompactionStrategy, FileAwareCompaction
 
 if TYPE_CHECKING:
     from chimera.providers.base import Provider
 
 
-class SummaryCompaction(CompactionStrategy):
+class SummaryCompaction(FileAwareCompaction):
     """Replace the middle portion of a conversation with a summary.
 
     When a *provider* is supplied the summary is generated via an LLM call;
@@ -75,17 +75,23 @@ class SummaryCompaction(CompactionStrategy):
         if tool_calls:
             parts.append(f"{tool_calls} tool call{'s' if tool_calls != 1 else ''}")
 
-        return f"Summarized: {', '.join(parts)}." if parts else "Summarized conversation."
+        summary = f"Summarized: {', '.join(parts)}." if parts else "Summarized conversation."
+        file_section = self.get_file_prompt_section()
+        if file_section:
+            summary += "\n\n" + file_section
+        return summary
 
     def _summarize_with_provider(self, messages: list[Message]) -> str:
         """Use the configured LLM provider to produce a summary."""
         conversation = "\n".join(
             f"[{m.role}] {m.content[:200]}" for m in messages
         )
+        file_section = self.get_file_prompt_section()
+        extra = f"\n\nFiles tracked:\n{file_section}" if file_section else ""
         prompt = (
             "Summarize the following conversation excerpt in a concise paragraph. "
             "Focus on key decisions, actions taken, and results.\n\n"
-            f"{conversation}"
+            f"{conversation}{extra}"
         )
         response = self._provider.complete(  # type: ignore[union-attr]
             messages=[Message.user(prompt)],

@@ -22,6 +22,7 @@ __all__ = [
 
 # Tools that modify files on disk — used for ghost commit snapshots.
 _FILE_MODIFYING_TOOLS = frozenset({"write_file", "edit_file", "replace_in_file"})
+_FILE_READING_TOOLS = frozenset({"read_file"})
 
 
 class PermissionDenied(Exception):
@@ -140,6 +141,17 @@ def execute_tool_calls(
                     tool_metadata=result.metadata,
                 )
             )
+
+        # -- File tracking --
+        if config and config.file_tracker:
+            if tc.name in _FILE_READING_TOOLS:
+                path = tc.arguments.get("path", "")
+                if path:
+                    config.file_tracker.record_read(path)
+            elif tc.name in _FILE_MODIFYING_TOOLS:
+                path = tc.arguments.get("path", "")
+                if path:
+                    config.file_tracker.record_modified(path)
 
         # -- Loop detection --
         if config and config.detector:
@@ -296,6 +308,17 @@ def execute_tool_calls_incremental(
                 )
             )
 
+        # -- File tracking --
+        if config and config.file_tracker:
+            if tc.name in _FILE_READING_TOOLS:
+                path = tc.arguments.get("path", "")
+                if path:
+                    config.file_tracker.record_read(path)
+            elif tc.name in _FILE_MODIFYING_TOOLS:
+                path = tc.arguments.get("path", "")
+                if path:
+                    config.file_tracker.record_modified(path)
+
         # -- Loop detection --
         if config and config.detector:
             from chimera.detection.actions import OnDetect
@@ -440,6 +463,17 @@ async def async_execute_tool_calls_incremental(
                     tool_metadata=tr.metadata,
                 )
             )
+
+        # -- File tracking --
+        if config and config.file_tracker:
+            if tc.name in _FILE_READING_TOOLS:
+                path = tc.arguments.get("path", "")
+                if path:
+                    config.file_tracker.record_read(path)
+            elif tc.name in _FILE_MODIFYING_TOOLS:
+                path = tc.arguments.get("path", "")
+                if path:
+                    config.file_tracker.record_modified(path)
 
         # -- Loop detection --
         if config and config.detector:
