@@ -71,6 +71,22 @@ class ReAct:
             wire.send(TurnBegin(turn_id=id(context)))
 
         for _ in range(self.max_steps):
+            # -- Cancellation check --
+            if self.config and self.config.cancellation:
+                from chimera.core.cancellation import OperationCancelled
+                try:
+                    self.config.cancellation.check()
+                except OperationCancelled:
+                    yield StepResult(
+                        message=Message.assistant("Operation cancelled"),
+                        done=True, step=steps, cost=0.0,
+                    )
+                    return AgentResult(
+                        output="Operation cancelled", steps=steps,
+                        tool_calls_total=total_tool_calls, cost=total_cost,
+                        success=False, error="Cancelled",
+                    )
+
             steps += 1
 
             if wire:
@@ -255,6 +271,11 @@ class ReAct:
                     cost=step_cost,
                 )
 
+            # -- Drain steering messages --
+            if self.config and self.config.message_queues:
+                for msg in self.config.message_queues.drain_steering():
+                    context.add(msg)
+
             if handler:
                 handler.on_step_end(steps)
 
@@ -372,6 +393,23 @@ class ReAct:
         event_bus = self.config.event_bus if self.config else None
 
         for _ in range(self.max_steps):
+            # -- Cancellation check --
+            if self.config and self.config.cancellation:
+                from chimera.core.cancellation import OperationCancelled
+                try:
+                    self.config.cancellation.check()
+                except OperationCancelled:
+                    yield StepResult(
+                        message=Message.assistant("Operation cancelled"),
+                        done=True, step=steps, cost=0.0,
+                    )
+                    self._async_result = AgentResult(
+                        output="Operation cancelled", steps=steps,
+                        tool_calls_total=total_tool_calls, cost=total_cost,
+                        success=False, error="Cancelled",
+                    )
+                    return
+
             steps += 1
 
             response = await provider.async_complete(
@@ -497,6 +535,11 @@ class ReAct:
                     step=steps,
                     cost=step_cost,
                 )
+
+            # -- Drain steering messages --
+            if self.config and self.config.message_queues:
+                for msg in self.config.message_queues.drain_steering():
+                    context.add(msg)
 
         # Max steps
         yield StepResult(

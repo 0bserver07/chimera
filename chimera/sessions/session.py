@@ -162,6 +162,24 @@ class Session:
         session._parent_id = data.parent_id
         return session
 
+    def steer(self, message: str) -> None:
+        """Inject a steering message into the running turn."""
+        config = getattr(self._agent.loop, "config", None)
+        if config and config.message_queues:
+            config.message_queues.steer(Message.user(message))
+
+    def queue(self, message: str) -> None:
+        """Queue a follow-up message for after the current turn."""
+        config = getattr(self._agent.loop, "config", None)
+        if config and config.message_queues:
+            config.message_queues.follow_up(Message.user(message))
+
+    def cancel(self) -> None:
+        """Cancel the running agent turn."""
+        config = getattr(self._agent.loop, "config", None)
+        if config and config.cancellation:
+            config.cancellation.cancel()
+
     # ------------------------------------------------------------------
     # Properties
     # ------------------------------------------------------------------

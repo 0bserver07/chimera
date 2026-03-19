@@ -64,6 +64,10 @@ def execute_tool_calls(
     for tc in tool_calls:
         count += 1
 
+        # -- Cancellation check --
+        if config and config.cancellation:
+            config.cancellation.check()
+
         # -- Permission check --
         if config and config.permissions:
             from chimera.permissions.base import PermissionAction
@@ -104,6 +108,12 @@ def execute_tool_calls(
             path = tc.arguments.get("path", "")
             if path:
                 config.ghost_commits.snapshot(f"{tc.name}: {path}", [path])
+
+        # -- Cancellation: bind token to cancellable tools --
+        if config and config.cancellation:
+            from chimera.core.cancellation import CancellableTool
+            if isinstance(tool, CancellableTool):
+                tool.bind_cancellation(config.cancellation)
 
         # -- Execute --
         result = tool.execute(tc.arguments, env)
@@ -197,6 +207,10 @@ def execute_tool_calls_incremental(
     result = ToolExecutionResult()
 
     for i, tc in enumerate(tool_calls):
+        # -- Cancellation check --
+        if config and config.cancellation:
+            config.cancellation.check()
+
         # -- Permission check --
         if config and config.permissions:
             from chimera.permissions.base import PermissionAction
@@ -249,6 +263,12 @@ def execute_tool_calls_incremental(
             path = tc.arguments.get("path", "")
             if path:
                 config.ghost_commits.snapshot(f"{tc.name}: {path}", [path])
+
+        # -- Cancellation: bind token to cancellable tools --
+        if config and config.cancellation:
+            from chimera.core.cancellation import CancellableTool
+            if isinstance(tool, CancellableTool):
+                tool.bind_cancellation(config.cancellation)
 
         # -- Execute --
         tr = tool.execute(tc.arguments, env)
@@ -344,6 +364,10 @@ async def async_execute_tool_calls_incremental(
     approved: list[tuple[int, ToolCall, BaseTool]] = []
 
     for i, tc in enumerate(tool_calls):
+        # -- Cancellation check --
+        if config and config.cancellation:
+            config.cancellation.check()
+
         # -- Permission check --
         if config and config.permissions:
             from chimera.permissions.base import PermissionAction
@@ -396,6 +420,12 @@ async def async_execute_tool_calls_incremental(
             path = tc.arguments.get("path", "")
             if path:
                 config.ghost_commits.snapshot(f"{tc.name}: {path}", [path])
+
+        # -- Cancellation: bind token to cancellable tools --
+        if config and config.cancellation:
+            from chimera.core.cancellation import CancellableTool
+            if isinstance(tool, CancellableTool):
+                tool.bind_cancellation(config.cancellation)
 
         approved.append((i, tc, tool))
 
