@@ -52,7 +52,13 @@ def create_provider(
         ValueError: If *provider_type* is unknown or cannot be inferred from
             the model name.
     """
-    # Fall back to env var if model not specified
+    from chimera.providers.registry import (
+        _ensure_builtins_registered,
+        get_provider_factory,
+        list_providers,
+    )
+    _ensure_builtins_registered()
+
     if model is None:
         import os
         model = os.environ.get("ANTHROPIC_MODEL") or os.environ.get("OPENAI_MODEL")
@@ -61,54 +67,17 @@ def create_provider(
                 "No model specified. Pass model= or set ANTHROPIC_MODEL / OPENAI_MODEL."
             )
 
-    # Infer provider from model name if not specified
     if provider_type is None:
         provider_type = _infer_provider(model)
 
-    if provider_type == "anthropic":
-        from chimera.providers.anthropic import AnthropicProvider
-        return AnthropicProvider(model=model, api_key=api_key, base_url=base_url)
+    factory = get_provider_factory(provider_type)
+    if factory is not None:
+        return factory(model=model, api_key=api_key, base_url=base_url, **kwargs)
 
-    elif provider_type == "openai":
-        from chimera.providers.openai import OpenAIProvider
-        return OpenAIProvider(model=model, api_key=api_key, base_url=base_url)
-
-    elif provider_type == "google":
-        from chimera.providers.google import GoogleProvider
-        return GoogleProvider(model=model, api_key=api_key)
-
-    elif provider_type == "ollama":
-        from chimera.providers.ollama import OllamaProvider
-        return OllamaProvider(
-            model=model,
-            base_url=base_url or "http://localhost:11434",
-            **kwargs,
-        )
-
-    elif provider_type == "compatible":
-        from chimera.providers.compatible import OpenAICompatibleProvider
-        if base_url is None:
-            raise ValueError("base_url required for 'compatible' provider")
-        return OpenAICompatibleProvider(
-            model=model,
-            base_url=base_url,
-            api_key=api_key,
-            **kwargs,
-        )
-
-    elif provider_type == "modal":
-        from chimera.providers.modal import ModalProvider
-        return ModalProvider(
-            model=model,
-            base_url=base_url,
-            **kwargs,
-        )
-
-    else:
-        raise ValueError(
-            f"Unknown provider: '{provider_type}'. "
-            f"Choose from: anthropic, openai, google, ollama, compatible, modal"
-        )
+    raise ValueError(
+        f"Unknown provider: '{provider_type}'. "
+        f"Registered: {list_providers()}"
+    )
 
 
 def _infer_provider(model: str) -> str:

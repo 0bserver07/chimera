@@ -132,3 +132,13 @@ class OllamaProvider(Provider):
     @property
     def model_name(self) -> str:
         return self._model
+
+
+from chimera.providers.registry import register_provider as _register  # noqa: E402
+
+
+def _ollama_factory(model="", base_url=None, api_key=None, **kw):
+    return OllamaProvider(model=model, base_url=base_url or "http://localhost:11434", **kw)
+
+
+_register("ollama", _ollama_factory)

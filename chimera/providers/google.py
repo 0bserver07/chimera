@@ -140,3 +140,7 @@ class GoogleProvider(Provider):
     @property
     def model_name(self) -> str:
         return self._model_name
+
+
+from chimera.providers.registry import register_provider as _register  # noqa: E402
+_register("google", lambda model="", api_key=None, **kw: GoogleProvider(model=model, api_key=api_key))
