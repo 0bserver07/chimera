@@ -206,6 +206,54 @@ def cmd_session(session: Any, env: Any, args: str, out: PrintFn) -> None:
         out(f"Unknown session command: {sub}")
 
 
+def cmd_tree(session: Any, env: Any, args: str, out: PrintFn) -> None:
+    tree = getattr(session, "_tree", None)
+    if tree is None:
+        out("No session tree active.")
+        return
+    leaves = tree.get_leaves()
+    branch_points = tree.get_branch_points()
+    out(f"Session tree: {tree.entry_count} entries, {len(leaves)} leaves, {len(branch_points)} branch points")
+    out(f"Active leaf: {tree.active_leaf}")
+    for leaf in leaves:
+        marker = " <- active" if leaf == tree.active_leaf else ""
+        branch = tree.get_branch(leaf)
+        msg_count = sum(1 for e in branch if hasattr(e, 'message') and getattr(e, 'message', None) is not None)
+        out(f"  {leaf[:8]}... ({msg_count} messages){marker}")
+
+
+def cmd_branch(session: Any, env: Any, args: str, out: PrintFn) -> None:
+    tree = getattr(session, "_tree", None)
+    if tree is None:
+        out("No session tree active.")
+        return
+    entry_id = args.strip()
+    if not entry_id:
+        out("Usage: /branch <entry_id>")
+        return
+    try:
+        tree.fork(entry_id)
+        out(f"Branched from {entry_id[:8]}...")
+    except ValueError as e:
+        out(str(e))
+
+
+def cmd_switch(session: Any, env: Any, args: str, out: PrintFn) -> None:
+    tree = getattr(session, "_tree", None)
+    if tree is None:
+        out("No session tree active.")
+        return
+    leaf_id = args.strip()
+    if not leaf_id:
+        out("Usage: /switch <leaf_id>")
+        return
+    try:
+        session.switch_branch(leaf_id)
+        out(f"Switched to branch {leaf_id[:8]}...")
+    except (ValueError, AttributeError) as e:
+        out(str(e))
+
+
 def cmd_exit(session: Any, env: Any, args: str, out: PrintFn) -> None:
     raise SystemExit(0)
 
@@ -275,6 +323,9 @@ _COMMANDS: dict[str, CommandHandler] = {
     "quit": cmd_exit,
     "init": cmd_init,
     "yolo": cmd_yolo,
+    "tree": cmd_tree,
+    "branch": cmd_branch,
+    "switch": cmd_switch,
 }
 
 
