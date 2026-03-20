@@ -138,3 +138,106 @@ def discover_all_configs(start_dir: str | Path) -> list[ProjectInstructions]:
         current = parent
 
     return configs
+
+
+# ---------------------------------------------------------------------------
+# AGENTS.md discovery — ported from Codex's hierarchical doc scanning
+# ---------------------------------------------------------------------------
+
+AGENTS_FILENAMES = [
+    "AGENTS.md",
+    ".agents.md",
+]
+
+
+@dataclass
+class AgentDoc:
+    """Parsed agent-level instructions from an AGENTS.md file.
+
+    Args:
+        instructions: Merged instruction text.
+        source_paths: Paths to all AGENTS.md files that contributed.
+        sections: Named sections extracted from the markdown (keyed by heading).
+    """
+
+    instructions: str = ""
+    source_paths: list[str] = field(default_factory=list)
+    sections: dict[str, str] = field(default_factory=dict)
+
+
+def _parse_agents_sections(content: str) -> dict[str, str]:
+    """Split markdown into sections keyed by ``## Heading``.
+
+    Lines before the first heading go under the empty-string key.
+    """
+    sections: dict[str, str] = {}
+    current_key = ""
+    lines: list[str] = []
+    for line in content.splitlines():
+        if line.startswith("## "):
+            if lines:
+                sections[current_key] = "\n".join(lines).strip()
+            current_key = line[3:].strip()
+            lines = []
+        else:
+            lines.append(line)
+    if lines:
+        sections[current_key] = "\n".join(lines).strip()
+    return sections
+
+
+def discover_agents_docs(start_dir: str | Path) -> AgentDoc | None:
+    """Walk up from *start_dir* collecting AGENTS.md files with merge.
+
+    Child files override parent sections with the same heading. Sections
+    unique to parents are preserved. The instructions text is the merged
+    body (child first, then non-overlapping parent sections).
+
+    Args:
+        start_dir: Directory to start searching from.
+
+    Returns:
+        Merged AgentDoc, or None if no AGENTS.md files found.
+    """
+    raw_docs: list[tuple[str, dict[str, str]]] = []
+    current = Path(start_dir).resolve()
+
+    while True:
+        for filename in AGENTS_FILENAMES:
+            agents_path = current / filename
+            if agents_path.is_file():
+                content = agents_path.read_text(encoding="utf-8")
+                sections = _parse_agents_sections(content)
+                raw_docs.append((str(agents_path), sections))
+                break  # Only first match per directory
+        parent = current.parent
+        if parent == current:
+            break
+        current = parent
+
+    if not raw_docs:
+        return None
+
+    # Merge: child (index 0) wins over parent (index N)
+    merged_sections: dict[str, str] = {}
+    source_paths: list[str] = []
+    for path, sections in reversed(raw_docs):
+        merged_sections.update(sections)
+        source_paths.insert(0, path)
+
+    # Child sections override last (deepest first)
+    for path, sections in raw_docs[:1]:
+        merged_sections.update(sections)
+
+    # Build final instructions: preamble then sections
+    parts: list[str] = []
+    if "" in merged_sections:
+        parts.append(merged_sections.pop(""))
+    for heading, body in merged_sections.items():
+        parts.append(f"## {heading}\n{body}")
+
+    return AgentDoc(
+        instructions="\n\n".join(parts),
+        source_paths=source_paths,
+        sections=merged_sections,
+    )

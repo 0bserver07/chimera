@@ -212,3 +212,131 @@ def connect_watcher_to_event_bus(
             )
 
     watcher.on_change(_on_changes)
+
+
+# ---------------------------------------------------------------------------
+# AI Comment Watcher — ported from Aider's file-watching concept
+# ---------------------------------------------------------------------------
+
+# Default patterns that trigger an action when found in file content
+DEFAULT_AI_COMMENT_PATTERNS = [
+    r"#\s*AI:\s*(.+)",       # Python: # AI: fix this
+    r"//\s*AI:\s*(.+)",      # JS/TS/Go/Rust: // AI: fix this
+    r"/\*\s*AI:\s*(.+?)\*/", # C/Java block: /* AI: fix this */
+    r"--\s*AI:\s*(.+)",      # SQL/Lua: -- AI: fix this
+]
+
+
+@dataclass
+class AIComment:
+    """An AI-directed comment found in a file.
+
+    Args:
+        path: File path (relative to workdir).
+        line_number: 1-based line number.
+        directive: The instruction text after "AI:".
+        full_match: The entire matched comment string.
+    """
+
+    path: str
+    line_number: int
+    directive: str
+    full_match: str
+
+
+class AICommentWatcher:
+    """Detect ``AI:`` comments in changed files and trigger callbacks.
+
+    Wraps a :class:`FileWatcher` and scans modified/created files for lines
+    matching AI comment patterns. When found, the registered callbacks are
+    invoked with the list of :class:`AIComment` objects.
+
+    Args:
+        workdir: Project root to watch.
+        patterns: File glob patterns (default ``["*.py"]``).
+        comment_patterns: Regex patterns for AI comments. Uses
+            :data:`DEFAULT_AI_COMMENT_PATTERNS` when ``None``.
+
+    Example::
+
+        aw = AICommentWatcher("/my/project")
+        aw.on_ai_comment(lambda comments: print(comments))
+        aw.start()
+    """
+
+    def __init__(
+        self,
+        workdir: str,
+        patterns: list[str] | None = None,
+        comment_patterns: list[str] | None = None,
+    ) -> None:
+        import re as _re
+
+        self._workdir = Path(workdir)
+        self._comment_res = [
+            _re.compile(p) for p in (comment_patterns or DEFAULT_AI_COMMENT_PATTERNS)
+        ]
+        self._callbacks: list[Callable[[list[AIComment]], None]] = []
+        self._watcher = FileWatcher(workdir, patterns=patterns or ["*.py"])
+        self._watcher.on_change(self._on_file_changes)
+
+    def on_ai_comment(self, callback: Callable[[list[AIComment]], None]) -> None:
+        """Register a callback invoked when AI comments are detected."""
+        self._callbacks.append(callback)
+
+    def start(self) -> None:
+        """Start the underlying file watcher."""
+        self._watcher.start()
+
+    def stop(self) -> None:
+        """Stop watching."""
+        self._watcher.stop()
+
+    @property
+    def is_running(self) -> bool:
+        return self._watcher.is_running
+
+    def scan_file(self, rel_path: str) -> list[AIComment]:
+        """Scan a single file for AI comments.
+
+        Args:
+            rel_path: Path relative to workdir.
+
+        Returns:
+            List of AIComment instances found in the file.
+        """
+        full = self._workdir / rel_path
+        if not full.is_file():
+            return []
+        try:
+            content = full.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return []
+
+        comments: list[AIComment] = []
+        for i, line in enumerate(content.splitlines(), 1):
+            for pat in self._comment_res:
+                m = pat.search(line)
+                if m:
+                    directive = m.group(1).strip()
+                    comments.append(AIComment(
+                        path=rel_path,
+                        line_number=i,
+                        directive=directive,
+                        full_match=m.group(0),
+                    ))
+                    break  # One match per line
+        return comments
+
+    def _on_file_changes(self, changes: list[FileChange]) -> None:
+        """Internal callback from FileWatcher."""
+        all_comments: list[AIComment] = []
+        for change in changes:
+            if change.change_type in (ChangeType.CREATED, ChangeType.MODIFIED):
+                all_comments.extend(self.scan_file(change.path))
+        if all_comments and self._callbacks:
+            for cb in self._callbacks:
+                try:
+                    cb(all_comments)
+                except Exception:
+                    pass
