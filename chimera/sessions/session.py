@@ -87,6 +87,8 @@ class Session:
         )
         if self._tree:
             self._tree.add_message(Message.assistant(result.output))
+        if self._auto_compact and self._compaction:
+            self._maybe_compact()
         return result
 
     def iter_chat(self, message: str) -> Generator[StepResult, None, AgentResult]:
@@ -187,6 +189,23 @@ class Session:
             session._context.add(msg)
         session._parent_id = data.parent_id
         return session
+
+    def _maybe_compact(self) -> None:
+        """Compact context if it exceeds the threshold."""
+        config = getattr(self._agent.loop, "config", None)
+        threshold = config.auto_compact_threshold if config else 0.8
+        window = self._agent.provider.context_window
+        estimated_tokens = sum(len(m.content) // 4 for m in self._context.messages)
+        if estimated_tokens > window * threshold:
+            budget = int(window * 0.5)
+            assert self._compaction is not None
+            # Inject file tracking metadata if available
+            if config and config.file_tracker:
+                from chimera.compaction.base import FileAwareCompaction
+                if isinstance(self._compaction, FileAwareCompaction):
+                    self._compaction.set_metadata(config.file_tracker.to_metadata())
+            compacted = self._compaction.compact(self._context.messages, budget)
+            self._context._messages = compacted
 
     def steer(self, message: str) -> None:
         """Inject a steering message into the running turn."""

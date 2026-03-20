@@ -123,6 +123,11 @@ def build_parser() -> argparse.ArgumentParser:
         default="interactive",
         help="Output mode (default: interactive)",
     )
+    code_parser.add_argument(
+        "--models",
+        default="",
+        help="Comma-separated list of models to cycle through (e.g. glm-5,claude-sonnet-4)",
+    )
 
     # ---- review subcommand ----
     review_parser = subparsers.add_parser(

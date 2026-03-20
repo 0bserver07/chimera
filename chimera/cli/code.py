@@ -45,7 +45,30 @@ def cmd_help(session: Any, env: Any, args: str, out: PrintFn) -> None:
 
 
 def cmd_model(session: Any, env: Any, args: str, out: PrintFn) -> None:
-    out(f"Current model: {session.provider.model_name}")
+    parts = args.strip().split()
+    sub = parts[0] if parts else ""
+    model_list = getattr(session, "_model_list", [])
+    model_index = getattr(session, "_model_index", 0)
+
+    if sub == "next" and model_list:
+        model_index = (model_index + 1) % len(model_list)
+        new_model = model_list[model_index]
+        session.provider = create_provider(model=new_model)
+        session._agent.provider = session.provider
+        session._model_index = model_index
+        out(f"Switched to: {new_model}")
+    elif sub == "prev" and model_list:
+        model_index = (model_index - 1) % len(model_list)
+        new_model = model_list[model_index]
+        session.provider = create_provider(model=new_model)
+        session._agent.provider = session.provider
+        session._model_index = model_index
+        out(f"Switched to: {new_model}")
+    else:
+        out(f"Current model: {session.provider.model_name}")
+        if len(model_list) > 1:
+            out(f"Available: {', '.join(model_list)}")
+            out("Use /model next or /model prev to cycle")
 
 
 def cmd_cost(session: Any, env: Any, args: str, out: PrintFn) -> None:
@@ -453,6 +476,16 @@ def run_code(args: Any) -> int:
     except Exception:
         pass  # Config discovery is best-effort
 
+    # Auto-discover skills
+    try:
+        from chimera.skills.discovery import discover_skills, default_search_paths, format_skills_for_prompt
+        skills = discover_skills(default_search_paths(workdir))
+        skills_section = format_skills_for_prompt(skills)
+        if skills_section:
+            system += "\n\n" + skills_section
+    except Exception:
+        pass
+
     # --- Wire all pi-mono features ---
     handler = ConsoleStreamHandler()
     cost_tracker = CostTracker()
@@ -486,14 +519,22 @@ def run_code(args: Any) -> int:
     ask_tool = AskUserTool(callback=_repl_ask_callback)
     tools = list(AGENT_TOOLS) + [ask_tool]
 
-    # Session with auto-persisting tree
+    # Session with auto-persisting tree + auto-compaction
+    from chimera.compaction.summary import SummaryCompaction
     tree = SessionTree(_session_path(workdir))
+    compaction = SummaryCompaction(keep_first=2, keep_last=10)
     agent = Agent(provider=provider, tools=tools, loop=loop, prompt=prompt)
-    session = Session(agent=agent, env=env, tree=tree)
+    session = Session(agent=agent, env=env, tree=tree, auto_compact=True, compaction=compaction)
     session.provider = provider  # type: ignore[attr-defined]
     session.cost_tracker = cost_tracker  # type: ignore[attr-defined]
     session.tools = tools  # type: ignore[attr-defined]
     session.debug = False  # type: ignore[attr-defined]
+
+    # Model cycling
+    models_arg = getattr(args, "models", "")
+    model_list = [m.strip() for m in models_arg.split(",") if m.strip()] if models_arg else [provider.model_name]
+    session._model_list = model_list  # type: ignore[attr-defined]
+    session._model_index = 0  # type: ignore[attr-defined]
 
     _setup_readline()
 
