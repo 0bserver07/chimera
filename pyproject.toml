@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "AGPL-3.0"}
 authors = [{name = "Chimera Contributors"}]
-keywords = ["ai", "agents", "coding", "framework", "synthesis", "swe-bench"]
+keywords = ["agentic-coding", "coding-agents", "ai-agents", "swe-bench", "code-generation", "agent-framework", "llm-tools", "program-synthesis"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
