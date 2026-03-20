@@ -20,6 +20,7 @@ class SyncOnlyProvider(Provider):
         tools: list[ToolSchema] | None = None,
         temperature: float = 0.0,
         max_tokens: int | None = None,
+        **kwargs,
     ) -> Response:
         return self._response
 
