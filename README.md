@@ -1,8 +1,8 @@
 # Chimera
 
-A composable coding agent framework. Synthesize codebases from specifications.
+Build, compose, and deploy coding agents from modular primitives. A composable coding agent framework.
 
-**Status: Alpha** -- Core framework complete (2040+ tests passing). API may change before 1.0.
+**Status: Alpha** -- 2459 tests passing, 8 agent architectures replicable, benchmarked on HumanEval (90.9%) and SWE-bench. API may change before 1.0.
 
 ## What You Can Build
 
@@ -39,7 +39,7 @@ trainer = chimera.Trainer(
         chimera.Layer("db", deps=["api"]),
     ]),
     spec=chimera.Spec.from_tests("./tests/", "Build a task manager"),
-    agent=chimera.Agent(provider=chimera.create_provider("claude-sonnet-4-20250514")),
+    agent=chimera.Agent(provider=chimera.create_provider()),  # auto-detects from env
 )
 result = trainer.synthesize(strategy=chimera.TestConvergence(max_epochs=10))
 
@@ -189,6 +189,39 @@ Use Layer 1-4 as an agent toolkit. Use Layer 1-6 as a synthesis framework. Use L
 
 **Flow Skills.** Parse Mermaid flowcharts into executable decision trees. Convert to agent prompts with current position tracking, advance through flows with choice selection.
 
+## Agent Replication
+
+Chimera can replicate the architecture of any major coding agent by composing its primitives:
+
+| Agent | Chimera Primitives Used |
+|-------|----------------------|
+| SWE-Agent | RetryLoop + SWE_TOOLS + DemonstrationPrompt + trajectory logging |
+| Aider | LintFeedbackLoop + TreeSitter + GitEnvironment + RepoMap + commit style inference |
+| Cline | PlanActLoop + FocusChain + DefinitionLookup + InstructionLayer |
+| Codex CLI | SandboxPolicy + GhostCommits + head+tail truncation + response caching |
+| OpenHands | AgentController FSM + microagents + ACP + Critic + EventBus |
+| Gemini CLI | GroundedSearch + ContextCache + thought stripping + subagent investigator |
+| OpenCode | LSP feedback middleware + SemanticSearch + ApplyMiddleware |
+| Kimi CLI | Wire protocol + DMailTool + Flow skills + ThinkTool |
+
+```python
+# One-liner presets
+agent = chimera.AgentPreset.SWE_AGENT.build(provider)
+agent = chimera.AgentPreset.AIDER.build(provider)
+agent = chimera.AgentPreset.CLINE.build(provider)
+agent = chimera.AgentPreset.CODEX.build(provider)
+```
+
+## Benchmarks
+
+| Benchmark | Score | Details |
+|-----------|-------|---------|
+| HumanEval (164 problems) | **90.9% pass@1** | GLM-5, $0.26 total |
+| Terminal-Bench (10 tasks) | **30%** | GLM-5, frontier models get <65% |
+| SWE-bench Lite (20 instances) | **10%** | GLM-5, [transparency report](docs/benchmarks/README.md) |
+
+Full benchmark transparency framework with 13 tracked issues: [docs/benchmarks/README.md](docs/benchmarks/README.md)
+
 ## Philosophy
 
 Chimera treats agentic coding as a machine learning problem. The insight (from the observation): when an engineer writes a spec, agents iterate on code, and the result is a codebase that passes all tests -- that's training. The spec is the loss function. The agent loop is the optimizer. The output is a trained model you deploy without inspecting its internals.
@@ -197,17 +230,15 @@ The core verb is `.synthesize()` -- program synthesis, not chat.
 
 ## Roadmap
 
-- [x] ~~Cost tracking~~ (done)
-- [x] ~~`chimera.synthesize()` one-liner~~ (done)
-- [x] ~~Tree search strategy~~ (done)
-- [x] ~~Repository mapping~~ (done)
-- [x] ~~Real provider integration tests~~ (done -- 12 tests, any Anthropic-compatible endpoint)
-- [x] ~~Plugin/extension system~~ (done)
-- [x] ~~Documentation site~~ (done)
-- [x] ~~CI agent~~ (done -- CIFixWorkflow)
-- [x] ~~Docker environment integration tests~~ (done -- 8 tests, skip without Docker)
-- [x] ~~Wire protocol, D-Mail, Flow Skills~~ (done -- ported from Kimi CLI)
-- [x] ~~Runnable examples with real LLM tests~~ (done -- 8 examples, 14 tests)
+- [x] Core framework (8 layers, 20 tools, 6 providers)
+- [x] Agent replication (8 architectures: SWE-Agent, Aider, Cline, Codex, OpenHands, Gemini, OpenCode, Kimi)
+- [x] Benchmarks (HumanEval 90.9%, Terminal-Bench 30%, SWE-bench 10%)
+- [x] Documentation site (Starlight, 114 pages)
+- [x] CI/CD pipeline (GitHub Actions)
+- [ ] Close SWE-bench gap (IPython action space, LLM condensation, 500 iterations)
+- [ ] PyPI publishing (`pip install chimera-ai`)
+- [ ] Additional benchmarks (FeatureBench, MBPP, LiveCodeBench, tau-bench)
+- [ ] IDE extension
 
 ## Contributing
 

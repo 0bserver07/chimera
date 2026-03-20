@@ -9,6 +9,7 @@ import subprocess
 
 import pytest
 
+docker = pytest.importorskip("docker", reason="docker package not installed")
 from chimera.env.docker import DockerEnvironment
 
 
