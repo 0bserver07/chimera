@@ -55,9 +55,15 @@ credential = auth.authenticate()  # Uses the explicit key
 
 ### OAuthDeviceFlow
 
-Implements RFC 8628 (device authorization grant).  Shows a code in the
-terminal; the user visits a URL to authorize.  Requires `httpx` (install via
-`pip install chimera-ai[auth]`).
+Implements RFC 8628 (device authorization grant) as a **real HTTP polling
+implementation** using only stdlib (`urllib.request`).  Shows a code in the
+terminal; the user visits a URL to authorize.  No external dependencies are
+required.
+
+The flow polls the token endpoint at `poll_interval` seconds until the user
+completes authorization or `timeout` seconds elapse.  Standard RFC 8628 error
+codes (`authorization_pending`, `slow_down`, `access_denied`, `expired_token`)
+are handled automatically.
 
 ```python
 from chimera.auth import OAuthDeviceFlow
@@ -74,8 +80,14 @@ auth = OAuthDeviceFlow(
 
 ### OAuthBrowserFlow
 
-OAuth 2.0 authorization code flow with PKCE and a local redirect server.  Also
-requires `httpx`.
+OAuth 2.0 authorization code flow with PKCE and a local callback server.  This
+is a **real PKCE implementation** using only stdlib (`urllib.request`,
+`http.server`, `secrets`).  No external dependencies are required.
+
+The flow generates a code verifier/challenge, opens the authorization URL in
+the default browser, and spins up a temporary `http.server` listener on
+`redirect_port` to capture the authorization code.  The code is then exchanged
+for tokens at `token_url`.
 
 ```python
 from chimera.auth import OAuthBrowserFlow

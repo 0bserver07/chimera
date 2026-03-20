@@ -122,9 +122,51 @@ nexts = flow.next_nodes("C")  # [(FlowEdge, FlowNode), ...]
 | `FlowValidationError` | Missing begin/end, unreachable end, unlabeled decision edges, duplicate labels |
 | `FlowError` | `advance()` called at end node, or invalid choice |
 
+## Skill Discovery (pi-mono)
+
+`chimera.skills.discovery` provides automatic skill discovery so the REPL and
+agent loops can load Flow skills from well-known locations without manual
+registration.
+
+### SKILL.md format
+
+A `SKILL.md` file placed in a skill directory tells the discovery system how to
+load the skill.  It is a Markdown file with a YAML front-matter header:
+
+```markdown
+---
+name: my-workflow
+description: A short description shown in /skills
+entry: flow.md        # path to the Mermaid flowchart file, relative to SKILL.md
+---
+
+Any additional documentation for the skill goes here.
+```
+
+### Discovery API
+
+| Function | Description |
+|----------|-------------|
+| `discover_skills(paths)` | Search `paths` for `SKILL.md` files and return a list of loaded `Flow` objects |
+| `default_search_paths()` | Return the default search path list: `~/.chimera/skills/`, `./skills/`, and any paths from `CHIMERA_SKILL_PATH` env var |
+
+```python
+from chimera.skills.discovery import discover_skills, default_search_paths
+
+skills = discover_skills(default_search_paths())
+for skill in skills:
+    print(skill.name, skill.description)
+```
+
+### Auto-discovery in the REPL
+
+When `chimera code` starts, it calls `discover_skills(default_search_paths())`
+and registers all found skills.  Type `/skills` in the REPL to list them.
+
 ## Import Reference
 
 ```python
 from chimera.skills.flow import Flow, FlowNode, FlowEdge, parse_choice
 from chimera.skills.flow import FlowError, FlowParseError, FlowValidationError
+from chimera.skills.discovery import discover_skills, default_search_paths
 ```

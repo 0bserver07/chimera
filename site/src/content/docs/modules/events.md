@@ -49,6 +49,41 @@ Nine concrete event dataclasses are defined in `chimera.events.types`:
 | `PermissionEvent` | `permission` | `tool_name`, `action`, `granted` |
 | `SessionEvent` | `session` | `action`, `session_id` |
 
+## New event types (pi-mono)
+
+Ten additional event dataclasses cover the full agent lifecycle, including
+per-request telemetry, turn tracking, streaming, and cancellation:
+
+| Class | `type` field | Key fields |
+|-------|-------------|------------|
+| `ModelRequestEvent` | `model_request` | `model`, `message_count`, `tool_count` |
+| `ModelResponseEvent` | `model_response` | `model`, `content_length`, `tool_calls_count`, `input_tokens`, `output_tokens` |
+| `TurnStartEvent` | `turn_start` | `turn_number` |
+| `TurnEndEvent` | `turn_end` | `turn_number`, `tool_calls_count` |
+| `StreamStartEvent` | `stream_start` | `model` |
+| `StreamEndEvent` | `stream_end` | `total_tokens` |
+| `AgentStartEvent` | `agent_start` | `max_steps` |
+| `AgentEndEvent` | `agent_end` | `steps`, `success`, `total_cost` |
+| `SteeringEvent` | `steering` | `content` |
+| `CancellationEvent` | `cancellation` | `at_step` |
+
+Subscribe to any of these using their `type` string or the `"*"` wildcard:
+
+```python
+from chimera.events import EventBus
+from chimera.events.types import AgentEndEvent
+
+bus = EventBus()
+
+@bus.on("agent_end")
+def on_done(event: AgentEndEvent):
+    print(f"Finished in {event.steps} steps, cost ${event.total_cost:.4f}")
+
+@bus.on("cancellation")
+def on_cancel(event):
+    print(f"Cancelled at step {event.at_step}")
+```
+
 ## Middleware
 
 Middleware wraps the dispatch pipeline.  Each middleware implements a single

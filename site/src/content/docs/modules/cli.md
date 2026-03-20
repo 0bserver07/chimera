@@ -29,7 +29,7 @@ chimera ci-fix --log ci-output.log
 | `chimera synth` | Alias for `synthesize` | (same as above) |
 | `chimera eval` | Evaluate against benchmarks | `--benchmark` (required), `--dataset`, `--limit`, `--model`, `--output` |
 | `chimera bench` | Run benchmark suites | `--suite` (required), `--tasks-dir`, `--model`, `--output` |
-| `chimera code` | Interactive REPL | `--model`, `--workdir`, `--max-steps` |
+| `chimera code` | Interactive REPL | `--model`, `--workdir`, `--max-steps`, `--mode`, `--models` |
 | `chimera review` | AI code review | `--diff` (required), `--model`, `--max-rounds` |
 | `chimera ci-fix` | Diagnose/fix CI failures | `--log` (required), `--model`, `--max-attempts` |
 | `chimera research` | Research a question | `--question` (required), `--model`, `--workdir` |
@@ -129,9 +129,43 @@ Launch with `chimera code`:
 
 ```bash
 chimera code --model claude-sonnet-4-20250514 --workdir ./myproject --max-steps 50
+
+# Cycle through multiple models automatically
+chimera code --models glm-5,claude-sonnet-4-20250514,gpt-4o
+
+# Use RPC or JSON output mode for programmatic consumers
+chimera code --mode rpc
+chimera code --mode json
 ```
 
 The REPL loads `AGENT_TOOLS` -- a 13-tool preset that extends `DEFAULT_TOOLS` with edit, search, list_files, test, git, replace_in_file, repo_map, think, and todo -- plus `AskUserTool` for interactive prompts. It also auto-discovers project context from `chimera.yaml`/`.chimera/`, and loads MCP servers from `~/.chimera/mcp.json` if present.
+
+### Terminal modes and mid-turn interaction
+
+The REPL operates in two terminal modes automatically:
+
+- **Readline idle mode** — used when waiting for user input; supports history and line editing.
+- **Raw stdin mode** — active while the agent runs; captures keystrokes without blocking the loop.
+
+While the agent is running you can:
+- **Type a message** — it is queued and delivered as a steering message to the running turn.
+- **Press Ctrl+C** — cancels the current turn via `CancellationToken`.
+
+Sessions are auto-saved to `~/.chimera/sessions/` after every turn so progress is never lost.
+
+### `--mode` flag
+
+| Value | Description |
+|-------|-------------|
+| `interactive` | Default terminal REPL with readline |
+| `rpc` | JSON-RPC 2.0 over stdio; suitable for IDE extensions |
+| `json` | One JSON object per line (newline-delimited) |
+
+### `--models` flag
+
+Accepts a comma-separated list of model names.  The REPL cycles through them
+in order using `/model next` / `/model prev`, or automatically based on cost
+or failure policies.
 
 ### REPL Slash Commands
 
@@ -158,6 +192,11 @@ The REPL loads `AGENT_TOOLS` -- a 13-tool preset that extends `DEFAULT_TOOLS` wi
 | `/agent list` | List available agent presets |
 | `/init` | Re-initialize the agent with updated project context |
 | `/yolo` | Toggle YOLO mode (auto-approve all tool calls) |
+| `/tree` | Display the session branch tree |
+| `/branch [name]` | Create a new named branch from the current session |
+| `/switch <name>` | Switch to an existing branch by name |
+| `/model next` | Cycle to the next model in the `--models` list |
+| `/model prev` | Cycle to the previous model in the `--models` list |
 | `/exit` or `/quit` | Exit the REPL |
 
 ### REPL example session

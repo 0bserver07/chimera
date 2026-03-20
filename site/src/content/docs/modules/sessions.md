@@ -22,6 +22,7 @@ appends the user message to the running context and delegates to the agent loop.
 | `session_id` | random UUID | Explicit session identifier |
 | `auto_compact` | `False` | Apply compaction after every turn |
 | `compaction` | `None` | `CompactionStrategy` for auto-compaction |
+| `tree` | `None` | Optional `SessionTree` for branch management |
 
 ### Key methods
 
@@ -31,6 +32,26 @@ appends the user message to the running context and delegates to the agent loop.
 | `fork()` | Create an independent branch with a deep-copied context |
 | `save()` | Persist the current state to storage |
 | `Session.resume(id, agent, storage)` | Class method to restore a saved session |
+| `steer(message)` | Inject a steering message mid-turn without interrupting the running loop |
+| `queue(message)` | Queue a user message to be processed after the current turn completes |
+| `cancel()` | Signal the current turn to cancel via `CancellationToken` |
+| `switch_branch(session_id)` | Switch this session to a different branch managed by the `SessionTree` |
+
+### Auto-compaction
+
+When `auto_compact=True` is set, the session calls `_maybe_compact()` after
+every `chat()` turn.  `_maybe_compact()` checks whether the context exceeds the
+configured token threshold and, if so, applies the `compaction` strategy before
+the next turn.  This keeps long-running sessions from hitting provider context
+limits automatically.
+
+## SessionTree
+
+`chimera.sessions.tree.SessionTree` manages a graph of related sessions for
+branch-aware workflows.  It tracks parent/child relationships, supports named
+branches, and enables switching between branches within a single `Session`
+object.  See the [chimera.sessions reference](/reference/sessions/) for the
+full API.
 
 ### Properties
 

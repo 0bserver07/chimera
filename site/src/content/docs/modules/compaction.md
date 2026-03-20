@@ -107,6 +107,48 @@ flowchart LR
     S --> OUT
 ```
 
+## CompactionMetadata (pi-mono)
+
+`CompactionMetadata` is a dataclass that tracks which files were read or
+modified during a session so compaction strategies can include file-aware
+context in their summaries:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `read_files` | `set[str]` | Paths of files the agent has read |
+| `modified_files` | `set[str]` | Paths of files the agent has written or edited |
+
+`CompactionMetadata` provides a `merge(other)` method that returns a new
+instance combining both sets, useful when merging metadata from parallel
+branches.
+
+## FileAwareCompaction mixin (pi-mono)
+
+`FileAwareCompaction` is a mixin for compaction strategies that need access to
+file metadata.  It adds two methods:
+
+| Method | Description |
+|--------|-------------|
+| `set_metadata(metadata)` | Attach a `CompactionMetadata` instance to this strategy |
+| `get_file_prompt_section()` | Return a formatted string listing read and modified files, suitable for inclusion in a summary prompt |
+
+`SummaryCompaction` now extends `FileAwareCompaction`.  When metadata is
+attached, the LLM summary prompt automatically includes a file-activity section
+so the summary preserves awareness of which files were touched.
+
+```python
+from chimera.compaction import SummaryCompaction, CompactionMetadata
+
+meta = CompactionMetadata(
+    read_files={"src/main.py", "src/utils.py"},
+    modified_files={"src/main.py"},
+)
+
+summary = SummaryCompaction(provider=my_provider)
+summary.set_metadata(meta)
+compacted = summary.compact(messages, budget=8000)
+```
+
 ## Integration with Sessions
 
 When `auto_compact=True` is set on a `Session`, the compaction strategy runs
