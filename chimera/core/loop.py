@@ -8,14 +8,13 @@ from chimera.core.tool import BaseTool
 from chimera.core.tool_executor import (
     LoopBreak,
     async_execute_tool_calls_incremental,
-    execute_tool_calls,
     execute_tool_calls_incremental,
 )
 from chimera.env.base import Environment
 from chimera.providers.base import Provider, Response, StreamEvent
 from chimera.providers.cost import calculate_cost
 from chimera.providers.cost_tracker import CostLimitExceeded
-from chimera.types import AgentResult, Message, StepResult, ToolCall, ToolResult
+from chimera.types import AgentResult, Message, StepResult, ToolCall
 
 if TYPE_CHECKING:
     from chimera.core.cancellation import CancellationToken

@@ -4,9 +4,8 @@ from __future__ import annotations
 import json
 import urllib.request
 from typing import Any
-from collections.abc import Iterator
 
-from chimera.providers.base import Provider, Response, StreamEvent
+from chimera.providers.base import Provider, Response
 from chimera.types import Message, ToolCall
 
 

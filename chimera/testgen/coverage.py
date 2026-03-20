@@ -42,8 +42,8 @@ def parse_coverage(output: str) -> CoverageReport:
         re.MULTILINE,
     ):
         filepath = match.group(1)
-        stmts = int(match.group(2))
-        miss = int(match.group(3))
+        _ = match.group(2)  # stmts
+        _ = match.group(3)  # miss
         cover = float(match.group(4))
         missing = match.group(5) or ""
 

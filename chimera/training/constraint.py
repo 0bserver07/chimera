@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Callable
 
 from chimera.types import TestResult
@@ -346,7 +346,7 @@ class Constraint:
                     message=f"{tool} not available",
                     score=1.0,
                 )
-            errors = [l for l in result.stdout.splitlines() if ": error:" in l]
+            errors = [line for line in result.stdout.splitlines() if ": error:" in line]
             score = max(0.0, 1.0 - len(errors) * 0.1)
             return ConstraintResult(
                 name="type_check",
@@ -402,7 +402,7 @@ class Constraint:
                     message=f"{tool} not available",
                     score=1.0,
                 )
-            warnings = [l for l in result.stdout.splitlines() if l.strip() and ":" in l]
+            warnings = [line for line in result.stdout.splitlines() if line.strip() and ":" in line]
             score = max(0.0, 1.0 - len(warnings) * 0.05)
             return ConstraintResult(
                 name="lint_check",

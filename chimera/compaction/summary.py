@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 from chimera.types import Message
 
-from chimera.compaction.base import CompactionStrategy, FileAwareCompaction
+from chimera.compaction.base import FileAwareCompaction
 
 if TYPE_CHECKING:
     from chimera.providers.base import Provider

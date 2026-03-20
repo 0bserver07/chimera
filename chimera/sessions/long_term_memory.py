@@ -191,7 +191,7 @@ class LongTermMemory:
         Returns:
             A Markdown string, or ``""`` if no memories match.
         """
-        entries: list[MemoryEntry] | dict_values = self._entries.values()  # type: ignore[assignment]
+        entries: list[MemoryEntry]  = self._entries.values()  # type: ignore[assignment]
         if categories:
             entries = [e for e in entries if e.category in categories]
 

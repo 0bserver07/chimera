@@ -10,7 +10,6 @@ Inspired by Cursor's codebase indexing and Aider's repo map.
 from __future__ import annotations
 
 import math
-import os
 import re
 from collections import Counter
 from dataclasses import dataclass, field

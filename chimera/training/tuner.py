@@ -8,7 +8,7 @@ configuration and selecting the best one by the chosen metric.
 from __future__ import annotations
 
 import itertools
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Callable
 
 from chimera.training.strategies.base import Callback, SynthesisResult

@@ -241,7 +241,7 @@ class CEGISStrategy(Strategy):
         for i, line in enumerate(lines):
             match = re.search(r"FAILED\s+(\S+)", line)
             if match:
-                failure_name = match.group(1)
+                _ = match.group(1)  # failure_name
                 # Collect context: lines around the failure
                 context_lines = [line.strip()]
                 # Look backwards for error/assertion info

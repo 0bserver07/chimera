@@ -3,9 +3,8 @@ from __future__ import annotations
 
 import shutil
 from pathlib import Path
-from typing import Any
 
-from chimera.lsp.base import Diagnostic, Severity
+from chimera.lsp.base import Diagnostic
 from chimera.lsp.servers import BUILTIN_SERVERS, LanguageServerConfig
 from chimera.lsp.session import LSPSession
 

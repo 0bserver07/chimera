@@ -14,7 +14,7 @@ from typing import Any, Callable, TYPE_CHECKING
 from chimera.env.local import LocalEnvironment
 
 _logger = logging.getLogger(__name__)
-from chimera.training.strategies.base import (
+from chimera.training.strategies.base import (  # noqa: E402
     Callback,
     EpochResult,
     Strategy,

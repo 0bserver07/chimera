@@ -10,7 +10,6 @@ from chimera.events.base import Event
 from chimera.sessions.base import SessionID, Storage
 from chimera.sessions.eventlog.log import EventLog
 from chimera.sessions.session import Session
-from chimera.sessions.storage.memory import InMemoryStorage
 from chimera.types import AgentResult, Message
 
 if TYPE_CHECKING:

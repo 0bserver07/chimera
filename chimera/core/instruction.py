@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 
@@ -68,12 +68,12 @@ class InstructionLayer:
     @property
     def layers(self) -> list[Layer]:
         """All layers, sorted by priority (highest first)."""
-        return sorted(self._layers.values(), key=lambda l: l.priority, reverse=True)
+        return sorted(self._layers.values(), key=lambda layer: layer.priority, reverse=True)
 
     @property
     def active_layers(self) -> list[Layer]:
         """Enabled layers only, sorted by priority."""
-        return [l for l in self.layers if l.enabled]
+        return [layer for layer in self.layers if layer.enabled]
 
     def render(self, **variables: str) -> str:
         """Render all active layers into a single prompt string.

@@ -1,7 +1,7 @@
 """Review orchestrator: manages reviewer-author iteration."""
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from chimera.review.feedback import ReviewFeedback

@@ -11,11 +11,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from chimera.core.middleware import LoopMiddleware
-from chimera.core.proposed_edit import EditProposal, EditStatus
+from chimera.core.proposed_edit import EditProposal
 
 if TYPE_CHECKING:
     from chimera.core.context import Context
-    from chimera.core.tool import BaseTool
     from chimera.env.base import Environment
     from chimera.providers.base import Response
     from chimera.types import AgentResult

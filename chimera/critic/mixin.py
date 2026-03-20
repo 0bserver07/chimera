@@ -7,7 +7,7 @@ from chimera.critic.base import CriticMode
 
 if TYPE_CHECKING:
     from chimera.core.context import Context
-    from chimera.critic.base import Critic, CriticResult
+    from chimera.critic.base import Critic
     from chimera.events.base import EventBus
     from chimera.types import Message, ToolCall
 

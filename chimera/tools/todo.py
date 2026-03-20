@@ -7,7 +7,7 @@ listing all tasks with their statuses.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from chimera.core.tool import BaseTool

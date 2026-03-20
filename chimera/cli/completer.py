@@ -8,8 +8,6 @@ from __future__ import annotations
 
 import os
 import readline
-from pathlib import Path
-from typing import Any
 
 # Slash commands available in the REPL
 _SLASH_COMMANDS = [

@@ -18,7 +18,7 @@ from collections.abc import Generator
 from typing import TYPE_CHECKING
 
 from chimera.core.context import Context
-from chimera.core.loop import ReAct, drain_steps
+from chimera.core.loop import ReAct
 from chimera.core.tool import BaseTool
 from chimera.env.base import Environment
 from chimera.providers.base import Provider

@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Iterator
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from chimera.types import Message, ToolCall

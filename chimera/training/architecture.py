@@ -43,7 +43,7 @@ class Architecture:
 
     def __init__(self, layers: list[Layer] | None = None) -> None:
         self.layers: list[Layer] = layers or []
-        self._by_name: dict[str, Layer] = {l.name: l for l in self.layers}
+        self._by_name: dict[str, Layer] = {layer.name: layer for layer in self.layers}
         self._validate()
 
     def _validate(self) -> None:
@@ -61,7 +61,7 @@ class Architecture:
     def _check_cycles(self) -> None:
         """Detect circular dependencies via DFS."""
         WHITE, GRAY, BLACK = 0, 1, 2
-        color = {l.name: WHITE for l in self.layers}
+        color = {layer.name: WHITE for layer in self.layers}
 
         def dfs(name: str) -> None:
             color[name] = GRAY
@@ -100,8 +100,8 @@ class Architecture:
         Uses Kahn's algorithm.
         """
         # Build in-degree map
-        in_degree: dict[str, int] = {l.name: 0 for l in self.layers}
-        dependents: dict[str, list[str]] = {l.name: [] for l in self.layers}
+        in_degree: dict[str, int] = {layer.name: 0 for layer in self.layers}
+        dependents: dict[str, list[str]] = {layer.name: [] for layer in self.layers}
 
         for layer in self.layers:
             for dep in layer.depends_on:

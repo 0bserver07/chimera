@@ -9,11 +9,11 @@ score.
 from __future__ import annotations
 
 from collections.abc import Generator
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Callable, TYPE_CHECKING
 
 from chimera.core.context import Context
-from chimera.core.loop import ReAct, drain_steps
+from chimera.core.loop import ReAct
 from chimera.core.tool import BaseTool
 from chimera.env.base import Environment
 from chimera.providers.base import Provider

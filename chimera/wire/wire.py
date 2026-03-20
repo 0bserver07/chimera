@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import queue
 import uuid
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Callable
 
 from chimera.wire.types import WireMessage, WireRequest, WireResponse
 

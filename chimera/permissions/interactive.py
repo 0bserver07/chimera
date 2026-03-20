@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from chimera.permissions.base import PermissionAction
-from chimera.permissions.risk import RiskLevel, classify_risk
+from chimera.permissions.risk import classify_risk
 
 
 @dataclass

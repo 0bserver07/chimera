@@ -1,7 +1,7 @@
 """CI fix workflow: diagnose and fix CI failures."""
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from chimera.ci.failure_parser import FailureInfo, parse_ci_log
