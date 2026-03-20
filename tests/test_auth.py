@@ -127,32 +127,11 @@ class TestAPIKeyAuth:
 
 
 # ---------------------------------------------------------------------------
-# OAuth stubs
+# OAuth flows (stdlib implementation — no httpx required)
 # ---------------------------------------------------------------------------
 
 
 class TestOAuthDeviceFlow:
-    def test_authenticate_raises(self) -> None:
-        flow = OAuthDeviceFlow(
-            provider_name="test",
-            client_id="cid",
-            device_auth_url="https://example.com/device",
-            token_url="https://example.com/token",
-        )
-        with pytest.raises(NotImplementedError, match="httpx"):
-            flow.authenticate()
-
-    def test_refresh_raises(self) -> None:
-        flow = OAuthDeviceFlow(
-            provider_name="test",
-            client_id="cid",
-            device_auth_url="https://example.com/device",
-            token_url="https://example.com/token",
-        )
-        cred = Credential(provider="test", token="tok")
-        with pytest.raises(NotImplementedError, match="httpx"):
-            flow.refresh(cred)
-
     def test_provider_name(self) -> None:
         flow = OAuthDeviceFlow(
             provider_name="mycloud",
@@ -161,30 +140,20 @@ class TestOAuthDeviceFlow:
             token_url="https://example.com/token",
         )
         assert flow.provider_name == "mycloud"
+
+    def test_refresh_no_token_raises(self) -> None:
+        flow = OAuthDeviceFlow(
+            provider_name="test",
+            client_id="cid",
+            device_auth_url="https://example.com/device",
+            token_url="https://example.com/token",
+        )
+        cred = Credential(provider="test", token="tok", refresh_token=None)
+        with pytest.raises(ValueError, match="No refresh token"):
+            flow.refresh(cred)
 
 
 class TestOAuthBrowserFlow:
-    def test_authenticate_raises(self) -> None:
-        flow = OAuthBrowserFlow(
-            provider_name="test",
-            client_id="cid",
-            auth_url="https://example.com/auth",
-            token_url="https://example.com/token",
-        )
-        with pytest.raises(NotImplementedError, match="httpx"):
-            flow.authenticate()
-
-    def test_refresh_raises(self) -> None:
-        flow = OAuthBrowserFlow(
-            provider_name="test",
-            client_id="cid",
-            auth_url="https://example.com/auth",
-            token_url="https://example.com/token",
-        )
-        cred = Credential(provider="test", token="tok")
-        with pytest.raises(NotImplementedError, match="httpx"):
-            flow.refresh(cred)
-
     def test_provider_name(self) -> None:
         flow = OAuthBrowserFlow(
             provider_name="mycloud",
@@ -193,6 +162,17 @@ class TestOAuthBrowserFlow:
             token_url="https://example.com/token",
         )
         assert flow.provider_name == "mycloud"
+
+    def test_refresh_no_token_raises(self) -> None:
+        flow = OAuthBrowserFlow(
+            provider_name="test",
+            client_id="cid",
+            auth_url="https://example.com/auth",
+            token_url="https://example.com/token",
+        )
+        cred = Credential(provider="test", token="tok", refresh_token=None)
+        with pytest.raises(ValueError, match="No refresh token"):
+            flow.refresh(cred)
 
 
 # ---------------------------------------------------------------------------
