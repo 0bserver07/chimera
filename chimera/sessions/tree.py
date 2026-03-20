@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import threading
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -81,15 +82,17 @@ class SessionTree:
         self._by_id: dict[str, AnyEntry] = {}
         self._children: dict[str | None, list[str]] = {}
         self._active_leaf: str | None = None
+        self._lock = threading.Lock()
         if self._path.exists():
             self._load()
 
     def append(self, entry: AnyEntry) -> None:
-        self._entries.append(entry)
-        self._by_id[entry.id] = entry
-        self._children.setdefault(entry.parent_id, []).append(entry.id)
-        self._active_leaf = entry.id
-        self._append_to_file(entry)
+        with self._lock:
+            self._entries.append(entry)
+            self._by_id[entry.id] = entry
+            self._children.setdefault(entry.parent_id, []).append(entry.id)
+            self._active_leaf = entry.id
+            self._append_to_file(entry)
 
     def add_message(self, message: Message, parent_id: str | None = None) -> str:
         entry_id = self._generate_id()

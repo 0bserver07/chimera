@@ -1,22 +1,30 @@
 """Interactive coding REPL with readline, slash commands, and session management."""
 from __future__ import annotations
 
+import hashlib
 import os
+import select
 import sys
+import threading
 from pathlib import Path
 from typing import Any, Callable
 
 from chimera import __version__
 from chimera.core.agent import Agent
+from chimera.core.cancellation import CancellationToken
+from chimera.core.file_tracker import FileTracker
 from chimera.core.loop import ReAct, drain_steps
 from chimera.core.loop_config import LoopConfig
+from chimera.core.message_queue import MessageQueues
 from chimera.core.prompt import Prompt
 from chimera.core.tool_group import AGENT_TOOLS
 from chimera.env.local import LocalEnvironment
 from chimera.providers.cost_tracker import CostTracker
 from chimera.providers.factory import create_provider
 from chimera.sessions.session import Session
+from chimera.sessions.tree import SessionTree
 from chimera.streaming.handlers import ConsoleStreamHandler
+from chimera.types import Message
 
 _DEFAULT_SYSTEM = """\
 You are a coding assistant with access to tools for reading, writing, \
@@ -387,10 +395,38 @@ def _setup_readline() -> None:
     atexit.register(readline.write_history_file, str(history_file))
 
 
+# -- Session Path --
+
+def _session_path(workdir: str) -> Path:
+    """Stable session file path based on workdir hash."""
+    h = hashlib.sha256(workdir.encode()).hexdigest()[:12]
+    session_dir = Path.home() / ".chimera" / "sessions"
+    session_dir.mkdir(parents=True, exist_ok=True)
+    return session_dir / f"{h}.jsonl"
+
+
+def _read_steering_input() -> str | None:
+    """Non-blocking read from stdin. Returns line or None."""
+    try:
+        readable, _, _ = select.select([sys.stdin], [], [], 0.1)
+        if readable:
+            line = sys.stdin.readline()
+            return line.strip() if line else None
+    except (OSError, ValueError):
+        pass
+    return None
+
+
 # -- Main REPL --
 
 def run_code(args: Any) -> int:
     """Run the interactive coding REPL."""
+    mode = getattr(args, "mode", "interactive")
+    if mode == "rpc":
+        return _run_rpc_mode(args)
+    if mode == "json":
+        return _run_json_mode(args)
+
     workdir = os.path.abspath(getattr(args, "workdir", None) or os.getcwd())
     provider = create_provider(model=getattr(args, "model", None))
     env = LocalEnvironment(workdir=workdir)
@@ -403,8 +439,7 @@ def run_code(args: Any) -> int:
             import json
             mcp_config = json.loads(mcp_config_path.read_text())
             from chimera.mcp.tools import MCPToolSource
-            mcp_tools = MCPToolSource.from_config(mcp_config)
-            # tools would be added here
+            mcp_tools = MCPToolSource.from_config(mcp_config)  # noqa: F841
     except Exception:
         pass
 
@@ -418,10 +453,19 @@ def run_code(args: Any) -> int:
     except Exception:
         pass  # Config discovery is best-effort
 
+    # --- Wire all pi-mono features ---
     handler = ConsoleStreamHandler()
     cost_tracker = CostTracker()
+    file_tracker = FileTracker()
+    queues = MessageQueues()
+
     max_steps = getattr(args, "max_steps", 50) or 50
-    config = LoopConfig(handler=handler, cost_tracker=cost_tracker)
+    config = LoopConfig(
+        handler=handler,
+        cost_tracker=cost_tracker,
+        file_tracker=file_tracker,
+        message_queues=queues,
+    )
     loop = ReAct(max_steps=max_steps, config=config)
 
     prompt = Prompt.from_string(system)
@@ -442,8 +486,10 @@ def run_code(args: Any) -> int:
     ask_tool = AskUserTool(callback=_repl_ask_callback)
     tools = list(AGENT_TOOLS) + [ask_tool]
 
+    # Session with auto-persisting tree
+    tree = SessionTree(_session_path(workdir))
     agent = Agent(provider=provider, tools=tools, loop=loop, prompt=prompt)
-    session = Session(agent=agent, env=env)
+    session = Session(agent=agent, env=env, tree=tree)
     session.provider = provider  # type: ignore[attr-defined]
     session.cost_tracker = cost_tracker  # type: ignore[attr-defined]
     session.tools = tools  # type: ignore[attr-defined]
@@ -455,6 +501,7 @@ def run_code(args: Any) -> int:
     total_cost = 0.0
 
     while True:
+        # IDLE MODE — readline active
         try:
             user_input = input("\n> ").strip()
         except (EOFError, KeyboardInterrupt):
@@ -473,16 +520,111 @@ def run_code(args: Any) -> int:
                 break
             continue
 
-        # Regular chat
+        # RUNNING MODE — agent in background thread, poll for steering
+        cancel_token = CancellationToken()
+        config.cancellation = cancel_token
+        agent_result_box: list[Any] = [None]
+
+        def _run_agent(msg: str = user_input) -> None:
+            try:
+                agent_result_box[0] = drain_steps(session.iter_chat(msg))
+            except Exception as exc:
+                agent_result_box[0] = exc
+
+        agent_thread = threading.Thread(target=_run_agent, daemon=True)
+        agent_thread.start()
+
+        # Poll for steering input while agent runs
         try:
-            result = drain_steps(session.iter_chat(user_input))
+            while agent_thread.is_alive():
+                line = _read_steering_input()
+                if line:
+                    queues.steer(Message.user(line))
+                    print("  (steering sent)")
+        except KeyboardInterrupt:
+            cancel_token.cancel()
+            print("\n  (cancelling...)")
+            agent_thread.join(timeout=10)
+
+        agent_thread.join(timeout=1)
+
+        # Show result
+        result = agent_result_box[0]
+        if isinstance(result, Exception):
+            print(f"\n  Error: {result}", file=sys.stderr)
+        elif result is not None:
             total_cost += result.cost
             print(f"\n  [cost: ${result.cost:.4f} | steps: {result.steps}]")
-        except KeyboardInterrupt:
-            print("\n  (interrupted)")
-        except Exception as exc:
-            print(f"\n  Error: {exc}", file=sys.stderr)
 
     print(f"\nTotal cost: ${total_cost:.4f}")
+    env.cleanup()
+    return 0
+
+
+def _run_rpc_mode(args: Any) -> int:
+    """Run in headless RPC mode (stdin/stdout JSON lines)."""
+    from chimera.rpc.handler import RpcHandler
+    from chimera.rpc.server import RpcServer
+
+    workdir = os.path.abspath(getattr(args, "workdir", None) or os.getcwd())
+    provider = create_provider(model=getattr(args, "model", None))
+    env = LocalEnvironment(workdir=workdir)
+    env.setup()
+
+    file_tracker = FileTracker()
+    queues = MessageQueues()
+    config = LoopConfig(
+        file_tracker=file_tracker,
+        message_queues=queues,
+    )
+    max_steps = getattr(args, "max_steps", 50) or 50
+    loop = ReAct(max_steps=max_steps, config=config)
+    prompt = Prompt.from_string(_DEFAULT_SYSTEM)
+    tools = list(AGENT_TOOLS)
+
+    tree = SessionTree(_session_path(workdir))
+    agent = Agent(provider=provider, tools=tools, loop=loop, prompt=prompt)
+    session = Session(agent=agent, env=env, tree=tree)
+
+    server = RpcServer(session)
+    handler = RpcHandler(server)
+    server.set_handlers(handler.handlers)
+    server.run()
+
+    env.cleanup()
+    return 0
+
+
+def _run_json_mode(args: Any) -> int:
+    """Run in JSON output mode — single prompt from stdin, JSON events to stdout."""
+    import json as json_mod
+
+    workdir = os.path.abspath(getattr(args, "workdir", None) or os.getcwd())
+    provider = create_provider(model=getattr(args, "model", None))
+    env = LocalEnvironment(workdir=workdir)
+    env.setup()
+
+    config = LoopConfig()
+    max_steps = getattr(args, "max_steps", 50) or 50
+    loop = ReAct(max_steps=max_steps, config=config)
+    prompt = Prompt.from_string(_DEFAULT_SYSTEM)
+    tools = list(AGENT_TOOLS)
+    agent = Agent(provider=provider, tools=tools, loop=loop, prompt=prompt)
+    session = Session(agent=agent, env=env)
+
+    # Read prompt from stdin
+    user_input = sys.stdin.read().strip()
+    if not user_input:
+        return 1
+
+    result = drain_steps(session.iter_chat(user_input))
+    json_mod.dump({
+        "output": result.output,
+        "steps": result.steps,
+        "cost": result.cost,
+        "success": result.success,
+    }, sys.stdout)
+    sys.stdout.write("\n")
+
     env.cleanup()
     return 0

@@ -18,6 +18,7 @@ from chimera.providers.cost_tracker import CostLimitExceeded
 from chimera.types import AgentResult, Message, StepResult, ToolCall, ToolResult
 
 if TYPE_CHECKING:
+    from chimera.core.cancellation import CancellationToken
     from chimera.core.loop_config import LoopConfig
     from chimera.streaming.base import StreamHandler
 
@@ -100,7 +101,8 @@ class ReAct:
                 events = provider.stream(
                     context.to_messages(), tools=schemas if schemas else None,
                 )
-                response = self._accumulate_stream(events, handler)
+                cancel = self.config.cancellation if self.config else None
+                response = self._accumulate_stream(events, handler, cancellation=cancel)
             else:
                 response = provider.complete(
                     context.to_messages(), tools=schemas if schemas else None,
@@ -308,6 +310,7 @@ class ReAct:
     def _accumulate_stream(
         events: Iterator[StreamEvent],
         handler: StreamHandler | None,
+        cancellation: CancellationToken | None = None,
     ) -> Response:
         """Consume an iterator of stream events into a single Response.
 
@@ -320,6 +323,10 @@ class ReAct:
         usage: dict[str, int] = {"input_tokens": 0, "output_tokens": 0}
 
         for event in events:
+            # Check cancellation between stream chunks for sub-second abort
+            if cancellation and cancellation.is_cancelled:
+                break
+
             if handler:
                 handler.handle_event(event)
 

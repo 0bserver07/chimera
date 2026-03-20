@@ -117,6 +117,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=50,
         help="Maximum agent steps per turn (default: 50)",
     )
+    code_parser.add_argument(
+        "--mode",
+        choices=["interactive", "rpc", "json"],
+        default="interactive",
+        help="Output mode (default: interactive)",
+    )
 
     # ---- review subcommand ----
     review_parser = subparsers.add_parser(
