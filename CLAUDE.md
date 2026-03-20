@@ -8,7 +8,7 @@ A composable coding agent framework. Synthesize codebases from specifications.
 - **Build:** hatchling + uv
 - **License:** AGPL-3.0
 - **Setup:** `uv sync --extra dev --extra anthropic`
-- **Tests:** `uv run pytest` (2046 tests)
+- **Tests:** `uv run pytest` (2459 tests)
 - **Lint:** `uv run ruff check chimera/`
 - **Types:** `uv run mypy chimera/`
 - **Docs:** `uv sync --extra docs && uv run mkdocs serve`
@@ -24,10 +24,13 @@ Layer 7: Workflows       CIFixWorkflow, ReviewOrchestrator, Researcher,
                          MigrationPlanner, DocGenerator, TestGenerator
 Layer 6: Synthesis       Trainer, Strategy, Spec, Architecture, Constraint
 Layer 5: Evaluation      Harness, Metrics, Benchmarks (SWE-bench, HumanEval, AIMO)
-Layer 4: Agent           Agent, Tools, Loops, Prompt, Context, Critic, ACP
-Layer 3: Provider        Anthropic, OpenAI, Google, Ollama, Modal, OpenAI-compat
+Layer 4: Agent           Agent, Tools, Loops, Prompt, Context, Critic, ACP,
+                         Cancellation, MessageQueues, FileTracker, Operations
+Layer 3: Provider        Anthropic, OpenAI, Google, Ollama, Modal, OpenAI-compat,
+                         Proxy, Registry, ThinkingLevel
 Layer 2: Infrastructure  Security, Secrets, Permissions, Events, Sessions, Wire,
-                         Compaction, Streaming, Detection, Config, Plugins, MCP, LSP
+                         Compaction, Streaming, Detection, Config, Plugins, MCP, LSP,
+                         SessionTree, RPC
 Layer 1: Environment     Local, Docker, Git, Remote, Cloud, PersistentShell
 ```
 
@@ -36,18 +39,25 @@ Layer 1: Environment     Local, Docker, Git, Remote, Cloud, PersistentShell
 ### Core (`chimera/core/`)
 - `agent.py` — Agent class, main entry point
 - `context.py` — Conversation history manager
-- `loop.py` — ReAct loop (reason-act-observe)
-- `loop_config.py` — LoopConfig dataclass (permissions, detection, events, audit, checkpoints, git workflow, etc.)
-- `tool_executor.py` — Shared tool execution with permission/event/detection/audit hooks
+- `loop.py` — ReAct loop (reason-act-observe), stream-level cancellation, steering drain, 10 lifecycle event emissions
+- `loop_config.py` — LoopConfig dataclass (permissions, detection, events, audit, checkpoints, git workflow, cancellation, message_queues, file_tracker)
+- `tool_executor.py` — Shared tool execution with permission/event/detection/audit/cancellation/file-tracking hooks
 - `prompt.py` — System prompt with variable substitution
 - `tool.py` — BaseTool ABC and @tool decorator
-- `tool_group.py` — ToolGroup and DEFAULT_TOOLS
+- `tool_group.py` — ToolGroup, DEFAULT_TOOLS, `create_default_tools(ops=...)` factory
+- `cancellation.py` — CancellationToken (thread-safe cooperative cancel), OperationCancelled, CancellableTool mixin
+- `file_tracker.py` — FileTracker (track files read/modified across compaction boundaries)
+- `message_queue.py` — MessageQueues (thread-safe steering + follow-up queues)
+- `operations.py` — ReadOps, WriteOps, BashOps, SearchOps protocols + Local implementations
 - `loops/` — PlanAndExecute, Reflexion, TreeOfThought
 
 ### Providers (`chimera/providers/`)
-- `base.py` — Provider ABC, Response, StreamEvent
-- `factory.py` — `create_provider()` auto-detection
-- `anthropic.py`, `openai_provider.py`, `google.py`, `ollama.py`, `modal.py`
+- `base.py` — Provider ABC (with `thinking` param), Response, StreamEvent
+- `factory.py` — `create_provider()` auto-detection via registry
+- `registry.py` — Runtime provider registry (`register_provider`, `get_provider_factory`, self-registration)
+- `thinking.py` — ThinkingLevel enum (OFF/MINIMAL/LOW/MEDIUM/HIGH/MAX), `budget_for_level()`
+- `proxy.py` — ProxyProvider (HTTP relay for centralized key management)
+- `anthropic.py`, `openai_provider.py`, `google.py`, `ollama.py`, `modal.py`, `compatible.py`
 - `cost.py` — Per-model pricing and cost calculation
 - `cost_tracker.py` — Granular token tracking (cache, reasoning, per-step breakdown)
 
@@ -120,16 +130,21 @@ Layer 1: Environment     Local, Docker, Git, Remote, Cloud, PersistentShell
 - CheckpointManager: create, restore_by_name, restore_by_id, undo, list_checkpoints
 
 ### Events (`chimera/events/`)
-- EventBus, event types (ToolCall, ToolResult, SecurityEvent, CriticEvent, StepCost, ExternalAgent), middleware
+- EventBus, 26 event types, middleware
+- Core: ToolCall, ToolResult, Step, TextDelta, Error, LoopDetected, Permission, Session, StepCost
+- Lifecycle: AgentStart/End, TurnStart/End, StreamStart/End, ModelRequest/Response
+- Advanced: Compaction, Critic, ExternalAgent (Start/Complete/ToolCall), Security, Steering, Cancellation
 
 ### Sessions (`chimera/sessions/`)
-- `session.py` — Session with chat(), iter_chat(), fork(), save(), resume()
+- `session.py` — Session with chat(), iter_chat(), fork(), save(), resume(), steer(), queue(), cancel(), auto-compaction
+- `tree.py` — SessionTree (JSONL persistence with in-place branching via parent_id, fork, switch, thread-safe)
 - `storage/` — Memory, File, SQLite backends
 - `eventlog/` — Event-sourced persistence (append-only log, file locking, crash recovery, gap detection)
 
 ### Compaction (`chimera/compaction/`)
-- `base.py` — CompactionStrategy ABC, AtomicGroup, CompactionView, CompactionUrgency
-- `strategies.py` — Summary, Prune, Counter, Composite
+- `base.py` — CompactionStrategy ABC, AtomicGroup, CompactionView, CompactionUrgency, CompactionMetadata, FileAwareCompaction
+- `summary.py` — SummaryCompaction (extends FileAwareCompaction, includes file tracking in summaries)
+- `strategies.py` — Prune, Counter, Composite
 - `thresholds.py` — ThresholdCompaction (SOFT/HARD thresholds, tool call/result atomicity)
 
 ### Config (`chimera/config/`)
@@ -150,23 +165,28 @@ Layer 1: Environment     Local, Docker, Git, Remote, Cloud, PersistentShell
 
 ### Skills (`chimera/skills/`)
 - `flow.py` — Flow (Mermaid flowchart → decision tree → agent prompt), FlowNode, FlowEdge
+- `discovery.py` — Skill discovery (walk SKILL.md files with YAML frontmatter), `discover_skills()`, `format_skills_for_prompt()`
 
 ### Other Infrastructure
 - `chimera/streaming/` — Stream handlers, StreamingReAct
 - `chimera/detection/` — Loop detection (exact repeat, pattern cycle)
 - `chimera/mcp/` — MCPClient (stdio/HTTP), MCPToolSource, from_config()
 - `chimera/lsp/` — LSP client, diagnostics, completion, rename
-- `chimera/auth/` — API key, OAuth device/browser flows, credential store
+- `chimera/auth/` — API key, OAuth device/browser flows (real stdlib HTTP impl), credential store (file-based, 0o600 perms)
+- `chimera/rpc/` — JSON-RPC server (stdin/stdout), RpcHandler (prompt/steer/cancel/get_state/compact), command/response/event types
 
 ### CLI (`chimera/cli/`)
 - `main.py` — 11 subcommands: synthesize, eval, bench, code, review, ci-fix, research, docs, testgen, migrate, plugins
-- `code.py` — Interactive REPL with 16 slash commands: /help, /model, /cost, /clear, /history, /tools, /context, /debug, /session, /compact, /audit, /checkpoint, /agent, /init, /yolo, /exit
+- `code.py` — Interactive REPL with 19 slash commands, two-mode terminal (readline idle / raw stdin running), threaded agent execution
+  - Commands: /help, /model (next/prev cycling), /cost, /clear, /history, /tools, /context, /debug, /session, /compact, /audit, /checkpoint, /agent, /init, /yolo, /tree, /branch, /switch, /exit
+  - Flags: `--mode interactive|rpc|json`, `--models glm-5,claude-sonnet-4` (comma-separated for cycling)
+  - Features: mid-turn steering, Ctrl+C cancellation, session auto-save to `~/.chimera/sessions/`, auto-compaction, skills discovery
 
 ## Key Conventions
 
 - **Zero-dependency core.** Only stdlib in main package. Providers and tools like browser (playwright), remote env (httpx) are optional extras.
 - **TYPE_CHECKING imports.** Use `if TYPE_CHECKING:` for cross-module type hints to avoid circular imports.
 - **3-tier API.** Every feature has: one-liner convenience, developer configuration, framework-author subclassing.
-- **LoopConfig pattern.** All loop-level features (permissions, detection, compaction, streaming, events, audit, checkpoints, git workflow) funnel through a single `LoopConfig` dataclass injected into loop constructors. When `None`, behavior is unchanged.
+- **LoopConfig pattern.** All loop-level features (permissions, detection, compaction, streaming, events, audit, checkpoints, git workflow, cancellation, message queues, file tracking) funnel through a single `LoopConfig` dataclass injected into loop constructors. When `None`, behavior is unchanged.
 - **Google-style docstrings.** Use Args/Returns/Raises sections.
 - **Tests mirror source.** `chimera/foo/bar.py` → `tests/test_bar.py` or `tests/test_foo.py`.
