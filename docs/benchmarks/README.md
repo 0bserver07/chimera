@@ -1,0 +1,88 @@
+---
+title: "Chimera Benchmark Transparency Framework"
+---
+
+# Chimera Benchmark Transparency Framework
+
+Full transparency on what Chimera can and cannot reproduce. Every benchmark has a status, our current score, the reference score, and what's needed to close the gap.
+
+## Agent Benchmarks
+
+| # | Benchmark | What It Tests | Our Score | Reference Score | Status | Issue |
+|---|-----------|--------------|-----------|-----------------|--------|-------|
+| A1 | [SWE-bench Verified](https://www.swebench.com/) | Fix real GitHub issues (500 instances) | 10% (2/20) | GLM-5: 77.8% (OpenHands) | GAP | #1 |
+| A2 | [SWE-bench Lite](https://www.swebench.com/) | Fix real GitHub issues (300 instances) | 10% (2/20) | — | GAP | #1 |
+| A3 | [Terminal-Bench 2.0](https://www.tbench.ai/) | CLI tasks (89 tasks) | 30% (3/10) | GLM-5: 56.2% | PARTIAL | #2 |
+| A4 | [FeatureBench](https://arxiv.org/abs/2602.10975) | Build full features (200 tasks) | NOT RUN | Opus 4.5: 11% | TODO | #3 |
+| A5 | [Cline Bench](https://github.com/cline/cline) | Repo-based development | NOT RUN | — | TODO | #4 |
+| A6 | [DPAI Arena](https://labs.scale.com/) | Multi-language dev tasks | NOT RUN | — | TODO | #5 |
+| A7 | [SWT-Bench](https://github.com/) | Software testing generation | NOT RUN | — | TODO | #6 |
+| A8 | [tau-bench](https://github.com/) | Tool-use + business tasks | NOT RUN | — | TODO | #7 |
+| A9 | [Context-Bench](https://github.com/) | Long-running context | NOT RUN | — | TODO | #8 |
+| A10 | [SWE-PolyBench](https://github.com/) | Polyglot codebases | NOT RUN | — | TODO | #9 |
+
+## LLM Benchmarks (Code)
+
+| # | Benchmark | What It Tests | Our Score | Reference | Status | Issue |
+|---|-----------|--------------|-----------|-----------|--------|-------|
+| L1 | [HumanEval](https://github.com/openai/human-eval) | Function generation (164) | 90.9% | GLM-5: ~92% claimed | DONE | — |
+| L2 | [HumanEval+](https://github.com/evalplus/evalplus) | Extended test cases | NOT RUN | — | TODO | #10 |
+| L3 | [MBPP](https://github.com/google-research/google-research/tree/master/mbpp) | Basic programming (974) | NOT RUN | — | TODO | #11 |
+| L4 | [LiveCodeBench](https://livecodebench.github.io/) | Contest problems | NOT RUN | — | TODO | #12 |
+| L5 | [AIMO/MATH-500](https://www.kaggle.com/competitions/ai-mathematical-olympiad-progress-prize-3) | Math reasoning | Adapter built | — | TODO | #13 |
+
+## LLM Benchmarks (General)
+
+| # | Benchmark | What It Tests | Our Score | Reference | Status | Issue |
+|---|-----------|--------------|-----------|-----------|--------|-------|
+| G1 | [MMLU-Pro](https://huggingface.co/datasets/TIGER-Lab/MMLU-Pro) | Knowledge + reasoning | N/A (eval only) | — | OUT OF SCOPE | — |
+| G2 | [GPQA Diamond](https://arxiv.org/abs/2311.12022) | PhD-level science | N/A (eval only) | — | OUT OF SCOPE | — |
+| G3 | [IFEval](https://arxiv.org/abs/2311.07911) | Instruction following | N/A (eval only) | — | OUT OF SCOPE | — |
+
+## Status Legend
+
+- **DONE**: Benchmark run, results reported
+- **PARTIAL**: Benchmark run on subset, partial results
+- **GAP**: Benchmark run, significant gap vs reference
+- **TODO**: Adapter/runner not yet built
+- **OUT OF SCOPE**: Tests raw LLM capability, not agent framework
+
+## Root Cause Analysis: SWE-bench Gap
+
+Our SWE-bench score (10%) vs GLM-5's claimed 77.8% with OpenHands:
+
+| Factor | Our Implementation | OpenHands | Impact |
+|--------|-------------------|-----------|--------|
+| Max iterations | 100 | 500 | HIGH |
+| Action space | bash only | bash + IPython + Jupyter | HIGH |
+| Condensation | Window truncation (50%) | LLM-based summarization | MEDIUM |
+| str_replace tool | Via sed/python heredoc | Native openhands_aci library | MEDIUM |
+| Step execution | Single action per LLM call | Queue multiple actions per call | MEDIUM |
+| Prompt | ~2KB general prompt | ~9KB domain-specific prompt | LOW |
+| Instance selection | Easiest 20 by patch size | All 300/500 | LOW |
+
+## Reproducing Results
+
+```bash
+# HumanEval (full 164)
+source .env
+python examples/humaneval_full.py --count 164
+
+# SWE-bench (Docker, proper eval)
+python examples/swe_bench_proper.py --count 10
+
+# SWE-bench v4 (anti-hesitation, 100 steps)
+python examples/swe_bench_v4.py --count 20 --max-steps 100
+
+# Terminal-Bench (requires Docker)
+tb run --agent terminus --model anthropic/glm-5 --dataset terminal-bench-core==0.1.1 --n-tasks 10
+```
+
+## Next Steps
+
+1. Run OpenHands directly with GLM-5 on our 20 instances to verify their 77.8%
+2. Build adapters for FeatureBench, MBPP, LiveCodeBench
+3. Implement LLM-based condensation (matching OpenHands)
+4. Add IPython action space
+5. Increase max iterations to 500
+6. Run on full SWE-bench Verified (500 instances)
