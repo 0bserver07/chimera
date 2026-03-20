@@ -1,8 +1,8 @@
 # Chimera
 
-Build, compose, and deploy coding agents from modular primitives. A composable coding agent framework.
+Compose agents from providers, tools, loops, and environments. The same primitives that make up Claude Code or Codex — ReAct loops, tool execution, context management — are modular blocks you can swap and reconfigure. A working coding agent is ~50 lines of Python.
 
-**Status: Alpha** -- 2459 tests passing, 8 agent architectures replicable, benchmarked on HumanEval (90.9%) and SWE-bench. API may change before 1.0.
+**Status: Alpha** — 2459 tests, 8 agent architectures replicable, benchmarked on HumanEval (90.9%) and SWE-bench. API may change before 1.0.
 
 ## What You Can Build
 
