@@ -22,6 +22,16 @@ __all__ = [
     "SecurityEvent",
     "SessionEvent",
     "StepCostEvent",
+    "ModelRequestEvent",
+    "ModelResponseEvent",
+    "TurnStartEvent",
+    "TurnEndEvent",
+    "StreamStartEvent",
+    "StreamEndEvent",
+    "AgentStartEvent",
+    "AgentEndEvent",
+    "SteeringEvent",
+    "CancellationEvent",
 ]
 
 
@@ -173,3 +183,92 @@ class StepCostEvent(Event):
     reasoning_tokens: int = 0
     cache_hit_rate: float = 0.0
     duration: float = 0.0
+
+
+@dataclass
+class ModelRequestEvent(Event):
+    """About to send a request to the LLM provider."""
+
+    type: str = field(default="model_request", init=False)
+    model: str = ""
+    message_count: int = 0
+    tool_count: int = 0
+
+
+@dataclass
+class ModelResponseEvent(Event):
+    """Received a response from the LLM provider."""
+
+    type: str = field(default="model_response", init=False)
+    model: str = ""
+    content_length: int = 0
+    tool_calls_count: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
+
+
+@dataclass
+class TurnStartEvent(Event):
+    """A new agent turn is starting."""
+
+    type: str = field(default="turn_start", init=False)
+    turn_number: int = 0
+
+
+@dataclass
+class TurnEndEvent(Event):
+    """An agent turn has completed."""
+
+    type: str = field(default="turn_end", init=False)
+    turn_number: int = 0
+    tool_calls_count: int = 0
+
+
+@dataclass
+class StreamStartEvent(Event):
+    """Streaming response has started."""
+
+    type: str = field(default="stream_start", init=False)
+    model: str = ""
+
+
+@dataclass
+class StreamEndEvent(Event):
+    """Streaming response has completed."""
+
+    type: str = field(default="stream_end", init=False)
+    total_tokens: int = 0
+
+
+@dataclass
+class AgentStartEvent(Event):
+    """Agent loop has started."""
+
+    type: str = field(default="agent_start", init=False)
+    max_steps: int = 0
+
+
+@dataclass
+class AgentEndEvent(Event):
+    """Agent loop has completed."""
+
+    type: str = field(default="agent_end", init=False)
+    steps: int = 0
+    success: bool = True
+    total_cost: float = 0.0
+
+
+@dataclass
+class SteeringEvent(Event):
+    """A steering message was injected."""
+
+    type: str = field(default="steering", init=False)
+    content: str = ""
+
+
+@dataclass
+class CancellationEvent(Event):
+    """The agent was cancelled."""
+
+    type: str = field(default="cancellation", init=False)
+    at_step: int = 0

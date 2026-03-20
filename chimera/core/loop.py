@@ -71,6 +71,10 @@ class ReAct:
             from chimera.wire.types import TurnBegin
             wire.send(TurnBegin(turn_id=id(context)))
 
+        if self.config and self.config.event_bus:
+            from chimera.events.types import AgentStartEvent
+            self.config.event_bus.publish(AgentStartEvent(max_steps=self.max_steps))
+
         for _ in range(self.max_steps):
             # -- Cancellation check --
             if self.config and self.config.cancellation:
@@ -78,6 +82,9 @@ class ReAct:
                 try:
                     self.config.cancellation.check()
                 except OperationCancelled:
+                    if self.config and self.config.event_bus:
+                        from chimera.events.types import CancellationEvent
+                        self.config.event_bus.publish(CancellationEvent(at_step=steps))
                     yield StepResult(
                         message=Message.assistant("Operation cancelled"),
                         done=True, step=steps, cost=0.0,
@@ -90,11 +97,23 @@ class ReAct:
 
             steps += 1
 
+            if self.config and self.config.event_bus:
+                from chimera.events.types import TurnStartEvent
+                self.config.event_bus.publish(TurnStartEvent(turn_number=steps))
+
             if wire:
                 from chimera.wire.types import StepBegin
                 wire.send(StepBegin(step=steps))
 
             context = mw_chain.run_before_model(context, tools)
+
+            if self.config and self.config.event_bus:
+                from chimera.events.types import ModelRequestEvent
+                self.config.event_bus.publish(ModelRequestEvent(
+                    model=provider.model_name,
+                    message_count=len(context.to_messages()),
+                    tool_count=len(schemas) if schemas else 0,
+                ))
 
             if handler:
                 handler.on_step_start(steps)
@@ -102,13 +121,31 @@ class ReAct:
                     context.to_messages(), tools=schemas if schemas else None,
                 )
                 cancel = self.config.cancellation if self.config else None
+                if self.config and self.config.event_bus:
+                    from chimera.events.types import StreamStartEvent
+                    self.config.event_bus.publish(StreamStartEvent(model=provider.model_name))
                 response = self._accumulate_stream(events, handler, cancellation=cancel)
+                if self.config and self.config.event_bus:
+                    from chimera.events.types import StreamEndEvent
+                    self.config.event_bus.publish(StreamEndEvent(
+                        total_tokens=response.usage.get("input_tokens", 0) + response.usage.get("output_tokens", 0),
+                    ))
             else:
                 response = provider.complete(
                     context.to_messages(), tools=schemas if schemas else None,
                 )
 
             response = mw_chain.run_after_model(response, context)
+
+            if self.config and self.config.event_bus:
+                from chimera.events.types import ModelResponseEvent
+                self.config.event_bus.publish(ModelResponseEvent(
+                    model=provider.model_name,
+                    content_length=len(response.content),
+                    tool_calls_count=len(response.tool_calls),
+                    input_tokens=response.usage.get("input_tokens", 0),
+                    output_tokens=response.usage.get("output_tokens", 0),
+                ))
 
             step_cost = calculate_cost(provider.model_name, response.usage)
             total_cost += step_cost
@@ -149,6 +186,12 @@ class ReAct:
                 if event_bus:
                     from chimera.events.types import StepEvent
                     event_bus.publish(StepEvent(step_number=steps, content=response.content))
+                if self.config and self.config.event_bus:
+                    from chimera.events.types import TurnEndEvent
+                    self.config.event_bus.publish(TurnEndEvent(
+                        turn_number=steps,
+                        tool_calls_count=len(response.tool_calls),
+                    ))
                 if handler:
                     handler.on_step_end(steps)
                     handler.on_done()
@@ -165,6 +208,11 @@ class ReAct:
                 if wire:
                     from chimera.wire.types import TurnEnd
                     wire.send(TurnEnd(turn_id=id(context), steps=steps, output=response.content))
+                if self.config and self.config.event_bus:
+                    from chimera.events.types import AgentEndEvent
+                    self.config.event_bus.publish(AgentEndEvent(
+                        steps=steps, success=True, total_cost=total_cost,
+                    ))
                 return AgentResult(
                     output=response.content,
                     steps=steps,
@@ -261,6 +309,12 @@ class ReAct:
                 if event_bus:
                     from chimera.events.types import StepEvent
                     event_bus.publish(StepEvent(step_number=steps, content=response.content))
+                if self.config and self.config.event_bus:
+                    from chimera.events.types import TurnEndEvent
+                    self.config.event_bus.publish(TurnEndEvent(
+                        turn_number=steps,
+                        tool_calls_count=len(response.tool_calls),
+                    ))
                 if wire:
                     from chimera.wire.types import StepEnd
                     wire.send(StepEnd(step=steps))
@@ -277,6 +331,9 @@ class ReAct:
             if self.config and self.config.message_queues:
                 for msg in self.config.message_queues.drain_steering():
                     context.add(msg)
+                    if self.config.event_bus:
+                        from chimera.events.types import SteeringEvent
+                        self.config.event_bus.publish(SteeringEvent(content=msg.content if hasattr(msg, "content") else ""))
 
             if handler:
                 handler.on_step_end(steps)
@@ -297,6 +354,11 @@ class ReAct:
         if wire:
             from chimera.wire.types import TurnEnd
             wire.send(TurnEnd(turn_id=id(context), steps=steps, output="Max steps reached"))
+        if self.config and self.config.event_bus:
+            from chimera.events.types import AgentEndEvent
+            self.config.event_bus.publish(AgentEndEvent(
+                steps=steps, success=False, total_cost=total_cost,
+            ))
         return AgentResult(
             output="Max steps reached",
             steps=steps,
