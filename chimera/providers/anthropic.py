@@ -57,6 +57,7 @@ class AnthropicProvider(Provider):
         tools: list[ToolSchema] | None = None,
         temperature: float = 0.0,
         max_tokens: int | None = None,
+        thinking: Any = None,
     ) -> dict[str, Any]:
         """Build the kwargs dict for the Anthropic messages API."""
         system_msg = None
@@ -94,11 +95,20 @@ class AnthropicProvider(Provider):
             "max_tokens": max_tokens or 4096,
         }
 
+        # Resolve thinking settings: per-call param overrides instance config
+        if thinking is not None:
+            from chimera.providers.thinking import ThinkingLevel, budget_for_level
+            enable = thinking != ThinkingLevel.OFF
+            budget = budget_for_level(thinking)
+        else:
+            enable = self._enable_thinking
+            budget = self._thinking_budget
+
         # Extended thinking — requires temperature=1 and uses budget_tokens
-        if self._enable_thinking:
+        if enable:
             kwargs["thinking"] = {
                 "type": "enabled",
-                "budget_tokens": self._thinking_budget,
+                "budget_tokens": budget,
             }
             kwargs["temperature"] = 1  # Required for extended thinking
         else:
@@ -173,8 +183,9 @@ class AnthropicProvider(Provider):
         tools: list[ToolSchema] | None = None,
         temperature: float = 0.0,
         max_tokens: int | None = None,
+        thinking: Any = None,
     ) -> Response:
-        kwargs = self._prepare_request(messages, tools, temperature, max_tokens)
+        kwargs = self._prepare_request(messages, tools, temperature, max_tokens, thinking=thinking)
         response = self._client.messages.create(**kwargs)
         return self._parse_response(response)
 
@@ -184,9 +195,10 @@ class AnthropicProvider(Provider):
         tools: list[ToolSchema] | None = None,
         temperature: float = 0.0,
         max_tokens: int | None = None,
+        thinking: Any = None,
     ) -> Iterator[StreamEvent]:
         """Stream a response using the Anthropic messages stream API."""
-        kwargs = self._prepare_request(messages, tools, temperature, max_tokens)
+        kwargs = self._prepare_request(messages, tools, temperature, max_tokens, thinking=thinking)
 
         # Track tool call state across events
         current_tool_id: str | None = None
@@ -320,8 +332,9 @@ class AnthropicProvider(Provider):
         tools: list[ToolSchema] | None = None,
         temperature: float = 0.0,
         max_tokens: int | None = None,
+        thinking: Any = None,
     ) -> Response:
-        kwargs = self._prepare_request(messages, tools, temperature, max_tokens)
+        kwargs = self._prepare_request(messages, tools, temperature, max_tokens, thinking=thinking)
         response = await self._aclient.messages.create(**kwargs)
         return self._parse_response(response)
 
@@ -331,9 +344,10 @@ class AnthropicProvider(Provider):
         tools: list[ToolSchema] | None = None,
         temperature: float = 0.0,
         max_tokens: int | None = None,
+        thinking: Any = None,
     ) -> AsyncIterator[StreamEvent]:
         """Async stream using the Anthropic async messages stream API."""
-        kwargs = self._prepare_request(messages, tools, temperature, max_tokens)
+        kwargs = self._prepare_request(messages, tools, temperature, max_tokens, thinking=thinking)
 
         current_tool_id: str | None = None
         current_tool_name: str | None = None

@@ -35,6 +35,7 @@ class OllamaProvider(Provider):
         tools: list[ToolSchema] | None = None,
         temperature: float = 0.0,
         max_tokens: int | None = None,
+        thinking: Any = None,
     ) -> Response:
         api_messages = self._convert_messages(messages)
 

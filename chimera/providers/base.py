@@ -4,9 +4,12 @@ import asyncio
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Iterator
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from chimera.types import Message, ToolCall
+
+if TYPE_CHECKING:
+    from chimera.providers.thinking import ThinkingLevel
 
 
 @dataclass
@@ -51,6 +54,7 @@ class Provider(ABC):
         tools: list[ToolSchema] | None = None,
         temperature: float = 0.0,
         max_tokens: int | None = None,
+        thinking: ThinkingLevel | None = None,
     ) -> Response:
         """Send messages, get a response."""
 
@@ -60,6 +64,7 @@ class Provider(ABC):
         tools: list[ToolSchema] | None = None,
         temperature: float = 0.0,
         max_tokens: int | None = None,
+        thinking: ThinkingLevel | None = None,
     ) -> Iterator[StreamEvent]:
         """Stream a response as incremental events.
 
@@ -68,6 +73,7 @@ class Provider(ABC):
         """
         response = self.complete(
             messages, tools=tools, temperature=temperature, max_tokens=max_tokens,
+            thinking=thinking,
         )
         if response.content:
             yield StreamEvent(type="text_delta", content=response.content)
@@ -81,6 +87,7 @@ class Provider(ABC):
         tools: list[ToolSchema] | None = None,
         temperature: float = 0.0,
         max_tokens: int | None = None,
+        thinking: ThinkingLevel | None = None,
     ) -> Response:
         """Async version of :meth:`complete`.
 
@@ -93,6 +100,7 @@ class Provider(ABC):
             None,
             lambda: self.complete(
                 messages, tools=tools, temperature=temperature, max_tokens=max_tokens,
+                thinking=thinking,
             ),
         )
 
@@ -102,6 +110,7 @@ class Provider(ABC):
         tools: list[ToolSchema] | None = None,
         temperature: float = 0.0,
         max_tokens: int | None = None,
+        thinking: ThinkingLevel | None = None,
     ) -> AsyncIterator[StreamEvent]:
         """Async version of :meth:`stream`.
 
@@ -116,6 +125,7 @@ class Provider(ABC):
             try:
                 for event in self.stream(
                     messages, tools=tools, temperature=temperature, max_tokens=max_tokens,
+                    thinking=thinking,
                 ):
                     loop.call_soon_threadsafe(queue.put_nowait, event)
             finally:
