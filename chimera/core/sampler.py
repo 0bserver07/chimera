@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import concurrent.futures
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Callable, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
     from chimera.providers.base import Provider, Response

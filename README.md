@@ -71,7 +71,7 @@ Layer 1  Environment     Local, Docker, Git, Remote, Cloud, PersistentShell
 
 [Full transparency report](docs/benchmarks/README.md) with 13 tracked issues.
 
-## Why Chimera, Not Claude Code/Codex?
+## When Chimera, Not Claude Code/Codex?
 
 **Use Claude Code or Codex** if you want a finished product that works today.
 
