@@ -4,6 +4,17 @@ Compose agents from providers, tools, loops, and environments. The same primitiv
 
 **Status: Alpha** — 2503 tests, 8 agent architectures replicable, benchmarked on HumanEval (90.9%) and SWE-bench.
 
+## Try It
+
+```bash
+git clone https://github.com/0bserver07/chimera && cd chimera
+uv sync --extra dev --extra anthropic
+export ANTHROPIC_API_KEY="sk-ant-..."   # or any Anthropic-compatible endpoint
+python -m chimera code --workdir .      # interactive coding agent
+```
+
+## 4-Line Agent
+
 ```python
 import chimera
 
@@ -12,25 +23,15 @@ agent = chimera.Agent(provider=provider, tools=list(chimera.AGENT_TOOLS))
 result = agent.run("Fix the failing test in auth.py", env=chimera.LocalEnvironment("."))
 ```
 
-## Install
-
-```bash
-pip install chimera-ai                  # core (zero dependencies)
-pip install chimera-ai[anthropic]       # + Claude support
-pip install chimera-ai[all]             # all providers
-```
-
 ## Quick Start
-
-Three tiers of control:
 
 ```python
 import chimera
 
-# One-liner
+# One-liner: synthesize code from a spec
 result = chimera.synthesize("Build a REST API for tasks", tests="./tests/")
 
-# Configured
+# Configured: choose your loop and tools
 agent = chimera.Agent(
     provider=chimera.create_provider(),
     tools=list(chimera.AGENT_TOOLS),
@@ -38,11 +39,11 @@ agent = chimera.Agent(
 )
 result = agent.run("Write unit tests for utils.py", env=chimera.LocalEnvironment("."))
 
-# Preset (replicate any coding agent in one line)
+# Preset: replicate any coding agent in one line
 agent = chimera.AgentPreset.SWE_AGENT.build(provider)   # retry loop + minimal tools
-agent = chimera.AgentPreset.AIDER.build(provider)       # lint feedback loop
-agent = chimera.AgentPreset.CLINE.build(provider)       # plan-then-act
-agent = chimera.AgentPreset.CODEX.build(provider)       # full tool suite
+agent = chimera.AgentPreset.AIDER.build(provider)        # lint feedback loop
+agent = chimera.AgentPreset.CLINE.build(provider)        # plan-then-act
+agent = chimera.AgentPreset.CODEX.build(provider)        # full tool suite
 ```
 
 ## Architecture
@@ -70,14 +71,27 @@ Layer 1  Environment     Local, Docker, Git, Remote, Cloud, PersistentShell
 
 [Full transparency report](docs/benchmarks/README.md) with 13 tracked issues.
 
+## Why Chimera, Not Aider/Claude Code?
+
+**Use Aider or Claude Code** if you want a finished product that works today.
+
+**Use Chimera** if you want to:
+- **Understand** how coding agents work — every major agent's architecture decomposed into primitives
+- **Build custom agents** — compose your own loops, tools, and strategies without forking someone else's monolith
+- **Research** agent architectures — benchmark framework with full transparency
+- **Prototype fast** — go from idea to working agent in 50 lines, not 5000
+
+Chimera is a framework, not a product. It's early — the building blocks exist, the community decides what to build with them.
+
 ## Philosophy
 
 Chimera treats agentic coding as a machine learning problem. When an engineer writes a spec, agents iterate on code, and the result passes all tests — that's training. The spec is the loss function. The agent loop is the optimizer. The core verb is `.synthesize()`.
 
 ## Links
 
-- [Documentation](https://0bserver07.github.io/chimera) — 114-page Starlight site
-- [Getting Started](docs/getting-started.md) — provider setup, first agent, examples
+- [Tutorial: Build Your Own Claude Code](docs/tutorials/build-your-own-claude-code.md) — 50 lines, step by step
+- [Documentation](https://chimera.run) — full docs site
+- [Getting Started](docs/getting-started.md) — provider setup, first agent
 - [Examples](examples/) — 39 runnable scripts
 - [Benchmarks](docs/benchmarks/README.md) — transparency framework
 - [Contributing](CONTRIBUTING.md) — setup, workflow, code style
