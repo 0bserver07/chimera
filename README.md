@@ -71,9 +71,9 @@ Layer 1  Environment     Local, Docker, Git, Remote, Cloud, PersistentShell
 
 [Full transparency report](docs/benchmarks/README.md) with 13 tracked issues.
 
-## Why Chimera, Not Aider/Claude Code?
+## Why Chimera, Not Claude Code/Codex?
 
-**Use Aider or Claude Code** if you want a finished product that works today.
+**Use Claude Code or Codex** if you want a finished product that works today.
 
 **Use Chimera** if you want to:
 - **Understand** how coding agents work — every major agent's architecture decomposed into primitives
@@ -89,7 +89,7 @@ Chimera treats agentic coding as a machine learning problem. When an engineer wr
 
 ## Links
 
-- [Tutorial: Build Your Own Claude Code](docs/tutorials/build-your-own-claude-code.md) — 50 lines, step by step
+- [Tutorial: Build a Claude Code-Like Agent](docs/tutorials/build-your-own-claude-code.md) — 50 lines, step by step
 - [Documentation](https://chimera.run) — full docs site
 - [Getting Started](docs/getting-started.md) — provider setup, first agent
 - [Examples](examples/) — 39 runnable scripts
