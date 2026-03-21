@@ -72,7 +72,7 @@
 - SWE-bench scripts: proper eval (test_patch after), Docker isolation, anti-hesitation, OpenHands-style
 
 ### Release Infrastructure
-- AGPL-3.0 license
+- MIT license
 - CI/CD: GitHub Actions (Python 3.11, 3.12, 3.13 + docs deploy)
 - CONTRIBUTING.md
 - Starlight documentation site (114 pages, Mermaid diagrams, dark theme)

@@ -99,4 +99,4 @@ Chimera treats agentic coding as a machine learning problem. When an engineer wr
 
 ## License
 
-[AGPL-3.0](LICENSE)
+[MIT](LICENSE)

@@ -47,4 +47,4 @@ uv run pytest tests/test_integration_live.py -v
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under AGPL-3.0.
+By contributing, you agree that your contributions will be licensed under MIT.
