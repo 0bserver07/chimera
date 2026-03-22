@@ -1,6 +1,25 @@
 # Changelog
 
-## 0.1.0 (2026-03-20) — Initial Release
+## 0.1.0 (2026-03-22) — Initial Release
+
+### Claude Code Integration (#97-#115)
+- **Plugin**: full `.claude-plugin` package with 5 slash commands, 3 subagents, 8 skills
+- **MCP Servers**: codebase search (#100), code review (#101), test generation (#102), RAG/doc retrieval (#103), benchmark (#104)
+- **Hooks**: path validation (#105), auto-test (#106), auto-lint (#107), security scanner (#108), stop verification (#109)
+- **Anti-Hallucination**: codebase grounding system (#110) — blocks edits to non-existent files, semantic search, doc retrieval
+- **Context Management**: proactive window manager with 70/85/90% thresholds (#111)
+- **Loop Detection**: detect repeated commands and circular patterns (#112)
+- **Persistent Memory**: survive session resets with fact extraction (#113)
+- **Research Tools**: comparative agent benchmarking (#114), prompt engineering lab (#115)
+
+### Ported Features (#73-#79)
+- Relative Indenter from Aider (#73) — robust search/replace handling indentation mismatches
+- AGENTS.md Discovery from Codex (#74) — hierarchical scanning with merge semantics
+- Action Sampler from SWE-Agent (#75) — parallel completion sampling with scoring
+- Multiple Edit Formats from Aider (#76) — whole-file, diff, search-replace, udiff
+- Reviewer/Chooser from SWE-Agent (#77) — multi-stage solution ranking
+- AI Comment Watcher from Aider (#78) — detect `# AI: fix this` patterns
+- Memory Consolidation from Codex (#79) — two-phase explore→consolidate pipeline
 
 ### Core Framework
 - 8-layer architecture: CLI → Workflows → Synthesis → Eval → Agent → Provider → Infrastructure → Environment
@@ -79,7 +98,9 @@
 - 0 lint errors (ruff clean)
 
 ### Stats
-- 2503 tests passing, 0 failures
+- 2632 tests passing, 0 failures
 - 340+ public exports
 - 39 runnable examples
-- 88-line README
+- 5 MCP servers, 5 hooks, 8 skills, 3 subagents
+- 102-line README
+- 115 GitHub issues (26 closed, 13 benchmarks open)

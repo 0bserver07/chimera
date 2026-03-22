@@ -2,7 +2,7 @@
 
 Compose agents from providers, tools, loops, and environments. The same primitives that make up Claude Code or Codex — ReAct loops, tool execution, context management — are modular blocks you can swap and reconfigure. A working coding agent is ~50 lines of Python.
 
-**Status: Alpha** — 2503 tests, 8 agent architectures replicable, benchmarked on HumanEval (90.9%) and SWE-bench.
+**Status: Alpha** — 2632 tests, 8 agent architectures replicable, benchmarked on HumanEval (90.9%) and SWE-bench.
 
 ## Try It
 
