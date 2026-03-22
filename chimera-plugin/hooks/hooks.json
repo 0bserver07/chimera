@@ -1,0 +1,10 @@
+{
+  "hooks": [
+    {
+      "event": "PreToolUse",
+      "tools": ["Write", "Edit"],
+      "command": "python3 chimera/hooks/validate_path.py",
+      "description": "Validate file paths before Write/Edit — blocks nonexistent paths with suggestions"
+    }
+  ]
+}

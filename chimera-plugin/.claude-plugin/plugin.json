@@ -1,0 +1,7 @@
+{
+  "name": "chimera",
+  "version": "0.1.0",
+  "description": "Composable coding agent primitives — codebase search, code review, test generation, migration planning",
+  "author": "Chimera Contributors",
+  "license": "MIT"
+}

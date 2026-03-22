@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "chimera-search": {
+      "command": "python3",
+      "args": ["chimera/mcp_servers/search_server.py"],
+      "description": "Chimera codebase search — TF-IDF file search and symbol lookup"
+    }
+  }
+}
