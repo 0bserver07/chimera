@@ -1,5 +1,5 @@
 site_name: Chimera
-site_description: A composable coding agent framework. Synthesize codebases from specifications.
+site_description: Compose coding agents from modular primitives.
 site_url: ""
 repo_url: https://github.com/your-username/chimera
 repo_name: chimera

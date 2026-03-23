@@ -81,7 +81,7 @@ Layer 1  Environment     Local, Docker, Git, Remote, Cloud, PersistentShell
 - **Research** agent architectures — benchmark framework with full transparency
 - **Prototype fast** — go from idea to working agent in 50 lines, not 5000
 
-Chimera is a framework, not a product. It's early — the building blocks exist, the community decides what to build with them.
+Chimera is a framework, not a product. The building blocks exist — the community decides what to build with them.
 
 ## Philosophy
 

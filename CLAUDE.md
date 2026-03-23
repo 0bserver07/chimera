@@ -1,6 +1,6 @@
 # Chimera
 
-A composable coding agent framework. Synthesize codebases from specifications.
+Compose coding agents from modular primitives. Synthesize codebases from specifications.
 
 ## Quick Reference
 
