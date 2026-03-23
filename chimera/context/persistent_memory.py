@@ -26,13 +26,10 @@ Example::
 """
 from __future__ import annotations
 
-import json
-import os
-import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from chimera.context.consolidation import Fact, MemoryConsolidator
+from chimera.context.consolidation import MemoryConsolidator
 from chimera.sessions.long_term_memory import LongTermMemory, MemoryEntry
 
 if TYPE_CHECKING:

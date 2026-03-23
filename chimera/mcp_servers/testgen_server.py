@@ -29,12 +29,11 @@ from __future__ import annotations
 
 import ast
 import json
-import os
 import sys
 from pathlib import Path
 from typing import Any
 
-from chimera.testgen.generator import TestCase, TestGenerator
+from chimera.testgen.generator import TestGenerator
 
 __all__ = ["TestgenMCPServer", "find_coverage_gaps"]
 

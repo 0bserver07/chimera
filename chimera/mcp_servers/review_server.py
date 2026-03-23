@@ -32,7 +32,7 @@ from __future__ import annotations
 import json
 import re
 import sys
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from typing import Any
 
 __all__ = ["ReviewMCPServer", "ReviewFinding", "review_diff"]

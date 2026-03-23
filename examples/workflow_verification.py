@@ -17,7 +17,7 @@ import traceback
 
 # Ensure env vars are set
 os.environ.setdefault("ANTHROPIC_BASE_URL", "https://api.z.ai/api/anthropic")
-os.environ.setdefault("ANTHROPIC_AUTH_TOKEN", "YOUR_TOKEN_HERE")
+os.environ.setdefault("ANTHROPIC_AUTH_TOKEN", "your-token-here")
 os.environ.setdefault("ANTHROPIC_MODEL", "glm-5")
 
 

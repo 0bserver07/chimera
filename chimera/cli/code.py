@@ -451,7 +451,17 @@ def run_code(args: Any) -> int:
         return _run_json_mode(args)
 
     workdir = os.path.abspath(getattr(args, "workdir", None) or os.getcwd())
-    provider = create_provider(model=getattr(args, "model", None))
+    try:
+        provider = create_provider(model=getattr(args, "model", None))
+    except ValueError as e:
+        print(f"Error: {e}")
+        print("\nSet up a provider:")
+        print("  export ANTHROPIC_API_KEY='sk-ant-...'")
+        print("  # or for compatible endpoints:")
+        print("  export ANTHROPIC_BASE_URL='https://...'")
+        print("  export ANTHROPIC_AUTH_TOKEN='your-token'")
+        print("  export ANTHROPIC_MODEL='model-name'")
+        return 1
     env = LocalEnvironment(workdir=workdir)
     env.setup()
 

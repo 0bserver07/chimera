@@ -20,9 +20,7 @@ import json
 import os
 import sys
 import time
-from collections import deque
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any, Callable
 
 from chimera.detection.base import DetectionResult
