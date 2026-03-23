@@ -1,6 +1,6 @@
 # Chimera — Task Status
 
-> 256 tasks across 39 phases. TDD approach: tests first, then implementation.
+> 280+ tasks across 42 phases. TDD approach: tests first, then implementation.
 > Sources: `docs/plans/2026-02-20-chimera-implementation-plan.md`, `docs/plans/2026-02-20-chimera-extension-plan.md`, `docs/plans/2026-02-22-persistent-shell-plan.md`, `docs/plans/2026-02-25-aimo3-implementation-plan.md`
 
 ## Phases 1–8: Core Framework (Original)
