@@ -4,7 +4,30 @@
       "event": "PreToolUse",
       "tools": ["Write", "Edit"],
       "command": "python3 chimera/hooks/validate_path.py",
-      "description": "Validate file paths before Write/Edit — blocks nonexistent paths with suggestions"
+      "description": "Block edits to nonexistent files — suggests similar paths"
+    },
+    {
+      "event": "PreToolUse",
+      "tools": ["Bash"],
+      "command": "python3 chimera/hooks/security_scan.py",
+      "description": "Block dangerous bash commands (rm -rf /, chmod 777, etc.)"
+    },
+    {
+      "event": "PostToolUse",
+      "tools": ["Write", "Edit"],
+      "command": "python3 chimera/hooks/auto_test.py",
+      "description": "Run related tests after every file edit"
+    },
+    {
+      "event": "PostToolUse",
+      "tools": ["Write", "Edit"],
+      "command": "python3 chimera/hooks/auto_lint.py",
+      "description": "Run linter on modified files after every edit"
+    },
+    {
+      "event": "Stop",
+      "command": "python3 chimera/hooks/verify_done.py",
+      "description": "Verify all tests pass before declaring done"
     }
   ]
 }
