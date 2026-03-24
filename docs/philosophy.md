@@ -3,33 +3,37 @@ title: "Philosophy"
 description: "Why Chimera exists and where agentic coding is heading"
 ---
 
-## Agentic Coding is Machine Learning
+## Program Synthesis, Not Chat
 
-There's a growing recognition that agentic coding follows machine learning patterns. The spec is the loss function. The agent loop is the optimizer. The generated codebase is the model — an artifact you deploy without inspecting every line, the same way we deploy neural networks without reading individual weights.
+Chimera's core verb is `.synthesize()`. Not `.generate()`, not `.create()`. Synthesize. Because that's what it is.
 
-This framing isn't new.  [asked publicly](https://x.com//status/) what the right set of high-level abstractions would be for steering codebase "training" with minimal cognitive overhead. Others have proposed answers — DSPy for prompt optimization, LangChain for agent orchestration, CrewAI for multi-agent workflows.
+Program synthesis has been studying automated code generation from specifications for decades. The search engine changed from enumerative search to constraint solving to LLMs, but the structure is the same: specify what you want, search for a program that satisfies the spec, verify the result. The concepts are well defined: DSLs, grammars, synthesizers, verifiers, oracles.
 
-Chimera is a different answer. Instead of optimizing prompts or orchestrating conversations, Chimera decomposes coding agents into the same kind of composable primitives that made deep learning frameworks productive: providers (like backends), tools (like layers), loops (like optimizers), environments (like data pipelines), and strategies (like training schedules).
+Agentic coding maps directly onto this. The spec (and its tests) is the loss function. Agent iterations are training steps. Each pass through the code, each test run, each edit moves toward convergence. The output is a synthesized codebase, an artifact you deploy without inspecting every line, the same way we deploy neural networks without reading individual weights.
 
-## What This Means in Practice
+ [asked publicly](https://x.com//status/) what the right set of high-level abstractions would be for steering codebase "training" with minimal cognitive overhead. Chimera is one attempt at an answer, grounded in program synthesis.
+
+## Classic ML Problems Apply
 
 If agentic coding really is ML, then classic ML problems apply:
 
-- **Overfitting to the spec** — the agent passes all tests but the code doesn't generalize
-- **Clever Hans shortcuts** — the agent finds a hack that satisfies tests without understanding the problem
-- **Data leakage** — the agent reads test files and reverse-engineers the expected output
-- **Concept drift** — the codebase works today but breaks as dependencies change
+- **Overfitting to the spec**: the agent passes all tests but the code doesn't generalize
+- **Clever Hans shortcuts**: the agent finds a hack that satisfies tests without understanding the problem
+- **Data leakage**: the agent reads test files and reverse-engineers the expected output
+- **Concept drift**: the codebase works today but breaks as dependencies change
 
-Chimera's synthesis layer (`synthesize()`, `Trainer`, `Strategy`, `Constraint`) is designed with these problems in mind. Constraints check for things beyond test passage — code complexity, type coverage, lint compliance. Strategies like CEGIS (counterexample-guided synthesis) focus the agent on one failing test at a time to prevent oscillation. Validation splits detect overfitting by holding out test cases.
+Chimera's synthesis layer is designed with these problems in mind. Constraints check for things beyond test passage: code complexity, type coverage, lint compliance. Strategies like CEGIS (counterexample-guided synthesis) focus the agent on one failing test at a time to prevent oscillation. Validation splits detect overfitting by holding out test cases.
 
-## Why Composability Matters
+## The Monolith Problem
 
-Every major coding agent today is a monolith. Claude Code, Codex, Aider, OpenHands — each is a complete system built around one set of assumptions. If you want to change the loop, you fork the project. If you want a different tool set, you rewrite the integration layer.
+Every major coding agent today is a monolith. Claude Code is closed-source. Codex is Rust, tightly coupled to OpenAI. Aider is 50,000+ lines organized around one workflow. If you want to understand how any of them work, you reverse-engineer them. If you want to build your own, you start from scratch.
 
-Chimera bets that the right architecture hasn't been found yet. By making every component swappable — the loop, the tools, the provider, the environment, the strategy — researchers and developers can explore the design space without rebuilding from scratch. The same way Keras let researchers try new architectures in an afternoon instead of a month.
+This is what every field looks like before decomposition happens. Custom stacks everywhere. No shared vocabulary. Results you can't reproduce because the infrastructure isn't shared.
+
+Chimera decomposes the agent into composable primitives: providers, tools, loops, environments, and strategies. The bet is that the right architecture hasn't been found yet. By making every component swappable, researchers and developers can explore the design space without rebuilding from scratch.
 
 ## Where This Goes
 
-The current state of coding agents is where deep learning was around 2012: custom training loops, no shared abstractions, results that can't be reproduced. The path forward is the same — shared primitives, standardized benchmarks, and a community iterating on architectures.
+The gap between having the primitives and getting competitive results is real. Chimera's benchmarks are honest: HumanEval 90.9%, SWE-bench 10%. The question is which combination of loop, tools, context management, and prompting gets you from 10% to 70% on SWE-bench with an open model.
 
-Chimera is early. The benchmarks are honest (HumanEval 90.9%, SWE-bench 10%). The gap between composable blocks and competitive results is real. But the blocks exist, and the question is no longer "can we build a coding agent framework" but "what's the right composition."
+The primitives existed in deep learning for years before someone found the right composition. That's a research problem now, not an infrastructure problem. Chimera is the infrastructure that makes the research tractable.
