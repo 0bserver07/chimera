@@ -8,7 +8,7 @@ Compose coding agents from modular primitives. Synthesize codebases from specifi
 - **Build:** hatchling + uv
 - **License:** AGPL-3.0
 - **Setup:** `uv sync --extra dev --extra anthropic`
-- **Tests:** `uv run pytest` (2632 tests)
+- **Tests:** `uv run pytest` (2666 tests)
 - **Lint:** `uv run ruff check chimera/`
 - **Types:** `uv run mypy chimera/`
 - **Docs:** `uv sync --extra docs && uv run mkdocs serve`
