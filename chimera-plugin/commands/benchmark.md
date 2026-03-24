@@ -1,6 +1,6 @@
 ---
 name: benchmark
-description: Run a coding benchmark against the current codebase to measure agent effectiveness
+description: See [full playbook](../../docs/playbooks/07-benchmarking.md) for details. Run a coding benchmark against the current codebase to measure agent effectiveness
 ---
 
 Run a structured benchmark to evaluate how well the current coding approach is working.
