@@ -3,10 +3,13 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import AsyncIterator, Iterator
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from chimera.providers.base import Provider, Response, StreamEvent, ToolSchema
 from chimera.types import Message, ToolCall
+
+if TYPE_CHECKING:
+    from chimera.auth.manager import AuthManager
 
 try:
     import anthropic
@@ -31,6 +34,7 @@ class AnthropicProvider(Provider):
         enable_cache: bool = False,
         enable_thinking: bool = False,
         thinking_budget: int = 10_000,
+        auth_manager: AuthManager | None = None,
     ) -> None:
         if anthropic is None:
             raise ImportError("pip install chimera-ai[anthropic]")
@@ -38,10 +42,18 @@ class AnthropicProvider(Provider):
         self._enable_cache = enable_cache
         self._enable_thinking = enable_thinking
         self._thinking_budget = thinking_budget
+
+        resolved_key = api_key
+        if resolved_key is None and auth_manager is not None:
+            try:
+                resolved_key = auth_manager.get_token("anthropic")
+            except Exception:
+                pass
+        if resolved_key is None:
+            resolved_key = os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")
+
         client_kwargs: dict[str, Any] = {
-            "api_key": api_key
-            or os.environ.get("ANTHROPIC_API_KEY")
-            or os.environ.get("ANTHROPIC_AUTH_TOKEN"),
+            "api_key": resolved_key,
         }
         if base_url or os.environ.get("ANTHROPIC_BASE_URL"):
             client_kwargs["base_url"] = base_url or os.environ.get("ANTHROPIC_BASE_URL")
@@ -409,4 +421,4 @@ class AnthropicProvider(Provider):
 
 
 from chimera.providers.registry import register_provider as _register  # noqa: E402
-_register("anthropic", lambda model="", api_key=None, base_url=None, **kw: AnthropicProvider(model=model, api_key=api_key, base_url=base_url))
+_register("anthropic", lambda model="", api_key=None, base_url=None, **kw: AnthropicProvider(model=model, api_key=api_key, base_url=base_url, **kw))

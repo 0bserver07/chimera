@@ -15,9 +15,22 @@ Example:
 # chimera/providers/factory.py
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from chimera.providers.base import Provider
+
+if TYPE_CHECKING:
+    from chimera.auth.manager import AuthManager
+
+# Maps provider_type to auth provider name for token lookup.
+_AUTH_PROVIDER_MAP: dict[str, str] = {
+    "anthropic": "anthropic",
+    "openai": "openai",
+    "google": "google",
+    "ollama": "ollama",
+    "compatible": "openai",
+    "modal": "modal",
+}
 
 
 def create_provider(
@@ -26,6 +39,7 @@ def create_provider(
     model: str | None = None,
     api_key: str | None = None,
     base_url: str | None = None,
+    auth_manager: AuthManager | None = None,
     **kwargs: Any,
 ) -> Provider:
     """Factory function to create a provider by type or by model name inference.
@@ -40,6 +54,10 @@ def create_provider(
             environment variable when ``None``.
         base_url: Base URL override (primarily for ``"compatible"`` and
             ``"ollama"`` providers).
+        auth_manager: Optional :class:`~chimera.auth.manager.AuthManager`
+            instance.  When provided and *api_key* is ``None``, the factory
+            tries ``auth_manager.get_token(provider_name)`` before falling
+            back to environment variables.
         **kwargs: Additional keyword arguments forwarded to the provider
             constructor.
 
@@ -69,6 +87,14 @@ def create_provider(
 
     if provider_type is None:
         provider_type = _infer_provider(model)
+
+    # Try auth_manager for API key when none was explicitly provided.
+    if api_key is None and auth_manager is not None:
+        auth_name = _AUTH_PROVIDER_MAP.get(provider_type, provider_type)
+        try:
+            api_key = auth_manager.get_token(auth_name)
+        except Exception:
+            pass  # Fall through to env var lookup inside provider
 
     factory = get_provider_factory(provider_type)
     if factory is not None:

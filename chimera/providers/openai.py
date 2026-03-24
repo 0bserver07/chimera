@@ -4,10 +4,13 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import AsyncIterator, Iterator
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from chimera.providers.base import Provider, Response, StreamEvent, ToolSchema
 from chimera.types import Message, ToolCall
+
+if TYPE_CHECKING:
+    from chimera.auth.manager import AuthManager
 
 try:
     import openai
@@ -33,12 +36,23 @@ class OpenAIProvider(Provider):
         model: str,
         api_key: str | None = None,
         base_url: str | None = None,
+        auth_manager: AuthManager | None = None,
     ) -> None:
         if openai is None:
             raise ImportError("pip install chimera-ai[openai]")
         self._model = model
+
+        resolved_key = api_key
+        if resolved_key is None and auth_manager is not None:
+            try:
+                resolved_key = auth_manager.get_token("openai")
+            except Exception:
+                pass
+        if resolved_key is None:
+            resolved_key = os.environ.get("OPENAI_API_KEY")
+
         self._client = openai.OpenAI(
-            api_key=api_key or os.environ.get("OPENAI_API_KEY"),
+            api_key=resolved_key,
             base_url=base_url,
         )
 
@@ -343,4 +357,4 @@ class OpenAIProvider(Provider):
 
 
 from chimera.providers.registry import register_provider as _register  # noqa: E402
-_register("openai", lambda model="", api_key=None, base_url=None, **kw: OpenAIProvider(model=model, api_key=api_key, base_url=base_url))
+_register("openai", lambda model="", api_key=None, base_url=None, **kw: OpenAIProvider(model=model, api_key=api_key, base_url=base_url, **kw))

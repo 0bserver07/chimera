@@ -3,10 +3,13 @@ from __future__ import annotations
 
 import os
 import uuid
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from chimera.providers.base import Provider, Response, ToolSchema
 from chimera.types import Message, ToolCall
+
+if TYPE_CHECKING:
+    from chimera.auth.manager import AuthManager
 
 try:
     import google.generativeai as genai
@@ -23,10 +26,25 @@ class GoogleProvider(Provider):
         "gemini-1.0": 32_768,
     }
 
-    def __init__(self, model: str, api_key: str | None = None) -> None:
+    def __init__(
+        self,
+        model: str,
+        api_key: str | None = None,
+        auth_manager: AuthManager | None = None,
+    ) -> None:
         if genai is None:
             raise ImportError("pip install chimera-ai[google]")
-        genai.configure(api_key=api_key or os.environ.get("GOOGLE_API_KEY"))
+
+        resolved_key = api_key
+        if resolved_key is None and auth_manager is not None:
+            try:
+                resolved_key = auth_manager.get_token("google")
+            except Exception:
+                pass
+        if resolved_key is None:
+            resolved_key = os.environ.get("GOOGLE_API_KEY")
+
+        genai.configure(api_key=resolved_key)
         self._model_name = model
         self._model = genai.GenerativeModel(model)
 
@@ -144,4 +162,4 @@ class GoogleProvider(Provider):
 
 
 from chimera.providers.registry import register_provider as _register  # noqa: E402
-_register("google", lambda model="", api_key=None, **kw: GoogleProvider(model=model, api_key=api_key))
+_register("google", lambda model="", api_key=None, base_url=None, **kw: GoogleProvider(model=model, api_key=api_key, **kw))
