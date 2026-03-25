@@ -120,6 +120,7 @@ class AgentConfig:
     loop: str = "react"
     max_steps: int = 50
     model: str | None = None
+    triggers: list[str] = field(default_factory=list)
 
     # -- Factory methods -----------------------------------------------------
 
