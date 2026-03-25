@@ -17,6 +17,15 @@ Install the Chimera plugin and get immediate improvements:
 | 06 | [Migration](06-migration.md) | Manual refactoring |
 | 07 | [Benchmarking](07-benchmarking.md) | No way to measure agent quality |
 
+## For Agent Developers
+
+| # | Playbook | What It Adds |
+|---|----------|--------------|
+| 09 | [Adaptive Learning](09-adaptive-learning.md) | Agents learn from errors across sessions |
+| 10 | [Smart Dispatch](10-smart-dispatch.md) | Automatic agent selection |
+| 11 | [Workflow Discipline](11-workflow-discipline.md) | Phase gates, scope guards, focus |
+| 12 | [Review & Eval](12-review-eval.md) | Pluggable review perspectives and graders |
+
 ## For Developers
 
 | # | Playbook | What You Build |
