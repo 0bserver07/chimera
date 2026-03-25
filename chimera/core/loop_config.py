@@ -14,7 +14,12 @@ if TYPE_CHECKING:
     from chimera.core.middleware import LoopMiddleware
     from chimera.core.truncation import TruncationConfig
     from chimera.detection.actions import LoopDetector
+    from chimera.discipline.anchor import InstructionAnchor
+    from chimera.discipline.guard import DisciplineGuard
     from chimera.events.base import EventBus
+    from chimera.learning.feedback import FeedbackTracker
+    from chimera.learning.injector import LearningInjector
+    from chimera.learning.store import LearningStore
     from chimera.permissions.audit import AuditLog
     from chimera.permissions.base import PermissionPolicy
     from chimera.lsp.manager import LSPManager
@@ -63,3 +68,8 @@ class LoopConfig:
     file_tracker: FileTracker | None = None
     cancellation: CancellationToken | None = None
     message_queues: MessageQueues | None = None
+    discipline: list[DisciplineGuard] | None = None
+    instruction_anchor: InstructionAnchor | None = None
+    learning: LearningStore | None = None
+    feedback_tracker: FeedbackTracker | None = None
+    learning_injector: LearningInjector | None = None
