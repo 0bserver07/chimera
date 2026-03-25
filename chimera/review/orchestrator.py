@@ -9,6 +9,8 @@ from chimera.review.feedback import ReviewFeedback
 if TYPE_CHECKING:
     from chimera.core.agent import Agent
     from chimera.env.base import Environment
+    from chimera.review.perspective import ReviewPerspective
+    from chimera.review.registry import PerspectiveRegistry
 
 
 @dataclass
@@ -26,9 +28,41 @@ class ReviewOrchestrator:
     determining when the review is complete.
     """
 
-    def __init__(self, max_rounds: int = 3) -> None:
+    _DEFAULT_PERSPECTIVES = ["logic", "security", "tests", "architecture"]
+
+    def __init__(
+        self,
+        max_rounds: int = 3,
+        perspectives: list[str] | None = None,
+        registry: PerspectiveRegistry | None = None,
+    ) -> None:
+        """Initialise the orchestrator.
+
+        Args:
+            max_rounds: Maximum review-fix iterations before stopping.
+            perspectives: Names of perspectives to use. Defaults to
+                ["logic", "security", "tests", "architecture"].
+            registry: PerspectiveRegistry to look up perspectives from.
+                Defaults to a fresh PerspectiveRegistry with built-ins.
+        """
         self._max_rounds = max_rounds
         self._rounds: list[ReviewRound] = []
+
+        if registry is None:
+            from chimera.review.registry import PerspectiveRegistry as _Registry
+            registry = _Registry()
+        self._registry = registry
+        self._perspective_names = perspectives or self._DEFAULT_PERSPECTIVES
+
+    @property
+    def perspectives(self) -> list[ReviewPerspective]:
+        """Return the resolved perspective objects for this orchestrator."""
+        return [self._registry.get(name) for name in self._perspective_names]
+
+    @property
+    def registry(self) -> PerspectiveRegistry:
+        """Return the perspective registry."""
+        return self._registry
 
     @property
     def max_rounds(self) -> int:
@@ -95,9 +129,16 @@ class ReviewOrchestrator:
             True if the review is approved, False otherwise.
         """
         while self.needs_another_round():
-            review_result = reviewer.run(
-                f"Review this diff:\n\n{diff}", env
-            )
+            # Build review prompt from perspectives
+            perspective_objs = self.perspectives
+            if perspective_objs:
+                review_parts: list[str] = []
+                for p in perspective_objs:
+                    review_parts.append(p.prompt_template.format(diff=diff))
+                review_prompt = "\n\n---\n\n".join(review_parts)
+            else:
+                review_prompt = f"Review this diff:\n\n{diff}"
+            review_result = reviewer.run(review_prompt, env)
             feedback = ReviewFeedback.parse_from_text(review_result.output)
             self.add_review(feedback)
 
