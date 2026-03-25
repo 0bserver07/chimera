@@ -100,6 +100,23 @@ class ReAct:
                 from chimera.events.types import TurnStartEvent
                 self.config.event_bus.publish(TurnStartEvent(turn_number=steps))
 
+            # -- Instruction anchor: re-inject key instructions periodically --
+            if self.config and self.config.instruction_anchor:
+                anchor = self.config.instruction_anchor
+                if anchor.should_inject(steps, context.to_messages()):
+                    context.add(Message.user(anchor.get_injection()))
+
+            # -- Learning injector: inject proven error-fix patterns --
+            if self.config and self.config.learning_injector:
+                try:
+                    injections = self.config.learning_injector.get_injections(
+                        context.to_messages(),
+                    )
+                    for inj in injections:
+                        context.add(Message.user(inj))
+                except Exception:
+                    pass  # Learning is best-effort
+
             if wire:
                 from chimera.wire.types import StepBegin
                 wire.send(StepBegin(step=steps))

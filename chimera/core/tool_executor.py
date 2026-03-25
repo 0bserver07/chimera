@@ -90,6 +90,16 @@ def execute_tool_calls(
             if action == PermissionAction.ASK:
                 raise PermissionAsk(tc.name)
 
+        # -- Discipline guards --
+        if config and config.discipline:
+            for _guard in config.discipline:
+                _g_ctx = {"file_path": tc.arguments.get("path", ""), "arguments": tc.arguments}
+                _g_result = _guard.check(tc.name, _g_ctx)
+                if not _g_result.allowed:
+                    if _g_result.severity == "block":
+                        from chimera.discipline.guard import DisciplineViolation
+                        raise DisciplineViolation(_guard.name, _g_result.reason)
+
         # -- Event: tool call --
         if config and config.event_bus:
             from chimera.events.types import ToolCallEvent
@@ -151,6 +161,17 @@ def execute_tool_calls(
                     tool_metadata=result.metadata,
                 )
             )
+
+        # -- Feedback tracker: learn from errors --
+        if config and config.feedback_tracker:
+            try:
+                from chimera.events.types import ToolResultEvent as _TRE
+                config.feedback_tracker.on_tool_result(_TRE(
+                    call_id=tc.id, output=content,
+                    success=result.success, tool_metadata=result.metadata,
+                ))
+            except Exception:
+                pass  # Learning is best-effort, never blocks execution
 
         # -- File tracking --
         if config and config.file_tracker:
@@ -253,6 +274,16 @@ def execute_tool_calls_incremental(
                 result.remaining = list(tool_calls[i + 1:])
                 return result
 
+        # -- Discipline guards --
+        if config and config.discipline:
+            for _guard in config.discipline:
+                _g_ctx = {"file_path": tc.arguments.get("path", ""), "arguments": tc.arguments}
+                _g_result = _guard.check(tc.name, _g_ctx)
+                if not _g_result.allowed:
+                    if _g_result.severity == "block":
+                        from chimera.discipline.guard import DisciplineViolation
+                        raise DisciplineViolation(_guard.name, _g_result.reason)
+
         # -- Event: tool call --
         if config and config.event_bus:
             from chimera.events.types import ToolCallEvent
@@ -327,6 +358,17 @@ def execute_tool_calls_incremental(
                     tool_metadata=tr.metadata,
                 )
             )
+
+        # -- Feedback tracker: learn from errors --
+        if config and config.feedback_tracker:
+            try:
+                from chimera.events.types import ToolResultEvent as _TRE
+                config.feedback_tracker.on_tool_result(_TRE(
+                    call_id=tc.id, output=content,
+                    success=tr.success, tool_metadata=tr.metadata,
+                ))
+            except Exception:
+                pass  # Learning is best-effort
 
         # -- File tracking --
         if config and config.file_tracker:
@@ -421,6 +463,16 @@ async def async_execute_tool_calls_incremental(
                 result.remaining = list(tool_calls[i + 1 :])
                 return result
 
+        # -- Discipline guards --
+        if config and config.discipline:
+            for _guard in config.discipline:
+                _g_ctx = {"file_path": tc.arguments.get("path", ""), "arguments": tc.arguments}
+                _g_result = _guard.check(tc.name, _g_ctx)
+                if not _g_result.allowed:
+                    if _g_result.severity == "block":
+                        from chimera.discipline.guard import DisciplineViolation
+                        raise DisciplineViolation(_guard.name, _g_result.reason)
+
         # -- Event: tool call --
         if config and config.event_bus:
             from chimera.events.types import ToolCallEvent
@@ -493,6 +545,17 @@ async def async_execute_tool_calls_incremental(
                     tool_metadata=tr.metadata,
                 )
             )
+
+        # -- Feedback tracker: learn from errors --
+        if config and config.feedback_tracker:
+            try:
+                from chimera.events.types import ToolResultEvent as _TRE
+                config.feedback_tracker.on_tool_result(_TRE(
+                    call_id=tc.id, output=content,
+                    success=tr.success, tool_metadata=tr.metadata,
+                ))
+            except Exception:
+                pass  # Learning is best-effort
 
         # -- File tracking --
         if config and config.file_tracker:

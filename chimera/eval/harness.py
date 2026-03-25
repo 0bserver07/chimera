@@ -94,6 +94,7 @@ class Harness:
         benchmark: Benchmark,
         agent: Any,
         env_factory: Any = None,
+        graders: list[Any] | None = None,
     ) -> None:
         """Initialise the harness.
 
@@ -103,10 +104,15 @@ class Harness:
             env_factory: Optional zero-argument callable that produces a
                 fresh :class:`~chimera.env.base.Environment` for each task.
                 When ``None``, tasks run without an environment.
+            graders: Optional list of :class:`~chimera.eval.graders.base.Grader`
+                instances.  When provided, graders are run *after* the
+                benchmark's own ``evaluate()`` and a task only passes if
+                **both** the benchmark evaluator and all graders pass.
         """
         self.benchmark = benchmark
         self.agent = agent
         self.env_factory = env_factory
+        self.graders = graders or []
 
     def run(self) -> EvalResult:
         """Execute the full benchmark and return aggregated results.
@@ -127,6 +133,16 @@ class Harness:
                 env.setup()
             agent_result = self.agent.run(task.get("prompt", ""), env)
             passed = self.benchmark.evaluate(task, agent_result.output, env)
+            # Run additional graders if configured
+            if passed and self.graders:
+                for grader in self.graders:
+                    try:
+                        grade = grader.grade(task, {"output": agent_result.output})
+                        if not grade.passed:
+                            passed = False
+                            break
+                    except Exception:
+                        pass  # Grader failure doesn't block
             if env:
                 env.cleanup()
             results.append(
