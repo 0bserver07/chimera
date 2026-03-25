@@ -78,10 +78,18 @@ from chimera.training.strategies import (
 # Evaluation
 from chimera.eval import (
     Benchmark,
+    CompositeGrader,
     EvalResult,
+    FileExistsGrader,
+    GradeResult,
+    Grader,
     Harness,
+    LLMRubricGrader,
     OverfitSignal,
+    PatternMatchGrader,
+    SchemaGrader,
     TaskEvalResult,
+    TestPassGrader,
     avg_cost,
     avg_steps,
     check_hardcoded_answers,
@@ -147,9 +155,31 @@ from chimera.agents import AgentConfig, AgentFactory, AgentLoader, AgentPreset, 
 from chimera.agents.investigator import InvestigatorAgent, Investigation
 from chimera.agents.microagent import MicroagentSpawner, MicroagentConfig
 from chimera.agents.loader import create_default_registry, load_custom_agents
+from chimera.agents.dispatch import Complexity, Dispatcher, ForceRoute, RequestClassifier
 from chimera.plugins import BasePlugin, DirectoryPluginLoader, Hook, MCPServerConfig, Marketplace, MarketplaceRegistry, PluginExtensionRegistry, PluginInfo, PluginManager
 from chimera.config import ChimeraConfig, DiscriminatedUnion, ProjectConfig, Skill, SkillRegistry, StructuredOutput
 from chimera.mcp import MCPClient, MCPToolSource
+
+# Discipline
+from chimera.discipline import (
+    BOUNDED_EXPLORATION,
+    BOUNDED_RETRY,
+    DepthGuard,
+    DisciplineGuard,
+    DisciplinePattern,
+    DisciplineViolation,
+    Gate,
+    GuardResult,
+    InstructionAnchor,
+    Phase,
+    PhasedWorkflow,
+    RetryBudgetGuard,
+    SCOPE_ONLY,
+    ScopeGuard,
+    STRICT,
+    VERIFY_FIRST,
+    VerificationGuard,
+)
 
 # Security
 from chimera.security import (
@@ -180,13 +210,33 @@ from chimera.testgen import CoverageReport, TestCase, TestGenerator, parse_cover
 from chimera.ci import CIFixWorkflow, FailureInfo, parse_ci_log
 
 # Review
-from chimera.review import ReviewComment, ReviewFeedback, ReviewOrchestrator, Severity as ReviewSeverity
+from chimera.review import (
+    BUILTIN_PERSPECTIVES,
+    PerspectiveRegistry,
+    ReviewComment,
+    ReviewFeedback,
+    ReviewOrchestrator,
+    ReviewPerspective,
+    Severity as ReviewSeverity,
+)
 
 # Research
 from chimera.research import Finding, ResearchPlan, Researcher, Source
 
 # Migration
 from chimera.migration import MigrationPlan, MigrationPlanner, MigrationRule
+
+# Learning
+from chimera.learning import (
+    CATEGORY_THRESHOLDS,
+    FeedbackTracker,
+    LearningInjector,
+    LearningStore,
+    MetricsCollector,
+    Observation,
+    ObservationCategory,
+    SessionMetrics,
+)
 
 # Context
 from chimera.context.focus import ContextItem, FocusChain
@@ -327,10 +377,18 @@ __all__ = [
     "ValidationSplit",
     # Evaluation
     "Benchmark",
+    "CompositeGrader",
     "EvalResult",
+    "FileExistsGrader",
+    "GradeResult",
+    "Grader",
     "Harness",
+    "LLMRubricGrader",
     "OverfitSignal",
+    "PatternMatchGrader",
+    "SchemaGrader",
     "TaskEvalResult",
+    "TestPassGrader",
     "avg_cost",
     "avg_steps",
     "check_hardcoded_answers",
@@ -495,9 +553,12 @@ __all__ = [
     "FailureInfo",
     "parse_ci_log",
     # Review
+    "BUILTIN_PERSPECTIVES",
+    "PerspectiveRegistry",
     "ReviewComment",
     "ReviewFeedback",
     "ReviewOrchestrator",
+    "ReviewPerspective",
     "ReviewSeverity",
     # Migration
     "MigrationPlan",
@@ -552,6 +613,11 @@ __all__ = [
     "Investigation",
     "MicroagentSpawner",
     "MicroagentConfig",
+    # Dispatch
+    "Complexity",
+    "Dispatcher",
+    "ForceRoute",
+    "RequestClassifier",
     # Context
     "RepoMapMiddleware",
     "generate_repo_map",
@@ -580,4 +646,31 @@ __all__ = [
     # Environment
     "FileWatcher",
     "WatcherFileChange",
+    # Discipline
+    "BOUNDED_EXPLORATION",
+    "BOUNDED_RETRY",
+    "DepthGuard",
+    "DisciplineGuard",
+    "DisciplinePattern",
+    "DisciplineViolation",
+    "Gate",
+    "GuardResult",
+    "InstructionAnchor",
+    "Phase",
+    "PhasedWorkflow",
+    "RetryBudgetGuard",
+    "SCOPE_ONLY",
+    "ScopeGuard",
+    "STRICT",
+    "VERIFY_FIRST",
+    "VerificationGuard",
+    # Learning
+    "CATEGORY_THRESHOLDS",
+    "FeedbackTracker",
+    "LearningInjector",
+    "LearningStore",
+    "MetricsCollector",
+    "Observation",
+    "ObservationCategory",
+    "SessionMetrics",
 ]
