@@ -6,7 +6,7 @@ Compose coding agents from modular primitives. Synthesize codebases from specifi
 
 - **Language:** Python 3.11+
 - **Build:** hatchling + uv
-- **License:** AGPL-3.0
+- **License:** MIT
 - **Setup:** `uv sync --extra dev --extra anthropic`
 - **Tests:** `uv run pytest` (2774 tests)
 - **Lint:** `uv run ruff check chimera/`

@@ -21,7 +21,7 @@ Chimera vs 8 major coding agents. Based on source code analysis of repos in `cod
 | **Synthesis** | **TestConvergence, CEGIS, TreeSearch, Sketch, Curriculum** | No | No | No | No | No | No | No | No |
 | **Evaluation** | **SWE-bench, HumanEval, AIMO, Custom** | Limited | Testing | No | No | **SWE-bench** | SWE-bench | No | GH workflow |
 | **ML Primitives** | **Training Curves, Validation Split, Regularization, Tuner, Oracle, Mutation, Fault Loc, Impact, Spec Inference** | No | No | No | No | No | No | No | No |
-| **Open Source** | Yes (AGPL) | No | Yes | No | Yes | Yes | Partial | Yes | No |
+| **Open Source** | Yes (MIT) | No | Yes | No | Yes | Yes | Partial | Yes | No |
 
 ---
 

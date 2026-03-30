@@ -684,7 +684,7 @@ Update the plugin.json to include proper metadata and point to the playbooks:
   "version": "0.2.0",
   "description": "Composable coding agent primitives — codebase search, code review, test generation, migration planning, context management, benchmarking",
   "author": "Chimera Contributors",
-  "license": "AGPL-3.0",
+  "license": "MIT",
   "homepage": "https://github.com/chimera-ai/chimera",
   "keywords": ["coding-agent", "code-review", "test-generation", "search", "migration"]
 }

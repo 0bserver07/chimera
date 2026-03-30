@@ -1,64 +1,100 @@
 # Chimera
 
-Compose agents from providers, tools, loops, and environments. The same primitives that make up Claude Code or Codex — ReAct loops, tool execution, context management — are modular blocks you can swap and reconfigure. A working coding agent is ~50 lines of Python.
+AI that reads, writes, and debugs code — tools like Claude Code and Codex do this. Chimera is a Python library for building these tools yourself, and a plugin that makes Claude Code better.
 
-**Status: Alpha** — 2632 tests (2684 collected), 8 agent architectures replicable, benchmarked on HumanEval (90.9%) and SWE-bench.
+**Status: Alpha** — 2774 tests, benchmarked on HumanEval (90.9%) and SWE-bench.
 
-## Try It
+## What It Does
 
-```bash
-git clone https://github.com/0bserver07/chimera && cd chimera
-uv sync --extra dev --extra anthropic
-export ANTHROPIC_API_KEY="sk-ant-..."   # or any Anthropic-compatible endpoint
-python -m chimera code --workdir .      # interactive coding agent
-```
+A coding agent is an LLM connected to your filesystem. It reads code, decides what to change, edits files, runs tests, and repeats until the task is done. Claude Code and Codex are coding agents.
 
-## 4-Line Agent
+Chimera gives you two things:
+
+1. **A plugin for Claude Code** that adds codebase search, auto-testing, code review, and context management — capabilities Claude Code doesn't have out of the box.
+
+2. **A Python library** for building your own coding agents from modular pieces — pick your LLM, pick your tools, pick your strategy, wire them together.
+
+## Use It With Claude Code
+
+Install the plugin to get immediate improvements. No Python code to write.
+
+**Hooks** run automatically on every edit:
+- Path validation — blocks edits to files that don't exist (no more hallucinated paths)
+- Auto-test — finds and runs related tests after every file change
+- Auto-lint — runs your linter after every edit
+- Security scan — blocks dangerous bash commands
+- Verify done — runs the full test suite before Claude can declare "done"
+
+**MCP servers** give Claude new tools to call:
+- `chimera-search` — semantic codebase search + symbol lookup
+- `chimera-review` — multi-perspective code review (logic, security, tests, architecture, and 4 more)
+- `chimera-testgen` — generate test skeletons from source analysis
+- `chimera-migration` — scan for and apply code migrations (Python 2 to 3, CJS to ESM)
+
+[Setup guide](docs/playbooks/00-quick-start.md) — install in 2 minutes.
+
+## Build Your Own Agent
 
 ```python
 import chimera
 
-provider = chimera.create_provider()
+provider = chimera.create_provider()  # Anthropic, OpenAI, Google, Ollama, or any compatible API
 agent = chimera.Agent(provider=provider, tools=list(chimera.AGENT_TOOLS))
 result = agent.run("Fix the failing test in auth.py", env=chimera.LocalEnvironment("."))
 ```
 
-## Quick Start
+Swap any piece:
 
 ```python
-import chimera
+# Different loop strategy
+agent = chimera.Agent(provider, loop=chimera.PlanAndExecute())   # plan first, then act
+agent = chimera.Agent(provider, loop=chimera.Reflexion())        # self-critique after each attempt
+agent = chimera.Agent(provider, loop=chimera.TreeOfThought())    # explore multiple approaches
 
-# One-liner: synthesize code from a spec
-result = chimera.synthesize("Build a REST API for tasks", tests="./tests/")
+# Replicate existing agents
+agent = chimera.AgentPreset.SWE_AGENT.build(provider)   # SWE-Agent's retry loop
+agent = chimera.AgentPreset.AIDER.build(provider)        # Aider's lint feedback loop
+agent = chimera.AgentPreset.CLINE.build(provider)        # Cline's plan-then-act
+agent = chimera.AgentPreset.CODEX.build(provider)        # Codex CLI's full tool suite
 
-# Configured: choose your loop and tools
-agent = chimera.Agent(
-    provider=chimera.create_provider(),
-    tools=list(chimera.AGENT_TOOLS),
-    loop=chimera.ReAct(max_steps=50),
-)
-result = agent.run("Write unit tests for utils.py", env=chimera.LocalEnvironment("."))
-
-# Preset: replicate any coding agent in one line
-agent = chimera.AgentPreset.SWE_AGENT.build(provider)   # retry loop + minimal tools
-agent = chimera.AgentPreset.AIDER.build(provider)        # lint feedback loop
-agent = chimera.AgentPreset.CLINE.build(provider)        # plan-then-act
-agent = chimera.AgentPreset.CODEX.build(provider)        # full tool suite
+# Iterate with real-time streaming (for building UIs)
+for step in agent.iter_steps("Fix the bug", env):
+    print(step.message.content)
+    if step.pending_approval:
+        step.pending_approval.approve()  # interactive permission system
 ```
 
-## Architecture
+[Full library guide](docs/playbooks/08-building-agents.md) — providers, tools, loops, sessions, streaming, permissions, composition.
 
-8-layer stack. Each layer usable independently:
+## How It's Organized
+
+Chimera is an 8-layer stack. Each layer works independently — use just what you need.
 
 ```
-Layer 8  CLI             chimera synthesize / eval / bench / code / review / ci-fix
-Layer 7  Workflows       CIFix, Review, Research, Migration, DocGen, TestGen
-Layer 6  Synthesis       Trainer, Strategy, Spec, Architecture, Constraint
-Layer 5  Evaluation      Harness, Metrics, Benchmarks (SWE-bench, HumanEval, AIMO)
-Layer 4  Agent           Agent, Tools, Loops, Prompt, Context, Critic, ACP
-Layer 3  Provider        Anthropic, OpenAI, Google, Ollama, Modal, OpenAI-compat
-Layer 2  Infrastructure  Security, Secrets, Events, Sessions, Compaction, MCP, LSP
-Layer 1  Environment     Local, Docker, Git, Remote, Cloud, PersistentShell
+What you run        CLI commands: chimera code / synthesize / eval / review / ci-fix
+                    ─────────────────────────────────────────────────────────────────
+Automated           CI repair, code review, research, migration planning, doc and
+workflows           test generation — multi-step pipelines built on the agent layer
+                    ─────────────────────────────────────────────────────────────────
+Iterating on code   Give it a spec and tests, it keeps trying until the tests pass.
+                    Strategies: converge on tests, search a tree of approaches,
+                    generate-then-verify (CEGIS), curriculum learning
+                    ─────────────────────────────────────────────────────────────────
+Measuring quality   Run benchmarks (HumanEval, SWE-bench, AIMO, custom), collect
+                    pass rates and costs, compare agent configurations
+                    ─────────────────────────────────────────────────────────────────
+The agent itself    An LLM in a loop: think, call a tool, observe the result,
+                    repeat. 20 built-in tools (read, write, edit, bash, search,
+                    git, test, web fetch, etc). 4 loop strategies.
+                    ─────────────────────────────────────────────────────────────────
+LLM providers       Anthropic, OpenAI, Google, Ollama, Modal, or any
+                    OpenAI-compatible API. Streaming, async, cost tracking.
+                    ─────────────────────────────────────────────────────────────────
+Plumbing            Auth, sessions (save/resume/fork), event bus, permissions,
+                    context compaction, secrets, plugins, MCP, LSP
+                    ─────────────────────────────────────────────────────────────────
+Where code runs     Your filesystem, a Docker container, a git branch,
+                    a remote server, or a cloud sandbox
 ```
 
 ## Benchmarks
@@ -71,27 +107,21 @@ Layer 1  Environment     Local, Docker, Git, Remote, Cloud, PersistentShell
 
 [Full transparency report](docs/benchmarks/README.md) with 13 tracked issues.
 
-## When Chimera, Not Claude Code/Codex?
+## When Chimera, When Claude Code?
 
-**Use Claude Code or Codex** if you want a finished product that works today.
+**Use Claude Code** if you want a polished product that works today.
 
 **Use Chimera** if you want to:
-- **Understand** how coding agents work — every major agent's architecture decomposed into primitives
-- **Build custom agents** — compose your own loops, tools, and strategies without forking someone else's monolith
-- **Research** agent architectures — benchmark framework with full transparency
-- **Prototype fast** — go from idea to working agent in 50 lines, not 5000
-
-Chimera is a framework, not a product. The building blocks exist — the community decides what to build with them.
-
-## Philosophy
-
-Chimera treats agentic coding as a machine learning problem. When an engineer writes a spec, agents iterate on code, and the result passes all tests — that's training. The spec is the loss function. The agent loop is the optimizer. The core verb is `.synthesize()`.
+- Make Claude Code better — add search, auto-test, review, context management via the plugin
+- Build your own coding agent — different LLM, different tools, different strategy
+- Understand how coding agents work — every major architecture decomposed into swappable pieces
+- Research and benchmark — compare agent architectures with controlled experiments
 
 ## Links
 
-- [Tutorial: Build a Claude Code-Like Agent](docs/tutorials/build-your-own-claude-code.md) — 50 lines, step by step
-- [Documentation](https://chimera.run) — full docs site
-- [Getting Started](docs/getting-started.md) — provider setup, first agent
+- [Quick Start: Claude Code Plugin](docs/playbooks/00-quick-start.md) — hooks, MCP servers, skills
+- [Build Your Own Agent](docs/playbooks/08-building-agents.md) — full library guide
+- [All Playbooks](docs/playbooks/) — 13 guides covering every feature
 - [Examples](examples/) — 39 runnable scripts
 - [Benchmarks](docs/benchmarks/README.md) — transparency framework
 - [Contributing](CONTRIBUTING.md) — setup, workflow, code style

@@ -35,7 +35,7 @@ dynamic = ["version"]
 description = "A composable coding agent framework. Synthesize codebases from specifications."
 readme = "README.md"
 requires-python = ">=3.11"
-license = {text = "AGPL-3.0"}
+license = {text = "MIT"}
 keywords = ["ai", "agents", "coding", "framework", "training"]
 classifiers = [
     "Development Status :: 3 - Alpha",
