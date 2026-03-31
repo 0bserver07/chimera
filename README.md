@@ -101,9 +101,9 @@ Where code runs     Your filesystem, a Docker container, a git branch,
 
 | Benchmark | GLM-5 | GLM-5.1 |
 |-----------|-------|---------|
-| HumanEval (164 problems) | 90.9% pass@1 | **66.5% pass@1** |
+| HumanEval (164 problems) | 90.9% pass@1 | 66.5% pass@1 |
+| SWE-bench Lite (20 instances) | 10% | 10% (2/20) |
 | Terminal-Bench (10 tasks) | 30% | — |
-| SWE-bench Lite (20 instances) | 10% | — |
 
 [Full transparency report](docs/benchmarks/README.md) with 13 tracked issues.
 
