@@ -50,6 +50,10 @@ class BaseTool(ABC):
     description: str
     parameters: dict[str, Any]  # JSON Schema
     requires_approval: bool = False
+    is_concurrency_safe: bool = False   # Default: fail-closed (sequential)
+    is_read_only: bool = False          # Does not perform writes
+    is_destructive: bool = False        # Delete/overwrite/send operations
+    max_result_size_chars: int = 30_000  # Threshold before disk persistence
 
     @abstractmethod
     def execute(self, args: dict[str, Any], env: Environment | None) -> ToolResult:
