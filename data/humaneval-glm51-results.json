@@ -1,0 +1,228 @@
+{
+  "model": "glm-5.1",
+  "passed": 109,
+  "total": 164,
+  "pass_rate": 0.6646341463414634,
+  "errors": [
+    [
+      "HumanEval/0",
+      "invalid syntax (<string>, line 22)"
+    ],
+    [
+      "HumanEval/6",
+      "unexpected indent (<string>, line 14)"
+    ],
+    [
+      "HumanEval/10",
+      "unterminated string literal (detected at line 43) (<string>, line 43)"
+    ],
+    [
+      "HumanEval/20",
+      "unexpected indent (<string>, line 14)"
+    ],
+    [
+      "HumanEval/26",
+      "unexpected indent (<string>, line 14)"
+    ],
+    [
+      "HumanEval/32",
+      "name 'poly' is not defined"
+    ],
+    [
+      "HumanEval/33",
+      "unterminated string literal (detected at line 21) (<string>, line 21)"
+    ],
+    [
+      "HumanEval/37",
+      "invalid syntax (<string>, line 22)"
+    ],
+    [
+      "HumanEval/38",
+      "name 'encode_cyclic' is not defined"
+    ],
+    [
+      "HumanEval/40",
+      "Error code: 400 - {'type': 'error', 'error': {'message': 'Network error, error id: 20260331080937ba3"
+    ],
+    [
+      "HumanEval/41",
+      "'return' outside function (<string>, line 13)"
+    ],
+    [
+      "HumanEval/43",
+      "invalid syntax (<string>, line 26)"
+    ],
+    [
+      "HumanEval/46",
+      "unterminated string literal (detected at line 21) (<string>, line 21)"
+    ],
+    [
+      "HumanEval/50",
+      "name 'encode_shift' is not defined"
+    ],
+    [
+      "HumanEval/54",
+      "Error code: 400 - {'type': 'error', 'error': {'message': 'Network error, error id: 20260331081057251"
+    ],
+    [
+      "HumanEval/65",
+      "unexpected indent (<string>, line 14)"
+    ],
+    [
+      "HumanEval/68",
+      "unterminated string literal (detected at line 27) (<string>, line 27)"
+    ],
+    [
+      "HumanEval/69",
+      "unexpected indent (<string>, line 14)"
+    ],
+    [
+      "HumanEval/70",
+      "unindent does not match any outer indentation level (<string>, line 15)"
+    ],
+    [
+      "HumanEval/73",
+      "Error code: 400 - {'type': 'error', 'error': {'message': 'Network error, error id: 20260331081244508"
+    ],
+    [
+      "HumanEval/76",
+      "unterminated triple-quoted string literal (detected at line 62) (<string>, line 34)"
+    ],
+    [
+      "HumanEval/80",
+      "Error code: 400 - {'type': 'error', 'error': {'message': 'Network error, error id: 20260331081330216"
+    ],
+    [
+      "HumanEval/81",
+      "invalid syntax (<string>, line 24)"
+    ],
+    [
+      "HumanEval/83",
+      ""
+    ],
+    [
+      "HumanEval/88",
+      "unterminated string literal (detected at line 32) (<string>, line 32)"
+    ],
+    [
+      "HumanEval/89",
+      "Error code: 400 - {'type': 'error', 'error': {'message': 'Network error, error id: 2026033108145543e"
+    ],
+    [
+      "HumanEval/91",
+      "Error code: 400 - {'type': 'error', 'error': {'message': 'Network error, error id: 202603310815117f8"
+    ],
+    [
+      "HumanEval/93",
+      "This prints if this assert fails 1 (good for debugging!)"
+    ],
+    [
+      "HumanEval/96",
+      "invalid decimal literal (<string>, line 31)"
+    ],
+    [
+      "HumanEval/102",
+      "Error code: 400 - {'type': 'error', 'error': {'message': 'Network error, error id: 202603310816310be"
+    ],
+    [
+      "HumanEval/105",
+      "unexpected indent (<string>, line 14)"
+    ],
+    [
+      "HumanEval/111",
+      "unindent does not match any outer indentation level (<string>, line 15)"
+    ],
+    [
+      "HumanEval/114",
+      "Error code: 400 - {'type': 'error', 'error': {'message': 'Network error, error id: 202603310817373bb"
+    ],
+    [
+      "HumanEval/115",
+      "Error"
+    ],
+    [
+      "HumanEval/117",
+      "unindent does not match any outer indentation level (<string>, line 16)"
+    ],
+    [
+      "HumanEval/118",
+      "unexpected indent (<string>, line 14)"
+    ],
+    [
+      "HumanEval/120",
+      ""
+    ],
+    [
+      "HumanEval/124",
+      "unterminated triple-quoted string literal (detected at line 111) (<string>, line 37)"
+    ],
+    [
+      "HumanEval/125",
+      "Error code: 400 - {'type': 'error', 'error': {'message': 'Network error, error id: 20260331081841557"
+    ],
+    [
+      "HumanEval/128",
+      "Error code: 400 - {'type': 'error', 'error': {'message': 'Network error, error id: 20260331081942967"
+    ],
+    [
+      "HumanEval/129",
+      "unexpected indent (<string>, line 15)"
+    ],
+    [
+      "HumanEval/130",
+      "list index out of range"
+    ],
+    [
+      "HumanEval/132",
+      ""
+    ],
+    [
+      "HumanEval/135",
+      "invalid syntax (<string>, line 26)"
+    ],
+    [
+      "HumanEval/136",
+      "Error code: 400 - {'type': 'error', 'error': {'message': 'Network error, error id: 20260331082035396"
+    ],
+    [
+      "HumanEval/137",
+      "invalid character '\u279e' (U+279E) (<string>, line 30)"
+    ],
+    [
+      "HumanEval/139",
+      "Error code: 400 - {'type': 'error', 'error': {'message': 'Network error, error id: 202603310821188bc"
+    ],
+    [
+      "HumanEval/145",
+      "unindent does not match any outer indentation level (<string>, line 16)"
+    ],
+    [
+      "HumanEval/146",
+      "invalid syntax (<string>, line 22)"
+    ],
+    [
+      "HumanEval/150",
+      "unindent does not match any outer indentation level (<string>, line 29)"
+    ],
+    [
+      "HumanEval/152",
+      "invalid syntax (<string>, line 21)"
+    ],
+    [
+      "HumanEval/153",
+      "Error code: 400 - {'type': 'error', 'error': {'message': 'Network error, error id: 20260331082257ae1"
+    ],
+    [
+      "HumanEval/154",
+      "unindent does not match any outer indentation level (<string>, line 15)"
+    ],
+    [
+      "HumanEval/156",
+      "Error code: 400 - {'type': 'error', 'error': {'message': 'Network error, error id: 20260331082319593"
+    ],
+    [
+      "HumanEval/159",
+      "unterminated string literal (detected at line 25) (<string>, line 25)"
+    ]
+  ]
+}

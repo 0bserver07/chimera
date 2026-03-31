@@ -405,6 +405,7 @@ def run_eval(args: argparse.Namespace) -> int:
     """Execute the eval command."""
     from chimera.core.agent import Agent
     from chimera.core.tool_group import DEFAULT_TOOLS
+    from chimera.env.local import LocalEnvironment
     from chimera.eval.harness import Harness
     from chimera.providers.factory import create_provider
 
@@ -416,7 +417,15 @@ def run_eval(args: argparse.Namespace) -> int:
 
     provider = create_provider(model=args.model)
     agent = Agent(provider=provider, tools=list(DEFAULT_TOOLS))
-    harness = Harness(benchmark, agent)
+
+    def _eval_env_factory() -> LocalEnvironment:
+        import tempfile
+        d = tempfile.mkdtemp(prefix="chimera-eval-")
+        e = LocalEnvironment(workdir=d)
+        e.setup()
+        return e
+
+    harness = Harness(benchmark, agent, env_factory=_eval_env_factory)
 
     print(f"Running {benchmark.name()} ({len(benchmark.tasks())} tasks) with {args.model}...", file=sys.stderr)
     result = harness.run()
