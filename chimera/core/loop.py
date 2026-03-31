@@ -17,8 +17,10 @@ from chimera.providers.cost_tracker import CostLimitExceeded
 from chimera.types import AgentResult, Message, StepResult, ToolCall
 
 if TYPE_CHECKING:
+    from chimera.core.abort import AbortSignal
     from chimera.core.cancellation import CancellationToken
     from chimera.core.loop_config import LoopConfig
+    from chimera.core.loop_events import LoopEvent
     from chimera.streaming.base import StreamHandler
 
 
@@ -658,6 +660,32 @@ class ReAct:
         return await async_drain_steps(
             self.async_iter_steps(provider, tools, context, env)
         )
+
+    async def async_run_events(
+        self,
+        provider: Provider,
+        tools: list[BaseTool],
+        context: Context,
+        env: Environment | None,
+        *,
+        abort_signal: AbortSignal | None = None,
+    ) -> AsyncGenerator[LoopEvent, None]:
+        """Run the loop yielding LoopEvents via AgentLoop.
+
+        This is the new streaming interface. Existing run()/iter_steps()
+        remain unchanged for backwards compatibility.
+        """
+        from chimera.core.agent_loop import AgentLoop
+        loop = AgentLoop()
+        async for event in loop.run(
+            messages=context.to_messages(),
+            tools=tools,
+            provider=provider,
+            system_prompt=context.system or "",
+            max_turns=self.max_steps,
+            abort_signal=abort_signal,
+        ):
+            yield event
 
 
 def drain_steps(
