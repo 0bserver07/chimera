@@ -13,6 +13,7 @@ instances describing what happened on each step.
 """
 from __future__ import annotations
 
+import asyncio
 import time
 from collections.abc import AsyncGenerator
 from typing import Any
@@ -156,7 +157,38 @@ class AgentLoop:
             executor = StreamingToolExecutor(tools)
             for tc in response.tool_calls:
                 await executor.submit(tc)
-            results = await executor.collect()
+
+            # If an abort signal is provided, race tool execution against it
+            # so that a mid-flight abort cancels pending tasks promptly.
+            if abort_signal is not None:
+                collect_task = asyncio.ensure_future(executor.collect())
+
+                async def _wait_for_abort() -> None:
+                    while not abort_signal.aborted:
+                        await asyncio.sleep(0.01)
+
+                abort_waiter = asyncio.ensure_future(_wait_for_abort())
+                done, pending = await asyncio.wait(
+                    {collect_task, abort_waiter},
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+                if abort_waiter in done:
+                    # Abort fired — cancel the collect task and discard results.
+                    collect_task.cancel()
+                    try:
+                        await collect_task
+                    except asyncio.CancelledError:
+                        pass
+                    results = await executor.discard()
+                else:
+                    abort_waiter.cancel()
+                    try:
+                        await abort_waiter
+                    except asyncio.CancelledError:
+                        pass
+                    results = collect_task.result()
+            else:
+                results = await executor.collect()
 
             # Yield individual tool results
             for tc, result in results:
