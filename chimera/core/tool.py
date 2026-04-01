@@ -54,6 +54,7 @@ class BaseTool(ABC):
     is_read_only: bool = False          # Does not perform writes
     is_destructive: bool = False        # Delete/overwrite/send operations
     max_result_size_chars: int = 30_000  # Threshold before disk persistence
+    requires_user_interaction: bool = False  # Bypass-immune when ASK
 
     @abstractmethod
     def execute(self, args: dict[str, Any], env: Environment | None) -> ToolResult:
@@ -68,6 +69,25 @@ class BaseTool(ABC):
             A :class:`~chimera.types.ToolResult` containing the tool's
             output (or error information).
         """
+
+    def get_permission_content(self, args: dict[str, Any]) -> str | None:
+        """Extract permission-relevant content from tool arguments.
+
+        Override in subclasses to provide content that permission rules
+        can match against (e.g., the command string for Bash).
+        Returns ``None`` by default (no opinion).
+        """
+        return None
+
+    def check_permissions(self, args: dict[str, Any], context: Any = None) -> Any:
+        """Tool-level permission check hook.
+
+        Override to return a :class:`~chimera.permissions.decisions.PermissionDecision`
+        to short-circuit the permission algorithm, or ``None`` to continue
+        with the standard flow.
+        Returns ``None`` by default (no opinion).
+        """
+        return None
 
     async def async_execute(
         self, args: dict[str, Any], env: Environment | None,

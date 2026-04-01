@@ -10,9 +10,11 @@ from __future__ import annotations
 
 import sys
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Callable, Awaitable
 
 from chimera.permissions.base import PermissionAction
+from chimera.permissions.decisions import DecisionReason, PermissionDecision
+from chimera.permissions.denial_tracking import DenialTrackingState
 from chimera.permissions.risk import classify_risk
 
 
@@ -117,3 +119,61 @@ class InteractiveApprover:
             return ApprovalDecision(action=PermissionAction.ALLOW, always=True)
         else:
             return ApprovalDecision(action=PermissionAction.DENY, reason="user denied")
+
+
+class InteractivePermissionHandler:
+    """Async handler for interactive permission prompts using the new
+    PermissionDecision-based flow.
+
+    Unlike :class:`InteractiveApprover`, this handler works with
+    :class:`PermissionDecision` (not :class:`PermissionAction`) and supports
+    denial tracking and pluggable async callbacks.
+    """
+
+    async def prompt(
+        self,
+        tool_name: str,
+        input_args: dict[str, Any],
+        decision: PermissionDecision,
+        *,
+        denial_tracking: DenialTrackingState | None = None,
+        prompt_callback: Callable[..., Awaitable[str]] | None = None,
+    ) -> PermissionDecision:
+        """Prompt for interactive approval.
+
+        Args:
+            tool_name:        Name of the tool requesting permission.
+            input_args:       The tool's input arguments.
+            decision:         The current (ASK) decision from the checker.
+            denial_tracking:  Optional denial tracker for auto-deny logic.
+            prompt_callback:  Async callback ``(tool_name, input_args, decision) -> str``
+                              returning one of ``"allow_once"``, ``"allow_always"``,
+                              ``"deny_once"``, ``"deny_always"``.
+
+        Returns:
+            A final :class:`PermissionDecision`.
+        """
+        # Auto-deny after repeated rejections
+        if denial_tracking and denial_tracking.should_auto_deny(tool_name):
+            return PermissionDecision.deny("Auto-denied after repeated rejections")
+
+        # No interactive handler available -> deny
+        if prompt_callback is None:
+            return PermissionDecision.deny("No interactive handler available")
+
+        choice = await prompt_callback(tool_name, input_args, decision)
+
+        if choice == "allow_once":
+            return PermissionDecision.allow()
+        elif choice == "allow_always":
+            return PermissionDecision.allow(reason=DecisionReason.rule(tool_name))
+        elif choice == "deny_once":
+            if denial_tracking:
+                denial_tracking.record_denial(tool_name)
+            return PermissionDecision.deny("User denied")
+        elif choice == "deny_always":
+            if denial_tracking:
+                denial_tracking.record_denial(tool_name)
+            return PermissionDecision.deny("User denied permanently")
+        else:
+            return PermissionDecision.deny("User cancelled")
