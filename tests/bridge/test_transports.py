@@ -124,16 +124,13 @@ class TestWebSocketTransport:
         assert transport._connected is False
         assert transport.is_connected is False
 
-    def test_raises_import_error_on_connect_without_websockets(self):
+    @pytest.mark.asyncio
+    async def test_raises_import_error_on_connect_without_websockets(self):
         """connect() should raise ImportError if websockets is missing."""
         transport = WebSocketTransport("ws://localhost:8080")
-
-        async def _test():
-            with patch.dict(sys.modules, {"websockets": None}):
-                with pytest.raises(ImportError, match="websockets"):
-                    await transport.connect()
-
-        asyncio.get_event_loop().run_until_complete(_test())
+        with patch.dict(sys.modules, {"websockets": None}):
+            with pytest.raises(ImportError, match="websockets"):
+                await transport.connect()
 
     @pytest.mark.asyncio
     async def test_connect_sets_connected(self):
