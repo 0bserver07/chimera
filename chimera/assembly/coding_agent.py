@@ -202,6 +202,11 @@ class CodingAgent:
             except Exception:
                 pass
 
+        # Snapshot manager (undo/revert)
+        from chimera.core.snapshot import SnapshotManager
+
+        self._snapshot_manager = SnapshotManager(self._project_dir)
+
         # Memory
         self._memory = PersistentMemory(self._project_dir)
 
@@ -251,11 +256,17 @@ class CodingAgent:
                 .build()
             )
 
-        # Run the loop
+        # Run the loop with snapshot tracking
         from chimera.core.agent_loop import AgentLoop
         from chimera.types import Message
 
+        # Tools that modify files on disk
+        _FILE_TOOLS = {"write_file", "edit_file", "bash", "replace_in_file"}
+
         loop = AgentLoop()
+        turn_modified: list[str] = []
+        last_turn = 0
+
         async for event in loop.run(
             messages=[Message.user(task)],
             tools=self.tools,
@@ -272,7 +283,31 @@ class CodingAgent:
             compaction=self._compaction,
             stream=self._config.streaming,
         ):
+            # Track modified files from tool_result events
+            if event.type == LoopEventType.tool_result:
+                tc, _result = event.data
+                if tc.name in _FILE_TOOLS:
+                    file_path = tc.arguments.get("path") or tc.arguments.get("file_path")
+                    if file_path and file_path not in turn_modified:
+                        turn_modified.append(file_path)
+
+                # When the turn advances, take a snapshot of what changed
+                if event.turn > last_turn and turn_modified:
+                    await self._snapshot_manager.take(
+                        turn=last_turn or 1,
+                        modified_files=list(turn_modified),
+                    )
+                    turn_modified.clear()
+                last_turn = event.turn
+
             yield event
+
+        # Take a final snapshot for any remaining modifications
+        if turn_modified:
+            await self._snapshot_manager.take(
+                turn=last_turn,
+                modified_files=turn_modified,
+            )
 
     def abort(self) -> None:
         """Abort the current run."""

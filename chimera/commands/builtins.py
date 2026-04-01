@@ -9,7 +9,7 @@ from chimera.commands.types import LocalCommand
 def _help_handler(args: str) -> str:
     return (
         "Available commands: /help, /clear, /compact, /cost, /diff, "
-        "/status, /model, /memory, /exit"
+        "/status, /model, /memory, /undo, /revert, /exit"
     )
 
 
@@ -73,6 +73,22 @@ def _memory_handler(args: str) -> str:
     return content or "No persistent memory found"
 
 
+def _undo_handler(args: str) -> str:
+    """Undo the last turn's file changes."""
+    return (
+        "Undo requires an active snapshot manager. "
+        "Use 'chimera code --preset claude_code' for snapshot support."
+    )
+
+
+def _revert_handler(args: str) -> str:
+    """Revert files to a specific turn."""
+    return (
+        "Revert requires an active snapshot manager. "
+        "Use 'chimera code --preset claude_code' for snapshot support."
+    )
+
+
 def get_builtin_commands() -> list[LocalCommand]:
     """Return the list of built-in local commands."""
     return [
@@ -125,6 +141,19 @@ def get_builtin_commands() -> list[LocalCommand]:
             description="Show persistent memory",
             aliases=["mem"],
             handler=_memory_handler,
+            loaded_from="builtin",
+        ),
+        LocalCommand(
+            name="undo",
+            description="Undo the last turn's file changes",
+            handler=_undo_handler,
+            loaded_from="builtin",
+        ),
+        LocalCommand(
+            name="revert",
+            description="Revert files to a specific turn",
+            argument_hint="<turn_number>",
+            handler=_revert_handler,
             loaded_from="builtin",
         ),
         LocalCommand(
