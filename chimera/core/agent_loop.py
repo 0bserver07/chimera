@@ -35,6 +35,7 @@ from chimera.sessions.transcript import TranscriptStorage
 from chimera.types import Message, ToolCall, ToolResult
 
 if TYPE_CHECKING:
+    from chimera.core.compaction_integration import CompactionIntegration
     from chimera.hooks.executor import HookExecutor
     from chimera.hooks.types import HookMatcher
 
@@ -69,6 +70,8 @@ class AgentLoop:
         content_replacement: ContentReplacementState | None = None,
         transcript: TranscriptStorage | None = None,
         file_state_cache: FileStateCache | None = None,
+        compaction: CompactionIntegration | None = None,
+        stream: bool = False,
     ) -> AsyncGenerator[LoopEvent, None]:
         """Run the agent loop, yielding :class:`LoopEvent` instances.
 
@@ -88,6 +91,10 @@ class AgentLoop:
             content_replacement: Optional state tracker for large-result persistence.
             transcript: Optional transcript storage for recording messages.
             file_state_cache: Optional LRU file-state cache for tools.
+            compaction: Optional compaction integration for context management.
+            stream: If ``True`` and provider has ``async_stream()``, use
+                streaming to get text deltas and yield ``assistant_chunk``
+                events.  Falls back to ``async_complete`` otherwise.
 
         Yields:
             :class:`LoopEvent` instances for each significant loop step.
@@ -168,6 +175,18 @@ class AgentLoop:
                 )
                 return
 
+            # ----- Compaction: auto-compact if needed -----
+            if compaction is not None:
+                working_messages, compacted = await compaction.auto_compact_if_needed(
+                    working_messages, token_budget=100_000,
+                )
+                if compacted:
+                    yield LoopEvent(
+                        type=LoopEventType.compact_boundary,
+                        data="auto_compact",
+                        turn=state.turn_count,
+                    )
+
             # ----- Phase A: Stream start -----
             yield LoopEvent(
                 type=LoopEventType.stream_start,
@@ -179,13 +198,57 @@ class AgentLoop:
             api_messages = [Message.system(prompt_str)] + working_messages
 
             try:
-                response = await provider.async_complete(
-                    api_messages, tools=tool_schemas,
-                )
+                # Streaming path: use async_stream if available and requested
+                if stream and hasattr(provider, "async_stream"):
+                    from chimera.providers.base import Response as _Response, StreamEvent
+
+                    accumulated_content = ""
+                    accumulated_tool_calls: list[ToolCall] = []
+                    accumulated_usage: dict[str, int] = {}
+
+                    async for stream_event in provider.async_stream(
+                        api_messages, tools=tool_schemas,
+                    ):
+                        if stream_event.type == "text_delta":
+                            accumulated_content += stream_event.content
+                            yield LoopEvent(
+                                type=LoopEventType.assistant_chunk,
+                                data=stream_event.content,
+                                turn=state.turn_count,
+                            )
+                        elif stream_event.type == "tool_call_start" and stream_event.tool_call is not None:
+                            accumulated_tool_calls.append(stream_event.tool_call)
+                        elif stream_event.type == "tool_call_complete" and stream_event.tool_call is not None:
+                            # Replace partial tool call with complete one
+                            accumulated_tool_calls = [
+                                stream_event.tool_call if tc.id == stream_event.tool_call.id else tc
+                                for tc in accumulated_tool_calls
+                            ]
+                        elif stream_event.type == "done":
+                            if stream_event.usage is not None:
+                                accumulated_usage = stream_event.usage
+
+                    response = _Response(
+                        content=accumulated_content,
+                        tool_calls=accumulated_tool_calls,
+                        usage=accumulated_usage,
+                    )
+                else:
+                    # Non-streaming path: use async_complete
+                    response = await provider.async_complete(
+                        api_messages, tools=tool_schemas,
+                    )
             except Exception as exc:
                 # Attempt error recovery (CG-1)
                 error_type = _classify_error(exc)
                 if error_type is not None:
+                    # Try reactive compaction first for prompt_too_long
+                    if error_type == "prompt_too_long" and compaction is not None:
+                        compacted_msgs = await compaction.reactive_compact(working_messages)
+                        if compacted_msgs is not None:
+                            working_messages = compacted_msgs
+                            continue  # Retry with compacted messages
+
                     withheld = WithheldError(
                         type=error_type,
                         original_error=exc,

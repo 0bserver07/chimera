@@ -359,3 +359,215 @@ async def test_system_prompt_object_accepted():
     assert len(system_msgs) == 1
     assert "You are helpful." in system_msgs[0].content
     assert "Be concise." in system_msgs[0].content
+
+
+# ---------------------------------------------------------------------------
+# Test 9: CompactionIntegration fires on large context (CG-5)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_compaction_fires_on_large_context():
+    """CompactionIntegration.auto_compact_if_needed() called when set."""
+    from chimera.core.compaction_integration import CompactionIntegration
+
+    compact_calls = []
+
+    class MockCompaction(CompactionIntegration):
+        async def auto_compact_if_needed(self, messages, token_budget, threshold=0.8):
+            compact_calls.append(("auto", len(messages)))
+            # Simulate compaction: return same messages but report compacted
+            return messages, True
+
+        async def reactive_compact(self, messages):
+            compact_calls.append(("reactive", len(messages)))
+            return messages
+
+    responses = [
+        Response(
+            content="tool time",
+            tool_calls=[ToolCall(id="t1", name="echo", arguments={"text": "a"})],
+            usage={},
+        ),
+        Response(content="Done!", tool_calls=[], usage={}),
+    ]
+    provider = MockProvider(responses)
+    compaction = MockCompaction()
+    loop = AgentLoop()
+    events = []
+    async for event in loop.run(
+        messages=[Message.user("go")],
+        tools=[EchoTool()],
+        provider=provider,
+        system_prompt="test",
+        compaction=compaction,
+    ):
+        events.append(event)
+
+    # auto_compact_if_needed should have been called at least once
+    assert len(compact_calls) >= 1
+    assert compact_calls[0][0] == "auto"
+
+    # Compact boundary event should be yielded
+    compact_events = [e for e in events if e.type == LoopEventType.compact_boundary]
+    assert len(compact_events) >= 1
+
+    result_event = next(e for e in events if e.type == LoopEventType.result)
+    assert result_event.data.reason == "completed"
+
+
+# ---------------------------------------------------------------------------
+# Test 10: Reactive compaction on prompt_too_long (CG-5)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_reactive_compaction_on_prompt_too_long():
+    """CompactionIntegration.reactive_compact() used on prompt_too_long error."""
+    from chimera.core.compaction_integration import CompactionIntegration
+
+    compact_calls = []
+
+    class MockCompaction(CompactionIntegration):
+        async def auto_compact_if_needed(self, messages, token_budget, threshold=0.8):
+            return messages, False
+
+        async def reactive_compact(self, messages):
+            compact_calls.append(len(messages))
+            return messages
+
+    call_count = 0
+
+    class PromptTooLongProvider:
+        model_name = "mock"
+
+        async def async_complete(self, messages, tools=None, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise RuntimeError("prompt_too_long: context too large")
+            return Response(content="OK!", tool_calls=[], usage={})
+
+    provider = PromptTooLongProvider()
+    compaction = MockCompaction()
+    loop = AgentLoop()
+    events = []
+    async for event in loop.run(
+        messages=[Message.user("big context")],
+        tools=[],
+        provider=provider,
+        system_prompt="test",
+        compaction=compaction,
+    ):
+        events.append(event)
+
+    # reactive_compact should have been called
+    assert len(compact_calls) >= 1
+
+    result_event = next(e for e in events if e.type == LoopEventType.result)
+    assert result_event.data.reason == "completed"
+
+
+# ---------------------------------------------------------------------------
+# Test 11: stream=True parameter accepted (CG-5)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_stream_parameter_accepted():
+    """stream=True parameter accepted (falls back gracefully if provider lacks streaming)."""
+    provider = MockProvider([Response(content="Hello!", tool_calls=[], usage={})])
+    loop = AgentLoop()
+    events = []
+    async for event in loop.run(
+        messages=[Message.user("Hi")],
+        tools=[],
+        provider=provider,
+        system_prompt="test",
+        stream=True,
+    ):
+        events.append(event)
+
+    result_event = next(e for e in events if e.type == LoopEventType.result)
+    assert result_event.data.reason == "completed"
+
+
+# ---------------------------------------------------------------------------
+# Test 12: streaming with async_stream yields assistant_chunk events
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_stream_yields_assistant_chunks():
+    """When stream=True and provider has async_stream, yield assistant_chunk events."""
+    from chimera.providers.base import StreamEvent
+
+    class StreamingProvider:
+        model_name = "mock-stream"
+
+        async def async_stream(self, messages, tools=None, **kwargs):
+            yield StreamEvent(type="text_delta", content="Hello ")
+            yield StreamEvent(type="text_delta", content="world!")
+            yield StreamEvent(type="done", usage={"input_tokens": 10, "output_tokens": 5})
+
+        async def async_complete(self, messages, tools=None, **kwargs):
+            return Response(content="Hello world!", tool_calls=[], usage={"input_tokens": 10, "output_tokens": 5})
+
+    provider = StreamingProvider()
+    loop = AgentLoop()
+    events = []
+    async for event in loop.run(
+        messages=[Message.user("Hi")],
+        tools=[],
+        provider=provider,
+        system_prompt="test",
+        stream=True,
+    ):
+        events.append(event)
+
+    chunk_events = [e for e in events if e.type == LoopEventType.assistant_chunk]
+    assert len(chunk_events) >= 1
+
+    result_event = next(e for e in events if e.type == LoopEventType.result)
+    assert result_event.data.reason == "completed"
+
+
+# ---------------------------------------------------------------------------
+# Test 13: stream=False uses async_complete (default behavior)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_stream_false_uses_async_complete():
+    """stream=False (default) should use async_complete, not async_stream."""
+    complete_called = False
+    stream_called = False
+
+    class TrackingProvider:
+        model_name = "mock-track"
+
+        async def async_complete(self, messages, tools=None, **kwargs):
+            nonlocal complete_called
+            complete_called = True
+            return Response(content="Done!", tool_calls=[], usage={})
+
+        async def async_stream(self, messages, tools=None, **kwargs):
+            nonlocal stream_called
+            stream_called = True
+            from chimera.providers.base import StreamEvent
+            yield StreamEvent(type="done", usage={})
+
+    provider = TrackingProvider()
+    loop = AgentLoop()
+    events = []
+    async for event in loop.run(
+        messages=[Message.user("Hi")],
+        tools=[],
+        provider=provider,
+        system_prompt="test",
+        stream=False,
+    ):
+        events.append(event)
+
+    assert complete_called is True
+    assert stream_called is False
