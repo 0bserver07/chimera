@@ -1,64 +1,92 @@
 from __future__ import annotations
+import json
+import os
+from dataclasses import dataclass, field
+from pathlib import Path
 
-from chimera.auth.api_key import APIKeyAuth
-from chimera.auth.base import AuthProvider, Credential
-from chimera.auth.store import CredentialStore
-
-__all__ = ["AuthManager"]
-
+@dataclass
+class StoredCredential:
+    provider: str
+    key: str
+    source: str  # "env", "keyring", "config"
 
 class AuthManager:
-    """Facade for authentication.  Manages credential lifecycle."""
+    """Centralized API key management for multiple providers."""
 
-    def __init__(self, store: CredentialStore | None = None) -> None:
-        self._store = store or CredentialStore()
-        self._providers: dict[str, AuthProvider] = {}
+    ENV_VARS = {
+        "anthropic": ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"],
+        "openai": ["OPENAI_API_KEY"],
+        "google": ["GOOGLE_API_KEY", "GEMINI_API_KEY"],
+        "ollama": [],  # No key needed
+    }
 
-    def register(self, auth_provider: AuthProvider) -> None:
-        """Register a custom :class:`AuthProvider`."""
-        self._providers[auth_provider.provider_name] = auth_provider
+    def __init__(self, config_dir: Path | None = None):
+        self._config_dir = config_dir or Path.home() / ".chimera"
+        self._credentials: dict[str, StoredCredential] = {}
+        self._load_from_env()
 
-    def login(
-        self,
-        provider: str = "anthropic",
-        method: str = "api_key",
-    ) -> Credential:
-        """Authenticate and cache a credential.
+    def _load_from_env(self) -> None:
+        """Load credentials from environment variables."""
+        for provider, vars in self.ENV_VARS.items():
+            for var in vars:
+                val = os.environ.get(var)
+                if val:
+                    self._credentials[provider] = StoredCredential(provider=provider, key=val, source="env")
+                    break
 
-        If a non-expired credential already exists in the store it is
-        returned immediately.
-        """
-        existing = self._store.get(provider)
-        if existing and not existing.is_expired:
-            return existing
+    def get_token(self, provider: str) -> str | None:
+        """Get API token for a provider."""
+        cred = self._credentials.get(provider)
+        if cred:
+            return cred.key
+        # Try config file
+        config_path = self._config_dir / "auth.json"
+        if config_path.exists():
+            data = json.loads(config_path.read_text())
+            key = data.get(provider, {}).get("api_key")
+            if key:
+                self._credentials[provider] = StoredCredential(provider=provider, key=key, source="config")
+                return key
+        return None
 
-        auth = self._providers.get(provider)
-        if auth is None:
-            if method == "api_key":
-                auth = APIKeyAuth(provider)
-            else:
-                raise ValueError(
-                    f"No auth provider for {provider} with method {method}"
-                )
+    def set_token(self, provider: str, key: str) -> None:
+        """Store API token for a provider."""
+        self._credentials[provider] = StoredCredential(provider=provider, key=key, source="config")
+        # Persist to config
+        config_path = self._config_dir / "auth.json"
+        self._config_dir.mkdir(parents=True, exist_ok=True)
+        data = {}
+        if config_path.exists():
+            data = json.loads(config_path.read_text())
+        data[provider] = {"api_key": key}
+        config_path.write_text(json.dumps(data, indent=2))
 
-        credential = auth.authenticate()
-        self._store.save(credential)
-        return credential
+    def remove_token(self, provider: str) -> bool:
+        """Remove stored token."""
+        if provider in self._credentials:
+            del self._credentials[provider]
+        config_path = self._config_dir / "auth.json"
+        if config_path.exists():
+            data = json.loads(config_path.read_text())
+            if provider in data:
+                del data[provider]
+                config_path.write_text(json.dumps(data, indent=2))
+                return True
+        return False
 
-    def get_token(self, provider: str) -> str:
-        """Return a valid token, refreshing or re-authenticating as needed."""
-        credential = self._store.get(provider)
-        if credential is None:
-            credential = self.login(provider)
-        if credential.is_expired:
-            auth = self._providers.get(provider)
-            if auth:
-                credential = auth.refresh(credential)
-                self._store.save(credential)
-            else:
-                credential = self.login(provider)
-        return credential.token
+    def list_providers(self) -> list[dict[str, str]]:
+        """List configured providers with their source."""
+        result = []
+        for provider, cred in self._credentials.items():
+            result.append({"provider": provider, "source": cred.source, "key_preview": cred.key[:8] + "..."})
+        return result
 
-    def logout(self, provider: str) -> None:
-        """Remove stored credentials for *provider*."""
-        self._store.delete(provider)
+    def status(self) -> str:
+        """Human-readable auth status."""
+        providers = self.list_providers()
+        if not providers:
+            return "No API keys configured. Set ANTHROPIC_API_KEY or use 'chimera auth login'."
+        lines = ["Configured providers:"]
+        for p in providers:
+            lines.append(f"  {p['provider']}: {p['key_preview']} (from {p['source']})")
+        return "\n".join(lines)
