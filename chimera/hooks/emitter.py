@@ -2,6 +2,24 @@
 
 Used by AgentLoop, AgentSpawner, CompactionIntegration, etc. to fire
 hooks without duplicating executor/matcher plumbing.
+
+Wired events (fired from call sites):
+- AgentLoop: SESSION_START, SESSION_END, STOP, STOP_FAILURE,
+  PRE_TOOL_USE, POST_TOOL_USE, POST_TOOL_USE_FAILURE,
+  NOTIFICATION, PERMISSION_DENIED
+- AgentSpawner: SUBAGENT_START, SUBAGENT_STOP
+- CompactionIntegration: PRE_COMPACT, POST_COMPACT
+- TaskManager: TASK_CREATED, TASK_COMPLETED
+- SlashCommandProcessor: USER_PROMPT_SUBMIT
+- FileWatcher: FILE_CHANGED, CWD_CHANGED
+
+Pending (require integration points not yet built):
+- SETUP: Fired during initial environment setup
+- ELICITATION/ELICITATION_RESULT: MCP URL elicitation flow
+- CONFIG_CHANGE: Settings file modification detection
+- WORKTREE_CREATE/WORKTREE_REMOVE: Git worktree operations
+- INSTRUCTIONS_LOADED: CHIMERA.md/CLAUDE.md loading
+- TEAMMATE_IDLE: Multi-agent team coordination
 """
 from __future__ import annotations
 

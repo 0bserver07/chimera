@@ -6,10 +6,15 @@ background tasks spawned by sub-agents.
 """
 from __future__ import annotations
 
+import asyncio
 import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from chimera.hooks.emitter import HookEmitter
 
 __all__ = ["BackgroundTask", "TaskManager"]
 
@@ -44,8 +49,9 @@ class TaskManager:
     and output reading for :class:`BackgroundTask` instances.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, emitter: HookEmitter | None = None) -> None:
         self._tasks: dict[str, BackgroundTask] = {}
+        self._emitter = emitter
 
     def register(
         self,
@@ -73,6 +79,16 @@ class TaskManager:
             output_path=output_path,
         )
         self._tasks[task_id] = task
+
+        if self._emitter:
+            from chimera.hooks.events import HookEvent
+
+            asyncio.get_event_loop().call_soon(
+                lambda: asyncio.create_task(
+                    self._emitter.emit(HookEvent.TASK_CREATED, tool_name=task.description)
+                )
+            )
+
         return task
 
     def get(self, task_id: str) -> BackgroundTask | None:
@@ -98,6 +114,15 @@ class TaskManager:
             return
         task.status = "completed"
         task.completed_at = time.time()
+
+        if self._emitter:
+            from chimera.hooks.events import HookEvent
+
+            asyncio.get_event_loop().call_soon(
+                lambda: asyncio.create_task(
+                    self._emitter.emit(HookEvent.TASK_COMPLETED, tool_name=task.description)
+                )
+            )
 
     def read_output(self, task_id: str) -> str | None:
         """Read the output file for the given task.

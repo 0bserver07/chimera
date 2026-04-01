@@ -285,15 +285,29 @@ class AgentLoop:
                 # Fire STOP hook before completing
                 if hook_executor is not None and hook_matchers is not None:
                     from chimera.hooks.events import HookEvent
-                    from chimera.hooks.types import HookInput
+                    from chimera.hooks.types import HookInput, HookOutput
 
                     stop_input = HookInput(
                         event=HookEvent.STOP,
                         session_id="",
                     )
-                    stop_result = await hook_executor.execute(
-                        HookEvent.STOP, stop_input, hook_matchers, abort_signal,
-                    )
+                    try:
+                        stop_result = await hook_executor.execute(
+                            HookEvent.STOP, stop_input, hook_matchers, abort_signal,
+                        )
+                    except Exception as stop_exc:
+                        # Fire STOP_FAILURE on error
+                        stop_failure_input = HookInput(
+                            event=HookEvent.STOP_FAILURE,
+                            session_id="",
+                            tool_error=str(stop_exc),
+                        )
+                        await hook_executor.execute(
+                            HookEvent.STOP_FAILURE, stop_failure_input,
+                            hook_matchers, abort_signal,
+                        )
+                        stop_result = HookOutput()
+
                     if not stop_result.continue_execution:
                         # Inject the stop_reason as a user message and continue
                         reason_text = stop_result.stop_reason or "Hook prevented stop"
@@ -497,6 +511,20 @@ class AgentLoop:
                             post_event, post_input, hook_matchers,
                             abort_signal,
                         )
+
+                        # Fire NOTIFICATION if tool result has an error
+                        # (notifications surface tool-level issues)
+                        if sresult.error:
+                            notif_input = HookInput(
+                                event=HookEvent.NOTIFICATION,
+                                session_id="",
+                                tool_name=stc.name,
+                                tool_error=sresult.error,
+                            )
+                            await hook_executor.execute(
+                                HookEvent.NOTIFICATION, notif_input,
+                                hook_matchers, abort_signal,
+                            )
 
             results = tool_call_results
 

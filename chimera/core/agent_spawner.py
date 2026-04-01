@@ -8,12 +8,14 @@ the agent as a background task.
 from __future__ import annotations
 
 import asyncio
+import time
 from collections.abc import AsyncGenerator
 from typing import Any
 
 from chimera.core.agent_context import AgentContext, IsolationLevel
 from chimera.core.agent_definition import AgentDefinition
 from chimera.core.agent_loop import AgentLoop
+from chimera.core.auto_background import AutoBackgroundConfig, AutoBackgroundMonitor
 from chimera.core.loop_events import LoopEvent, LoopEventType
 from chimera.core.task_manager import TaskManager
 from chimera.core.tool import BaseTool
@@ -31,6 +33,7 @@ class AgentSpawner:
         provider: LLM provider with an ``async_complete`` method.
         available_tools: All tools that may be filtered by agent definitions.
         task_manager: Manager for registering background tasks.
+        auto_bg_config: Optional configuration for auto-backgrounding long tasks.
     """
 
     def __init__(
@@ -40,11 +43,13 @@ class AgentSpawner:
         available_tools: list[BaseTool],
         task_manager: TaskManager,
         hook_emitter: HookEmitter | None = None,
+        auto_bg_config: AutoBackgroundConfig | None = None,
     ) -> None:
         self._provider = provider
         self._available_tools = available_tools
         self._task_manager = task_manager
         self._hook_emitter = hook_emitter or HookEmitter()
+        self._auto_bg = AutoBackgroundMonitor(auto_bg_config) if auto_bg_config else None
 
     async def spawn(
         self,
@@ -147,15 +152,46 @@ class AgentSpawner:
         # Foreground: yield all events from the loop
         try:
             loop = AgentLoop()
-            async for event in loop.run(
-                messages=messages,
-                tools=tools,
-                provider=self._provider,
-                system_prompt=system_prompt,
-                abort_signal=child_ctx.abort_signal,
-                query_source=child_ctx.query_source,
-            ):
-                yield event
+            if self._auto_bg and self._auto_bg.config.enabled:
+                # Auto-background monitoring: if the agent runs too long,
+                # convert remaining execution to a background task.
+                start_time = time.time()
+                async for event in loop.run(
+                    messages=messages,
+                    tools=tools,
+                    provider=self._provider,
+                    system_prompt=system_prompt,
+                    abort_signal=child_ctx.abort_signal,
+                    query_source=child_ctx.query_source,
+                ):
+                    elapsed_ms = (time.time() - start_time) * 1000
+                    if await self._auto_bg.should_background(elapsed_ms):
+                        # Register as background task for the remaining work
+                        self._task_manager.register(
+                            agent_id=child_ctx.agent_id,
+                            description=f"{definition.name}: auto-backgrounded",
+                        )
+                        yield LoopEvent(
+                            type=LoopEventType.system,
+                            data={
+                                "event": "auto-backgrounded",
+                                "agent_name": definition.name,
+                                "description": f"Agent auto-backgrounded after {int(elapsed_ms)}ms",
+                            },
+                            turn=0,
+                        )
+                        break
+                    yield event
+            else:
+                async for event in loop.run(
+                    messages=messages,
+                    tools=tools,
+                    provider=self._provider,
+                    system_prompt=system_prompt,
+                    abort_signal=child_ctx.abort_signal,
+                    query_source=child_ctx.query_source,
+                ):
+                    yield event
         finally:
             await self._hook_emitter.emit(
                 HookEvent.SUBAGENT_STOP,
