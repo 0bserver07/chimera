@@ -62,8 +62,13 @@ def clone_and_checkout(repo: str, base_commit: str, workdir: str) -> bool:
     repo_url = f"https://github.com/{repo}.git"
     try:
         subprocess.run(
-            ["git", "clone", "--depth", "100", repo_url, workdir],
-            capture_output=True, timeout=120, check=True,
+            ["git", "clone", "--depth", "500", repo_url, workdir],
+            capture_output=True, timeout=600, check=True,
+        )
+        # Fetch the specific commit if shallow clone missed it
+        subprocess.run(
+            ["git", "fetch", "--depth", "500", "origin", base_commit],
+            capture_output=True, cwd=workdir, timeout=120,
         )
         subprocess.run(
             ["git", "checkout", base_commit],
