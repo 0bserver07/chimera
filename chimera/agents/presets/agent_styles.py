@@ -82,6 +82,16 @@ class AgentPreset:
         Returns:
             A fully-wired :class:`~chimera.core.agent.Agent`.
         """
+        import warnings
+        warnings.warn(
+            f"AgentPreset.build() uses the legacy stack. "
+            f"Use CodingAgent.from_preset() instead:\n"
+            f"  from chimera.assembly.coding_agent import CodingAgent\n"
+            f"  agent = CodingAgent.from_preset('{self.name}')",
+            FutureWarning,
+            stacklevel=2,
+        )
+        # Keep existing implementation working
         from chimera.core.agent import Agent
         from chimera.core.prompt import Prompt
 

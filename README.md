@@ -14,6 +14,66 @@ Chimera gives you two things:
 
 2. **A Python library** for building your own coding agents from modular pieces — pick your LLM, pick your tools, pick your strategy, wire them together.
 
+## Build Your Own Coding Agent
+
+```python
+from chimera.assembly.coding_agent import CodingAgent
+
+# One line — full-featured coding agent with 20 tools
+agent = CodingAgent(model="claude-sonnet-4-20250514")
+
+# Run a task
+import asyncio
+
+async def main():
+    async for event in agent.run("Fix the bug in auth.py"):
+        print(event.type.value, getattr(event.data, 'content', '')[:100])
+
+asyncio.run(main())
+```
+
+### Presets
+
+| Preset | Tools | Features |
+|--------|-------|----------|
+| `claude_code` | 20 (bash, read, write, edit, search, git, test, agent, skill, ...) | Permissions, hooks, transcripts, compaction, streaming |
+| `codex` | 20 | Permissions, transcripts (no hooks) |
+| `minimal` | 4 (bash, read, write, edit) | No extras |
+| `explore` | 3 (read, search, list) | Read-only |
+
+```python
+# Codex-style agent
+agent = CodingAgent.from_preset("codex", model="gpt-4o")
+
+# Minimal agent for simple tasks
+agent = CodingAgent.from_preset("minimal", model="claude-haiku-3.5")
+
+# Custom API endpoint (any Anthropic-compatible API)
+import os
+os.environ["ANTHROPIC_BASE_URL"] = "https://your-api.com/v1"
+os.environ["ANTHROPIC_AUTH_TOKEN"] = "your-key"
+agent = CodingAgent(model="your-model")
+```
+
+### Architecture
+
+Chimera is modular — every component is replaceable:
+
+```
+CodingAgent
+├── Provider (Anthropic, OpenAI, Google, Ollama, or any compatible API)
+├── Tools (20+ built-in, plus custom tools, MCP servers, skills)
+├── AgentLoop (async generator with streaming, error recovery, abort)
+├── Permissions (multi-source rules, 6 modes, interactive prompts)
+├── Hooks (27 lifecycle events, shell/LLM/function hooks)
+├── Commands (slash commands, skills from .chimera/skills/)
+├── Sub-Agents (3-tier context isolation, background tasks)
+├── State (content replacement, file cache, session transcripts)
+└── Infrastructure (feature flags, analytics, memory, compaction)
+```
+
+See [docs/architecture.md](docs/architecture.md) for the full module map.
+
 ## Use It With Claude Code
 
 Install the plugin to get immediate improvements. No Python code to write.
@@ -32,39 +92,6 @@ Install the plugin to get immediate improvements. No Python code to write.
 - `chimera-migration` — scan for and apply code migrations (Python 2 to 3, CJS to ESM)
 
 [Setup guide](docs/playbooks/00-quick-start.md) — install in 2 minutes.
-
-## Build Your Own Agent
-
-```python
-import chimera
-
-provider = chimera.create_provider()  # Anthropic, OpenAI, Google, Ollama, or any compatible API
-agent = chimera.Agent(provider=provider, tools=list(chimera.AGENT_TOOLS))
-result = agent.run("Fix the failing test in auth.py", env=chimera.LocalEnvironment("."))
-```
-
-Swap any piece:
-
-```python
-# Different loop strategy
-agent = chimera.Agent(provider, loop=chimera.PlanAndExecute())   # plan first, then act
-agent = chimera.Agent(provider, loop=chimera.Reflexion())        # self-critique after each attempt
-agent = chimera.Agent(provider, loop=chimera.TreeOfThought())    # explore multiple approaches
-
-# Replicate existing agents
-agent = chimera.AgentPreset.SWE_AGENT.build(provider)   # SWE-Agent's retry loop
-agent = chimera.AgentPreset.AIDER.build(provider)        # Aider's lint feedback loop
-agent = chimera.AgentPreset.CLINE.build(provider)        # Cline's plan-then-act
-agent = chimera.AgentPreset.CODEX.build(provider)        # Codex CLI's full tool suite
-
-# Iterate with real-time streaming (for building UIs)
-for step in agent.iter_steps("Fix the bug", env):
-    print(step.message.content)
-    if step.pending_approval:
-        step.pending_approval.approve()  # interactive permission system
-```
-
-[Full library guide](docs/playbooks/08-building-agents.md) — providers, tools, loops, sessions, streaming, permissions, composition.
 
 ## How It's Organized
 
