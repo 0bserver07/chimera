@@ -30,6 +30,8 @@ def coding_tools(**kwargs: Any) -> list[BaseTool]:
     from chimera.tools.skill_tool import SkillTool
     from chimera.tools.tool_search import ToolSearchTool
     from chimera.tools.task_tools import TaskOutputTool, TaskStopTool, TaskListTool
+    from chimera.tools.apply_patch import ApplyPatchTool
+    from chimera.tools.batch import BatchTool
 
     file_cache = kwargs.get("file_cache")
     spawner = kwargs.get("spawner")
@@ -42,7 +44,7 @@ def coding_tools(**kwargs: Any) -> list[BaseTool]:
         from chimera.commands.registry import CommandRegistry
         command_registry = CommandRegistry()
 
-    return [
+    tools = [
         BashTool(),
         CachedReadTool(cache=file_cache),
         WriteFileTool(),
@@ -63,7 +65,12 @@ def coding_tools(**kwargs: Any) -> list[BaseTool]:
         TaskOutputTool(task_manager=task_manager),
         TaskStopTool(task_manager=task_manager),
         TaskListTool(task_manager=task_manager),
+        ApplyPatchTool(),
     ]
+    # BatchTool needs the full tool_map so it can dispatch to other tools
+    tool_map = {t.name: t for t in tools}
+    tools.append(BatchTool(tool_map=tool_map))
+    return tools
 
 
 def minimal_tools(**kwargs: Any) -> list[BaseTool]:
