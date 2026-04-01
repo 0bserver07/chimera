@@ -69,7 +69,7 @@ class PermissionRuleValue:
             content = rule[paren_idx + 1 : -1]
         else:
             content = rule[paren_idx + 1 :]
-        content = content.replace('\\(', '(').replace('\\)', ')').replace('\\\\', '\\')
+        content = content.replace('\\\\', '\x00').replace('\\(', '(').replace('\\)', ')').replace('\x00', '\\')
         return cls(tool_name=tool_name, content=content)
 
     # ----- serialisation ----------------------------------------------------

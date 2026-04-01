@@ -95,6 +95,22 @@ class FileStateCache:
         while len(self._store) > self._max_entries:
             self._store.popitem(last=False)
 
+    def check_and_read(
+        self,
+        path: str,
+        offset: int | None = None,
+        limit: int | None = None,
+    ) -> tuple[str | None, bool]:
+        """Check cache. Returns (content, was_cached).
+
+        If cached and fresh: returns (content, True).
+        If not cached or stale: returns (None, False) — caller should read the file.
+        """
+        entry = self.get(path, offset, limit)
+        if entry:
+            return entry.content, True
+        return None, False
+
     def clone(self) -> FileStateCache:
         """Return a shallow-independent copy of this cache."""
         new = FileStateCache(max_entries=self._max_entries)

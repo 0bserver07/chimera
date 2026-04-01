@@ -7,6 +7,20 @@ import time
 from pathlib import Path
 from typing import Any
 
+from chimera.types import Message
+
+
+def _dict_to_message(entry: dict) -> Message:
+    """Convert a raw JSONL dict to a :class:`~chimera.types.Message`."""
+    role = entry.get("role", "user")
+    content = entry.get("content", "")
+    if role == "assistant":
+        return Message.assistant(content)
+    elif role == "tool":
+        return Message.tool(entry.get("call_id", ""), content)
+    else:
+        return Message.user(content)
+
 try:
     import aiofiles
 
@@ -119,25 +133,25 @@ class TranscriptStorage:
         lines = text.strip().splitlines()
         return [json.loads(line) for line in lines if line.strip()]
 
-    async def load(self) -> list[dict]:
-        """Read all entries from the main transcript.
-
-        Returns:
-            A list of raw dicts deserialized from JSONL.  The Message class
-            does not yet implement ``from_dict()``, so this intentionally
-            returns ``list[dict]`` rather than ``list[Message]``.
-        """
+    async def load_raw(self) -> list[dict]:
+        """Read all raw JSONL dicts from the main transcript (includes metadata entries)."""
         return await self._read_jsonl(self._main_path)
+
+    async def load(self) -> list[Message]:
+        """Read all entries from the main transcript as :class:`~chimera.types.Message` objects."""
+        raw = await self._read_jsonl(self._main_path)
+        return [_dict_to_message(entry) for entry in raw]
 
     async def load_subagent(
         self,
         agent_id: str,
         subdir: str | None = None,
-    ) -> list[dict]:
-        """Read all entries from a subagent's transcript."""
+    ) -> list[Message]:
+        """Read all entries from a subagent's transcript as :class:`~chimera.types.Message` objects."""
         base = Path(subdir) if subdir else self._subagents_dir
         path = base / f"{agent_id}.jsonl"
-        return await self._read_jsonl(path)
+        raw = await self._read_jsonl(path)
+        return [_dict_to_message(entry) for entry in raw]
 
     def list_subagent_ids(self) -> list[str]:
         """Return the agent ids that have sidechain transcripts."""
