@@ -44,6 +44,7 @@ class CodingAgent:
         project_dir: str | Path | None = None,
         preset: str = "claude_code",
         *,
+        provider: Any = None,
         permission_callback: Any = None,
         tools_override: list | None = None,
     ) -> None:
@@ -73,8 +74,11 @@ class CodingAgent:
         # Feature flags
         FeatureFlags.from_env()
 
-        # Provider
-        self.provider = create_provider(model=model)
+        # Provider — use injected provider or create from model name
+        if provider is not None:
+            self.provider = provider
+        else:
+            self.provider = create_provider(model=model)
 
         # Infrastructure
         self._file_cache = FileStateCache()
