@@ -32,6 +32,7 @@ def coding_tools(**kwargs: Any) -> list[BaseTool]:
     from chimera.tools.task_tools import TaskOutputTool, TaskStopTool, TaskListTool
     from chimera.tools.apply_patch import ApplyPatchTool
     from chimera.tools.batch import BatchTool
+    from chimera.tools.plan_mode import EnterPlanModeTool, ExitPlanModeTool
 
     file_cache = kwargs.get("file_cache")
     spawner = kwargs.get("spawner")
@@ -67,6 +68,10 @@ def coding_tools(**kwargs: Any) -> list[BaseTool]:
         TaskListTool(task_manager=task_manager),
         ApplyPatchTool(),
     ]
+    # Plan mode tools — share state so exit can deactivate enter's flag
+    enter_plan = EnterPlanModeTool()
+    exit_plan = ExitPlanModeTool(enter_tool=enter_plan)
+    tools.extend([enter_plan, exit_plan])
     # BatchTool needs the full tool_map so it can dispatch to other tools
     tool_map = {t.name: t for t in tools}
     tools.append(BatchTool(tool_map=tool_map))

@@ -163,4 +163,13 @@ def get_builtin_commands() -> list[LocalCommand]:
             handler=_exit_handler,
             loaded_from="builtin",
         ),
+        LocalCommand(
+            name="plan",
+            description="Toggle plan mode",
+            aliases=["p"],
+            handler=lambda args: (
+                "Use the enter_plan_mode/exit_plan_mode tools to toggle plan mode."
+            ),
+            loaded_from="builtin",
+        ),
     ]
