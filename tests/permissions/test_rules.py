@@ -27,9 +27,10 @@ class TestRuleSource:
         assert [m.name for m in RuleSource] == expected
 
     def test_ordering(self) -> None:
-        """Lower-precedence sources have lower numeric values."""
-        assert RuleSource.POLICY.value < RuleSource.SESSION.value
-        assert RuleSource.FLAG.value < RuleSource.CLI_ARG.value
+        """Lower-precedence sources appear earlier in declaration order."""
+        members = list(RuleSource)
+        assert members.index(RuleSource.POLICY) < members.index(RuleSource.SESSION)
+        assert members.index(RuleSource.FLAG) < members.index(RuleSource.CLI_ARG)
 
 
 # ---------------------------------------------------------------------------
@@ -73,7 +74,7 @@ class TestPermissionRuleValueParsing:
     def test_tool_with_escaped_paren(self) -> None:
         v = PermissionRuleValue.from_string(r"Bash(echo \) done)")
         assert v.tool_name == "Bash"
-        assert v.content == r"echo \) done"
+        assert v.content == "echo ) done"
 
     def test_wildcard_tool(self) -> None:
         v = PermissionRuleValue.from_string("*")

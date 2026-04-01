@@ -27,11 +27,13 @@ class TestPersistentMemory:
         assert "Line 2" in content
 
     def test_truncation_at_200_lines(self, tmp_path: Path) -> None:
-        """load() truncates content to 200 lines."""
+        """load() truncates content to 200 lines and appends truncation notice."""
         mem = PersistentMemory(tmp_path)
         lines = [f"Line {i}" for i in range(300)]
         mem.write("\n".join(lines))
         content = mem.load()
         assert content is not None
+        assert content.endswith("... (truncated)")
         result_lines = content.splitlines()
-        assert len(result_lines) == 200
+        # 200 content lines + 1 truncation notice line
+        assert len(result_lines) == 201

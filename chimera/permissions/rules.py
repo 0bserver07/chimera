@@ -19,14 +19,14 @@ class RuleSource(Enum):
     When multiple rules match, higher-precedence sources win.
     """
 
-    POLICY = 0
-    FLAG = 1
-    LOCAL = 2
-    PROJECT = 3
-    USER = 4
-    CLI_ARG = 5
-    COMMAND = 6
-    SESSION = 7
+    POLICY = "policy"
+    FLAG = "flag"
+    LOCAL = "local"
+    PROJECT = "project"
+    USER = "user"
+    CLI_ARG = "cli_arg"
+    COMMAND = "command"
+    SESSION = "session"
 
 
 class PermissionBehavior(Enum):
@@ -69,6 +69,7 @@ class PermissionRuleValue:
             content = rule[paren_idx + 1 : -1]
         else:
             content = rule[paren_idx + 1 :]
+        content = content.replace('\\(', '(').replace('\\)', ')').replace('\\\\', '\\')
         return cls(tool_name=tool_name, content=content)
 
     # ----- serialisation ----------------------------------------------------
@@ -77,7 +78,8 @@ class PermissionRuleValue:
         """Reverse of :meth:`from_string`."""
         if self.content is None:
             return self.tool_name
-        return f"{self.tool_name}({self.content})"
+        escaped = self.content.replace('\\', '\\\\').replace('(', '\\(').replace(')', '\\)')
+        return f"{self.tool_name}({escaped})"
 
     # ----- matching ---------------------------------------------------------
 

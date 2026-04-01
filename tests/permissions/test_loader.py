@@ -81,7 +81,7 @@ class TestPermissionRuleLoader:
         with tempfile.TemporaryDirectory() as td:
             self._write_settings(Path(td), {
                 "permissions": {
-                    "mode": "bypass",
+                    "mode": "bypass_permissions",
                     "allow": [],
                 },
             })

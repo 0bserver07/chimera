@@ -17,6 +17,13 @@ STANDARD_FLAGS: dict[str, str] = {
     "PERSISTENT_MEMORY": "Enable persistent memory across sessions",
     "ANALYTICS": "Enable analytics event collection",
     "BRIDGE_PROTOCOL": "Enable inter-process bridge communication",
+    "PROACTIVE": "Enable proactive mode (SleepTool, background monitoring)",
+    "VOICE_MODE": "Enable voice input",
+    "AGENT_TRIGGERS": "Enable cron/scheduled triggers",
+    "TOOL_SEARCH": "Enable tool deferral and search",
+    "HISTORY_SNIP": "Enable snip compaction",
+    "CONTEXT_COLLAPSE": "Enable context collapse",
+    "AUTO_BACKGROUND": "Enable auto-backgrounding of long agents",
 }
 
 
@@ -59,7 +66,7 @@ class FeatureFlags:
         for key, value in os.environ.items():
             if key.startswith(prefix):
                 flag_name = key[len(prefix):]
-                cls._flags[flag_name] = value.lower() in ("1", "true", "yes")
+                cls.override(flag_name, value.lower() in ("1", "true", "yes"))
 
     @classmethod
     def reset(cls) -> None:

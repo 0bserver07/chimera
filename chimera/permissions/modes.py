@@ -20,6 +20,6 @@ class PermissionMode(Enum):
     DEFAULT = "default"
     PLAN = "plan"
     ACCEPT_EDITS = "accept_edits"
-    BYPASS = "bypass"
+    BYPASS = "bypass_permissions"
     DONT_ASK = "dont_ask"
     AUTO = "auto"

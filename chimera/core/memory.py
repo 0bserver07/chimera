@@ -34,6 +34,7 @@ class PersistentMemory:
         lines = text.splitlines()
         if len(lines) > 200:
             lines = lines[:200]
+            return "\n".join(lines) + "\n... (truncated)"
         return "\n".join(lines)
 
     def write(self, content: str) -> None:

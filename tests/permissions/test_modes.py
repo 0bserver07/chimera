@@ -19,7 +19,7 @@ class TestPermissionMode:
         assert PermissionMode.ACCEPT_EDITS.value == "accept_edits"
 
     def test_has_bypass(self) -> None:
-        assert PermissionMode.BYPASS.value == "bypass"
+        assert PermissionMode.BYPASS.value == "bypass_permissions"
 
     def test_has_dont_ask(self) -> None:
         assert PermissionMode.DONT_ASK.value == "dont_ask"
