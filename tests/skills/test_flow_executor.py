@@ -37,7 +37,8 @@ graph TD
 
 
 class TestExecuteLinearFlow:
-    def test_execute_linear_flow(self, linear_graph: FlowGraph) -> None:
+    @pytest.mark.asyncio
+    async def test_execute_linear_flow(self, linear_graph: FlowGraph) -> None:
         """Walk BEGIN -> Action -> END, calling run_action for the action node."""
 
         async def run_action(node: FlowNode) -> str:
@@ -47,9 +48,7 @@ class TestExecuteLinearFlow:
             return options[0]
 
         executor = FlowExecutor(linear_graph)
-        result = asyncio.get_event_loop().run_until_complete(
-            executor.execute(run_action, choose_branch)
-        )
+        result = await executor.execute(run_action, choose_branch)
         assert result.completed is True
         assert "start" in result.path
         assert "end" in result.path
@@ -57,7 +56,8 @@ class TestExecuteLinearFlow:
 
 
 class TestExecuteWithDecision:
-    def test_execute_with_decision_yes(self, decision_graph: FlowGraph) -> None:
+    @pytest.mark.asyncio
+    async def test_execute_with_decision_yes(self, decision_graph: FlowGraph) -> None:
         """At a decision node, choose_branch selects the 'yes' path."""
 
         async def run_action(node: FlowNode) -> str:
@@ -67,16 +67,15 @@ class TestExecuteWithDecision:
             return "yes"
 
         executor = FlowExecutor(decision_graph)
-        result = asyncio.get_event_loop().run_until_complete(
-            executor.execute(run_action, choose_branch)
-        )
+        result = await executor.execute(run_action, choose_branch)
         assert result.completed is True
         assert "D" in result.path
         # Should have gone through Deploy (A), not Prepare (B)
         assert "A" in result.path
         assert "B" not in result.path
 
-    def test_execute_with_decision_no(self, decision_graph: FlowGraph) -> None:
+    @pytest.mark.asyncio
+    async def test_execute_with_decision_no(self, decision_graph: FlowGraph) -> None:
         """At a decision node, choose_branch selects the 'no' path."""
 
         async def run_action(node: FlowNode) -> str:
@@ -86,16 +85,15 @@ class TestExecuteWithDecision:
             return "no"
 
         executor = FlowExecutor(decision_graph)
-        result = asyncio.get_event_loop().run_until_complete(
-            executor.execute(run_action, choose_branch)
-        )
+        result = await executor.execute(run_action, choose_branch)
         assert result.completed is True
         assert "B" in result.path
         assert "A" not in result.path
 
 
 class TestExecuteMaxStepsSafety:
-    def test_execute_max_steps_safety(self) -> None:
+    @pytest.mark.asyncio
+    async def test_execute_max_steps_safety(self) -> None:
         """If the graph loops forever the executor bails after max_steps."""
         # Build a graph that loops: start -> A -> A (cycle)
         nodes = {
@@ -117,13 +115,12 @@ class TestExecuteMaxStepsSafety:
             return options[0]
 
         executor = FlowExecutor(graph)
-        result = asyncio.get_event_loop().run_until_complete(
-            executor.execute(run_action, choose_branch)
-        )
+        result = await executor.execute(run_action, choose_branch)
         assert result.completed is False
         assert "Max steps exceeded" in result.output
 
-    def test_execute_no_start_node(self) -> None:
+    @pytest.mark.asyncio
+    async def test_execute_no_start_node(self) -> None:
         """Executor reports failure when no BEGIN node is found."""
         graph = FlowGraph(
             nodes={"A": FlowNode(id="A", label="Action", node_type="action")},
@@ -137,8 +134,6 @@ class TestExecuteMaxStepsSafety:
             return options[0]
 
         executor = FlowExecutor(graph)
-        result = asyncio.get_event_loop().run_until_complete(
-            executor.execute(run_action, choose_branch)
-        )
+        result = await executor.execute(run_action, choose_branch)
         assert result.completed is False
         assert "No BEGIN node" in result.output

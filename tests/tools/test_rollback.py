@@ -49,16 +49,14 @@ class TestRollbackTool:
         assert "code.py" in result.output
         assert f.read_text() == "v1"
 
-    def test_rollback_metadata_includes_turn(self, tmp_path: Path):
+    @pytest.mark.asyncio
+    async def test_rollback_metadata_includes_turn(self, tmp_path: Path):
         """Sync execute populates metadata with rollback_turn and files_to_revert."""
         f = tmp_path / "data.py"
         f.write_text("original")
 
-        import asyncio
         mgr = SnapshotManager(tmp_path)
-        asyncio.get_event_loop().run_until_complete(
-            mgr.take(turn=1, modified_files=["data.py"])
-        )
+        await mgr.take(turn=1, modified_files=["data.py"])
 
         tool = RollbackTool(snapshot_manager=mgr)
         result = tool.execute({"checkpoint": 1, "message": "fix it"}, env=None)
