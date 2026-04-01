@@ -6,6 +6,7 @@ gate availability and delegates task execution to an
 """
 from __future__ import annotations
 
+import asyncio
 import uuid
 from typing import TYPE_CHECKING, Any
 
@@ -34,6 +35,7 @@ class CoordinatorMode:
     ) -> None:
         self._spawner = spawner
         self._definitions = agent_definitions
+        self._active_agents: dict[str, asyncio.Task[None]] = {}
 
     @property
     def is_enabled(self) -> bool:
@@ -52,6 +54,10 @@ class CoordinatorMode:
 
         Returns the agent ID assigned to the spawned agent.
 
+        When *run_in_background* is ``True``, the spawned agent is wrapped
+        in an :class:`asyncio.Task` and stored for later status checks and
+        cancellation.
+
         Raises:
             RuntimeError: If coordinator mode is disabled or the spawner
                 is not configured.
@@ -65,13 +71,59 @@ class CoordinatorMode:
         definition = self._definitions[agent_type]
         agent_id = str(uuid.uuid4())
 
-        # Fire-and-forget via the spawner
-        async for _event in self._spawner.spawn(
-            definition,
-            task,
-            parent_context,
-            run_in_background=run_in_background,
-        ):
-            pass  # Events consumed internally
+        if run_in_background:
+            async def _run() -> None:
+                async for _event in self._spawner.spawn(
+                    definition,
+                    task,
+                    parent_context,
+                    run_in_background=run_in_background,
+                ):
+                    pass  # Events consumed internally
+
+            async_task = asyncio.create_task(_run())
+            self._active_agents[agent_id] = async_task
+        else:
+            # Foreground: consume events synchronously
+            async for _event in self._spawner.spawn(
+                definition,
+                task,
+                parent_context,
+                run_in_background=run_in_background,
+            ):
+                pass  # Events consumed internally
 
         return agent_id
+
+    async def get_status(self, agent_id: str) -> str:
+        """Check the status of a dispatched agent.
+
+        Args:
+            agent_id: The agent ID returned by :meth:`dispatch`.
+
+        Returns:
+            ``"running"``, ``"done"``, or ``"unknown"`` if the agent
+            was not dispatched via background mode or is not tracked.
+        """
+        task = self._active_agents.get(agent_id)
+        if task is None:
+            return "unknown"
+        if task.done():
+            return "done"
+        return "running"
+
+    async def cancel(self, agent_id: str) -> None:
+        """Cancel a running background agent task.
+
+        Args:
+            agent_id: The agent ID returned by :meth:`dispatch`.
+
+        Does nothing if the agent is not tracked or already finished.
+        """
+        task = self._active_agents.get(agent_id)
+        if task is not None and not task.done():
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
