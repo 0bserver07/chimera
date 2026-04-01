@@ -450,6 +450,37 @@ def run_code(args: Any) -> int:
     if mode == "json":
         return _run_json_mode(args)
 
+    # New CodingAgent stack — activated by --preset
+    preset = getattr(args, "preset", None)
+    if preset:
+        import asyncio
+        model = getattr(args, "model", None) or os.environ.get(
+            "ANTHROPIC_MODEL", "claude-sonnet-4-20250514",
+        )
+        cwd = os.path.abspath(getattr(args, "workdir", None) or os.getcwd())
+
+        # Non-interactive -p mode
+        print_task = getattr(args, "print_mode", None)
+        if print_task:
+            from chimera.assembly.coding_agent import CodingAgent
+            from chimera.core.loop_events import LoopEventType
+
+            async def _print_run() -> None:
+                agent = CodingAgent(model=model, preset=preset, project_dir=cwd)
+                async for event in agent.run(print_task):
+                    if event.type == LoopEventType.assistant:
+                        content = getattr(event.data, 'content', str(event.data))
+                        if content.strip():
+                            print(content)
+                    elif event.type == LoopEventType.assistant_chunk:
+                        print(str(event.data), end="", flush=True)
+
+            asyncio.run(_print_run())
+            return 0
+
+        asyncio.run(_run_new_stack(model=model, preset=preset, cwd=cwd))
+        return 0
+
     workdir = os.path.abspath(getattr(args, "workdir", None) or os.getcwd())
     try:
         provider = create_provider(model=getattr(args, "model", None))
@@ -610,6 +641,82 @@ def run_code(args: Any) -> int:
     print(f"\nTotal cost: ${total_cost:.4f}")
     env.cleanup()
     return 0
+
+
+async def _run_new_stack(model: str, preset: str, cwd: str) -> None:
+    """REPL using the new CodingAgent assembly."""
+    from chimera.assembly.coding_agent import CodingAgent
+    from chimera.core.loop_events import LoopEventType
+
+    agent = CodingAgent(model=model, preset=preset, project_dir=cwd)
+    print(f"Chimera ({preset}) — {model} — {len(agent.tools)} tools")
+    print("Type /help for commands, Ctrl+C to exit\n")
+
+    while True:
+        try:
+            user_input = input(">>> ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\nBye!")
+            break
+
+        if not user_input:
+            continue
+
+        # Handle local slash commands that don't need the model
+        if user_input == "/exit" or user_input == "/quit":
+            print("Bye!")
+            break
+        if user_input == "/help":
+            print("Commands: /help /exit /model /tools /preset /compact /cost")
+            continue
+        if user_input == "/tools":
+            for t in agent.tools:
+                print(f"  {t.name}: {getattr(t, 'description', '')[:60]}")
+            continue
+        if user_input == "/model":
+            print(f"  Model: {agent.provider.model_name}")
+            continue
+
+        # Run through CodingAgent
+        agent.reset_abort()
+        try:
+            async for event in agent.run(user_input):
+                t = event.type
+                if t == LoopEventType.assistant:
+                    content = getattr(event.data, 'content', str(event.data))
+                    if content.strip():
+                        print(content)
+                elif t == LoopEventType.tool_result:
+                    tc, result = event.data if isinstance(event.data, tuple) else (None, event.data)
+                    tool_name = getattr(tc, 'name', '?') if tc else '?'
+                    output = getattr(result, 'output', str(result))
+                    success = getattr(result, 'success', True)
+                    if output.strip():
+                        marker = "+" if success else "!"
+                        # Truncate long output
+                        if len(output) > 2000:
+                            output = output[:1000] + f"\n... [{len(output)-2000} chars truncated] ...\n" + output[-1000:]
+                        print(f"[{marker} {tool_name}] {output}")
+                elif t == LoopEventType.assistant_chunk:
+                    # Streaming text
+                    print(str(event.data), end="", flush=True)
+                elif t == LoopEventType.error:
+                    print(f"[ERROR] {event.data}")
+                elif t == LoopEventType.result:
+                    # Turn complete — show cost if available
+                    cost = getattr(event.data, 'cost_usd', 0)
+                    turns = getattr(event.data, 'turn_count', 0)
+                    if cost > 0:
+                        print(f"  ({turns} turns, ${cost:.4f})")
+                elif t == LoopEventType.system:
+                    # Slash command output from InputHandler
+                    if event.data:
+                        print(event.data)
+        except KeyboardInterrupt:
+            agent.abort()
+            print("\n[Interrupted]")
+        except Exception as e:
+            print(f"[ERROR] {e}")
 
 
 def _run_rpc_mode(args: Any) -> int:

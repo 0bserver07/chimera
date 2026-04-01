@@ -128,6 +128,18 @@ def build_parser() -> argparse.ArgumentParser:
         default="",
         help="Comma-separated list of models to cycle through (e.g. glm-5,claude-sonnet-4)",
     )
+    code_parser.add_argument(
+        "--preset",
+        default=None,
+        choices=["claude_code", "codex", "minimal", "explore"],
+        help="Agent preset — uses the new CodingAgent stack (default: legacy stack)",
+    )
+    code_parser.add_argument(
+        "-p", "--print",
+        dest="print_mode",
+        default=None,
+        help="Non-interactive: run a single task and print the result",
+    )
 
     # ---- review subcommand ----
     review_parser = subparsers.add_parser(
