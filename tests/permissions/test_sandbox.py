@@ -110,3 +110,59 @@ class TestSandboxAdapterExecute:
         adapter = SandboxAdapter()
         result = await adapter.execute("echo error >&2", cwd="/tmp")
         assert "error" in result.stderr
+
+    async def test_command_with_denied_path_blocked(self) -> None:
+        """Command containing a denied path should be blocked pre-execution."""
+        adapter = SandboxAdapter()
+        result = await adapter.execute(
+            "cat .chimera/settings.json", cwd="/tmp"
+        )
+        assert result.returncode == 1
+        assert "access denied" in result.stderr
+
+    async def test_command_without_denied_path_executes(self) -> None:
+        """Normal commands without denied paths should execute normally."""
+        adapter = SandboxAdapter()
+        result = await adapter.execute("echo safe", cwd="/tmp")
+        assert result.returncode == 0
+        assert "safe" in result.stdout
+
+    async def test_command_with_custom_denied_path_blocked(self) -> None:
+        """Commands referencing custom fs_deny_paths should be blocked."""
+        cfg = SandboxConfig(fs_deny_paths=["/etc/shadow"])
+        adapter = SandboxAdapter(config=cfg)
+        result = await adapter.execute("cat /etc/shadow", cwd="/tmp")
+        assert result.returncode == 1
+        assert "access denied" in result.stderr
+
+
+@pytest.mark.asyncio
+class TestSandboxAdapterScrub:
+    async def test_scrub_bare_repo_removes_suspicious_head(self, tmp_path) -> None:
+        """Bare-repo HEAD file should be scrubbed after execution."""
+        import os
+
+        head_path = os.path.join(str(tmp_path), "HEAD")
+        with open(head_path, "w") as f:
+            f.write("ref: refs/heads/main\n")
+        assert os.path.exists(head_path)
+
+        adapter = SandboxAdapter()
+        await adapter.execute("echo done", cwd=str(tmp_path))
+
+        assert not os.path.exists(head_path)
+
+    async def test_scrub_preserves_normal_files(self, tmp_path) -> None:
+        """Normal files named HEAD (not git content) should NOT be removed."""
+        import os
+
+        head_path = os.path.join(str(tmp_path), "HEAD")
+        with open(head_path, "w") as f:
+            f.write("This is my project's HEAD document\n")
+        assert os.path.exists(head_path)
+
+        adapter = SandboxAdapter()
+        await adapter.execute("echo done", cwd=str(tmp_path))
+
+        # Should NOT have been removed — it's not a bare-repo artifact
+        assert os.path.exists(head_path)

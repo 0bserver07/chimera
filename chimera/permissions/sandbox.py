@@ -54,8 +54,17 @@ class SandboxAdapter:
         cwd: str,
         env: dict | None = None,
     ) -> CommandResult:
-        """Execute command. For now, delegates to subprocess (sandbox enforcement
-        is a future enhancement)."""
+        """Execute command with sandbox restrictions enforced."""
+        # 1. Pre-execution: check for denied path access in the command
+        denied = self._check_command_for_denied_paths(command)
+        if denied:
+            return CommandResult(
+                stdout="",
+                stderr=f"Sandbox: access denied to {denied}",
+                returncode=1,
+            )
+
+        # 2. Execute
         proc = await asyncio.create_subprocess_shell(
             command,
             cwd=cwd,
@@ -64,11 +73,59 @@ class SandboxAdapter:
             stderr=asyncio.subprocess.PIPE,
         )
         stdout, stderr = await proc.communicate()
+
+        # 3. Post-execution: scrub bare-repo files
+        self._scrub_bare_repo_files(cwd)
+
         return CommandResult(
             stdout=stdout.decode() if stdout else "",
             stderr=stderr.decode() if stderr else "",
             returncode=proc.returncode or 0,
         )
+
+    def _check_command_for_denied_paths(self, command: str) -> str | None:
+        """Check if command references any denied paths."""
+        all_denied = self.config.ALWAYS_DENY + self.config.fs_deny_paths
+        for denied_path in all_denied:
+            if denied_path in command:
+                return denied_path
+        return None
+
+    def _scrub_bare_repo_files(self, cwd: str) -> None:
+        """Remove planted bare-repo files after sandboxed execution.
+
+        Attackers can plant HEAD, objects/, refs/ in cwd to trick git into
+        treating the directory as a repo and loading hooks. Scrub these
+        after sandboxed commands.
+        """
+        import os
+
+        suspicious = ["HEAD", "config", "description"]
+        suspicious_dirs = ["objects", "refs", "hooks"]
+
+        for fname in suspicious:
+            fpath = os.path.join(cwd, fname)
+            # Only remove if it looks like a bare repo file (not a normal project file)
+            if os.path.isfile(fpath):
+                try:
+                    with open(fpath) as f:
+                        content = f.read(100)
+                    if content.startswith("ref: refs/") or "Unnamed repository" in content:
+                        os.unlink(fpath)
+                except (OSError, UnicodeDecodeError):
+                    pass
+
+        for dname in suspicious_dirs:
+            dpath = os.path.join(cwd, dname)
+            if os.path.isdir(dpath):
+                # Check if it's a small, suspicious directory (bare repo artifacts are tiny)
+                try:
+                    entries = os.listdir(dpath)
+                    if len(entries) <= 3 and dname == "objects":
+                        import shutil
+                        shutil.rmtree(dpath, ignore_errors=True)
+                except OSError:
+                    pass
 
     def is_path_denied(self, path: str) -> bool:
         """Check whether *path* is denied by ALWAYS_DENY or fs_deny_paths."""

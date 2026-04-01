@@ -5,7 +5,7 @@ import asyncio
 import io
 import json
 import sys
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -110,45 +110,89 @@ class TestStdioBridgeTransport:
 
 
 # ---------------------------------------------------------------------------
-# WebSocketTransport: import check and stubs
+# WebSocketTransport: connect, send, receive, disconnect
 # ---------------------------------------------------------------------------
 
 
 class TestWebSocketTransport:
 
     def test_init_stores_url(self):
-        """WebSocketTransport should store the URL."""
-        # This may raise ImportError if websockets is not installed,
-        # which is fine — that's also tested below.
-        try:
-            transport = WebSocketTransport("ws://localhost:8080")
-            assert transport._url == "ws://localhost:8080"
-        except ImportError:
-            pass
+        """WebSocketTransport.__init__ should store the URL and start disconnected."""
+        transport = WebSocketTransport("ws://localhost:8080")
+        assert transport._url == "ws://localhost:8080"
+        assert transport._ws is None
+        assert transport._connected is False
+        assert transport.is_connected is False
 
-    def test_raises_import_error_without_websockets(self):
-        """WebSocketTransport should raise ImportError if websockets is missing."""
-        with patch.dict(sys.modules, {"websockets": None}):
-            with pytest.raises(ImportError, match="websockets"):
-                WebSocketTransport("ws://localhost:8080")
+    def test_raises_import_error_on_connect_without_websockets(self):
+        """connect() should raise ImportError if websockets is missing."""
+        transport = WebSocketTransport("ws://localhost:8080")
 
-    @pytest.mark.asyncio
-    async def test_send_not_implemented(self):
-        """send() should raise NotImplementedError."""
-        try:
-            transport = WebSocketTransport("ws://localhost:8080")
-        except ImportError:
-            pytest.skip("websockets not installed")
-        with pytest.raises(NotImplementedError):
-            await transport.send({"test": True})
+        async def _test():
+            with patch.dict(sys.modules, {"websockets": None}):
+                with pytest.raises(ImportError, match="websockets"):
+                    await transport.connect()
+
+        asyncio.get_event_loop().run_until_complete(_test())
 
     @pytest.mark.asyncio
-    async def test_receive_not_implemented(self):
-        """receive() should raise NotImplementedError."""
-        try:
-            transport = WebSocketTransport("ws://localhost:8080")
-        except ImportError:
-            pytest.skip("websockets not installed")
-        with pytest.raises(NotImplementedError):
+    async def test_connect_sets_connected(self):
+        """connect() should set _connected to True on success."""
+        transport = WebSocketTransport("ws://localhost:8080")
+        mock_ws = AsyncMock()
+        mock_websockets = MagicMock()
+        mock_websockets.connect = AsyncMock(return_value=mock_ws)
+
+        with patch.dict(sys.modules, {"websockets": mock_websockets}):
+            await transport.connect()
+
+        assert transport.is_connected is True
+        assert transport._ws is mock_ws
+
+    @pytest.mark.asyncio
+    async def test_send_raises_when_not_connected(self):
+        """send() should raise ConnectionError when not connected."""
+        transport = WebSocketTransport("ws://localhost:8080")
+        with pytest.raises(ConnectionError, match="not connected"):
+            await transport.send({"hello": "world"})
+
+    @pytest.mark.asyncio
+    async def test_send_sends_json(self):
+        """send() should JSON-encode and send via ws."""
+        transport = WebSocketTransport("ws://localhost:8080")
+        mock_ws = AsyncMock()
+        transport._ws = mock_ws
+        transport._connected = True
+
+        await transport.send({"type": "ping"})
+
+        mock_ws.send.assert_awaited_once_with(json.dumps({"type": "ping"}))
+
+    @pytest.mark.asyncio
+    async def test_receive_raises_when_not_connected(self):
+        """receive() should raise ConnectionError when not connected."""
+        transport = WebSocketTransport("ws://localhost:8080")
+        with pytest.raises(ConnectionError, match="not connected"):
             async for _ in transport.receive():
                 pass
+
+    @pytest.mark.asyncio
+    async def test_disconnect_closes_ws(self):
+        """disconnect() should close the WebSocket and set connected to False."""
+        transport = WebSocketTransport("ws://localhost:8080")
+        mock_ws = AsyncMock()
+        transport._ws = mock_ws
+        transport._connected = True
+
+        await transport.disconnect()
+
+        mock_ws.close.assert_awaited_once()
+        assert transport.is_connected is False
+
+    @pytest.mark.asyncio
+    async def test_disconnect_noop_when_not_connected(self):
+        """disconnect() should be a no-op when no WebSocket exists."""
+        transport = WebSocketTransport("ws://localhost:8080")
+        # Should not raise
+        await transport.disconnect()
+        assert transport.is_connected is False

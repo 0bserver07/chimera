@@ -77,27 +77,55 @@ class StdioBridgeTransport(BridgeTransport):
 
 
 class WebSocketTransport(BridgeTransport):
-    """WebSocket transport (requires ``websockets`` package).
+    """WebSocket-based transport for IDE integration.
 
-    This is currently a stub — calling :meth:`send` or :meth:`receive`
-    raises :exc:`NotImplementedError`.  Install ``websockets`` to use
-    this transport.
+    Requires the ``websockets`` package (optional dependency).
+    Call :meth:`connect` before sending or receiving messages.
     """
 
     def __init__(self, url: str) -> None:
         self._url = url
+        self._ws: Any = None
+        self._connected = False
+
+    async def connect(self) -> None:
+        """Connect to the WebSocket server."""
         try:
-            import websockets  # noqa: F401
+            import websockets
+            self._ws = await websockets.connect(self._url)
+            self._connected = True
         except ImportError:
             raise ImportError(
-                "WebSocket transport requires 'pip install websockets'"
+                "WebSocket transport requires the 'websockets' package. "
+                "Install it with: pip install websockets"
             )
 
     async def send(self, message: dict[str, Any]) -> None:
-        """Not yet implemented."""
-        raise NotImplementedError("WebSocket transport not yet implemented")
+        """Send a message over WebSocket."""
+        if not self._ws or not self._connected:
+            raise ConnectionError("WebSocket not connected. Call connect() first.")
+        await self._ws.send(json.dumps(message))
 
     async def receive(self) -> AsyncGenerator[dict[str, Any], None]:
-        """Not yet implemented."""
-        raise NotImplementedError("WebSocket transport not yet implemented")
-        yield  # Make it a generator
+        """Receive messages from WebSocket."""
+        if not self._ws:
+            raise ConnectionError("WebSocket not connected. Call connect() first.")
+        try:
+            async for raw in self._ws:
+                try:
+                    yield json.loads(raw)
+                except json.JSONDecodeError:
+                    continue
+        except Exception:
+            self._connected = False
+
+    async def disconnect(self) -> None:
+        """Close the WebSocket connection."""
+        if self._ws:
+            await self._ws.close()
+            self._connected = False
+
+    @property
+    def is_connected(self) -> bool:
+        """Whether the WebSocket is currently connected."""
+        return self._connected
