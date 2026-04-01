@@ -104,6 +104,53 @@ class ComponentRegistry:
         """All registered providers."""
         return dict(self._providers)
 
+    # ------------------------------------------------------------------
+    # Extension registrations: commands, hooks, skills
+    # ------------------------------------------------------------------
+
+    def register_command(self, command) -> None:
+        """Register a command provided by a plugin.
+
+        Args:
+            command: A command descriptor (dict, dataclass, etc.).
+        """
+        self._commands = getattr(self, "_commands", [])
+        self._commands.append(command)
+
+    def register_hook(self, event: str, matcher) -> None:
+        """Register a hook matcher for a given event.
+
+        Args:
+            event: The hook event name (e.g. ``"PreToolUse"``).
+            matcher: A hook matcher descriptor.
+        """
+        self._hooks = getattr(self, "_hooks", {})
+        self._hooks.setdefault(event, []).append(matcher)
+
+    def register_skill(self, skill) -> None:
+        """Register a skill provided by a plugin.
+
+        Args:
+            skill: A skill descriptor (dict, dataclass, etc.).
+        """
+        self._skills = getattr(self, "_skills", [])
+        self._skills.append(skill)
+
+    @property
+    def commands(self) -> list:
+        """All registered commands."""
+        return list(getattr(self, "_commands", []))
+
+    @property
+    def hooks(self) -> dict[str, list]:
+        """All registered hooks, keyed by event name."""
+        return dict(getattr(self, "_hooks", {}))
+
+    @property
+    def skills(self) -> list:
+        """All registered skills."""
+        return list(getattr(self, "_skills", []))
+
 
 # ---------------------------------------------------------------------------
 # Base plugin

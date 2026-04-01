@@ -96,6 +96,20 @@ class AgentLoop:
         total_usage: dict[str, int] = {}
         total_cost = 0.0
 
+        # ----- Fire SESSION_START hook -----
+        if hook_executor is not None and hook_matchers is not None:
+            from chimera.hooks.events import HookEvent
+            from chimera.hooks.types import HookInput
+
+            session_start_input = HookInput(
+                event=HookEvent.SESSION_START.value,
+                session_id="",
+            )
+            await hook_executor.execute(
+                HookEvent.SESSION_START, session_start_input, hook_matchers,
+                abort_signal,
+            )
+
         # Resolve system prompt to a string (CG-3)
         prompt_str: str = (
             system_prompt.to_string()
@@ -236,6 +250,20 @@ class AgentLoop:
                             transition_reason=state.transition_reason,
                         )
                         continue
+
+                # Fire SESSION_END hook before completing
+                if hook_executor is not None and hook_matchers is not None:
+                    from chimera.hooks.events import HookEvent
+                    from chimera.hooks.types import HookInput
+
+                    session_end_input = HookInput(
+                        event=HookEvent.SESSION_END.value,
+                        session_id="",
+                    )
+                    await hook_executor.execute(
+                        HookEvent.SESSION_END, session_end_input,
+                        hook_matchers, abort_signal,
+                    )
 
                 yield LoopEvent(
                     type=LoopEventType.result,
@@ -383,14 +411,19 @@ class AgentLoop:
 
                     tool_call_results.append((stc, sresult))
 
-                # --- POST_TOOL_USE hook ---
+                # --- POST_TOOL_USE / POST_TOOL_USE_FAILURE hook ---
                 if hook_executor is not None and hook_matchers is not None:
                     from chimera.hooks.events import HookEvent
                     from chimera.hooks.types import HookInput
 
                     for stc, sresult in exec_results:
+                        if sresult.success:
+                            post_event = HookEvent.POST_TOOL_USE
+                        else:
+                            post_event = HookEvent.POST_TOOL_USE_FAILURE
+
                         post_input = HookInput(
-                            event=HookEvent.POST_TOOL_USE.value,
+                            event=post_event.value,
                             session_id="",
                             tool_name=stc.name,
                             tool_input=dict(stc.arguments),
@@ -398,7 +431,7 @@ class AgentLoop:
                             tool_error=sresult.error,
                         )
                         await hook_executor.execute(
-                            HookEvent.POST_TOOL_USE, post_input, hook_matchers,
+                            post_event, post_input, hook_matchers,
                             abort_signal,
                         )
 
