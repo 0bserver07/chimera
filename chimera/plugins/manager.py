@@ -16,6 +16,9 @@ class PluginManager:
     Plugins are discovered via the ``chimera.plugins`` entry point group.
     Each entry point should resolve to a :class:`BasePlugin` subclass.
 
+    Each plugin gets its own :class:`ComponentRegistry` so that
+    aggregation methods can iterate per-plugin.
+
     Example:
         ```python
         manager = PluginManager()
@@ -26,7 +29,7 @@ class PluginManager:
 
     def __init__(self) -> None:
         self._plugins: dict[str, BasePlugin] = {}
-        self._registry = ComponentRegistry()
+        self._registries: dict[str, ComponentRegistry] = {}
 
     def discover(self) -> list[str]:
         """Discover available plugins via entry points.
@@ -57,8 +60,11 @@ class PluginManager:
             raise KeyError(f"No plugin entry point named '{name}'")
         plugin_cls = matches[0].load()
         plugin = plugin_cls()
-        plugin.activate(self._registry)
+        registry = ComponentRegistry()
+        plugin.activate(registry)
+        plugin._registry = registry
         self._plugins[plugin.name] = plugin
+        self._registries[plugin.name] = registry
         return plugin
 
     def load_plugin(self, plugin: BasePlugin) -> None:
@@ -72,8 +78,11 @@ class PluginManager:
         """
         if plugin.name in self._plugins:
             raise ValueError(f"Plugin '{plugin.name}' is already loaded")
-        plugin.activate(self._registry)
+        registry = ComponentRegistry()
+        plugin.activate(registry)
+        plugin._registry = registry
         self._plugins[plugin.name] = plugin
+        self._registries[plugin.name] = registry
 
     def load_all(self) -> list[BasePlugin]:
         """Discover and load all available plugins.
@@ -99,14 +108,52 @@ class PluginManager:
         if name not in self._plugins:
             raise KeyError(f"Plugin '{name}' is not loaded")
         plugin = self._plugins.pop(name)
+        self._registries.pop(name, None)
         plugin.deactivate()
 
     @property
     def tools(self) -> list[BaseTool]:
         """All tools registered by loaded plugins."""
-        return self._registry.tools
+        all_tools: list[BaseTool] = []
+        for registry in self._registries.values():
+            all_tools.extend(registry.tools)
+        return all_tools
 
     @property
     def plugins(self) -> dict[str, BasePlugin]:
         """All currently loaded plugins."""
         return dict(self._plugins)
+
+    # ------------------------------------------------------------------
+    # Aggregation helpers
+    # ------------------------------------------------------------------
+
+    def get_all_commands(self) -> list:
+        """Return commands from all loaded plugins."""
+        commands: list = []
+        for registry in self._registries.values():
+            commands.extend(registry.commands)
+        return commands
+
+    def get_all_hooks(self, event: str | None = None) -> dict | list:
+        """Return hooks from all loaded plugins.
+
+        If *event* is ``None``, returns a dict mapping event names to
+        lists of matchers.  If *event* is given, returns just the list
+        for that event (or an empty list).
+        """
+        hooks: dict[str, list] = {}
+        for registry in self._registries.values():
+            for ev, matchers in registry.hooks.items():
+                if event is None or ev == event:
+                    hooks.setdefault(ev, []).extend(matchers)
+        if event is not None:
+            return hooks.get(event, [])
+        return hooks
+
+    def get_all_skills(self) -> list:
+        """Return skills from all loaded plugins."""
+        skills: list = []
+        for registry in self._registries.values():
+            skills.extend(registry.skills)
+        return skills

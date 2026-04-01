@@ -17,6 +17,8 @@ from chimera.core.agent_loop import AgentLoop
 from chimera.core.loop_events import LoopEvent, LoopEventType
 from chimera.core.task_manager import TaskManager
 from chimera.core.tool import BaseTool
+from chimera.hooks.emitter import HookEmitter
+from chimera.hooks.events import HookEvent
 from chimera.types import Message
 
 __all__ = ["AgentSpawner"]
@@ -37,10 +39,12 @@ class AgentSpawner:
         provider: Any,
         available_tools: list[BaseTool],
         task_manager: TaskManager,
+        hook_emitter: HookEmitter | None = None,
     ) -> None:
         self._provider = provider
         self._available_tools = available_tools
         self._task_manager = task_manager
+        self._hook_emitter = hook_emitter or HookEmitter()
 
     async def spawn(
         self,
@@ -93,6 +97,12 @@ class AgentSpawner:
         # Build initial messages with the prompt
         messages = [Message.user(prompt)]
 
+        # Fire SUBAGENT_START hook
+        await self._hook_emitter.emit(
+            HookEvent.SUBAGENT_START,
+            tool_name=definition.name,
+        )
+
         if run_in_background:
             # Register background task and launch
             task = self._task_manager.register(
@@ -114,6 +124,10 @@ class AgentSpawner:
                         pass  # Consume events silently in background
                 finally:
                     self._task_manager.complete(task.task_id)
+                    await self._hook_emitter.emit(
+                        HookEvent.SUBAGENT_STOP,
+                        tool_name=definition.name,
+                    )
 
             asyncio.create_task(_run_background())
 
@@ -131,16 +145,22 @@ class AgentSpawner:
             return
 
         # Foreground: yield all events from the loop
-        loop = AgentLoop()
-        async for event in loop.run(
-            messages=messages,
-            tools=tools,
-            provider=self._provider,
-            system_prompt=system_prompt,
-            abort_signal=child_ctx.abort_signal,
-            query_source=child_ctx.query_source,
-        ):
-            yield event
+        try:
+            loop = AgentLoop()
+            async for event in loop.run(
+                messages=messages,
+                tools=tools,
+                provider=self._provider,
+                system_prompt=system_prompt,
+                abort_signal=child_ctx.abort_signal,
+                query_source=child_ctx.query_source,
+            ):
+                yield event
+        finally:
+            await self._hook_emitter.emit(
+                HookEvent.SUBAGENT_STOP,
+                tool_name=definition.name,
+            )
 
     def _resolve_tools(self, definition: AgentDefinition) -> list[BaseTool]:
         """Resolve the tool list from the definition.
