@@ -102,7 +102,7 @@ class AgentLoop:
             from chimera.hooks.types import HookInput
 
             session_start_input = HookInput(
-                event=HookEvent.SESSION_START.value,
+                event=HookEvent.SESSION_START,
                 session_id="",
             )
             await hook_executor.execute(
@@ -225,7 +225,7 @@ class AgentLoop:
                     from chimera.hooks.types import HookInput
 
                     stop_input = HookInput(
-                        event=HookEvent.STOP.value,
+                        event=HookEvent.STOP,
                         session_id="",
                     )
                     stop_result = await hook_executor.execute(
@@ -257,7 +257,7 @@ class AgentLoop:
                     from chimera.hooks.types import HookInput
 
                     session_end_input = HookInput(
-                        event=HookEvent.SESSION_END.value,
+                        event=HookEvent.SESSION_END,
                         session_id="",
                     )
                     await hook_executor.execute(
@@ -326,7 +326,7 @@ class AgentLoop:
                     from chimera.hooks.types import HookInput
 
                     pre_input = HookInput(
-                        event=HookEvent.PRE_TOOL_USE.value,
+                        event=HookEvent.PRE_TOOL_USE,
                         session_id="",
                         tool_name=tc.name,
                         tool_input=dict(tc.arguments),
@@ -423,7 +423,7 @@ class AgentLoop:
                             post_event = HookEvent.POST_TOOL_USE_FAILURE
 
                         post_input = HookInput(
-                            event=post_event.value,
+                            event=post_event,
                             session_id="",
                             tool_name=stc.name,
                             tool_input=dict(stc.arguments),

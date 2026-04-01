@@ -81,8 +81,8 @@ def test_create_child_full_isolation():
 
     child = AgentContext.create_child(parent, isolation=IsolationLevel.FULL)
 
-    # Messages should be cloned (independent copy)
-    assert child.messages == parent.messages
+    # Child starts with empty messages (MG-2: child does not inherit parent messages)
+    assert child.messages == []
     child.messages.append({"role": "assistant", "content": "bye"})
     assert len(parent.messages) == 1  # Parent unaffected
 
@@ -261,8 +261,8 @@ def test_create_child_selective_isolation():
 
     child = AgentContext.create_child(parent, isolation=IsolationLevel.SELECTIVE)
 
-    # Messages cloned
-    assert child.messages == parent.messages
+    # Child starts with empty messages (MG-2: child does not inherit parent messages)
+    assert child.messages == []
     child.messages.append({"role": "assistant", "content": "x"})
     assert len(parent.messages) == 1
 

@@ -153,11 +153,13 @@ class HookExecutor:
     ) -> HookOutput:
         """Call a Python callback with timeout."""
         try:
+            messages = input_data.messages or []
+            abort_signal_arg = None  # abort is managed externally; pass None
             if inspect.iscoroutinefunction(hook.callback):
-                coro = hook.callback(input_data)
+                coro = hook.callback(messages, abort_signal_arg)
             else:
                 coro = asyncio.get_event_loop().run_in_executor(
-                    None, hook.callback, input_data,
+                    None, hook.callback, messages, abort_signal_arg,
                 )
 
             timeout = hook.timeout if hook.timeout > 0 else 0.001

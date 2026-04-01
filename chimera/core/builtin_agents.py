@@ -27,7 +27,7 @@ BUILTIN_AGENTS: dict[str, AgentDefinition] = {
         name="explore",
         description="An agent that explores and reads codebases to answer questions.",
         model=None,
-        tools=["bash", "read", "grep", "glob"],
+        tools=["read_file", "glob", "grep", "list_files"],
         system_prompt=(
             "You are a code exploration agent. Your job is to search and read "
             "source files to understand codebases and answer questions. Use grep "
@@ -39,7 +39,7 @@ BUILTIN_AGENTS: dict[str, AgentDefinition] = {
         name="plan",
         description="An agent that creates detailed implementation plans.",
         model=None,
-        tools=["bash", "read", "grep", "glob"],
+        tools=["read_file", "glob", "grep", "list_files", "web_fetch", "web_search"],
         system_prompt=(
             "You are a planning agent. Your job is to analyze a codebase and create "
             "a detailed implementation plan for a requested change. Read the relevant "

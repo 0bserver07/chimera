@@ -35,9 +35,9 @@ class AgentContext:
     """
 
     messages: list[Any]
-    file_state_cache: dict[str, Any]
+    file_state_cache: Any  # FileStateCache or dict[str, Any]
     abort_signal: AbortSignal
-    denial_tracking: dict[str, Any]
+    denial_tracking: Any  # DenialTrackingState or dict[str, Any]
     agent_id: str
     parent_agent_id: str | None
     query_source: QuerySource
@@ -82,11 +82,25 @@ class AgentContext:
             # SELECTIVE and SHARED both share set_app_state with parent
             child_set_app_state = parent.set_app_state
 
+        # Clone file_state_cache: prefer .clone() if available, else copy.copy()
+        fsc = parent.file_state_cache
+        if hasattr(fsc, "clone"):
+            child_fsc = fsc.clone()
+        else:
+            child_fsc = copy.copy(fsc)
+
+        # Fresh denial tracking: try DenialTrackingState() if importable, else {}
+        try:
+            from chimera.core.denial_tracking import DenialTrackingState
+            child_denial: Any = DenialTrackingState()
+        except (ImportError, AttributeError):
+            child_denial = {}
+
         return cls(
-            messages=copy.copy(parent.messages),
-            file_state_cache=copy.copy(parent.file_state_cache),
+            messages=[],
+            file_state_cache=child_fsc,
             abort_signal=child_abort,
-            denial_tracking={},
+            denial_tracking=child_denial,
             agent_id=str(uuid.uuid4()),
             parent_agent_id=parent.agent_id,
             query_source=parent.query_source,

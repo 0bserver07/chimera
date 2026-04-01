@@ -97,7 +97,7 @@ async def test_command_hook_exit_1_passes_stderr(executor, sample_input):
 
 @pytest.mark.asyncio
 async def test_function_hook_allow(executor, sample_input):
-    def allow_hook(input_data):
+    def allow_hook(messages, abort_signal):
         return HookOutput(continue_execution=True)
 
     hook = FunctionHook(callback=allow_hook)
@@ -116,7 +116,7 @@ async def test_function_hook_allow(executor, sample_input):
 
 @pytest.mark.asyncio
 async def test_function_hook_block(executor, sample_input):
-    def block_hook(input_data):
+    def block_hook(messages, abort_signal):
         return HookOutput(continue_execution=False, reason="denied")
 
     hook = FunctionHook(callback=block_hook)
@@ -136,7 +136,7 @@ async def test_function_hook_block(executor, sample_input):
 
 @pytest.mark.asyncio
 async def test_function_hook_timeout(executor, sample_input):
-    async def slow_hook(input_data):
+    async def slow_hook(messages, abort_signal):
         await asyncio.sleep(10)
         return HookOutput()
 
@@ -161,7 +161,7 @@ async def test_matcher_filters_by_tool_name(executor):
     """Matcher 'Write' should not fire for tool_name='bash'."""
     called = []
 
-    def tracking_hook(input_data):
+    def tracking_hook(messages, abort_signal):
         called.append(True)
         return HookOutput()
 
@@ -180,7 +180,7 @@ async def test_matcher_none_matches_all(executor):
     """Matcher=None should fire for any tool."""
     called = []
 
-    def tracking_hook(input_data):
+    def tracking_hook(messages, abort_signal):
         called.append(True)
         return HookOutput()
 
@@ -198,7 +198,7 @@ async def test_matcher_fnmatch_glob(executor):
     """Matcher supports fnmatch-style patterns."""
     called = []
 
-    def tracking_hook(input_data):
+    def tracking_hook(messages, abort_signal):
         called.append(True)
         return HookOutput()
 
@@ -219,10 +219,10 @@ async def test_matcher_fnmatch_glob(executor):
 @pytest.mark.asyncio
 async def test_merge_block_wins(executor, sample_input):
     """If one hook blocks and another allows, the result is blocked."""
-    def allow_hook(inp):
+    def allow_hook(messages, abort_signal):
         return HookOutput(continue_execution=True)
 
-    def block_hook(inp):
+    def block_hook(messages, abort_signal):
         return HookOutput(continue_execution=False, stop_reason="nope")
 
     m1 = HookMatcher(hooks=[FunctionHook(callback=allow_hook)])
@@ -245,11 +245,11 @@ async def test_short_circuit_on_block(executor, sample_input):
     """After a hook returns continue_execution=False, later matchers are skipped."""
     call_order = []
 
-    def block_hook(inp):
+    def block_hook(messages, abort_signal):
         call_order.append("block")
         return HookOutput(continue_execution=False, stop_reason="blocked")
 
-    def after_hook(inp):
+    def after_hook(messages, abort_signal):
         call_order.append("after")
         return HookOutput()
 
