@@ -145,6 +145,20 @@ async def run_instance(instance: dict, model: str, max_turns: int) -> dict:
             preset="claude_code",
             project_dir=workdir,
         )
+        # Disable streaming to avoid API timeout, bump turns for complex repos
+        from chimera.assembly.presets import AssemblyConfig
+        agent._config = AssemblyConfig(
+            name="swebench",
+            description="SWE-bench benchmark run",
+            tool_set="coding",
+            permissions=False,
+            hooks=False,
+            transcripts=False,
+            content_replacement=False,
+            compaction=False,
+            streaming=False,
+            max_turns=30,
+        )
 
         output_parts = []
         tool_calls = 0
