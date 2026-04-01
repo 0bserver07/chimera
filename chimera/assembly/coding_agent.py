@@ -138,6 +138,21 @@ class CodingAgent:
                     user_dir=str(Path.home() / ".chimera"),
                 )
                 self._permission_context = loader.load()
+
+                # If no interactive callback, default to BYPASS mode
+                # so tools aren't silently blocked in non-interactive use
+                if permission_callback is None and self._permission_context is not None:
+                    from chimera.permissions.modes import PermissionMode
+                    from chimera.permissions.context import PermissionContext
+                    # Replace with bypass mode
+                    self._permission_context = PermissionContext(
+                        mode=PermissionMode.BYPASS,
+                        allow_rules=self._permission_context.allow_rules,
+                        deny_rules=self._permission_context.deny_rules,
+                        ask_rules=self._permission_context.ask_rules,
+                        additional_working_dirs=self._permission_context.additional_working_dirs,
+                        is_bypass_available=True,
+                    )
             except Exception:
                 pass
 
