@@ -160,24 +160,19 @@ async def run_instance(instance: dict, model: str, max_turns: int) -> dict:
             max_turns=30,
         )
 
-        output_parts = []
-        tool_calls = 0
+        # Trace collector — captures everything for diagnosis
+        from chimera.eval.trace import TraceCollector
+        collector = TraceCollector(
+            instance_id=instance_id, model=model, preset="swebench", task=task,
+        )
+
         async for event in agent.run(task):
-            if event.type == LoopEventType.assistant:
-                content = getattr(event.data, "content", "")
-                if content.strip():
-                    output_parts.append(content)
-            elif event.type == LoopEventType.tool_result:
-                tool_calls += 1
+            collector.record(event)
+            # Print progress
+            if event.type == LoopEventType.tool_result:
                 tc, result = event.data if isinstance(event.data, tuple) else (None, event.data)
                 tool_name = getattr(tc, "name", "?") if tc else "?"
                 print(f"  [{tool_name}]", end="", flush=True)
-            elif event.type == LoopEventType.result:
-                reason = event.data.reason
-                turns = event.data.turn_count
-
-        elapsed = time.time() - start
-        output = "\n".join(output_parts)
 
         # Get the diff (what the agent changed)
         diff_proc = subprocess.run(
@@ -188,19 +183,25 @@ async def run_instance(instance: dict, model: str, max_turns: int) -> dict:
         # Verify fix
         resolved = verify_fix(workdir, instance.get("test_patch", ""))
 
-        result = {
-            "instance_id": instance_id,
-            "resolved": resolved,
-            "turns": turns,
-            "tool_calls": tool_calls,
-            "elapsed_s": round(elapsed, 1),
-            "patch_lines": len(agent_patch.splitlines()) if agent_patch else 0,
-            "reason": reason,
-        }
+        # Finalize trace with diagnosis
+        trace = collector.finalize(resolved=resolved, patch=agent_patch)
 
+        # Save detailed trace
+        trace_dir = Path("data/traces")
+        trace_dir.mkdir(parents=True, exist_ok=True)
+        trace.save(trace_dir / f"{instance_id}.json")
+
+        # Print diagnosis
         status = "PASS" if resolved else "FAIL"
-        print(f"\n  {status} — {turns} turns, {tool_calls} tools, {elapsed:.0f}s, {result['patch_lines']} patch lines")
+        print(f"\n  {status} — {trace.diagnosis}")
+        print(f"    {len(trace.turns)} turns, {trace.total_tool_calls} tools, {trace.elapsed_s}s")
+        print(f"    Tools: {trace.tools_used}")
+        print(f"    Files read: {trace.files_read[:5]}")
+        print(f"    Files edited: {trace.files_edited}")
+        if trace.failed_edits:
+            print(f"    Failed edits: {[(fe.tool_name, fe.output[:80]) for fe in trace.failed_edits]}")
 
+        result = trace.to_dict()
         return result
 
     finally:
