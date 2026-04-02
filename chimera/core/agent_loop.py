@@ -23,6 +23,7 @@ from chimera.core.content_replacement import ContentReplacementState
 from chimera.core.file_state_cache import FileStateCache
 from chimera.core.loop_events import LoopEvent, LoopEventType, LoopResult
 from chimera.core.loop_state import LoopState, QuerySource, RetryPolicy, RETRY_POLICIES
+from chimera.core.message_queue import SteeringMessageQueue
 from chimera.core.recovery import ErrorRecovery, WithheldError
 from chimera.core.streaming_executor import StreamingToolExecutor
 from chimera.core.system_prompt import SystemPrompt
@@ -72,6 +73,7 @@ class AgentLoop:
         file_state_cache: FileStateCache | None = None,
         compaction: CompactionIntegration | None = None,
         stream: bool = False,
+        message_queue: SteeringMessageQueue | None = None,
     ) -> AsyncGenerator[LoopEvent, None]:
         """Run the agent loop, yielding :class:`LoopEvent` instances.
 
@@ -328,6 +330,23 @@ class AgentLoop:
                         )
                         continue
 
+                # ----- Follow-up injection: prevent early stop -----
+                if message_queue is not None and message_queue.has_follow_up():
+                    follow_ups = message_queue.drain_follow_up()
+                    working_messages.append(
+                        Message.assistant(response.content),
+                    )
+                    working_messages.extend(follow_ups)
+                    state = LoopState(
+                        messages=list(working_messages),
+                        turn_count=state.turn_count + 1,
+                        max_output_tokens_recovery_count=state.max_output_tokens_recovery_count,
+                        has_attempted_reactive_compact=state.has_attempted_reactive_compact,
+                        max_output_tokens_override=state.max_output_tokens_override,
+                        transition_reason=state.transition_reason,
+                    )
+                    continue
+
                 # Fire SESSION_END hook before completing
                 if hook_executor is not None and hook_matchers is not None:
                     from chimera.hooks.events import HookEvent
@@ -570,6 +589,11 @@ class AgentLoop:
                     turn=state.turn_count,
                 )
                 return
+
+            # ----- Steering injection: inject messages between tool turns -----
+            if message_queue is not None and message_queue.has_steering():
+                steering_msgs = message_queue.drain_steering()
+                working_messages.extend(steering_msgs)
 
 
 def _merge_usage(total: dict[str, int], new: dict[str, int]) -> None:

@@ -13,7 +13,7 @@ from chimera.commands.types import LocalCommand
 
 _COMMAND_CATEGORIES: dict[str, list[str]] = {
     "General": ["help", "clear", "compact", "cost", "exit"],
-    "Session Management": ["session", "files", "history"],
+    "Session Management": ["session", "files", "history", "export"],
     "Development": ["commit", "test"],
     "Git": ["diff", "status"],
     "Context": ["context", "debug", "verbose"],
@@ -254,6 +254,19 @@ def _env_handler(args: str) -> str:
     return "\n".join(lines)
 
 
+def _export_handler(args: str) -> str:
+    """Export session as HTML."""
+    from pathlib import Path
+
+    from chimera.core.html_export import export_session_html
+    from chimera.types import Message
+
+    output = args.strip() or "session_export.html"
+    # Placeholder: in a real session the messages would come from session context
+    path = export_session_html([], Path(output))
+    return f"Session exported to {path}"
+
+
 # ---------------------------------------------------------------------------
 # Command list
 # ---------------------------------------------------------------------------
@@ -440,6 +453,14 @@ def get_builtin_commands() -> list[LocalCommand]:
             description="Revert files to a specific turn",
             argument_hint="<turn_number>",
             handler=_revert_handler,
+            loaded_from="builtin",
+        ),
+        # --- Export ---
+        LocalCommand(
+            name="export",
+            description="Export session as HTML",
+            aliases=["html"],
+            handler=_export_handler,
             loaded_from="builtin",
         ),
     ]

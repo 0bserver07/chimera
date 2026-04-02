@@ -120,3 +120,47 @@ class MessageQueues:
         """Return ``True`` if there are follow-up messages pending."""
         with self._lock:
             return len(self._follow_up) > 0
+
+
+class SteeringMessageQueue:
+    """Queue for injecting messages into the agent loop mid-run.
+
+    Provides two channels:
+
+    - **steering** -- injected between tool turns (mid-run).
+    - **follow_up** -- injected when the agent would otherwise stop.
+    """
+
+    def __init__(self) -> None:
+        self._steering: deque[Message] = deque()
+        self._follow_up: deque[Message] = deque()
+
+    def add_steering(self, message: Message) -> None:
+        """Add a message to be injected between tool turns (mid-run)."""
+        self._steering.append(message)
+
+    def add_follow_up(self, message: Message) -> None:
+        """Add a message to be injected when the agent would stop."""
+        self._follow_up.append(message)
+
+    def drain_steering(self) -> list[Message]:
+        """Drain all pending steering messages."""
+        msgs = list(self._steering)
+        self._steering.clear()
+        return msgs
+
+    def drain_follow_up(self) -> list[Message]:
+        """Drain all pending follow-up messages."""
+        msgs = list(self._follow_up)
+        self._follow_up.clear()
+        return msgs
+
+    def has_steering(self) -> bool:
+        return len(self._steering) > 0
+
+    def has_follow_up(self) -> bool:
+        return len(self._follow_up) > 0
+
+    def clear(self) -> None:
+        self._steering.clear()
+        self._follow_up.clear()
