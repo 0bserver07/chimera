@@ -1,7 +1,8 @@
 # chimera/tools/edit.py
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from chimera.core.tool import BaseTool
 from chimera.env.base import Environment
@@ -25,6 +26,30 @@ class EditFileTool(BaseTool):
         "required": ["path", "old_string", "new_string"],
     }
 
+    # --- #130: Read-before-write tracking ---
+    _read_files: ClassVar[set[str]] = set()
+    _enforce_read_before_write: ClassVar[bool] = False
+
+    @classmethod
+    def mark_file_read(cls, path: str) -> None:
+        """Record that *path* has been read in this session."""
+        cls._read_files.add(str(Path(path).resolve()))
+
+    @classmethod
+    def was_file_read(cls, path: str) -> bool:
+        """Return ``True`` if *path* was previously marked as read."""
+        return str(Path(path).resolve()) in cls._read_files
+
+    @classmethod
+    def reset_read_tracking(cls) -> None:
+        """Clear all read-tracking state."""
+        cls._read_files.clear()
+
+    @classmethod
+    def set_enforce_read_before_write(cls, enabled: bool) -> None:
+        """Enable or disable the read-before-write guard."""
+        cls._enforce_read_before_write = enabled
+
     def __init__(
         self,
         editor: FuzzyEditor | None = None,
@@ -37,6 +62,15 @@ class EditFileTool(BaseTool):
 
     def execute(self, args: dict[str, Any], env: Environment | None) -> ToolResult:
         path = args["path"]
+
+        # --- #130: Read-before-write guard ---
+        if self._enforce_read_before_write:
+            resolved = _resolve_edit_path(path, self._read_ops, env)
+            if resolved and not self.was_file_read(resolved):
+                return ToolResult(
+                    output="",
+                    error=f"You must read '{path}' before editing it. Use the read_file tool first.",
+                )
 
         # Read content via ops or env
         if self._read_ops is not None:
@@ -89,3 +123,23 @@ class EditFileTool(BaseTool):
             output=f"Edited {path}",
             metadata={"file_change": fc, "match_strategy": match_strategy},
         )
+
+
+def _resolve_edit_path(
+    path: str,
+    read_ops: Any | None,
+    env: Environment | None,
+) -> str:
+    """Resolve *path* to absolute using the ops or env cwd if available."""
+    import os
+
+    if not path:
+        return ""
+    if os.path.isabs(path):
+        return path
+    backend = read_ops or env
+    if backend is not None:
+        cwd = getattr(backend, "cwd", None) or getattr(backend, "workdir", None)
+        if cwd:
+            return os.path.join(cwd, path)
+    return str(Path(path).resolve())

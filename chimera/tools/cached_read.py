@@ -61,4 +61,9 @@ class CachedReadTool(ReadFileTool):
             except OSError:
                 pass
 
+        # #130: Mark file as read for read-before-write guard
+        if result.success:
+            from chimera.tools.edit import EditFileTool
+            EditFileTool.mark_file_read(path)
+
         return result

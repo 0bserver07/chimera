@@ -74,6 +74,8 @@ class AgentLoop:
         compaction: CompactionIntegration | None = None,
         stream: bool = False,
         message_queue: SteeringMessageQueue | None = None,
+        enable_action_nudge: bool = True,
+        enable_auto_continue: bool = True,
     ) -> AsyncGenerator[LoopEvent, None]:
         """Run the agent loop, yielding :class:`LoopEvent` instances.
 
@@ -143,6 +145,16 @@ class AgentLoop:
 
         # Build tool schemas once
         tool_schemas = [t.to_anthropic_schema() for t in tools] if tools else None
+
+        # --- #131/#132 enforcement state ---
+        _nudge_count = 0
+        _any_tools_called = False
+        _files_edited: list[str] = []
+
+        _EDIT_TOOL_NAMES = frozenset({
+            "edit_file", "write_file", "replace_in_file", "apply_patch", "multi_edit",
+        })
+        _has_edit_tools = any(t.name in _EDIT_TOOL_NAMES for t in tools) if tools else False
 
         while True:
             # ----- Check abort before calling the model -----
@@ -337,6 +349,57 @@ class AgentLoop:
                         Message.assistant(response.content),
                     )
                     working_messages.extend(follow_ups)
+                    state = LoopState(
+                        messages=list(working_messages),
+                        turn_count=state.turn_count + 1,
+                        max_output_tokens_recovery_count=state.max_output_tokens_recovery_count,
+                        has_attempted_reactive_compact=state.has_attempted_reactive_compact,
+                        max_output_tokens_override=state.max_output_tokens_override,
+                        transition_reason=state.transition_reason,
+                    )
+                    continue
+
+                # ----- #131: Action nudge — text-only with no tool use -----
+                if (
+                    enable_action_nudge
+                    and _has_edit_tools  # only nudge when edit tools are available
+                    and not _any_tools_called
+                    and _nudge_count < 2
+                ):
+                    _nudge_count += 1
+                    assistant_msg = Message.assistant(response.content)
+                    working_messages.append(assistant_msg)
+                    working_messages.append(Message.user(
+                        "You described what to do but didn't use any tools to make changes. "
+                        "Please use the appropriate tools (edit_file, write_file, bash, etc.) "
+                        "to implement the actual changes."
+                    ))
+                    state = LoopState(
+                        messages=list(working_messages),
+                        turn_count=state.turn_count + 1,
+                        max_output_tokens_recovery_count=state.max_output_tokens_recovery_count,
+                        has_attempted_reactive_compact=state.has_attempted_reactive_compact,
+                        max_output_tokens_override=state.max_output_tokens_override,
+                        transition_reason=state.transition_reason,
+                    )
+                    continue
+
+                # ----- #132: Auto-continue when no edits made -----
+                if (
+                    enable_auto_continue
+                    and _has_edit_tools  # only auto-continue when edit tools are available
+                    and not _files_edited
+                    and _any_tools_called
+                    and state.turn_count < max_turns - 5
+                    and _nudge_count < 2
+                ):
+                    _nudge_count += 1
+                    assistant_msg = Message.assistant(response.content)
+                    working_messages.append(assistant_msg)
+                    working_messages.append(Message.user(
+                        "You haven't made any file changes yet. "
+                        "Please use edit_file or write_file to implement the changes needed."
+                    ))
                     state = LoopState(
                         messages=list(working_messages),
                         turn_count=state.turn_count + 1,
@@ -547,6 +610,18 @@ class AgentLoop:
 
             results = tool_call_results
 
+            # --- #131/#132: Track tool usage and edits ---
+            _any_tools_called = True
+            for tc, result in results:
+                if tc.name in _EDIT_TOOL_NAMES and result.success:
+                    path = (
+                        tc.arguments.get("file_path")
+                        or tc.arguments.get("path")
+                        or tc.arguments.get("file", "")
+                    )
+                    if path:
+                        _files_edited.append(path)
+
             # Yield individual tool results
             for tc, result in results:
                 yield LoopEvent(
@@ -565,6 +640,21 @@ class AgentLoop:
             ]
             working_messages.append(assistant_msg)
             working_messages.extend(tool_result_messages)
+
+            # --- #133: Error context injection ---
+            for tc, result in results:
+                if not result.success:
+                    error_msg = result.error or result.output or ""
+                    if tc.name in ("edit_file", "write_file", "replace_in_file"):
+                        working_messages.append(Message.user(
+                            f"The {tc.name} tool failed: {error_msg[:500]}\n"
+                            f"Please re-read the file to see its actual content, then try again with the correct text."
+                        ))
+                    elif tc.name == "bash":
+                        working_messages.append(Message.user(
+                            f"The bash command failed: {error_msg[:500]}\n"
+                            f"Please diagnose the issue before retrying."
+                        ))
 
             # Record tool result messages in transcript (CG-4)
             if transcript is not None:
