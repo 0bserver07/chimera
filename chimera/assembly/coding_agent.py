@@ -49,11 +49,7 @@ class CodingAgent:
         tools_override: list | None = None,
     ) -> None:
         from chimera.assembly.presets import PRESETS
-        from chimera.assembly.system_prompts import (
-            CODING_AGENT_PROMPT,
-            EXPLORE_PROMPT,
-            MINIMAL_PROMPT,
-        )
+        from chimera.assembly.system_prompts import CODING_AGENT_PROMPT, PRESET_PROMPTS
         from chimera.assembly.tool_sets import coding_tools, explore_tools, minimal_tools
         from chimera.core.abort import AbortSignal
         from chimera.core.content_replacement import ContentReplacementState
@@ -86,19 +82,17 @@ class CodingAgent:
         self._abort_signal = AbortSignal()
         self._command_registry = CommandRegistry()
 
-        # Prompt selection
-        prompt_map = {
-            "coding": CODING_AGENT_PROMPT,
-            "minimal": MINIMAL_PROMPT,
-            "explore": EXPLORE_PROMPT,
-        }
+        # Prompt selection — use preset-specific prompt, fall back to tool-set prompt
+        from chimera.assembly.system_prompts import PRESET_PROMPTS
         tool_factory = {
             "coding": coding_tools,
             "minimal": minimal_tools,
             "explore": explore_tools,
         }
-        self._system_prompt_text = prompt_map.get(
-            config.tool_set, CODING_AGENT_PROMPT,
+        # Try preset name first (e.g., "swebench", "kimi"), then tool_set
+        self._system_prompt_text = (
+            PRESET_PROMPTS.get(config.name)
+            or PRESET_PROMPTS.get(config.tool_set, CODING_AGENT_PROMPT)
         )
 
         # Tools (must be built before the spawner, which needs them)
