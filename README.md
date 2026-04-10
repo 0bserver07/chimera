@@ -2,7 +2,15 @@
 
 AI that reads, writes, and debugs code — tools like Claude Code and Codex do this. Chimera is a Python library for building these tools yourself, and a plugin that makes Claude Code better.
 
-**Status: Alpha** — 2774 tests, benchmarked on HumanEval (90.9%) and SWE-bench.
+**Status: Alpha** — 3552 tests, benchmarked on HumanEval (90.9%) and SWE-bench.
+
+## Who This Is For
+
+**You build with CLI coding agents.**
+You use Claude Code, Codex, OpenCode, Amp, or Mono daily. You know what it feels like when an agent reads your codebase, edits files, and runs tests from your terminal. You want to build your own — with your model, your tools, your rules — or take apart how these agents work to understand why they behave differently.
+
+**You're curious about coding agents.**
+You've seen demos of AI writing entire apps. You want to understand what's actually happening — what the pieces are, how the loop works, why some agents are better at certain tasks. Chimera breaks it all down into parts you can inspect, modify, and run yourself.
 
 ## What It Does
 

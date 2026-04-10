@@ -18,3 +18,5 @@ site/dist/
 site/node_modules/
 site/.astro/
 runs/
+.chimera/
+data/
