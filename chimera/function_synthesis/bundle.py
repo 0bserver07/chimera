@@ -11,6 +11,7 @@ import zipfile
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from chimera.function_synthesis.spec import FunctionSpec
 
@@ -36,8 +37,8 @@ class ChiBundle:
 
     spec: FunctionSpec
     adapter_bytes: bytes
-    prompts: dict
-    metadata: dict = field(default_factory=dict)
+    prompts: dict[str, Any]
+    metadata: dict[str, Any] = field(default_factory=dict)
     base_model: str = "qwen3-4b-instruct-q4_0"
 
     def save(self, path: str | Path) -> None:

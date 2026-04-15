@@ -11,21 +11,22 @@ in any compatible backend (self-hosted or third-party).
 """
 from __future__ import annotations
 
-import io
 import json
 import tempfile
 from pathlib import Path
+from typing import Any
 
 from chimera.function_synthesis.bundle import ChiBundle
 from chimera.function_synthesis.compiler import CompilerBackend, CompilerError
 from chimera.function_synthesis.spec import FunctionSpec
 
+_Client: Any = None
 try:  # pragma: no cover - import guard
-    import httpx as _httpx  # type: ignore[import-not-found]
+    import httpx as _httpx
 
     _Client = _httpx.Client
 except ImportError:
-    _Client = None  # type: ignore[assignment]
+    _Client = None
 
 
 class RemoteCompiler(CompilerBackend):

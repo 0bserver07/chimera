@@ -64,5 +64,5 @@ class CompiledFunction:
     def __enter__(self) -> CompiledFunction:
         return self
 
-    def __exit__(self, exc_type, exc, tb) -> None:
+    def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
         self.close()

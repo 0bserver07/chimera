@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import io
-import zipfile
 from unittest.mock import MagicMock
 
 import pytest
@@ -20,8 +18,6 @@ def _zip_bytes() -> bytes:
         prompts={"system": "", "user_template": "{input}", "stop": []},
         metadata={"compiler_backend": "remote"},
     )
-    buf = io.BytesIO()
-    # mirror ChiBundle.save but write to a buffer
     import tempfile
     from pathlib import Path
     with tempfile.TemporaryDirectory() as tmp:

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import tempfile
 from pathlib import Path
+from typing import Any
 
 from chimera.function_synthesis.bundle import ChiBundle
 from chimera.function_synthesis.runtime import RuntimeBackend
@@ -49,7 +50,7 @@ class LlamaCppBackend(RuntimeBackend):
         tmp.close()
         self._adapter_tmp = Path(tmp.name)
 
-        kwargs: dict = {
+        kwargs: dict[str, Any] = {
             "model_path": str(self._base_model_path),
             "lora_path": str(self._adapter_tmp),
             "n_ctx": self._n_ctx,

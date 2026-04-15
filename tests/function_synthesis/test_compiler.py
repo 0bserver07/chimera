@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
 
 from chimera.function_synthesis.bundle import ChiBundle
 from chimera.function_synthesis.compiler import CompilerBackend, CompilerError

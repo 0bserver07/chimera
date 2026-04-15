@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
+from typing import Any
 
 
 @dataclass
@@ -23,8 +24,8 @@ class FunctionSpec:
     name: str
     description: str
     examples: list[dict[str, str]] = field(default_factory=list)
-    input_schema: dict | None = None
-    output_schema: dict | None = None
+    input_schema: dict[str, Any] | None = None
+    output_schema: dict[str, Any] | None = None
 
     def __post_init__(self) -> None:
         if not self.name:
