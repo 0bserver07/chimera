@@ -2,6 +2,28 @@
 
 > You want to build your own Claude Code-like tool using Chimera as a library.
 
+## Fast path: `CodingAgent.from_preset()`
+
+If you just want a Claude Code clone in 20 lines, use the assembled product:
+
+```python
+from chimera.assembly.coding_agent import CodingAgent
+
+agent = CodingAgent.from_preset("claude_code")  # 24 tools, permissions, hooks, transcripts
+async for event in agent.run("Fix the bug in auth.py"):
+    ...
+```
+
+Presets: `claude_code`, `codex`, `minimal`, `explore`. See
+[`examples/build_claude_code_clone.py`](../../examples/build_claude_code_clone.py)
+and [`examples/build_codex_clone.py`](../../examples/build_codex_clone.py)
+for runnable ~20-line scripts.
+
+**The rest of this playbook** covers the lower-level primitive layer (`Agent`,
+`ReAct`, `LoopConfig`, ...). Read on if you want fine-grained control over
+tools, loops, permissions, and composition — or if you're building something
+that doesn't map cleanly onto the pre-baked presets.
+
 ## What This Solves
 
 Building a coding agent from scratch means wiring together LLM calls, tool execution, context management, permissions, streaming, session persistence, and composition -- before you write any product logic. Chimera gives you an 8-layer stack where each layer is independently usable, composable, and testable. You pick the layers you need, configure them, and ship.
