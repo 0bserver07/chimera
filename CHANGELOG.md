@@ -1,5 +1,47 @@
 # Changelog
 
+## 0.2.0 (2026-04-16) — Function Synthesis Subsystem
+
+### New: `chimera.function_synthesis`
+Compile natural-language `FunctionSpec` objects into portable `.chi` bundles, load them as callable `CompiledFunction` instances, and expose them as agent tools.
+
+**Core types**
+- `FunctionSpec` — task spec dataclass (name, description, examples, schemas)
+- `ChiBundle` — ZIP-format artifact (manifest, adapter, prompts, spec, metadata)
+- `CompilerBackend` ABC + `CompilerError`
+- `RuntimeBackend` ABC + `CompiledFunction` (context-manager API)
+
+**Backends**
+- `LlamaCppBackend` — local inference via optional `llama-cpp-python`
+- `RemoteCompiler` — HTTP client speaking the [compile protocol](docs/function-synthesis-compile-protocol.md)
+- `MockCompiler` — offline/test stub, deterministic bundles
+
+**User-facing (v0.2.0 additions)**
+- `CacheDirs`, `BaseModelCache`, `BundleCache` — on-disk cache at `~/.chimera/function_synthesis/` (overridable via `CHIMERA_FS_HOME`)
+- `ProgramRegistry` + `slug_for()` — deterministic `<name>-<hash8>` slugs, JSON index
+- `PrefixCache` — llama.cpp state cache for cold-start elimination (sha computed once per load)
+- `CacheMissError`, `OfflineError` — offline mode via `CHIMERA_FS_OFFLINE=1`
+
+**CLI: `chimera fs`**
+- `compile <spec.json>` — compile + install in one step (`--compiler mock|remote`)
+- `run <slug> <input>` — invoke an installed program against a base GGUF
+- `list` / `info <slug>` / `rm <slug>` — manage the local registry
+
+**Tools & strategies**
+- `CompiledFunctionTool` — wrap any `CompiledFunction` as a Chimera agent tool
+- `FunctionSynthesisStrategy` — training-loop strategy that compiles specs into bundles
+
+**Docs & examples**
+- `docs/function-synthesis.md` — quickstart + API tour
+- `docs/function-synthesis-compile-protocol.md` — HTTP contract for remote compilers
+- `examples/function_synthesis_quickstart.py` — runnable offline end-to-end walkthrough
+
+**Tests** — 49 new tests (spec, bundle, compiler, runtime, cache, registry, prefix cache, mock, remote, CLI, strategy). Opt-in `-m live` e2e test requires a real base GGUF.
+
+### Other
+- `pyproject.toml` — `function_synthesis` extra now pulls `llama-cpp-python>=0.3.0` and `huggingface_hub>=0.25`
+- `live` pytest marker registered for opt-in real-model tests
+
 ## 0.1.0 (2026-03-22) — Initial Release
 
 ### Claude Code Integration (#97-#115)
