@@ -2,7 +2,7 @@
 
 AI that reads, writes, and debugs code — tools like Claude Code and Codex do this. Chimera is a Python library for building these tools yourself, and a plugin that makes Claude Code better.
 
-**Status: Alpha** — 3552 tests, benchmarked on HumanEval (90.9%) and SWE-bench.
+**Status: Alpha** — 3601 tests, benchmarked on HumanEval (90.9%) and SWE-bench.
 
 ## Who This Is For
 
@@ -106,7 +106,7 @@ Install the plugin to get immediate improvements. No Python code to write.
 Chimera is an 8-layer stack. Each layer works independently — use just what you need.
 
 ```
-What you run        CLI commands: chimera code / synthesize / eval / review / ci-fix
+What you run        CLI commands: chimera code / synthesize / eval / review / ci-fix / fs
                     ─────────────────────────────────────────────────────────────────
 Automated           CI repair, code review, research, migration planning, doc and
 workflows           test generation — multi-step pipelines built on the agent layer
@@ -157,7 +157,8 @@ Where code runs     Your filesystem, a Docker container, a git branch,
 - [Quick Start: Claude Code Plugin](docs/playbooks/00-quick-start.md) — hooks, MCP servers, skills
 - [Build Your Own Agent](docs/playbooks/08-building-agents.md) — full library guide
 - [All Playbooks](docs/playbooks/) — 13 guides covering every feature
-- [Examples](examples/) — 39 runnable scripts
+- [Examples](examples/) — 41 runnable scripts
+- [Function Synthesis](docs/function-synthesis.md) — compile specs into callable `.chi` bundles
 - [Benchmarks](docs/benchmarks/README.md) — transparency framework
 - [Contributing](CONTRIBUTING.md) — setup, workflow, code style
 - [Changelog](CHANGELOG.md) — version history
