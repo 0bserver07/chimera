@@ -30,7 +30,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import chimera
-from chimera.wire.types import StepBegin, StepEnd, StatusUpdate
+from chimera.wire.types import StatusUpdate, StepBegin
 
 SYSTEM_PROMPT = """\
 You are an expert coding agent. You can read files, write files, edit files, \
@@ -47,9 +47,19 @@ Guidelines:
 
 def build_agent(workdir: str, verbose: bool = False):
     """Build a fully-equipped coding agent."""
-    provider = chimera.create_provider(
-        model=os.environ.get("ANTHROPIC_MODEL", "glm-5"),
-    )
+    try:
+        provider = chimera.create_provider(
+            model=os.environ.get("ANTHROPIC_MODEL"),
+        )
+    except ValueError as e:
+        print(f"Setup error: {e}\n", file=sys.stderr)
+        print("Set one of these before running:", file=sys.stderr)
+        print("  export ANTHROPIC_API_KEY='sk-ant-...'", file=sys.stderr)
+        print("  # or for a compatible endpoint (e.g. GLM-5 via z.ai):", file=sys.stderr)
+        print("  export ANTHROPIC_BASE_URL='https://api.z.ai/api/anthropic'", file=sys.stderr)
+        print("  export ANTHROPIC_AUTH_TOKEN='your-token'", file=sys.stderr)
+        print("  export ANTHROPIC_MODEL='glm-5'", file=sys.stderr)
+        sys.exit(1)
 
     # Wire for real-time monitoring
     wire = chimera.Wire()
@@ -119,7 +129,7 @@ def run_interactive(workdir: str, verbose: bool = False):
 
     print(f"Chimera coding agent | model: {provider.model_name}")
     print(f"Workdir: {workdir}")
-    print(f"Commands: /help /tools /cost /exit")
+    print("Commands: /help /tools /cost /exit")
     print()
 
     total_cost = 0.0

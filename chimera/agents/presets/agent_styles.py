@@ -84,10 +84,12 @@ class AgentPreset:
         """
         import warnings
         warnings.warn(
-            f"AgentPreset.build() uses the legacy stack. "
-            f"Use CodingAgent.from_preset() instead:\n"
+            f"AgentPreset.build() returns a lower-level Agent primitive "
+            f"(no permissions/hooks/transcripts/snapshots). For a "
+            f"fully-assembled coding agent, use:\n"
             f"  from chimera.assembly.coding_agent import CodingAgent\n"
-            f"  agent = CodingAgent.from_preset('{self.name}')",
+            f"  agent = CodingAgent.from_preset('{self.name}')\n"
+            f"This message is informational, not a deprecation.",
             FutureWarning,
             stacklevel=2,
         )

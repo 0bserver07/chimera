@@ -24,7 +24,17 @@ import chimera
 
 
 def main():
-    provider = chimera.create_provider()
+    try:
+        provider = chimera.create_provider()
+    except ValueError as e:
+        print(f"Setup error: {e}\n")
+        print("Set one of these before running:")
+        print("  export ANTHROPIC_API_KEY='sk-ant-...'")
+        print("  # or for compatible endpoints:")
+        print("  export ANTHROPIC_BASE_URL='https://api.z.ai/api/anthropic'")
+        print("  export ANTHROPIC_AUTH_TOKEN='your-token'")
+        print("  export ANTHROPIC_MODEL='glm-5'")
+        sys.exit(1)
     workdir = sys.argv[1] if len(sys.argv) > 1 else "."
     workdir = os.path.abspath(workdir)
     os.makedirs(workdir, exist_ok=True)
