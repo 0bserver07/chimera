@@ -25,7 +25,7 @@ from __future__ import annotations
 
 from chimera.hooks.events import HookEvent
 from chimera.hooks.executor import HookExecutor
-from chimera.hooks.types import HookInput, HookMatcher, HookOutput
+from chimera.hooks.hook_types import HookInput, HookMatcher, HookOutput
 
 __all__ = ["HookEmitter"]
 

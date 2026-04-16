@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from chimera.hooks.events import HookEvent
 from chimera.hooks.session_hooks import SessionHookManager
-from chimera.hooks.types import HookOutput
+from chimera.hooks.hook_types import HookOutput
 
 
 # ---------------------------------------------------------------------------

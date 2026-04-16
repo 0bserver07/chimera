@@ -6,7 +6,7 @@ import time
 from dataclasses import dataclass, field
 
 from chimera.hooks.events import HookEvent
-from chimera.hooks.types import HookOutput
+from chimera.hooks.hook_types import HookOutput
 
 
 @dataclass

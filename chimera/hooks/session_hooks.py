@@ -6,7 +6,7 @@ from collections import defaultdict
 from typing import Any, Callable
 
 from chimera.hooks.events import HookEvent
-from chimera.hooks.types import CommandHook, FunctionHook, HookMatcher
+from chimera.hooks.hook_types import CommandHook, FunctionHook, HookMatcher
 
 
 class SessionHookManager:

@@ -38,7 +38,7 @@ from chimera.types import Message, ToolCall, ToolResult
 if TYPE_CHECKING:
     from chimera.core.compaction_integration import CompactionIntegration
     from chimera.hooks.executor import HookExecutor
-    from chimera.hooks.types import HookMatcher
+    from chimera.hooks.hook_types import HookMatcher
 
 __all__ = ["AgentLoop"]
 
@@ -110,7 +110,7 @@ class AgentLoop:
         # ----- Fire SESSION_START hook -----
         if hook_executor is not None and hook_matchers is not None:
             from chimera.hooks.events import HookEvent
-            from chimera.hooks.types import HookInput
+            from chimera.hooks.hook_types import HookInput
 
             session_start_input = HookInput(
                 event=HookEvent.SESSION_START,
@@ -299,7 +299,7 @@ class AgentLoop:
                 # Fire STOP hook before completing
                 if hook_executor is not None and hook_matchers is not None:
                     from chimera.hooks.events import HookEvent
-                    from chimera.hooks.types import HookInput, HookOutput
+                    from chimera.hooks.hook_types import HookInput, HookOutput
 
                     stop_input = HookInput(
                         event=HookEvent.STOP,
@@ -413,7 +413,7 @@ class AgentLoop:
                 # Fire SESSION_END hook before completing
                 if hook_executor is not None and hook_matchers is not None:
                     from chimera.hooks.events import HookEvent
-                    from chimera.hooks.types import HookInput
+                    from chimera.hooks.hook_types import HookInput
 
                     session_end_input = HookInput(
                         event=HookEvent.SESSION_END,
@@ -482,7 +482,7 @@ class AgentLoop:
                 # --- PRE_TOOL_USE hook ---
                 if not skip_tool and hook_executor is not None and hook_matchers is not None:
                     from chimera.hooks.events import HookEvent
-                    from chimera.hooks.types import HookInput
+                    from chimera.hooks.hook_types import HookInput
 
                     pre_input = HookInput(
                         event=HookEvent.PRE_TOOL_USE,
@@ -573,7 +573,7 @@ class AgentLoop:
                 # --- POST_TOOL_USE / POST_TOOL_USE_FAILURE hook ---
                 if hook_executor is not None and hook_matchers is not None:
                     from chimera.hooks.events import HookEvent
-                    from chimera.hooks.types import HookInput
+                    from chimera.hooks.hook_types import HookInput
 
                     for stc, sresult in exec_results:
                         if sresult.success:

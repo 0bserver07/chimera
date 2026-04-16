@@ -54,7 +54,7 @@
 # tests/hooks/test_executor.py
 import pytest
 from chimera.hooks.executor import HookExecutor
-from chimera.hooks.types import HookInput, HookMatcher, CommandHook
+from chimera.hooks.hook_types import HookInput, HookMatcher, CommandHook
 from chimera.hooks.events import HookEvent
 
 @pytest.mark.asyncio

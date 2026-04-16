@@ -11,7 +11,7 @@ from chimera.core.feature_flags import FeatureFlags
 from chimera.core.system_prompt import SystemPromptBuilder
 from chimera.core.memory import PersistentMemory
 from chimera.hooks.executor import HookExecutor
-from chimera.hooks.types import HookMatcher, FunctionHook, HookInput, HookOutput
+from chimera.hooks.hook_types import HookMatcher, FunctionHook, HookInput, HookOutput
 from chimera.hooks.events import HookEvent
 from chimera.permissions.checker import PermissionChecker
 from chimera.commands.registry import CommandRegistry

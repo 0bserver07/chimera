@@ -169,7 +169,7 @@ Or register hooks programmatically:
 ```python
 from chimera.hooks.executor import HookExecutor
 from chimera.hooks.events import HookEvent
-from chimera.hooks.types import HookDescriptor
+from chimera.hooks.hook_types import HookDescriptor
 
 executor = HookExecutor()
 hook = HookDescriptor(

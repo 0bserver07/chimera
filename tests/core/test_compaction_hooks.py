@@ -6,7 +6,7 @@ import pytest
 from chimera.core.compaction_integration import CompactionIntegration
 from chimera.hooks.emitter import HookEmitter
 from chimera.hooks.events import HookEvent
-from chimera.hooks.types import HookOutput
+from chimera.hooks.hook_types import HookOutput
 from chimera.types import Message
 
 

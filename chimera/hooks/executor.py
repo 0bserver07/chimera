@@ -6,7 +6,7 @@ import fnmatch
 import inspect
 from typing import TYPE_CHECKING
 
-from chimera.hooks.types import (
+from chimera.hooks.hook_types import (
     CommandHook,
     FunctionHook,
     HookInput,

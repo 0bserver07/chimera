@@ -11,7 +11,7 @@ from chimera.hooks.emitter import HookEmitter
 from chimera.hooks.events import HookEvent
 from chimera.hooks.executor import HookExecutor
 from chimera.hooks.file_watcher import FileWatcher
-from chimera.hooks.types import FunctionHook, HookMatcher, HookOutput
+from chimera.hooks.hook_types import FunctionHook, HookMatcher, HookOutput
 
 
 # ---------------------------------------------------------------------------

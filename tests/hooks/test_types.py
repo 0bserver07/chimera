@@ -1,9 +1,9 @@
-"""Tests for chimera.hooks.types — hook type dataclasses."""
+"""Tests for chimera.hooks.hook_types — hook type dataclasses."""
 from __future__ import annotations
 
 import json
 
-from chimera.hooks.types import (
+from chimera.hooks.hook_types import (
     CommandHook,
     FunctionHook,
     Hook,
