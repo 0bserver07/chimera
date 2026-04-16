@@ -43,6 +43,7 @@ class LlamaCppBackend(RuntimeBackend):
         self._llm: Any = None
         self._bundle: ChiBundle | None = None
         self._adapter_tmp: Path | None = None
+        self._base_model_sha: str | None = None
 
     def load(self, bundle: ChiBundle) -> None:
         try:
@@ -70,6 +71,14 @@ class LlamaCppBackend(RuntimeBackend):
         self._llm = llama_cpp.Llama(**kwargs)
         self._bundle = bundle
 
+        # Compute base-model sha once per load; reused by PrefixCache key.
+        if self._prefix_cache is not None and self._base_model_path.exists():
+            from hashlib import sha256
+
+            self._base_model_sha = sha256(
+                self._base_model_path.read_bytes()
+            ).hexdigest()
+
     def invoke(self, user_input: str, *, max_tokens: int = 256) -> str:
         if self._llm is None or self._bundle is None:
             raise RuntimeError("backend not loaded; call load() first")
@@ -80,19 +89,15 @@ class LlamaCppBackend(RuntimeBackend):
         cache_key: str | None = None
         if (
             self._prefix_cache is not None
+            and self._base_model_sha is not None
             and hasattr(self._llm, "save_state")
             and hasattr(self._llm, "load_state")
         ):
-            from hashlib import sha256
-
-            base_sha = sha256(
-                self._base_model_path.read_bytes()
-                if self._base_model_path.exists()
-                else b""
-            ).hexdigest()
             slug = self._bundle.metadata.get("slug", self._bundle.spec.name)
             cache_key = self._prefix_cache.key(
-                base_model_sha=base_sha, slug=slug, system_prompt=system,
+                base_model_sha=self._base_model_sha,
+                slug=slug,
+                system_prompt=system,
             )
             cached = self._prefix_cache.load(cache_key)
             if cached is not None:
@@ -120,6 +125,7 @@ class LlamaCppBackend(RuntimeBackend):
     def close(self) -> None:
         self._llm = None
         self._bundle = None
+        self._base_model_sha = None
         if self._adapter_tmp is not None and self._adapter_tmp.exists():
             try:
                 self._adapter_tmp.unlink()
