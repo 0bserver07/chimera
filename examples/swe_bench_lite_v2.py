@@ -131,7 +131,7 @@ def main():
     print(f"Model:       {provider.model_name}")
     print(f"Instances:   {len(instances)}")
     print(f"Max steps:   {args.max_steps}")
-    print(f"Investigator: enabled")
+    print("Investigator: enabled")
     print()
 
     results: list[dict] = []
@@ -152,12 +152,12 @@ def main():
         workdir = tempfile.mkdtemp(prefix=f"swebench_{instance_id}_")
         cloned = clone_and_checkout(repo, base_commit, workdir)
         if not cloned:
-            print(f"  SKIP (clone failed)")
+            print("  SKIP (clone failed)")
             results.append({"instance_id": instance_id, "status": "SKIP"})
             continue
 
         # Phase 1: Investigate
-        print(f"  Investigating...")
+        print("  Investigating...")
         investigation = investigate(provider, workdir, problem, fail_to_pass)
         print(f"  Files identified: {investigation[:100]}...")
 

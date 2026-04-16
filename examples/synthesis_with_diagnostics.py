@@ -48,7 +48,13 @@ def test_divide_by_zero():
 
 
 def main():
-    provider = chimera.create_provider()
+    try:
+        provider = chimera.create_provider()
+    except ValueError as _e:
+        import sys
+        print(f"Setup error: {_e}", file=sys.stderr)
+        print("Set ANTHROPIC_API_KEY or ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN + ANTHROPIC_MODEL before running.", file=sys.stderr)
+        sys.exit(1)
     workdir = tempfile.mkdtemp(prefix="chimera-synth-diag-")
 
     # Write test file
@@ -79,8 +85,8 @@ def main():
 
     print(f"Model:   {provider.model_name}")
     print(f"Workdir: {workdir}")
-    print(f"Tests:   6 tests in test_calculator.py")
-    print(f"Constraints: tests_pass + complexity_penalty(15)")
+    print("Tests:   6 tests in test_calculator.py")
+    print("Constraints: tests_pass + complexity_penalty(15)")
     print()
 
     result = trainer.synthesize(
@@ -95,22 +101,22 @@ def main():
     print(f"Cost: ${result.total_cost:.4f}")
 
     # Training curve
-    print(f"\n--- Training Curve ---")
+    print("\n--- Training Curve ---")
     print(curve.summary())
 
     # Diagnose
     warnings = curve.diagnose()
     if warnings:
-        print(f"\n--- Diagnostics ---")
+        print("\n--- Diagnostics ---")
         for w in warnings:
             print(f"  WARNING: {w}")
     else:
-        print(f"\n--- Diagnostics: clean ---")
+        print("\n--- Diagnostics: clean ---")
 
     # Show generated code
     calc_path = os.path.join(workdir, "calculator.py")
     if os.path.exists(calc_path):
-        print(f"\n--- Generated calculator.py ---")
+        print("\n--- Generated calculator.py ---")
         print(open(calc_path).read())
 
     env.cleanup()

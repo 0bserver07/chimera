@@ -197,7 +197,7 @@ def main():
     print(f"Model:      {provider.model_name}")
     print(f"Instances:  {len(instances)}")
     print(f"Max steps:  {args.max_steps}")
-    print(f"Method:     Official (agent=source fix, eval=apply test_patch + run tests)")
+    print("Method:     Official (agent=source fix, eval=apply test_patch + run tests)")
     print()
 
     results = []
@@ -217,7 +217,7 @@ def main():
 
         container = setup_container(repo, base_commit, instance_id)
         if not container:
-            print(f"  SKIP (setup)")
+            print("  SKIP (setup)")
             results.append({"instance_id": instance_id, "status": "SKIP"})
             continue
 
@@ -226,7 +226,7 @@ def main():
         agent_diff = agent_fix(provider, container, problem, args.max_steps)
 
         if not agent_diff.strip():
-            print(f"  FAILED (no changes made)")
+            print("  FAILED (no changes made)")
             results.append({"instance_id": instance_id, "status": "FAILED", "reason": "no_patch"})
             subprocess.run(["docker", "rm", "-f", container], capture_output=True)
             continue
@@ -234,7 +234,7 @@ def main():
         print(f"  Agent produced patch ({len(agent_diff.splitlines())} lines)")
 
         # Phase 2: Evaluate (apply test_patch, run tests)
-        print(f"  Evaluating...")
+        print("  Evaluating...")
         eval_result = evaluate(container, test_patch, fail_to_pass, pass_to_pass)
 
         status = "RESOLVED" if eval_result["resolved"] else "FAILED"

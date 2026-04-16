@@ -87,7 +87,13 @@ def test_len():
 
 
 def main():
-    provider = chimera.create_provider()
+    try:
+        provider = chimera.create_provider()
+    except ValueError as _e:
+        import sys
+        print(f"Setup error: {_e}", file=sys.stderr)
+        print("Set ANTHROPIC_API_KEY or ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN + ANTHROPIC_MODEL before running.", file=sys.stderr)
+        sys.exit(1)
     workdir = tempfile.mkdtemp(prefix="chimera-sketch-")
 
     # Write sketch
@@ -129,7 +135,7 @@ def main():
     # Show result
     stack_path = os.path.join(workdir, "stack.py")
     if os.path.exists(stack_path):
-        print(f"\n--- Generated stack.py ---")
+        print("\n--- Generated stack.py ---")
         print(open(stack_path).read())
 
     env.cleanup()

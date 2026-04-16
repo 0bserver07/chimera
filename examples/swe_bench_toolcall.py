@@ -404,8 +404,8 @@ def main():
     print(f"Model:      {provider.model_name}")
     print(f"Instances:  {len(instances)}")
     print(f"Max steps:  {args.max_steps}")
-    print(f"Scaffold:   Tool calling (str_replace_editor + execute_bash + think + finish)")
-    print(f"Temp:       0.0")
+    print("Scaffold:   Tool calling (str_replace_editor + execute_bash + think + finish)")
+    print("Temp:       0.0")
     print()
 
     results = []
@@ -422,7 +422,7 @@ def main():
         print(f"[{i}/{len(instances)}] {instance_id}")
         container = setup_container(inst["repo"], inst["base_commit"], instance_id)
         if not container:
-            print(f"  SKIP")
+            print("  SKIP")
             results.append({"instance_id": instance_id, "status": "SKIP"})
             continue
 

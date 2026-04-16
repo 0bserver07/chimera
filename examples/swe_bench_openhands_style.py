@@ -271,8 +271,8 @@ def main():
     print(f"Model:      {provider.model_name}")
     print(f"Instances:  {len(instances)}")
     print(f"Max steps:  {args.max_steps}")
-    print(f"Scaffold:   OpenHands-style (long-horizon prompt, loop detection, context condensation)")
-    print(f"Temp:       0.0")
+    print("Scaffold:   OpenHands-style (long-horizon prompt, loop detection, context condensation)")
+    print("Temp:       0.0")
     print()
 
     results = []
@@ -292,12 +292,12 @@ def main():
 
         container = setup_container(repo, base_commit, instance_id)
         if not container:
-            print(f"  SKIP (setup)")
+            print("  SKIP (setup)")
             results.append({"instance_id": instance_id, "status": "SKIP"})
             continue
 
         # Agent produces source fix (no test info given)
-        print(f"  Fixing...")
+        print("  Fixing...")
         diff, steps = agent_fix(provider, container, problem, args.max_steps)
 
         if not diff.strip():
@@ -309,7 +309,7 @@ def main():
         print(f"  Patch: {len(diff.splitlines())} lines, {steps} steps")
 
         # Evaluate with test_patch
-        print(f"  Evaluating...")
+        print("  Evaluating...")
         eval_result = evaluate(container, test_patch, fail_to_pass, pass_to_pass)
         status = "RESOLVED" if eval_result["resolved"] else "FAILED"
         if eval_result["resolved"]:

@@ -82,7 +82,11 @@ def create_provider(
         model = os.environ.get("ANTHROPIC_MODEL") or os.environ.get("OPENAI_MODEL")
         if model is None:
             raise ValueError(
-                "No model specified. Pass model= or set ANTHROPIC_MODEL / OPENAI_MODEL."
+                "No model specified. Either pass model=<name> or set one of:\n"
+                "  - ANTHROPIC_API_KEY + ANTHROPIC_MODEL (Anthropic)\n"
+                "  - OPENAI_API_KEY + OPENAI_MODEL (OpenAI)\n"
+                "  - ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN + ANTHROPIC_MODEL "
+                "(Anthropic-compatible, e.g. GLM-5 via z.ai)"
             )
 
     if provider_type is None:
@@ -134,6 +138,9 @@ def _infer_provider(model: str) -> str:
         return "openai"
 
     raise ValueError(
-        f"Cannot infer provider from model name '{model}'. "
-        f"Specify provider_type explicitly or set ANTHROPIC_BASE_URL / ANTHROPIC_AUTH_TOKEN."
+        f"Cannot infer provider from model name '{model}'.\n"
+        f"For Anthropic-compatible endpoints (e.g. GLM-5 via z.ai) set:\n"
+        f"  export ANTHROPIC_BASE_URL='https://api.z.ai/api/anthropic'\n"
+        f"  export ANTHROPIC_AUTH_TOKEN='your-token'\n"
+        f"Or pass provider_type='anthropic' explicitly."
     )

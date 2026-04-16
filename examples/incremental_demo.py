@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Incremental synthesis: fix only the functions that are broken."""
-import os, sys, tempfile
+import os
+import sys
+import tempfile
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import chimera
@@ -41,7 +43,13 @@ def main():
     env = chimera.LocalEnvironment(workdir=workdir)
     env.setup()
 
-    provider = chimera.create_provider()
+    try:
+        provider = chimera.create_provider()
+    except ValueError as _e:
+        import sys
+        print(f"Setup error: {_e}", file=sys.stderr)
+        print("Set ANTHROPIC_API_KEY or ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN + ANTHROPIC_MODEL before running.", file=sys.stderr)
+        sys.exit(1)
     agent = chimera.Agent(provider=provider, tools=list(chimera.AGENT_TOOLS), loop=chimera.ReAct(max_steps=10))
     spec = chimera.Spec.from_tests(tests_dir, "Fix the bugs in math_ops.py")
 
@@ -55,11 +63,11 @@ def main():
     print(f"Converged: {result.converged}")
     print(f"Iterations: {result.iterations}")
     print(f"Cost: ${result.total_cost:.4f}")
-    print(f"\nTraining curve:")
+    print("\nTraining curve:")
     print(curve.summary())
 
     # Show the fixed code
-    print(f"\n--- Fixed math_ops.py ---")
+    print("\n--- Fixed math_ops.py ---")
     print(open(os.path.join(workdir, "math_ops.py")).read())
 
     env.cleanup()

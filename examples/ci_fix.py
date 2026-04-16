@@ -60,7 +60,13 @@ FAILED test_calculator.py::test_add - AssertionError: Expected 5
 
 
 def main():
-    provider = chimera.create_provider()
+    try:
+        provider = chimera.create_provider()
+    except ValueError as _e:
+        import sys
+        print(f"Setup error: {_e}", file=sys.stderr)
+        print("Set ANTHROPIC_API_KEY or ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN + ANTHROPIC_MODEL before running.", file=sys.stderr)
+        sys.exit(1)
 
     with tempfile.TemporaryDirectory(prefix="chimera-cifix-") as tmpdir:
         # Write the buggy code and test
@@ -80,7 +86,7 @@ def main():
 
         print("=== CI Fix Workflow ===\n")
         print(f"Workdir: {tmpdir}")
-        print(f"Bug: calculator.py uses subtraction instead of addition\n")
+        print("Bug: calculator.py uses subtraction instead of addition\n")
 
         # Run the CI fix workflow
         workflow = CIFixWorkflow(max_attempts=2)
@@ -93,7 +99,7 @@ def main():
         # Show the fixed file
         fixed_path = os.path.join(tmpdir, "calculator.py")
         if os.path.exists(fixed_path):
-            print(f"\n--- calculator.py (after fix) ---")
+            print("\n--- calculator.py (after fix) ---")
             print(open(fixed_path).read())
 
         env.cleanup()

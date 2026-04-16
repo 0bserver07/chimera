@@ -23,7 +23,13 @@ import chimera
 
 
 def main():
-    provider = chimera.create_provider(model=os.environ.get("ANTHROPIC_MODEL", "glm-5"))
+    try:
+        provider = chimera.create_provider(model=os.environ.get("ANTHROPIC_MODEL"))
+    except ValueError as _e:
+        import sys
+        print(f"Setup error: {_e}", file=sys.stderr)
+        print("Set ANTHROPIC_API_KEY or ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN + ANTHROPIC_MODEL before running.", file=sys.stderr)
+        sys.exit(1)
 
     with tempfile.TemporaryDirectory(prefix="chimera-dmail-") as tmpdir:
         env = chimera.LocalEnvironment(workdir=tmpdir)
@@ -66,7 +72,7 @@ def main():
         # Show what was created
         summary_path = os.path.join(tmpdir, "PROJECT_SUMMARY.md")
         if os.path.exists(summary_path):
-            print(f"\n--- PROJECT_SUMMARY.md ---")
+            print("\n--- PROJECT_SUMMARY.md ---")
             print(open(summary_path).read())
 
         env.cleanup()

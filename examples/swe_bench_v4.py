@@ -588,10 +588,10 @@ def main():
     print(f"Model:      {provider.model_name}")
     print(f"Instances:  {len(instances)}")
     print(f"Max steps:  {args.max_steps}")
-    print(f"Temp:       0.0")
-    print(f"Features:   anti-hesitation nudges, edit verification, "
-          f"anti-repetition, context condensation")
-    print(f"Method:     Official (agent=source fix, eval=test_patch + tests)")
+    print("Temp:       0.0")
+    print("Features:   anti-hesitation nudges, edit verification, "
+          "anti-repetition, context condensation")
+    print("Method:     Official (agent=source fix, eval=test_patch + tests)")
     print()
 
     results: list[dict] = []
@@ -623,7 +623,7 @@ def main():
         t0 = time.time()
         container = setup_container(repo, base_commit, instance_id)
         if not container:
-            print(f"  SKIP (container setup failed)")
+            print("  SKIP (container setup failed)")
             results.append({
                 "instance_id": instance_id,
                 "status": "SKIP",
@@ -659,7 +659,7 @@ def main():
               f"{agent_time:.0f}s")
 
         # Phase 2: Evaluate (apply test_patch, run tests)
-        print(f"  Evaluating...")
+        print("  Evaluating...")
         eval_result = evaluate(
             container, test_patch, fail_to_pass, pass_to_pass
         )

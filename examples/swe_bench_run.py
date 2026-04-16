@@ -14,10 +14,8 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import sys
-import tempfile
 import textwrap
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -25,11 +23,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from chimera.core.agent import Agent
 from chimera.core.loop import ReAct
 from chimera.core.prompt import Prompt
-from chimera.core.tool_group import AGENT_TOOLS
-from chimera.env.local import LocalEnvironment
 from chimera.eval.benchmarks.swe_bench import SWEBench, SWEBenchInstance
-from chimera.eval.harness import Harness
-from chimera.eval.metrics import avg_cost, avg_steps, resolve_rate
 from chimera.providers.factory import create_provider
 
 # ---------------------------------------------------------------------------

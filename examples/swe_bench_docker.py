@@ -83,7 +83,7 @@ def setup_container(repo: str, base_commit: str, instance_id: str) -> str | None
     # Install git
     code, out = docker_exec(container_name, "apt-get update -qq && apt-get install -y -qq git > /dev/null 2>&1")
     if code != 0:
-        print(f"    Git install failed")
+        print("    Git install failed")
         subprocess.run(["docker", "rm", "-f", container_name], capture_output=True)
         return None
 
@@ -210,7 +210,7 @@ def main():
     print(f"Model:     {provider.model_name}")
     print(f"Instances: {len(instances)}")
     print(f"Max steps: {args.max_steps}")
-    print(f"Isolation: Docker (python:3.11-slim)")
+    print("Isolation: Docker (python:3.11-slim)")
     print()
 
     results = []
@@ -228,10 +228,10 @@ def main():
         print(f"  repo: {repo}, patch: {len(inst['patch'].splitlines())} lines")
 
         # Setup Docker container
-        print(f"  Setting up Docker container...")
+        print("  Setting up Docker container...")
         container = setup_container(repo, base_commit, instance_id)
         if not container:
-            print(f"  SKIP (container setup failed)")
+            print("  SKIP (container setup failed)")
             results.append({"instance_id": instance_id, "status": "SKIP"})
             continue
 
@@ -239,7 +239,7 @@ def main():
         pre_results = [run_test_in_docker(container, t) for t in fail_to_pass]
         pre_pass = sum(pre_results)
         if pre_pass == len(fail_to_pass):
-            print(f"  SKIP (tests already pass)")
+            print("  SKIP (tests already pass)")
             subprocess.run(["docker", "rm", "-f", container], capture_output=True)
             results.append({"instance_id": instance_id, "status": "SKIP", "reason": "already_passes"})
             continue
@@ -247,7 +247,7 @@ def main():
         print(f"  Pre-fix: {pre_pass}/{len(fail_to_pass)} pass (bug confirmed)")
 
         # Run agent
-        print(f"  Running agent...")
+        print("  Running agent...")
         agent_result = agent_loop(provider, container, problem, fail_to_pass, args.max_steps)
 
         # Verify fix

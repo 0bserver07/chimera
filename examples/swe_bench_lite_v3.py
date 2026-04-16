@@ -194,9 +194,9 @@ def main():
         workdir = tempfile.mkdtemp(prefix=f"swe3_{instance_id[:30]}_")
 
         # Setup
-        print(f"  Cloning + installing...")
+        print("  Cloning + installing...")
         if not setup_repo(repo, base_commit, workdir):
-            print(f"  SKIP (setup failed)")
+            print("  SKIP (setup failed)")
             results.append({"instance_id": instance_id, "status": "SKIP", "reason": "setup"})
             shutil.rmtree(workdir, ignore_errors=True)
             continue
@@ -204,12 +204,12 @@ def main():
         # Verify tests fail BEFORE fix
         pre_passed, pre_total, pre_output = run_tests(workdir, fail_to_pass)
         if pre_passed == pre_total and pre_total > 0:
-            print(f"  SKIP (tests already pass — can't reproduce bug)")
+            print("  SKIP (tests already pass — can't reproduce bug)")
             results.append({"instance_id": instance_id, "status": "SKIP", "reason": "already_passes"})
             shutil.rmtree(workdir, ignore_errors=True)
             continue
         if pre_total == 0:
-            print(f"  SKIP (no tests to run)")
+            print("  SKIP (no tests to run)")
             results.append({"instance_id": instance_id, "status": "SKIP", "reason": "no_tests"})
             shutil.rmtree(workdir, ignore_errors=True)
             continue
@@ -217,7 +217,7 @@ def main():
         print(f"  Pre-fix: {pre_passed}/{pre_total} pass (confirmed bug exists)")
 
         # Investigate
-        print(f"  Investigating...")
+        print("  Investigating...")
         investigation = investigate(provider, workdir, problem, fail_to_pass)
 
         # Run agent

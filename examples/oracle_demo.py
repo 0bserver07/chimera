@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Oracle: grow the test suite during synthesis."""
-import os, sys, tempfile
+import os
+import sys
+import tempfile
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import chimera
@@ -23,7 +25,13 @@ def main():
     env = chimera.LocalEnvironment(workdir=workdir)
     env.setup()
 
-    provider = chimera.create_provider()
+    try:
+        provider = chimera.create_provider()
+    except ValueError as _e:
+        import sys
+        print(f"Setup error: {_e}", file=sys.stderr)
+        print("Set ANTHROPIC_API_KEY or ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN + ANTHROPIC_MODEL before running.", file=sys.stderr)
+        sys.exit(1)
     agent = chimera.Agent(provider=provider, tools=list(chimera.AGENT_TOOLS), loop=chimera.ReAct(max_steps=15))
     spec = chimera.Spec.from_tests(tests_dir, "Build math_utils with factorial and fibonacci.")
 
@@ -40,7 +48,7 @@ def main():
     print(f"Iterations: {result.iterations}")
     print(f"Cost: ${result.total_cost:.4f}")
     print(f"Oracle generated {len(oracle.generated_tests)} new tests")
-    print(f"\nTraining curve:")
+    print("\nTraining curve:")
     print(curve.summary())
 
     # Show what test files exist now

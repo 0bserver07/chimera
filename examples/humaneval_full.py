@@ -17,7 +17,6 @@ import json
 import os
 import sys
 import time
-import traceback
 import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -34,7 +33,7 @@ def download_dataset() -> str:
     if os.path.exists(DATASET_CACHE):
         return DATASET_CACHE
 
-    print(f"Downloading HumanEval dataset...")
+    print("Downloading HumanEval dataset...")
     gz_path = DATASET_CACHE + ".gz"
     urllib.request.urlretrieve(DATASET_URL, gz_path)
     import gzip
@@ -142,7 +141,7 @@ def main():
             total_cost += cost
 
             success = run_test(code, test_code, entry_point)
-        except Exception as e:
+        except Exception:
             code = ""
             success = False
             cost = 0.0

@@ -36,7 +36,13 @@ flowchart TD
 
 
 def main():
-    provider = chimera.create_provider(model=os.environ.get("ANTHROPIC_MODEL", "glm-5"))
+    try:
+        provider = chimera.create_provider(model=os.environ.get("ANTHROPIC_MODEL"))
+    except ValueError as _e:
+        import sys
+        print(f"Setup error: {_e}", file=sys.stderr)
+        print("Set ANTHROPIC_API_KEY or ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN + ANTHROPIC_MODEL before running.", file=sys.stderr)
+        sys.exit(1)
 
     # Parse the Mermaid flowchart
     flow = chimera.Flow.from_mermaid(REVIEW_FLOW)
@@ -99,7 +105,7 @@ def main():
                 current = flow.advance(current, choice)
                 print(f"  → advancing to {flow.nodes[current].label}")
             else:
-                print(f"  Agent didn't make a clear choice, defaulting to first option")
+                print("  Agent didn't make a clear choice, defaulting to first option")
                 current = nexts[0][1].id
         else:
             # End node
@@ -107,7 +113,7 @@ def main():
 
         print()
 
-    print(f"\n=== Flow complete ===")
+    print("\n=== Flow complete ===")
     print(f"Ended at: {flow.nodes[current].label}")
     print(f"Total cost: ${total_cost:.4f}")
 

@@ -15,10 +15,19 @@ import sys
 import tempfile
 import traceback
 
-# Ensure env vars are set
-os.environ.setdefault("ANTHROPIC_BASE_URL", "https://api.z.ai/api/anthropic")
-os.environ.setdefault("ANTHROPIC_AUTH_TOKEN", "your-token-here")
-os.environ.setdefault("ANTHROPIC_MODEL", "glm-5")
+# Require real credentials — previously this setdefault'd "your-token-here"
+# and failed with a confusing 401 auth error.
+if not (os.environ.get("ANTHROPIC_AUTH_TOKEN") or os.environ.get("ANTHROPIC_API_KEY")):
+    print(
+        "Setup: this verification script hits a real LLM. Set before running:\n"
+        "  export ANTHROPIC_BASE_URL='https://api.z.ai/api/anthropic'\n"
+        "  export ANTHROPIC_AUTH_TOKEN='your-token'\n"
+        "  export ANTHROPIC_MODEL='glm-5'\n"
+        "Or use ANTHROPIC_API_KEY for direct Anthropic access.",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+os.environ.setdefault("ANTHROPIC_MODEL", "claude-sonnet-4-20250514")
 
 
 def separator(title: str) -> None:
@@ -92,13 +101,13 @@ def verify_researcher() -> bool:
 
     from chimera import Agent, create_provider
     from chimera.core.prompt import Prompt
-    from chimera.research.researcher import Researcher, Finding, Source
+    from chimera.research.researcher import Researcher, Finding
 
     # First test local-only methods (no LLM)
     researcher = Researcher(max_sources=5)
 
     plan = researcher.plan("How does authentication work in this codebase?")
-    print(f"Plan created:")
+    print("Plan created:")
     print(f"  Question: {plan.question}")
     print(f"  Sub-questions: {plan.sub_questions}")
     print(f"  Search terms: {plan.search_terms}")
@@ -327,7 +336,7 @@ class Stack:
         print(f"  Name: {case.name}")
         print(f"  Target: {case.target_function}")
         print(f"  Category: {case.category}")
-        print(f"  Code:")
+        print("  Code:")
         for line in case.test_code.splitlines():
             print(f"    {line}")
         print()

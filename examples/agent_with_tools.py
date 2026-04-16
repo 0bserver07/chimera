@@ -21,7 +21,13 @@ import chimera
 
 
 def main():
-    provider = chimera.create_provider(model=os.environ.get("ANTHROPIC_MODEL", "glm-5"))
+    try:
+        provider = chimera.create_provider(model=os.environ.get("ANTHROPIC_MODEL"))
+    except ValueError as _e:
+        import sys
+        print(f"Setup error: {_e}", file=sys.stderr)
+        print("Set ANTHROPIC_API_KEY or ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN + ANTHROPIC_MODEL before running.", file=sys.stderr)
+        sys.exit(1)
 
     # Create a temp workspace so the agent can create files safely
     with tempfile.TemporaryDirectory(prefix="chimera-demo-") as tmpdir:
@@ -45,7 +51,7 @@ def main():
         print(f"\n[steps: {result.steps} | cost: ${result.cost:.4f} | success: {result.success}]")
 
         # Show what the agent created
-        print(f"\n=== Files in workspace ===")
+        print("\n=== Files in workspace ===")
         for f in os.listdir(tmpdir):
             filepath = os.path.join(tmpdir, f)
             if os.path.isfile(filepath):

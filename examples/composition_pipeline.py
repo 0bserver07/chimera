@@ -21,7 +21,13 @@ import chimera
 
 def main():
     model = os.environ.get("ANTHROPIC_MODEL", "glm-5")
-    provider = chimera.create_provider(model=model)
+    try:
+        provider = chimera.create_provider(model=model)
+    except ValueError as _e:
+        import sys
+        print(f"Setup error: {_e}", file=sys.stderr)
+        print("Set ANTHROPIC_API_KEY or ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN + ANTHROPIC_MODEL before running.", file=sys.stderr)
+        sys.exit(1)
 
     coder = chimera.Agent(
         provider=provider,

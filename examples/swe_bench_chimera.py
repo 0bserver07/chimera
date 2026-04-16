@@ -322,8 +322,8 @@ def main():
     print(f"Instances:    {len(instances)}")
     print(f"Max steps:    {args.max_steps} per attempt")
     print(f"Max attempts: {args.max_attempts} (RetryLoop)")
-    print(f"Scaffold:     Chimera (Investigate → Fix → Verify → Retry)")
-    print(f"Isolation:    Docker (python:3.11-slim)")
+    print("Scaffold:     Chimera (Investigate → Fix → Verify → Retry)")
+    print("Isolation:    Docker (python:3.11-slim)")
     print()
 
     results = []
@@ -342,14 +342,14 @@ def main():
         # Setup
         container = setup_container(repo, base_commit, instance_id)
         if not container:
-            print(f"  SKIP (setup failed)")
+            print("  SKIP (setup failed)")
             results.append({"instance_id": instance_id, "status": "SKIP"})
             continue
 
         # Verify bug
         pre_pass = sum(1 for t in fail_to_pass if run_test(container, t)[0])
         if pre_pass == len(fail_to_pass):
-            print(f"  SKIP (bug not reproducible)")
+            print("  SKIP (bug not reproducible)")
             subprocess.run(["docker", "rm", "-f", container], capture_output=True)
             results.append({"instance_id": instance_id, "status": "SKIP"})
             continue
@@ -357,7 +357,7 @@ def main():
         print(f"  Bug confirmed ({pre_pass}/{len(fail_to_pass)} pass)")
 
         # Phase 1: Investigate
-        print(f"  Investigating...")
+        print("  Investigating...")
         investigation = investigate(provider, container, problem, fail_to_pass)
         print(f"  → {investigation[:80]}...")
 

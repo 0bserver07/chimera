@@ -31,7 +31,13 @@ TESTS = {
 
 
 def main():
-    provider = chimera.create_provider()
+    try:
+        provider = chimera.create_provider()
+    except ValueError as _e:
+        import sys
+        print(f"Setup error: {_e}", file=sys.stderr)
+        print("Set ANTHROPIC_API_KEY or ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN + ANTHROPIC_MODEL before running.", file=sys.stderr)
+        sys.exit(1)
     workdir = tempfile.mkdtemp(prefix="chimera-valsplit-")
 
     # Write test files
@@ -73,7 +79,7 @@ def main():
     # Now evaluate against held-out validation tests
     val_result = split.evaluate(env)
 
-    print(f"\n--- Validation Results ---")
+    print("\n--- Validation Results ---")
     print(f"Train pass rate: {val_result.train_pass_rate:.0%} ({val_result.train_passed}/{val_result.train_total})")
     print(f"Val pass rate:   {val_result.val_pass_rate:.0%} ({val_result.val_passed}/{val_result.val_total})")
     print(f"Overfit gap:     {val_result.overfit_gap:.0%}")
@@ -88,7 +94,7 @@ def main():
     # Show generated code
     code_path = os.path.join(workdir, "math_ops.py")
     if os.path.exists(code_path):
-        print(f"\n--- Generated math_ops.py ---")
+        print("\n--- Generated math_ops.py ---")
         print(open(code_path).read())
 
     env.cleanup()

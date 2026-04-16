@@ -22,7 +22,13 @@ from chimera.streaming.handlers import ConsoleStreamHandler
 
 
 def main():
-    provider = chimera.create_provider()
+    try:
+        provider = chimera.create_provider()
+    except ValueError as _e:
+        import sys
+        print(f"Setup error: {_e}", file=sys.stderr)
+        print("Set ANTHROPIC_API_KEY or ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN + ANTHROPIC_MODEL before running.", file=sys.stderr)
+        sys.exit(1)
 
     # Attach a ConsoleStreamHandler via LoopConfig
     config = chimera.LoopConfig(handler=ConsoleStreamHandler())

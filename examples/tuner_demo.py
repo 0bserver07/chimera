@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Hyperparameter search: find the best synthesis config."""
-import os, sys, tempfile
+import os
+import sys
+import tempfile
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import chimera

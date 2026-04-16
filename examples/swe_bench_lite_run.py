@@ -124,7 +124,7 @@ def main():
         workdir = tempfile.mkdtemp(prefix=f"swebench_{instance_id}_")
         cloned = clone_and_checkout(repo, base_commit, workdir)
         if not cloned:
-            print(f"  SKIP (clone failed)")
+            print("  SKIP (clone failed)")
             results.append({"instance_id": instance_id, "status": "SKIP", "reason": "clone_failed"})
             continue
 

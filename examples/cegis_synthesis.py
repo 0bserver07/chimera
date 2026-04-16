@@ -51,7 +51,13 @@ def test_count_vowels_empty():
 
 
 def main():
-    provider = chimera.create_provider()
+    try:
+        provider = chimera.create_provider()
+    except ValueError as _e:
+        import sys
+        print(f"Setup error: {_e}", file=sys.stderr)
+        print("Set ANTHROPIC_API_KEY or ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN + ANTHROPIC_MODEL before running.", file=sys.stderr)
+        sys.exit(1)
     workdir = tempfile.mkdtemp(prefix="chimera-cegis-")
 
     tests_dir = os.path.join(workdir, "tests")
@@ -74,8 +80,8 @@ def main():
     trainer = chimera.Trainer(spec=spec, agent=agent, env=env)
 
     print(f"Model: {provider.model_name}")
-    print(f"Strategy: CEGIS (one failure at a time)")
-    print(f"Tests: 8 tests for string_utils")
+    print("Strategy: CEGIS (one failure at a time)")
+    print("Tests: 8 tests for string_utils")
     print()
 
     result = trainer.synthesize(
@@ -88,13 +94,13 @@ def main():
     print(f"Iterations: {result.iterations}")
     print(f"Best pass rate: {result.best_pass_rate:.0%}")
     print(f"Cost: ${result.total_cost:.4f}")
-    print(f"\n--- Training Curve ---")
+    print("\n--- Training Curve ---")
     print(curve.summary())
 
     # Show generated code
     code_path = os.path.join(workdir, "string_utils.py")
     if os.path.exists(code_path):
-        print(f"\n--- Generated string_utils.py ---")
+        print("\n--- Generated string_utils.py ---")
         print(open(code_path).read())
 
     env.cleanup()
