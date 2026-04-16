@@ -5,6 +5,7 @@ import hashlib
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from chimera.function_synthesis.bundle import ChiBundle
 from chimera.function_synthesis.cache import BundleCache, CacheDirs
@@ -25,7 +26,7 @@ class ProgramEntry:
     slug: str
     bundle_path: Path
     spec: FunctionSpec
-    metadata: dict = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class ProgramRegistry:
@@ -40,12 +41,13 @@ class ProgramRegistry:
     def default(cls) -> ProgramRegistry:
         return cls(CacheDirs.default())
 
-    def _load_index(self) -> dict:
+    def _load_index(self) -> dict[str, Any]:
         if not self.dirs.index_file.exists():
             return {}
-        return json.loads(self.dirs.index_file.read_text())
+        result: dict[str, Any] = json.loads(self.dirs.index_file.read_text())
+        return result
 
-    def _save_index(self, index: dict) -> None:
+    def _save_index(self, index: dict[str, Any]) -> None:
         self.dirs.index_file.write_text(json.dumps(index, sort_keys=True, indent=2))
 
     def install(self, *, spec: FunctionSpec, bundle: ChiBundle) -> str:

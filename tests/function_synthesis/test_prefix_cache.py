@@ -1,8 +1,6 @@
 # tests/function_synthesis/test_prefix_cache.py
 from __future__ import annotations
 
-from pathlib import Path
-
 from chimera.function_synthesis.prefix_cache import PrefixCache
 
 

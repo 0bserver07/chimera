@@ -40,13 +40,13 @@ class LlamaCppBackend(RuntimeBackend):
         self._n_ctx = n_ctx
         self._n_threads = n_threads
         self._prefix_cache = prefix_cache
-        self._llm = None
+        self._llm: Any = None
         self._bundle: ChiBundle | None = None
         self._adapter_tmp: Path | None = None
 
     def load(self, bundle: ChiBundle) -> None:
         try:
-            import llama_cpp  # type: ignore[import-not-found]
+            import llama_cpp
         except ImportError as exc:
             raise ImportError(
                 "LlamaCppBackend requires llama-cpp-python. "
@@ -108,13 +108,14 @@ class LlamaCppBackend(RuntimeBackend):
             stop=prompts.get("stop") or None,
         )
 
-        if cache_key is not None and self._prefix_cache.load(cache_key) is None:
-            try:
-                self._prefix_cache.store(cache_key, self._llm.save_state())
-            except Exception:  # pragma: no cover — best-effort cache save
-                pass
+        if cache_key is not None and self._prefix_cache is not None:
+            if self._prefix_cache.load(cache_key) is None:
+                try:
+                    self._prefix_cache.store(cache_key, self._llm.save_state())
+                except Exception:  # pragma: no cover — best-effort cache save
+                    pass
 
-        return result["choices"][0]["message"]["content"]
+        return str(result["choices"][0]["message"]["content"])
 
     def close(self) -> None:
         self._llm = None

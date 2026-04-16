@@ -1,8 +1,6 @@
 # tests/function_synthesis/test_errors.py
 from __future__ import annotations
 
-import pytest
-
 from chimera.function_synthesis.errors import CacheMissError, OfflineError
 
 

@@ -1,12 +1,19 @@
 # tests/function_synthesis/test_cache.py
 from __future__ import annotations
 
-import os
+import sys
+import types
 from pathlib import Path
 
 import pytest
 
-from chimera.function_synthesis.cache import CacheDirs
+from chimera.function_synthesis.bundle import ChiBundle
+from chimera.function_synthesis.cache import BaseModelCache, BundleCache, CacheDirs
+from chimera.function_synthesis.errors import CacheMissError, OfflineError
+from chimera.function_synthesis.spec import FunctionSpec
+
+
+# --- T1: CacheDirs ---
 
 
 def test_default_home_under_dot_chimera(monkeypatch):
@@ -34,12 +41,6 @@ def test_ensure_creates_subdirs(tmp_path, monkeypatch):
 
 # --- T3: BaseModelCache ---
 
-import sys
-import types
-
-from chimera.function_synthesis.cache import BaseModelCache, BundleCache
-from chimera.function_synthesis.errors import CacheMissError, OfflineError
-
 
 def _install_fake_hub(monkeypatch, captured: dict):
     fake = types.ModuleType("huggingface_hub")
@@ -53,7 +54,7 @@ def _install_fake_hub(monkeypatch, captured: dict):
         target.write_bytes(b"FAKE_GGUF")
         return str(target)
 
-    fake.hf_hub_download = hf_hub_download
+    fake.hf_hub_download = hf_hub_download  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, "huggingface_hub", fake)
 
 
@@ -95,9 +96,6 @@ def test_missing_hub_extra_gives_clear_error(tmp_path, monkeypatch):
 
 
 # --- T4: BundleCache ---
-
-from chimera.function_synthesis.bundle import ChiBundle
-from chimera.function_synthesis.spec import FunctionSpec
 
 
 def _sample_bundle() -> ChiBundle:
