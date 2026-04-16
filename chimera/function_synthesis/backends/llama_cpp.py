@@ -3,10 +3,13 @@ from __future__ import annotations
 
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from chimera.function_synthesis.bundle import ChiBundle
 from chimera.function_synthesis.runtime import RuntimeBackend
+
+if TYPE_CHECKING:
+    from chimera.function_synthesis.prefix_cache import PrefixCache
 
 
 class LlamaCppBackend(RuntimeBackend):
@@ -19,6 +22,10 @@ class LlamaCppBackend(RuntimeBackend):
         base_model_path: Path to the base GGUF model file.
         n_ctx: Context window size.
         n_threads: CPU threads (None = library default).
+        prefix_cache: Optional :class:`PrefixCache` for cold-start elimination.
+            When provided and the underlying ``Llama`` instance supports
+            ``save_state``/``load_state``, post-prefill state is cached to disk
+            so subsequent calls skip the system-prompt prefill.
     """
 
     def __init__(
@@ -27,10 +34,12 @@ class LlamaCppBackend(RuntimeBackend):
         base_model_path: str | Path,
         n_ctx: int = 2048,
         n_threads: int | None = None,
+        prefix_cache: PrefixCache | None = None,
     ) -> None:
         self._base_model_path = Path(base_model_path)
         self._n_ctx = n_ctx
         self._n_threads = n_threads
+        self._prefix_cache = prefix_cache
         self._llm = None
         self._bundle: ChiBundle | None = None
         self._adapter_tmp: Path | None = None
@@ -65,9 +74,32 @@ class LlamaCppBackend(RuntimeBackend):
         if self._llm is None or self._bundle is None:
             raise RuntimeError("backend not loaded; call load() first")
         prompts = self._bundle.prompts
+        system = prompts.get("system", "")
         user_msg = prompts.get("user_template", "{input}").format(input=user_input)
+
+        cache_key: str | None = None
+        if (
+            self._prefix_cache is not None
+            and hasattr(self._llm, "save_state")
+            and hasattr(self._llm, "load_state")
+        ):
+            from hashlib import sha256
+
+            base_sha = sha256(
+                self._base_model_path.read_bytes()
+                if self._base_model_path.exists()
+                else b""
+            ).hexdigest()
+            slug = self._bundle.metadata.get("slug", self._bundle.spec.name)
+            cache_key = self._prefix_cache.key(
+                base_model_sha=base_sha, slug=slug, system_prompt=system,
+            )
+            cached = self._prefix_cache.load(cache_key)
+            if cached is not None:
+                self._llm.load_state(cached)
+
         messages = [
-            {"role": "system", "content": prompts.get("system", "")},
+            {"role": "system", "content": system},
             {"role": "user", "content": user_msg},
         ]
         result = self._llm.create_chat_completion(
@@ -75,6 +107,13 @@ class LlamaCppBackend(RuntimeBackend):
             max_tokens=max_tokens,
             stop=prompts.get("stop") or None,
         )
+
+        if cache_key is not None and self._prefix_cache.load(cache_key) is None:
+            try:
+                self._prefix_cache.store(cache_key, self._llm.save_state())
+            except Exception:  # pragma: no cover — best-effort cache save
+                pass
+
         return result["choices"][0]["message"]["content"]
 
     def close(self) -> None:
