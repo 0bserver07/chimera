@@ -88,7 +88,7 @@ class BaseModelCache:
                 operation=f"download base model {repo_id!r}/{filename!r}"
             )
         try:
-            import huggingface_hub  # type: ignore[import-not-found]
+            import huggingface_hub  # type: ignore[import-not-found, unused-ignore]
         except ImportError as exc:
             raise ImportError(
                 "BaseModelCache requires huggingface_hub. "

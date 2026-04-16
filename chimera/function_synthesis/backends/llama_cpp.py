@@ -46,7 +46,7 @@ class LlamaCppBackend(RuntimeBackend):
 
     def load(self, bundle: ChiBundle) -> None:
         try:
-            import llama_cpp
+            import llama_cpp  # type: ignore[import-not-found, unused-ignore]
         except ImportError as exc:
             raise ImportError(
                 "LlamaCppBackend requires llama-cpp-python. "
