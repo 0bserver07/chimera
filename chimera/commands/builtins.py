@@ -127,11 +127,44 @@ def _revert_handler(args: str) -> str:
 # ---------------------------------------------------------------------------
 
 def _session_handler(args: str) -> str:
+    """Session management: list sessions on disk, show info.
+
+    Note: save/fork/resume need active Session state that this handler
+    contract doesn't expose. Use the rich REPL (`chimera code` without
+    `--preset`) or `Session.save()` directly for those.
+    """
+    from pathlib import Path
+
     parts = args.strip().split()
     sub = parts[0] if parts else "info"
+
     if sub == "info":
-        return "Session management: /session save [name] | /session list"
-    return f"Session command '{sub}' not yet implemented"
+        return (
+            "Session commands: /session list (show saved sessions)\n"
+            "For save/fork/resume, use the rich REPL or Session API directly."
+        )
+
+    if sub == "list":
+        session_dir = Path.home() / ".chimera" / "sessions"
+        if not session_dir.exists():
+            return "No sessions found (~/.chimera/sessions/ does not exist)."
+        files = sorted(session_dir.glob("*.jsonl"))
+        if not files:
+            return "No sessions saved."
+        lines = ["Saved sessions:"]
+        for f in files:
+            size_kb = f.stat().st_size / 1024
+            lines.append(f"  {f.stem}  ({size_kb:.1f} KB)")
+        return "\n".join(lines)
+
+    if sub in ("save", "fork", "resume"):
+        return (
+            f"/session {sub} requires active Session state. "
+            "Use the rich REPL (`chimera code` without --preset) "
+            "or call Session.{sub}() directly from Python."
+        ).replace("{sub}", sub)
+
+    return f"Unknown /session subcommand: {sub}. Try: info, list"
 
 
 def _files_handler(args: str) -> str:
@@ -149,7 +182,29 @@ def _files_handler(args: str) -> str:
 
 
 def _history_handler(args: str) -> str:
-    return "Message history requires active session context"
+    """Show readline command history (terminal history, not message history).
+
+    For full message-history access, use the rich REPL's /history command,
+    which has the Session context this handler lacks.
+    """
+    try:
+        import readline
+    except ImportError:
+        return "Readline not available on this platform."
+
+    limit = 20
+    if args.strip().isdigit():
+        limit = int(args.strip())
+    length = readline.get_current_history_length()
+    if length == 0:
+        return "No command history yet."
+    start = max(1, length - limit + 1)
+    lines = ["Recent commands:"]
+    for i in range(start, length + 1):
+        item = readline.get_history_item(i)
+        if item:
+            lines.append(f"  {i:4d}  {item}")
+    return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------
@@ -259,7 +314,6 @@ def _export_handler(args: str) -> str:
     from pathlib import Path
 
     from chimera.core.html_export import export_session_html
-    from chimera.types import Message
 
     output = args.strip() or "session_export.html"
     # Placeholder: in a real session the messages would come from session context

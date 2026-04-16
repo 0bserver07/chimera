@@ -209,9 +209,13 @@ def cmd_agent(session: Any, env: Any, args: str, out: PrintFn) -> None:
         except Exception as exc:
             out(f"Error loading agent presets: {exc}")
     elif sub == "set":
-        out("Agent preset switching not yet supported in REPL.")
+        out(
+            "Mid-session agent switching isn't supported — Agent + tools + loop\n"
+            "are wired at startup. To use a different preset, exit and run:\n"
+            "  chimera code --preset <name>"
+        )
     else:
-        out(f"Unknown agent command: {sub}")
+        out(f"Unknown agent command: {sub}. Try: /agent list")
 
 
 def cmd_session(session: Any, env: Any, args: str, out: PrintFn) -> None:
