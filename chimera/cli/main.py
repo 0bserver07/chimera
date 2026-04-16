@@ -254,6 +254,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="Migration preset (e.g. python2-to-3, commonjs-to-esm)",
     )
 
+    # ---- fs subcommand ----
+    from chimera.cli import fs as _fs_cli
+    _fs_cli.register(subparsers)
+
     # ---- plugins subcommand ----
     plugins_parser = subparsers.add_parser(
         "plugins",
@@ -717,6 +721,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return run_migrate(args)
     elif args.command == "plugins":
         return run_plugins(args)
+    elif args.command == "fs":
+        return args.func(args)
     else:
         parser.print_help()
         return 1
