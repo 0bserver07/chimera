@@ -55,6 +55,9 @@ dev-dependencies = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "live: opt-in tests that hit real models/networks (run with `pytest -m live`)",
+]
 
 [tool.ruff]
 target-version = "py311"
