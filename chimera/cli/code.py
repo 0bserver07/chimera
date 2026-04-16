@@ -644,13 +644,32 @@ def run_code(args: Any) -> int:
 
 
 async def _run_new_stack(model: str, preset: str, cwd: str) -> None:
-    """REPL using the new CodingAgent assembly."""
+    """REPL using the new CodingAgent assembly.
+
+    Note: this is a lean REPL. The rich REPL (default, no --preset) currently
+    has more slash commands (sessions, checkpoints, tree, steering). Parity is
+    tracked for v0.3.
+    """
     from chimera.assembly.coding_agent import CodingAgent
     from chimera.core.loop_events import LoopEventType
 
     agent = CodingAgent(model=model, preset=preset, project_dir=cwd)
     print(f"Chimera ({preset}) — {model} — {len(agent.tools)} tools")
     print("Type /help for commands, Ctrl+C to exit\n")
+
+    total_cost = 0.0
+
+    def print_help() -> None:
+        print("Commands:")
+        print("  /help         — show this list")
+        print("  /tools        — list available tools")
+        print("  /model        — show the active model")
+        print("  /cost         — show cumulative cost for this session")
+        print("  /clear        — clear the screen")
+        print("  /exit, /quit  — leave the REPL")
+        print()
+        print("For session trees, checkpoints, steering, and /compact use the")
+        print("rich REPL (run `chimera code` without --preset).")
 
     while True:
         try:
@@ -667,14 +686,25 @@ async def _run_new_stack(model: str, preset: str, cwd: str) -> None:
             print("Bye!")
             break
         if user_input == "/help":
-            print("Commands: /help /exit /model /tools /preset /compact /cost")
+            print_help()
             continue
         if user_input == "/tools":
             for t in agent.tools:
-                print(f"  {t.name}: {getattr(t, 'description', '')[:60]}")
+                desc = getattr(t, "description", "") or ""
+                print(f"  {t.name}: {desc[:60]}")
             continue
         if user_input == "/model":
             print(f"  Model: {agent.provider.model_name}")
+            continue
+        if user_input == "/cost":
+            print(f"  Cumulative cost: ${total_cost:.4f}")
+            continue
+        if user_input == "/clear":
+            # ANSI clear-screen + move cursor to top-left. Works on most terminals.
+            print("\033[2J\033[H", end="", flush=True)
+            continue
+        if user_input.startswith("/"):
+            print(f"Unknown command: {user_input}. Type /help for available commands.")
             continue
 
         # Run through CodingAgent
@@ -707,6 +737,7 @@ async def _run_new_stack(model: str, preset: str, cwd: str) -> None:
                     cost = getattr(event.data, 'cost_usd', 0)
                     turns = getattr(event.data, 'turn_count', 0)
                     if cost > 0:
+                        total_cost += cost
                         print(f"  ({turns} turns, ${cost:.4f})")
                 elif t == LoopEventType.system:
                     # Slash command output from InputHandler
