@@ -222,6 +222,8 @@ class TestMigrationPresets:
         assert "require" in text.lower() or "import" in text.lower()
 
     def test_presets_includes_rule_counts(self) -> None:
+        from chimera.migration.planner import MigrationPlanner
+
         server = MigrationMCPServer()
         resp = server.handle_message(_make_request(1, "tools/call", {
             "name": "chimera_migration_presets",
@@ -229,8 +231,10 @@ class TestMigrationPresets:
         }))
 
         text = resp["result"]["content"][0]["text"]
-        assert "4 rules" in text  # python2-to-3 has 4 rules
-        assert "2 rules" in text  # commonjs-to-esm has 2 rules
+        py_count = len(MigrationPlanner.from_preset("python2-to-3")._rules)
+        cjs_count = len(MigrationPlanner.from_preset("commonjs-to-esm")._rules)
+        assert f"{py_count} rules" in text
+        assert f"{cjs_count} rules" in text
 
 
 class TestUnknownTool:
