@@ -19,6 +19,8 @@ from chimera.types import Message
 class FakeUsage:
     input_tokens: int = 10
     output_tokens: int = 5
+    cache_creation_input_tokens: int | None = None
+    cache_read_input_tokens: int | None = None
 
 
 @dataclass
@@ -242,6 +244,35 @@ class TestAnthropicStream:
         assert complete_event.tool_call is not None
         assert complete_event.tool_call.name == "read_file"
         assert complete_event.tool_call.arguments == {"path": "foo.py"}
+
+    def test_stream_includes_cache_tokens_in_done_usage(self, provider) -> None:
+        """Regression: stream() must forward cache tokens in the final 'done' event.
+
+        Previously only input/output tokens were surfaced, silently dropping
+        prompt-cache accounting for streaming calls.
+        """
+        events = [
+            FakeContentBlockStart(content_block=FakeTextBlock()),
+            FakeContentBlockDelta(delta=FakeTextDelta(text="hi")),
+            FakeContentBlockStop(),
+        ]
+        final = FakeMessage(
+            content=[FakeTextBlock(text="hi")],
+            usage=FakeUsage(
+                input_tokens=100,
+                output_tokens=5,
+                cache_creation_input_tokens=80,
+                cache_read_input_tokens=20,
+            ),
+        )
+        provider._client.messages.stream.return_value = FakeStream(events, final)
+
+        events_out = list(provider.stream([Message.user("hi")]))
+        done = events_out[-1]
+        assert done.type == "done"
+        assert done.usage["input_tokens"] == 100
+        assert done.usage["cache_creation_input_tokens"] == 80
+        assert done.usage["cache_read_input_tokens"] == 20
 
     def test_mixed_text_and_tool_use(self, provider) -> None:
         text_block = FakeTextBlock()

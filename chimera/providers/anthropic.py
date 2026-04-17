@@ -251,11 +251,27 @@ class AnthropicProvider(Provider):
             final = stream.get_final_message()
             yield StreamEvent(
                 type="done",
-                usage={
-                    "input_tokens": final.usage.input_tokens,
-                    "output_tokens": final.usage.output_tokens,
-                },
+                usage=self._usage_from_final(final),
             )
+
+    @staticmethod
+    def _usage_from_final(final: Any) -> dict[str, int]:
+        """Build a usage dict from the final streamed message.
+
+        Includes cache_creation/cache_read tokens when the SDK exposes
+        them (they come back as zero when caching is disabled).
+        """
+        usage: dict[str, int] = {
+            "input_tokens": final.usage.input_tokens,
+            "output_tokens": final.usage.output_tokens,
+        }
+        cache_creation = getattr(final.usage, "cache_creation_input_tokens", None)
+        cache_read = getattr(final.usage, "cache_read_input_tokens", None)
+        if cache_creation is not None:
+            usage["cache_creation_input_tokens"] = cache_creation
+        if cache_read is not None:
+            usage["cache_read_input_tokens"] = cache_read
+        return usage
 
     @staticmethod
     def _map_anthropic_event(
@@ -394,10 +410,7 @@ class AnthropicProvider(Provider):
             final = await stream.get_final_message()
             yield StreamEvent(
                 type="done",
-                usage={
-                    "input_tokens": final.usage.input_tokens,
-                    "output_tokens": final.usage.output_tokens,
-                },
+                usage=self._usage_from_final(final),
             )
 
     # ------------------------------------------------------------------
