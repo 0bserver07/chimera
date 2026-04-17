@@ -95,9 +95,16 @@ class CachedProvider(Provider):
                 return self._cache[key]
 
         self._stats.misses += 1
-        response = self._provider.complete(
-            messages, tools, temperature, max_tokens, thinking=thinking,
-        )
+        # Only forward ``thinking`` when non-None so we remain compatible with
+        # custom Provider subclasses that predate the kwarg.
+        if thinking is not None:
+            response = self._provider.complete(
+                messages, tools, temperature, max_tokens, thinking=thinking,
+            )
+        else:
+            response = self._provider.complete(
+                messages, tools, temperature, max_tokens,
+            )
 
         with self._lock:
             self._cache[key] = response
@@ -116,9 +123,13 @@ class CachedProvider(Provider):
         max_tokens: int | None = None,
         thinking: Any = None,
     ) -> Iterator[StreamEvent]:
-        # Streaming bypasses cache — delegate directly
+        # Streaming bypasses cache — delegate directly.
+        if thinking is not None:
+            return self._provider.stream(
+                messages, tools, temperature, max_tokens, thinking=thinking,
+            )
         return self._provider.stream(
-            messages, tools, temperature, max_tokens, thinking=thinking,
+            messages, tools, temperature, max_tokens,
         )
 
     def clear_cache(self) -> None:
