@@ -13,6 +13,7 @@ build/
 venv/
 .env
 .worktrees/
+.claude/
 # Starlight docs build output + deps
 site/dist/
 site/node_modules/
