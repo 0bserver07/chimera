@@ -533,6 +533,24 @@ async def async_execute_tool_calls_incremental(
         result.results.append(tr)
         result.executed += 1
 
+        # -- Wire: status update --
+        if config and config.wire:
+            from chimera.wire.types import StatusUpdate
+            config.wire.send(StatusUpdate(
+                step=0,  # not known at this level
+                metadata={"tool": tc.name, "success": tr.success},
+            ))
+
+        # -- Audit log --
+        if config and config.audit_log:
+            config.audit_log.record(
+                tool_name=tc.name, arguments=tc.arguments, decision="allowed"
+            )
+
+        # -- Checkpoint --
+        if config and config.checkpoint_manager and tr.success:
+            config.checkpoint_manager.create(description=f"After {tc.name}")
+
         # -- Event: tool result --
         if config and config.event_bus:
             from chimera.events.types import ToolResultEvent

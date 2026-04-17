@@ -186,3 +186,76 @@ class TestToolExecutionResultDefaults:
         assert r.results == []
         assert r.pending is None
         assert r.remaining == []
+
+
+class TestAsyncExecutorSideEffects:
+    """Regression tests: async executor must run the same side-effect hooks
+    as the sync executor — audit log, checkpoint manager, wire.
+
+    Previously the async path silently skipped these, so features that
+    only the async loop used (e.g. Agent.async_run) had no audit trail
+    and no checkpoints.
+    """
+
+    @pytest.mark.asyncio
+    async def test_async_audit_log_records_tool_call(self) -> None:
+        from chimera.core.loop_config import LoopConfig
+        from chimera.core.tool_executor import (
+            async_execute_tool_calls_incremental,
+        )
+        from chimera.permissions.audit import AuditLog
+
+        audit = AuditLog()
+        config = LoopConfig(audit_log=audit)
+        ctx = Context()
+        result = await async_execute_tool_calls_incremental(
+            [make_tc()], {"echo": EchoTool()}, ctx, None, config,
+        )
+        assert result.executed == 1
+        assert len(audit.entries) == 1
+        assert audit.entries[0].tool_name == "echo"
+
+    @pytest.mark.asyncio
+    async def test_async_checkpoint_created_after_success(self) -> None:
+        from chimera.core.loop_config import LoopConfig
+        from chimera.core.tool_executor import (
+            async_execute_tool_calls_incremental,
+        )
+
+        ckpt = MagicMock()
+        config = LoopConfig(checkpoint_manager=ckpt)
+        ctx = Context()
+        await async_execute_tool_calls_incremental(
+            [make_tc()], {"echo": EchoTool()}, ctx, None, config,
+        )
+        ckpt.create.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_async_checkpoint_skipped_on_failure(self) -> None:
+        from chimera.core.loop_config import LoopConfig
+        from chimera.core.tool_executor import (
+            async_execute_tool_calls_incremental,
+        )
+
+        ckpt = MagicMock()
+        config = LoopConfig(checkpoint_manager=ckpt)
+        ctx = Context()
+        await async_execute_tool_calls_incremental(
+            [make_tc(name="fail")], {"fail": FailTool()}, ctx, None, config,
+        )
+        ckpt.create.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_async_wire_sends_status(self) -> None:
+        from chimera.core.loop_config import LoopConfig
+        from chimera.core.tool_executor import (
+            async_execute_tool_calls_incremental,
+        )
+
+        wire = MagicMock()
+        config = LoopConfig(wire=wire)
+        ctx = Context()
+        await async_execute_tool_calls_incremental(
+            [make_tc()], {"echo": EchoTool()}, ctx, None, config,
+        )
+        wire.send.assert_called()
