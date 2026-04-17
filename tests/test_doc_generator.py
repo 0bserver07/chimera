@@ -81,3 +81,58 @@ class TestDocGenerator:
             gen = DocGenerator(root=tmp)
             gen.scan()
             assert len(gen.sections) >= 1
+
+    def test_signature_includes_defaults_and_varargs(self):
+        """Signatures must not silently truncate defaults, *args, **kwargs."""
+        src = "def fn(a, b=1, *args, c=2, **kwargs): pass\n"
+        with tempfile.TemporaryDirectory() as tmp:
+            with open(os.path.join(tmp, "m.py"), "w") as f:
+                f.write(src)
+            gen = DocGenerator(root=tmp)
+            sections = gen.scan()
+            assert len(sections) >= 1
+            # Flatten: module section has the function as a subsection.
+            titles = [s.title for s in sections[0].subsections]
+            assert len(titles) == 1
+            sig = titles[0]
+            assert "a" in sig
+            assert "b = 1" in sig
+            assert "*args" in sig
+            assert "c = 2" in sig
+            assert "**kwargs" in sig
+
+    def test_signature_includes_annotations_and_return_type(self):
+        src = "def f(x: str, y: int = 0) -> list[str]: pass\n"
+        with tempfile.TemporaryDirectory() as tmp:
+            with open(os.path.join(tmp, "m.py"), "w") as f:
+                f.write(src)
+            gen = DocGenerator(root=tmp)
+            sections = gen.scan()
+            sig = sections[0].subsections[0].title
+            assert "x: str" in sig
+            assert "y: int = 0" in sig
+            assert "-> list[str]" in sig
+
+    def test_signature_async_preserved(self):
+        src = "async def fetch(url: str) -> bytes: pass\n"
+        with tempfile.TemporaryDirectory() as tmp:
+            with open(os.path.join(tmp, "m.py"), "w") as f:
+                f.write(src)
+            gen = DocGenerator(root=tmp)
+            sections = gen.scan()
+            sig = sections[0].subsections[0].title
+            assert sig.startswith("`async ")
+            assert "url: str" in sig
+            assert "-> bytes" in sig
+
+    def test_signature_keyword_only_args(self):
+        src = "def k(*, a: int, b=1): pass\n"
+        with tempfile.TemporaryDirectory() as tmp:
+            with open(os.path.join(tmp, "m.py"), "w") as f:
+                f.write(src)
+            gen = DocGenerator(root=tmp)
+            sections = gen.scan()
+            sig = sections[0].subsections[0].title
+            assert "*" in sig
+            assert "a: int" in sig
+            assert "b = 1" in sig

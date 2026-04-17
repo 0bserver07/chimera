@@ -121,15 +121,65 @@ class DocGenerator:
         )
 
     def _get_function_sig(self, node: Any) -> str:
-        """Extract function signature string."""
-        args = []
-        for arg in node.args.args:
-            name = arg.arg
-            if name == "self" or name == "cls":
+        """Extract function signature string.
+
+        Includes positional args, default values, *args, keyword-only args,
+        **kwargs, and return-type annotations. Type annotations on parameters
+        are included when present. ``self`` and ``cls`` are stripped.
+        """
+        import ast
+
+        def ann(a: ast.expr | None) -> str:
+            return ast.unparse(a) if a is not None else ""
+
+        parts: list[str] = []
+        pos_args = list(node.args.args)
+        # Normal positional args with default-value alignment. Defaults align
+        # to the TAIL of node.args.args (the usual AST convention).
+        defaults = list(node.args.defaults)
+        default_offset = len(pos_args) - len(defaults)
+
+        for i, arg in enumerate(pos_args):
+            if arg.arg in ("self", "cls"):
                 continue
-            args.append(name)
-        prefix = "async " if isinstance(node, __import__("ast").AsyncFunctionDef) else ""
-        return f"{prefix}{node.name}({', '.join(args)})"
+            piece = arg.arg
+            if arg.annotation is not None:
+                piece += f": {ann(arg.annotation)}"
+            if i >= default_offset:
+                default_node = defaults[i - default_offset]
+                piece += f" = {ast.unparse(default_node)}"
+            parts.append(piece)
+
+        if node.args.vararg is not None:
+            vararg = node.args.vararg
+            piece = f"*{vararg.arg}"
+            if vararg.annotation is not None:
+                piece += f": {ann(vararg.annotation)}"
+            parts.append(piece)
+        elif node.args.kwonlyargs:
+            # PEP 3102: bare ``*`` separator before keyword-only args
+            parts.append("*")
+
+        kw_defaults = list(node.args.kw_defaults)
+        for i, arg in enumerate(node.args.kwonlyargs):
+            piece = arg.arg
+            if arg.annotation is not None:
+                piece += f": {ann(arg.annotation)}"
+            # kw_defaults positions align 1:1 with kwonlyargs; None = no default.
+            if i < len(kw_defaults) and kw_defaults[i] is not None:
+                piece += f" = {ast.unparse(kw_defaults[i])}"
+            parts.append(piece)
+
+        if node.args.kwarg is not None:
+            kwarg = node.args.kwarg
+            piece = f"**{kwarg.arg}"
+            if kwarg.annotation is not None:
+                piece += f": {ann(kwarg.annotation)}"
+            parts.append(piece)
+
+        prefix = "async " if isinstance(node, ast.AsyncFunctionDef) else ""
+        ret = f" -> {ann(node.returns)}" if node.returns is not None else ""
+        return f"{prefix}{node.name}({', '.join(parts)}){ret}"
 
     def write(self, sections: list[DocSection] | None = None) -> list[str]:
         """Write documentation sections to files.
