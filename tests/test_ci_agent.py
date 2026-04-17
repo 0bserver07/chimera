@@ -161,3 +161,77 @@ class TestCIFixWorkflowRun:
         result = wf.run("", agent, env=None)
         assert result is True  # No failures found
         assert len(wf.attempts) == 0
+
+    def test_run_with_verify_passed_returns_true(self):
+        from chimera.core.agent import Agent
+        from chimera.providers.base import Response
+
+        provider = _MockProvider([
+            Response(content="Fixed.", tool_calls=[], usage={"input_tokens": 5, "output_tokens": 5}),
+        ])
+        agent = Agent(provider=provider, name="ci-fixer")
+        wf = CIFixWorkflow(max_attempts=3)
+
+        log = "FAILED tests/test_x.py::test_y - AssertionError: bad"
+        calls: list[int] = []
+
+        def verify():
+            calls.append(1)
+            return True, ""
+
+        result = wf.run(log, agent, env=None, verify=verify)
+        assert result is True
+        assert len(calls) == 1
+        assert wf.succeeded
+        assert wf.attempts[-1].success is True
+
+    def test_run_with_verify_failing_iterates_and_rediagnoses(self):
+        from chimera.core.agent import Agent
+        from chimera.providers.base import Response
+
+        provider = _MockProvider([
+            Response(content="Try 1.", tool_calls=[], usage={"input_tokens": 5, "output_tokens": 5}),
+            Response(content="Try 2.", tool_calls=[], usage={"input_tokens": 5, "output_tokens": 5}),
+            Response(content="Try 3.", tool_calls=[], usage={"input_tokens": 5, "output_tokens": 5}),
+        ])
+        agent = Agent(provider=provider, name="ci-fixer")
+        wf = CIFixWorkflow(max_attempts=3)
+
+        initial_log = "FAILED tests/test_x.py::test_y - AssertionError: bad"
+        verify_logs = [
+            "FAILED tests/test_x.py::test_y - AssertionError: still bad",
+            "FAILED tests/test_x.py::test_z - AssertionError: new failure",
+        ]
+        call_idx: list[int] = [0]
+
+        def verify():
+            i = call_idx[0]
+            call_idx[0] += 1
+            if i < len(verify_logs):
+                return False, verify_logs[i]
+            return True, ""
+
+        result = wf.run(initial_log, agent, env=None, verify=verify)
+        assert result is True
+        # The workflow should have made 3 attempts: initial try, retry after
+        # first failing verify (re-diagnosed), then verified pass on 3rd.
+        assert len(wf.attempts) == 3
+        # The 3rd attempt's prompt should mention the re-diagnosed failure
+        # from the 2nd verify call (test_z).
+        assert "test_z" in wf.attempts[2].prompt
+
+    def test_run_without_verify_stops_on_agent_success(self):
+        """Without verify, success still relies on AgentResult.success (legacy)."""
+        from chimera.core.agent import Agent
+        from chimera.providers.base import Response
+
+        provider = _MockProvider([
+            Response(content="Done.", tool_calls=[], usage={"input_tokens": 5, "output_tokens": 5}),
+        ])
+        agent = Agent(provider=provider, name="ci-fixer")
+        wf = CIFixWorkflow(max_attempts=3)
+
+        log = "FAILED tests/test_x.py::test_y - AssertionError: bad"
+        result = wf.run(log, agent, env=None)
+        assert result is True
+        assert len(wf.attempts) == 1

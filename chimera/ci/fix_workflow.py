@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 from chimera.ci.failure_parser import FailureInfo, parse_ci_log
 
@@ -82,13 +82,28 @@ class CIFixWorkflow:
         self._attempts.append(attempt)
         return attempt
 
-    def run(self, log: str, agent: Agent, env: Environment) -> bool:
+    def run(
+        self,
+        log: str,
+        agent: Agent,
+        env: Environment,
+        verify: Callable[[], tuple[bool, str]] | None = None,
+    ) -> bool:
         """Diagnose CI failures and attempt to fix them using the agent.
 
         Args:
             log: Raw CI log output to parse for failures.
             agent: Agent to use for generating fixes.
             env: Environment for the agent to execute in.
+            verify: Optional callable invoked after each fix attempt to check
+                whether the CI is now green. Returns ``(passed, new_log)``.
+                If ``passed`` is True, ``run`` returns True immediately.
+                If ``passed`` is False, ``new_log`` is re-diagnosed and a
+                fresh prompt is built from the new failures.
+                When ``verify`` is None, ``max_attempts > 1`` cannot re-check
+                — the loop relies solely on ``AgentResult.success``, which
+                only indicates the ReAct loop finished, not that the CI is
+                actually fixed.
 
         Returns:
             True if any attempt succeeded, False otherwise.
@@ -106,9 +121,24 @@ class CIFixWorkflow:
                 success=result.success,
                 cost=result.cost,
             )
-            if result.success:
+
+            # If a verify callback was provided, use it as the authoritative
+            # signal instead of the agent's own success flag.
+            if verify is not None:
+                passed, new_log = verify()
+                if passed:
+                    # Overwrite the last attempt's success field so
+                    # ``succeeded`` reflects verified state.
+                    self._attempts[-1].success = True
+                    return True
+                # CI still red; re-diagnose so the next prompt targets the
+                # remaining failures, not the original ones.
+                self._attempts[-1].success = False
+                failures = self.diagnose(new_log) or failures
+            elif result.success:
                 return True
+
             if self._budget is not None and self.total_cost >= self._budget:
                 break
 
-        return False
+        return self.succeeded
