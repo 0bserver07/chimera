@@ -6,6 +6,11 @@ import re
 from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
+
+from chimera.core.tool import BaseTool
+from chimera.env.base import Environment
+from chimera.types import ToolResult
 
 
 @dataclass
@@ -159,3 +164,101 @@ class ImportGraph:
     @property
     def files(self) -> list[str]:
         return list(self._imports_by_file.keys())
+
+
+class ImportGraphTool(BaseTool):
+    """Expose :class:`ImportGraph` as an agent-callable tool.
+
+    Actions:
+        imports_of: List modules imported by the given file.
+        importers_of: List files that import the given module.
+        related: List files related to the given file (imports + importers).
+        summary: Short summary of the graph (file count, edge count).
+    """
+
+    name = "import_graph"
+    description = (
+        "Analyze module import dependencies in the workspace. "
+        "Actions: 'imports_of' (what a file imports), 'importers_of' "
+        "(who imports a module), 'related' (both directions, ranked), "
+        "'summary' (counts)."
+    )
+    parameters: dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "action": {
+                "type": "string",
+                "enum": ["imports_of", "importers_of", "related", "summary"],
+                "description": "Which query to perform.",
+            },
+            "target": {
+                "type": "string",
+                "description": (
+                    "File path (for imports_of / related) or module name "
+                    "(for importers_of). Required for all actions except 'summary'."
+                ),
+            },
+            "root": {
+                "type": "string",
+                "description": "Workspace root to scan. Defaults to environment workdir.",
+            },
+            "max_results": {
+                "type": "integer",
+                "description": "Cap on results returned (default 20).",
+                "default": 20,
+            },
+        },
+        "required": ["action"],
+    }
+
+    def execute(self, args: dict[str, Any], env: Environment | None) -> ToolResult:
+        action = args.get("action")
+        if action not in {"imports_of", "importers_of", "related", "summary"}:
+            return ToolResult(output="", error=f"Unknown action: {action!r}")
+
+        root = args.get("root")
+        if root is None:
+            if env is not None and hasattr(env, "workdir"):
+                root = str(env.workdir)
+            else:
+                root = "."
+        root_path = Path(root)
+        if not root_path.is_dir():
+            return ToolResult(output="", error=f"Not a directory: {root}")
+
+        graph = ImportGraph()
+        graph.build(str(root_path))
+        max_results = args.get("max_results", 20)
+
+        if action == "summary":
+            return ToolResult(
+                output=(
+                    f"{len(graph.files)} files scanned, "
+                    f"{len(graph.all_edges)} import edges"
+                ),
+                metadata={
+                    "files": len(graph.files),
+                    "edges": len(graph.all_edges),
+                },
+            )
+
+        target = args.get("target")
+        if not target:
+            return ToolResult(
+                output="",
+                error=f"'target' is required for action {action!r}",
+            )
+
+        if action == "imports_of":
+            results = graph.imports_of(target)[:max_results]
+        elif action == "importers_of":
+            results = graph.importers_of(target)[:max_results]
+        else:  # related
+            results = graph.related_files(target, max_results=max_results)
+
+        if not results:
+            return ToolResult(output=f"No results for {action} {target!r}.")
+        return ToolResult(
+            output="\n".join(results),
+            metadata={"count": len(results)},
+        )

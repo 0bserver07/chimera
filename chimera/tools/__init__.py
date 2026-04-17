@@ -12,7 +12,7 @@ from chimera.tools.delegate import DelegateTool
 from chimera.tools.repo_map import RepoMapTool
 from chimera.tools.verify import VerifyTool
 from chimera.tools.image_read import ImageReadTool
-from chimera.tools.import_graph import ImportGraph
+from chimera.tools.import_graph import ImportGraph, ImportGraphTool
 from chimera.tools.browser import BrowserTool
 from chimera.tools.definition_lookup import DefinitionLookupTool
 from chimera.tools.web_search import WebSearchTool
@@ -40,6 +40,7 @@ __all__ = [
     "read_file", "write_file", "bash", "edit_file", "search", "list_files",
     "test", "web_fetch", "git", "replace_in_file", "verify", "read_image",
     "ImportGraph",
+    "ImportGraphTool",
     "BrowserTool",
     "DefinitionLookupTool",
     "WebSearchTool",

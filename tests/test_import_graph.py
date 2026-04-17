@@ -6,7 +6,8 @@ import tempfile
 
 import pytest
 
-from chimera.tools.import_graph import ImportEdge, ImportGraph
+from chimera.env.local import LocalEnvironment
+from chimera.tools.import_graph import ImportEdge, ImportGraph, ImportGraphTool
 
 
 @pytest.fixture
@@ -117,3 +118,91 @@ class TestImportGraph:
         graph.build(sample_project)
         related = graph.related_files("src/main.py", max_results=1)
         assert len(related) <= 1
+
+
+class TestImportGraphTool:
+    """ImportGraphTool is the agent-callable wrapper around ImportGraph."""
+
+    def test_schema_and_name(self):
+        tool = ImportGraphTool()
+        assert tool.name == "import_graph"
+        schema = tool.to_anthropic_schema()
+        assert "action" in str(schema)
+
+    def test_summary_action(self, sample_project):
+        tool = ImportGraphTool()
+        env = LocalEnvironment(workdir=sample_project)
+        result = tool.execute({"action": "summary"}, env)
+        assert result.error is None
+        assert "files scanned" in result.output
+        assert result.metadata["files"] >= 4
+        assert result.metadata["edges"] > 0
+
+    def test_imports_of_action(self, sample_project):
+        tool = ImportGraphTool()
+        env = LocalEnvironment(workdir=sample_project)
+        result = tool.execute(
+            {"action": "imports_of", "target": "src/main.py"}, env
+        )
+        assert result.error is None
+        assert "os" in result.output
+        assert "src.utils" in result.output
+
+    def test_importers_of_action(self, sample_project):
+        tool = ImportGraphTool()
+        env = LocalEnvironment(workdir=sample_project)
+        result = tool.execute(
+            {"action": "importers_of", "target": "src.utils"}, env
+        )
+        assert result.error is None
+        assert "src/main.py" in result.output
+        assert "src/models.py" in result.output
+
+    def test_related_action(self, sample_project):
+        tool = ImportGraphTool()
+        env = LocalEnvironment(workdir=sample_project)
+        result = tool.execute(
+            {"action": "related", "target": "src/main.py", "max_results": 5}, env
+        )
+        # Either finds related files or returns an honest "no results" message.
+        assert result.error is None
+
+    def test_unknown_action(self, sample_project):
+        tool = ImportGraphTool()
+        env = LocalEnvironment(workdir=sample_project)
+        result = tool.execute({"action": "explode"}, env)
+        assert result.error is not None
+        assert "Unknown action" in result.error
+
+    def test_missing_target(self, sample_project):
+        tool = ImportGraphTool()
+        env = LocalEnvironment(workdir=sample_project)
+        result = tool.execute({"action": "imports_of"}, env)
+        assert result.error is not None
+        assert "target" in result.error
+
+    def test_bad_root(self):
+        tool = ImportGraphTool()
+        result = tool.execute(
+            {"action": "summary", "root": "/no/such/dir/xyzzy"}, None
+        )
+        assert result.error is not None
+        assert "Not a directory" in result.error
+
+    def test_explicit_root_overrides_env(self, sample_project):
+        tool = ImportGraphTool()
+        # Pass root explicitly; env=None.
+        result = tool.execute(
+            {"action": "summary", "root": sample_project}, None
+        )
+        assert result.error is None
+        assert result.metadata["files"] >= 4
+
+    def test_imports_of_no_results_message(self, sample_project):
+        tool = ImportGraphTool()
+        env = LocalEnvironment(workdir=sample_project)
+        result = tool.execute(
+            {"action": "imports_of", "target": "nonexistent.py"}, env
+        )
+        assert result.error is None
+        assert "No results" in result.output
