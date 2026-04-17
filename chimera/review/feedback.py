@@ -83,8 +83,24 @@ class ReviewFeedback:
                 message=match.group(4).strip(),
             ))
 
-        # Check for approval
-        if re.search(r"\bapproved?\b", text, re.IGNORECASE) and not feedback.has_errors:
+        # Check for approval. Require an explicit affirmative form — bare
+        # "approved" or "I approve" — and reject negated forms like
+        # "not approved", "do not approve", "cannot approve", "no approval".
+        # Negations must be rejected even if they appear elsewhere in the text,
+        # because the model often writes a verdict like "Overall: NOT approved."
+        if feedback.has_errors:
+            return feedback
+
+        has_negated = re.search(
+            r"\b(?:not|no|never|cannot|can't|don't|do\s+not|isn't)"
+            r"(?:\s+\w+){0,3}\s+approv(?:e|ed|al)\b",
+            text,
+            re.IGNORECASE,
+        )
+        if has_negated:
+            return feedback
+
+        if re.search(r"\b(?:approved|approve|approval)\b", text, re.IGNORECASE):
             feedback.approved = True
 
         return feedback

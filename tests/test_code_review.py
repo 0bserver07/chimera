@@ -79,6 +79,27 @@ class TestReviewFeedback:
         fb = ReviewFeedback.parse_from_text(text)
         assert not fb.approved  # has errors, so not approved
 
+    def test_parse_negated_not_approved(self):
+        """A verdict of 'NOT approved' must not be parsed as approval."""
+        fb = ReviewFeedback.parse_from_text("Overall: NOT approved. See issues above.")
+        assert not fb.approved
+
+    def test_parse_negated_do_not_approve(self):
+        fb = ReviewFeedback.parse_from_text("I do not approve this change.")
+        assert not fb.approved
+
+    def test_parse_negated_cannot_approve(self):
+        fb = ReviewFeedback.parse_from_text("Cannot approve at this time — security review pending.")
+        assert not fb.approved
+
+    def test_parse_negated_no_approval(self):
+        fb = ReviewFeedback.parse_from_text("No approval granted; needs revisions.")
+        assert not fb.approved
+
+    def test_parse_affirmative_approve(self):
+        fb = ReviewFeedback.parse_from_text("I approve this PR.")
+        assert fb.approved
+
 
 class TestReviewOrchestrator:
     def test_initial_state(self):
