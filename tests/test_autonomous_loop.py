@@ -493,3 +493,41 @@ class TestEdgeCases:
 
         assert result.success
         assert result.steps == 2
+
+    def test_iter_steps_fires_checkpoints_and_events(self):
+        """iter_steps must emit plan checkpoint and step events like run() does.
+
+        Regression: iter_steps previously skipped _create_checkpoint() and
+        _emit_event() that run() fires at the plan and per-step boundaries.
+        """
+        from unittest.mock import MagicMock
+        from chimera.core.loop_config import LoopConfig
+
+        plan_text = "1. Step one\n2. Step two"
+        provider = PlanProvider(plan_text, ["One done", "Two done"])
+
+        event_bus = MagicMock()
+        checkpoint_manager = MagicMock()
+        config = LoopConfig(event_bus=event_bus, checkpoint_manager=checkpoint_manager)
+        loop = AutonomousLoop(
+            max_steps_per_task=5, max_total_steps=50, config=config,
+        )
+        ctx = Context()
+        ctx.add(Message.user("Do two things"))
+
+        gen = loop.iter_steps(provider, [], ctx, None)
+        result = drain_steps(gen)
+        assert result.success
+
+        # A "plan_complete" checkpoint + per-step checkpoints fire.
+        ckpt_names = [
+            call.kwargs.get("name") for call in checkpoint_manager.create.call_args_list
+        ]
+        assert "plan_complete" in ckpt_names, (
+            f"expected 'plan_complete' checkpoint, got {ckpt_names}"
+        )
+        # Per-step checkpoints for each successful step.
+        assert any("step_1_done" in (n or "") for n in ckpt_names)
+
+        # Plan event + per-step events fired on the bus.
+        assert event_bus.publish.called, "expected at least one event published"

@@ -468,6 +468,10 @@ class AutonomousLoop:
                 error="Planning produced no steps",
             )
 
+        # Emit initial plan event + checkpoint (parity with run())
+        self._create_checkpoint("plan_complete")
+        self._emit_event(step_number=0, content=f"Plan: {self.plan}")
+
         remaining_steps = list(self.plan)
         step_index = 0
 
@@ -510,6 +514,11 @@ class AutonomousLoop:
                 )
 
             # Execute sub-task via inner ReAct, yielding its steps
+            self._emit_event(
+                step_number=step_index,
+                content=f"Executing step {step_index}: {step_desc}",
+            )
+
             step_context = Context()
             step_context.add(Message.user(
                 f"You are working on a larger goal: {goal}\n\n"
@@ -565,6 +574,11 @@ class AutonomousLoop:
                     )
 
                 remaining_steps = new_steps
+                self._create_checkpoint(f"replan_{self.replan_count}")
+                self._emit_event(
+                    step_number=step_index,
+                    content=f"Replanned after step {step_index} failure. New steps: {new_steps}",
+                )
 
         combined_output = "\n\n".join(outputs) if outputs else "All steps completed"
         return AgentResult(
