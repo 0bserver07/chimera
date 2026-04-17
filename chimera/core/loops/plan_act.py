@@ -193,8 +193,9 @@ class PlanActLoop:
     ) -> Generator[StepResult, None, AgentResult]:
         """Yield steps from both plan and act phases.
 
-        The plan phase runs first (via :func:`drain_steps`) to produce
-        the plan text, then act-phase steps are yielded one at a time.
+        Plan-phase steps are yielded first (with read-only tools), then
+        act-phase steps (with full tool access). Consumers receive a
+        real, incremental view of both phases.
 
         Args:
             provider: LLM provider for completions.
@@ -206,14 +207,16 @@ class PlanActLoop:
             Combined :class:`~chimera.types.AgentResult` (via generator
             return value).
         """
-        # Run plan phase to completion first
+        # Yield plan-phase steps via iter_steps (read-only tools)
         plan_tools = self._filter_read_only(tools)
         plan_context = self._build_plan_context(context)
         plan_loop = ReAct(max_steps=self._plan_steps, config=self.config)
-        plan_result = plan_loop.run(provider, plan_tools, plan_context, env)
+        plan_result: AgentResult = yield from plan_loop.iter_steps(
+            provider, plan_tools, plan_context, env,
+        )
         self.plan_output = plan_result.output
 
-        # Then yield act-phase steps
+        # Then yield act-phase steps (full tool access)
         act_context = self._build_act_context(context)
         act_loop = ReAct(max_steps=self._act_steps, config=self.config)
         act_result: AgentResult = yield from act_loop.iter_steps(

@@ -349,3 +349,31 @@ class TestPlanActLoopIterSteps:
         drain_steps(gen)
 
         assert "Plan:" in loop.plan_output
+
+    def test_iter_steps_yields_both_plan_and_act_phases(self):
+        """iter_steps actually yields steps from both phases, not just act.
+
+        Regression: previously the plan phase ran via ``plan_loop.run()``
+        so no plan-phase steps were yielded even though the docstring said
+        "yield steps from both plan and act phases".
+        """
+        loop = PlanActLoop(plan_steps=3, act_steps=5)
+        provider = SimpleProvider()
+        ctx = Context(system="test")
+        ctx.add(Message.user("Fix the bug"))
+
+        gen = loop.iter_steps(provider, [_ReadTool(), _WriteTool()], ctx, None)
+        yielded_steps = []
+        try:
+            while True:
+                yielded_steps.append(next(gen))
+        except StopIteration:
+            pass
+
+        # With SimpleProvider there's 1 plan step (done=True after text-only
+        # response) + 1 act step (done=True after text-only response) = 2 yields.
+        assert len(yielded_steps) == 2, (
+            f"expected 2 yielded steps (plan + act), got {len(yielded_steps)}"
+        )
+        # Both yielded steps should be done=True (plan ends text-only, act ends text-only)
+        assert all(s.done for s in yielded_steps)
