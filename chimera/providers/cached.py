@@ -11,6 +11,7 @@ import threading
 from collections import OrderedDict
 from collections.abc import Iterator
 from dataclasses import dataclass
+from typing import Any
 
 from chimera.providers.base import Provider, Response, StreamEvent, ToolSchema
 from chimera.types import Message
@@ -29,13 +30,24 @@ class CacheStats:
         return self.hits / total if total > 0 else 0.0
 
 
-def _cache_key(model: str, messages: list[Message], tools: list[ToolSchema] | None, temperature: float) -> str:
-    """Generate a SHA-256 cache key from request parameters."""
+def _cache_key(
+    model: str,
+    messages: list[Message],
+    tools: list[ToolSchema] | None,
+    temperature: float,
+    thinking: Any = None,
+) -> str:
+    """Generate a SHA-256 cache key from request parameters.
+
+    Includes ``thinking`` in the key so runs with and without extended
+    reasoning are not confused for each other.
+    """
     payload = {
         "model": model,
         "messages": [{"role": m.role, "content": m.content} for m in messages],
         "tools": tools or [],
         "temperature": temperature,
+        "thinking": str(getattr(thinking, "value", thinking)) if thinking is not None else None,
     }
     raw = json.dumps(payload, sort_keys=True, default=str)
     return hashlib.sha256(raw.encode()).hexdigest()[:32]
@@ -70,8 +82,11 @@ class CachedProvider(Provider):
         tools: list[ToolSchema] | None = None,
         temperature: float = 0.0,
         max_tokens: int | None = None,
+        thinking: Any = None,
     ) -> Response:
-        key = _cache_key(self._provider.model_name, messages, tools, temperature)
+        key = _cache_key(
+            self._provider.model_name, messages, tools, temperature, thinking,
+        )
 
         with self._lock:
             if key in self._cache:
@@ -80,7 +95,9 @@ class CachedProvider(Provider):
                 return self._cache[key]
 
         self._stats.misses += 1
-        response = self._provider.complete(messages, tools, temperature, max_tokens)
+        response = self._provider.complete(
+            messages, tools, temperature, max_tokens, thinking=thinking,
+        )
 
         with self._lock:
             self._cache[key] = response
@@ -97,9 +114,12 @@ class CachedProvider(Provider):
         tools: list[ToolSchema] | None = None,
         temperature: float = 0.0,
         max_tokens: int | None = None,
+        thinking: Any = None,
     ) -> Iterator[StreamEvent]:
         # Streaming bypasses cache — delegate directly
-        return self._provider.stream(messages, tools, temperature, max_tokens)
+        return self._provider.stream(
+            messages, tools, temperature, max_tokens, thinking=thinking,
+        )
 
     def clear_cache(self) -> None:
         """Clear all cached responses."""

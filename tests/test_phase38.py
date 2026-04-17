@@ -290,6 +290,23 @@ class TestResponseCaching:
         for t in threads: t.join()
         # Should not crash
 
+    def test_thinking_is_part_of_cache_key(self):
+        """Regression: thinking=off vs thinking=high must not share cache slot."""
+        from chimera.providers.cached import CachedProvider
+        from chimera.providers.base import Response
+        from chimera.providers.thinking import ThinkingLevel
+        mock = MagicMock()
+        mock.model_name = "test"
+        mock.complete.return_value = Response(content="R", tool_calls=[], usage={})
+        cached = CachedProvider(mock)
+        msgs = [Message.user("hi")]
+        cached.complete(msgs, thinking=ThinkingLevel.OFF)
+        cached.complete(msgs, thinking=ThinkingLevel.HIGH)
+        # Two calls with different thinking must hit the wrapped provider twice.
+        assert mock.complete.call_count == 2
+        # And thinking is forwarded
+        assert mock.complete.call_args_list[-1].kwargs.get("thinking") == ThinkingLevel.HIGH
+
 
 # === Task 84: LSP feedback ===
 
