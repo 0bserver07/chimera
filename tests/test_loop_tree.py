@@ -130,3 +130,50 @@ class TestTreeOfThought:
             result = loop.run(provider, [ReadFileTool()], context, env)
             assert result.success
             assert result.tool_calls_total >= 1
+
+    def test_step_cost_reflects_candidate_spend(self):
+        """StepResult.cost must reflect real money spent on n candidates.
+
+        Regression test for the fake where step.cost was hardcoded to 0.0
+        while the real n-candidate completions cost money.
+        """
+        # Use a model whose pricing is in chimera.providers.cost
+        class PricedVariedProvider(Provider):
+            def __init__(self):
+                self._call = 0
+
+            def complete(self, messages, tools=None, temperature=0.0, max_tokens=None):
+                self._call += 1
+                if self._call <= 3:
+                    return Response(
+                        content=f"Candidate {self._call}",
+                        tool_calls=[],
+                        usage={"input_tokens": 1000, "output_tokens": 500},
+                    )
+                return Response(
+                    content="2",
+                    tool_calls=[],
+                    usage={"input_tokens": 100, "output_tokens": 10},
+                )
+
+            @property
+            def context_window(self): return 100_000
+            @property
+            def supports_tool_use(self): return False
+            @property
+            def model_name(self): return "claude-sonnet-4-20250514"
+
+        provider = PricedVariedProvider()
+        loop = TreeOfThought(max_steps=5, n_candidates=3)
+        context = Context(system="ok")
+        context.add(Message.user("pick"))
+
+        steps = list(loop.iter_steps(provider, [], context, None))
+        # Should yield exactly one final StepResult (no tool calls)
+        assert len(steps) == 1
+        final = steps[0]
+        assert final.done is True
+        # Step cost should NOT be zero — we actually spent money
+        assert final.cost > 0.0, (
+            f"step.cost = {final.cost} but 3 candidates + 1 eval were billed"
+        )

@@ -58,6 +58,7 @@ class TreeOfThought:
 
         for _ in range(self.max_steps):
             steps += 1
+            step_cost = 0.0
 
             # Generate N candidate responses
             candidates: list[str] = []
@@ -68,7 +69,9 @@ class TreeOfThought:
                     tools=schemas if schemas else None,
                     temperature=0.7,
                 )
-                total_cost += calculate_cost(provider.model_name, response.usage)
+                c = calculate_cost(provider.model_name, response.usage)
+                step_cost += c
+                total_cost += c
                 candidates.append(response.content)
                 candidate_tool_calls.append(response.tool_calls)
 
@@ -94,7 +97,7 @@ class TreeOfThought:
                         tool_calls=chosen_tool_calls,
                         done=True,
                         step=steps,
-                        cost=0.0,
+                        cost=step_cost,
                     )
                     return AgentResult(
                         output=chosen_content,
@@ -114,7 +117,7 @@ class TreeOfThought:
                         tool_results=exec_result.results,
                         done=False,
                         step=steps,
-                        cost=0.0,
+                        cost=step_cost,
                         pending_approval=exec_result.pending,
                     )
                     yield step
@@ -141,7 +144,7 @@ class TreeOfThought:
                         tool_results=exec_result.results,
                         done=False,
                         step=steps,
-                        cost=0.0,
+                        cost=step_cost,
                     )
                 continue
 
@@ -156,7 +159,9 @@ class TreeOfThought:
                 eval_context = Context(system="You are an evaluator.")
                 eval_context.add(Message.user(f"{candidate_text}\n\n{eval_prompt}"))
                 eval_response = provider.complete(eval_context.to_messages())
-                total_cost += calculate_cost(provider.model_name, eval_response.usage)
+                eval_cost = calculate_cost(provider.model_name, eval_response.usage)
+                step_cost += eval_cost
+                total_cost += eval_cost
 
                 try:
                     choice = int(eval_response.content.strip()) - 1
@@ -173,7 +178,7 @@ class TreeOfThought:
                 tool_calls=[],
                 done=True,
                 step=steps,
-                cost=0.0,
+                cost=step_cost,
             )
             return AgentResult(
                 output=best_content,
