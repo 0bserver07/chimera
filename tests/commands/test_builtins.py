@@ -140,34 +140,53 @@ class TestExpandedBuiltinCommands:
     # --- Development ---
 
     def test_commit_handler_runs(self):
+        """With staged files, /commit calls git diff --cached then git commit."""
         cmd = self._find("commit")
         assert cmd.description
         with patch("subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(
-                stdout="[main abc1234] Auto-commit by chimera\n 1 file changed",
-                stderr="",
-            )
+            # First call: `git diff --cached --name-only` returns staged files
+            # Second call: `git commit -m ...` returns commit message
+            mock_run.side_effect = [
+                MagicMock(returncode=0, stdout="file1.py\nfile2.py\n", stderr=""),
+                MagicMock(returncode=0, stdout="[main abc1234] chimera: auto-commit\n", stderr=""),
+            ]
             result = cmd.handler("")
             assert isinstance(result, str)
-            assert mock_run.call_count == 2  # git add + git commit
+            assert mock_run.call_count == 2
+            # First call must be the safe diff check, NOT `git add -A`
+            first_call_args = mock_run.call_args_list[0][0][0]
+            assert first_call_args == ["git", "diff", "--cached", "--name-only"]
+            assert "add" not in first_call_args, "handler must not run `git add`"
 
     def test_commit_handler_custom_message(self):
         cmd = self._find("commit")
         with patch("subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(
-                stdout="[main abc1234] my message\n",
-                stderr="",
-            )
+            mock_run.side_effect = [
+                MagicMock(returncode=0, stdout="file1.py\n", stderr=""),
+                MagicMock(returncode=0, stdout="[main abc1234] my message\n", stderr=""),
+            ]
             result = cmd.handler("my message")
-            # Second call is git commit, check -m arg
+            assert isinstance(result, str)
+            # Second call is the commit; check -m arg
             commit_call = mock_run.call_args_list[1]
             assert "my message" in commit_call[0][0]
+
+    def test_commit_handler_refuses_when_nothing_staged(self):
+        """Safety: /commit must refuse if nothing is staged (no `git add -A`)."""
+        cmd = self._find("commit")
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+            result = cmd.handler("")
+            assert mock_run.call_count == 1  # only the diff check, no commit
+            assert "Nothing staged" in result
+            # Safety message must mention the foot-gun we're preventing
+            assert "git add -A" in result
 
     def test_commit_handler_error(self):
         cmd = self._find("commit")
         with patch("subprocess.run", side_effect=OSError("git not found")):
             result = cmd.handler("")
-            assert "Error" in result
+            assert "git error" in result.lower()
 
     def test_test_command_exists(self):
         cmd = self._find("test")

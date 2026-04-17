@@ -4,8 +4,8 @@ Provides :class:`InMemoryTransport` — an in-process transport useful for
 testing that uses an :class:`asyncio.Queue`.
 
 Also provides :class:`StdioBridgeTransport` for subprocess communication
-via stdin/stdout and :class:`WebSocketTransport` (stub) for WebSocket-based
-communication.
+via stdin/stdout and :class:`WebSocketTransport` for WebSocket-based
+communication (requires optional ``websockets`` dependency).
 """
 from __future__ import annotations
 

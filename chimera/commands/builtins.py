@@ -47,19 +47,67 @@ def _help_handler(args: str) -> str:
 
 
 def _clear_handler(args: str) -> str:
-    return "Conversation cleared."
+    """Clear the terminal screen (ANSI clear + cursor home).
+
+    Conversation-history clear needs Session context this handler lacks;
+    use the rich REPL for that.
+    """
+    # \033[2J = clear entire screen, \033[H = move cursor to top-left.
+    return "\033[2J\033[H"
 
 
 def _compact_handler(args: str) -> str:
-    return "Conversation compacted."
+    return (
+        "Context compaction needs active Session state this handler can't reach.\n"
+        "Use the rich REPL (`chimera code` without --preset) — it has working\n"
+        "/compact, or call Session.compact() directly from Python."
+    )
 
 
 def _cost_handler(args: str) -> str:
-    return "Session cost: $0.00"
+    """Show cost from the most-recent session file on disk, if any."""
+    import json
+    from pathlib import Path
+
+    session_dir = Path.home() / ".chimera" / "sessions"
+    if not session_dir.exists():
+        return "No cost data: no session files yet. Cost is tracked per session."
+    files = sorted(
+        session_dir.glob("*.jsonl"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    if not files:
+        return "No cost data: no session files found."
+    most_recent = files[0]
+    total = 0.0
+    turns = 0
+    try:
+        for line in most_recent.read_text().splitlines():
+            if not line.strip():
+                continue
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            # Entries from the rich REPL include step_cost fields
+            cost = entry.get("cost_usd") or entry.get("cost") or 0
+            if isinstance(cost, (int, float)):
+                total += float(cost)
+                if cost > 0:
+                    turns += 1
+    except OSError as e:
+        return f"Error reading {most_recent.name}: {e}"
+    return (
+        f"Most recent session: {most_recent.stem}\n"
+        f"  cost:  ${total:.4f}\n"
+        f"  turns: {turns}"
+    )
 
 
 def _exit_handler(args: str) -> str:
-    return "Goodbye."
+    """Actually exit the process."""
+    raise SystemExit(0)
 
 
 def _diff_handler(args: str) -> str:
@@ -91,8 +139,28 @@ def _status_handler(args: str) -> str:
 
 
 def _model_handler(args: str) -> str:
-    """Show or switch model."""
-    return "Current model: (use --model flag to switch)"
+    """Show the active model (from env). Switching needs a new process.
+
+    Reads ANTHROPIC_MODEL / OPENAI_MODEL env vars, same precedence
+    create_provider() uses.
+    """
+    anthropic = os.environ.get("ANTHROPIC_MODEL")
+    openai_ = os.environ.get("OPENAI_MODEL")
+
+    if args.strip():
+        return (
+            "Mid-session model switching requires Provider state this handler\n"
+            "can't reach. Exit and restart with: chimera code --model <name>"
+        )
+
+    lines = []
+    if anthropic:
+        lines.append(f"ANTHROPIC_MODEL: {anthropic}")
+    if openai_:
+        lines.append(f"OPENAI_MODEL: {openai_}")
+    if not lines:
+        lines.append("No model env vars set (ANTHROPIC_MODEL / OPENAI_MODEL).")
+    return "\n".join(lines)
 
 
 def _memory_handler(args: str) -> str:
@@ -107,18 +175,82 @@ def _memory_handler(args: str) -> str:
 
 
 def _undo_handler(args: str) -> str:
-    """Undo the last turn's file changes."""
+    """Best-effort undo: prefer chimera snapshot, fall back to git.
+
+    A full snapshot manager needs Session context we don't have here.
+    But we can still help: if the user is in a git repo with a clean
+    working tree except for recent changes, offer `git checkout -- .`.
+    """
+    from pathlib import Path
+
+    snapshot_dir = Path.cwd() / ".chimera" / "snapshots"
+    if snapshot_dir.exists():
+        snapshots = sorted(snapshot_dir.glob("*.json"))
+        if snapshots:
+            return (
+                f"Found {len(snapshots)} snapshots in {snapshot_dir}.\n"
+                "To restore, use the rich REPL's /checkpoint restore <name>\n"
+                "(snapshot restore needs the CheckpointManager this handler "
+                "can't reach)."
+            )
+
+    try:
+        result = subprocess.run(
+            ["git", "diff", "--stat"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return (
+                "Uncommitted changes:\n"
+                f"{result.stdout}\n"
+                "To discard all of them (destructive!):\n"
+                "  git checkout -- .    # unstaged\n"
+                "  git reset HEAD       # unstage\n"
+                "For chimera snapshot-based undo, use the rich REPL."
+            )
+    except (OSError, subprocess.SubprocessError):
+        pass
+
     return (
-        "Undo requires an active snapshot manager. "
-        "Use 'chimera code --preset claude_code' for snapshot support."
+        "Nothing to undo: no chimera snapshots and no uncommitted git changes.\n"
+        "Snapshot support is available in the rich REPL "
+        "(`chimera code` without --preset)."
     )
 
 
 def _revert_handler(args: str) -> str:
-    """Revert files to a specific turn."""
+    """Revert files to a specific turn — needs Session context.
+
+    Offers concrete git alternative if args look like a commit-ish.
+    """
+    target = args.strip()
+    if not target:
+        return (
+            "Usage: /revert <turn_id>  (requires snapshot manager — use rich REPL)\n"
+            "Git alternative: `git checkout <commit>` to jump to a commit."
+        )
+    # Looks like a short sha? Offer to run git checkout.
+    if target.isalnum() and 4 <= len(target) <= 40:
+        try:
+            result = subprocess.run(
+                ["git", "rev-parse", "--verify", target],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if result.returncode == 0:
+                return (
+                    f"'{target}' is a valid git revision ({result.stdout.strip()[:12]}).\n"
+                    f"To revert: git checkout {target}\n"
+                    f"For chimera turn-based revert, use the rich REPL."
+                )
+        except (OSError, subprocess.SubprocessError):
+            pass
     return (
-        "Revert requires an active snapshot manager. "
-        "Use 'chimera code --preset claude_code' for snapshot support."
+        f"Cannot revert to '{target}' from here — needs Session context.\n"
+        "Use the rich REPL (`chimera code` without --preset) for turn-based revert."
     )
 
 
@@ -212,18 +344,48 @@ def _history_handler(args: str) -> str:
 # ---------------------------------------------------------------------------
 
 def _commit_handler(args: str) -> str:
-    msg = args.strip() or "Auto-commit by chimera"
+    """Commit already-staged changes.
+
+    Safety: does NOT run `git add -A` (would sweep in .env, credentials,
+    untracked debug files). Caller must stage files themselves first.
+    """
+    # Check there's something staged
     try:
-        subprocess.run(["git", "add", "-A"], capture_output=True, timeout=10)
+        diff = subprocess.run(
+            ["git", "diff", "--cached", "--name-only"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError) as e:
+        return f"git error: {e}"
+
+    if diff.returncode != 0:
+        return f"git error: {diff.stderr.strip() or 'not a git repository?'}"
+    staged = [f for f in diff.stdout.splitlines() if f.strip()]
+    if not staged:
+        return (
+            "Nothing staged to commit. Stage changes first:\n"
+            "  git add <file>...     # specific files (recommended)\n"
+            "  git add -p            # review each hunk interactively\n"
+            "Note: /commit will NOT run `git add -A` — too easy to sweep "
+            "in .env and other secrets."
+        )
+
+    msg = args.strip() or "chimera: auto-commit"
+    try:
         result = subprocess.run(
             ["git", "commit", "-m", msg],
             capture_output=True,
             text=True,
             timeout=10,
         )
-        return result.stdout or result.stderr or "Committed"
-    except Exception as e:
-        return f"Error: {e}"
+    except (OSError, subprocess.SubprocessError) as e:
+        return f"git error: {e}"
+
+    if result.returncode == 0:
+        return f"Committed {len(staged)} file(s): {result.stdout.strip()}"
+    return f"Commit failed: {result.stderr.strip() or result.stdout.strip()}"
 
 
 def _test_handler(args: str) -> str:
@@ -245,15 +407,68 @@ def _test_handler(args: str) -> str:
 # ---------------------------------------------------------------------------
 
 def _context_handler(args: str) -> str:
-    return "Context info requires active session. Use /tokens for estimation."
+    """Show current env-level context info (what this handler CAN see).
+
+    Full message-window stats need Session state; use the rich REPL.
+    """
+    lines = [
+        f"CWD: {os.getcwd()}",
+        f"ANTHROPIC_MODEL: {os.environ.get('ANTHROPIC_MODEL', '(not set)')}",
+        f"OPENAI_MODEL:    {os.environ.get('OPENAI_MODEL', '(not set)')}",
+    ]
+    # If a .chimera project exists, show loaded config summary
+    from pathlib import Path
+    dotdir = Path.cwd() / ".chimera"
+    if dotdir.exists():
+        entries = sorted(dotdir.iterdir())
+        lines.append(f".chimera/: {len(entries)} entries")
+        for e in entries[:10]:
+            lines.append(f"  {e.name}")
+        if len(entries) > 10:
+            lines.append(f"  ... +{len(entries) - 10} more")
+    else:
+        lines.append(".chimera/: (none)")
+    lines.append("")
+    lines.append(
+        "For token-usage stats and message-window state, use the rich REPL."
+    )
+    return "\n".join(lines)
 
 
 def _debug_handler(args: str) -> str:
-    return "Debug mode toggled (requires session integration)"
+    """Toggle CHIMERA_DEBUG env var (persists for child processes only).
+
+    Affects subprocess-based tools and subsequent `create_provider` calls
+    that read the var. Can't reach the live loop's debug state.
+    """
+    current = os.environ.get("CHIMERA_DEBUG", "")
+    if args.strip().lower() in ("off", "0", "false"):
+        os.environ.pop("CHIMERA_DEBUG", None)
+        return "CHIMERA_DEBUG unset."
+    if args.strip().lower() in ("on", "1", "true"):
+        os.environ["CHIMERA_DEBUG"] = "1"
+        return "CHIMERA_DEBUG=1."
+    if current in ("1", "true", "yes"):
+        os.environ.pop("CHIMERA_DEBUG", None)
+        return "CHIMERA_DEBUG unset (was on)."
+    os.environ["CHIMERA_DEBUG"] = "1"
+    return "CHIMERA_DEBUG=1 (was off)."
 
 
 def _verbose_handler(args: str) -> str:
-    return "Verbose mode toggled (requires session integration)"
+    """Toggle CHIMERA_VERBOSE env var. Same caveats as /debug."""
+    current = os.environ.get("CHIMERA_VERBOSE", "")
+    if args.strip().lower() in ("off", "0", "false"):
+        os.environ.pop("CHIMERA_VERBOSE", None)
+        return "CHIMERA_VERBOSE unset."
+    if args.strip().lower() in ("on", "1", "true"):
+        os.environ["CHIMERA_VERBOSE"] = "1"
+        return "CHIMERA_VERBOSE=1."
+    if current in ("1", "true", "yes"):
+        os.environ.pop("CHIMERA_VERBOSE", None)
+        return "CHIMERA_VERBOSE unset (was on)."
+    os.environ["CHIMERA_VERBOSE"] = "1"
+    return "CHIMERA_VERBOSE=1 (was off)."
 
 
 # ---------------------------------------------------------------------------
@@ -261,11 +476,46 @@ def _verbose_handler(args: str) -> str:
 # ---------------------------------------------------------------------------
 
 def _permissions_handler(args: str) -> str:
-    return "Permission rules: configure in .chimera/settings.json under 'permissions'"
+    """Show permission rules from .chimera/settings.json if present."""
+    import json
+    from pathlib import Path
+
+    settings = Path.cwd() / ".chimera" / "settings.json"
+    if not settings.exists():
+        return (
+            "No .chimera/settings.json in the current directory.\n"
+            "Create one with a 'permissions' block to configure rules. Example:\n"
+            '  {"permissions": {"policy": "allow_list", "allow": ["read", "list"]}}'
+        )
+    try:
+        data = json.loads(settings.read_text())
+    except (OSError, json.JSONDecodeError) as e:
+        return f"Error reading {settings}: {e}"
+    perms = data.get("permissions")
+    if not perms:
+        return f"{settings} has no 'permissions' block."
+    return f"Permissions from {settings.name}:\n{json.dumps(perms, indent=2)}"
 
 
 def _hooks_handler(args: str) -> str:
-    return "Hooks: configure in .chimera/settings.json under 'hooks'"
+    """Show hooks from .chimera/settings.json if present."""
+    import json
+    from pathlib import Path
+
+    settings = Path.cwd() / ".chimera" / "settings.json"
+    if not settings.exists():
+        return (
+            "No .chimera/settings.json in the current directory.\n"
+            "Create one with a 'hooks' block to configure lifecycle hooks."
+        )
+    try:
+        data = json.loads(settings.read_text())
+    except (OSError, json.JSONDecodeError) as e:
+        return f"Error reading {settings}: {e}"
+    hooks = data.get("hooks")
+    if not hooks:
+        return f"{settings} has no 'hooks' block."
+    return f"Hooks from {settings.name}:\n{json.dumps(hooks, indent=2)}"
 
 
 def _preset_handler(args: str) -> str:
@@ -293,11 +543,49 @@ def _version_handler(args: str) -> str:
 
 
 def _snapshot_handler(args: str) -> str:
-    return "Snapshots: use /undo to revert last turn, /revert <turn> for specific turn"
+    """List snapshots under .chimera/snapshots/ if present."""
+    from pathlib import Path
+
+    snap_dir = Path.cwd() / ".chimera" / "snapshots"
+    if not snap_dir.exists():
+        return (
+            "No snapshots: .chimera/snapshots/ does not exist.\n"
+            "Snapshots are created automatically by the rich REPL "
+            "(`chimera code` without --preset) on each turn."
+        )
+    snapshots = sorted(snap_dir.glob("*"))
+    if not snapshots:
+        return f"No snapshots in {snap_dir}."
+    lines = [f"Snapshots in {snap_dir}:"]
+    for s in snapshots:
+        size_kb = s.stat().st_size / 1024 if s.is_file() else 0
+        lines.append(f"  {s.name}  ({size_kb:.1f} KB)")
+    lines.append("")
+    lines.append("Restore with /undo (last) or /revert <name> from the rich REPL.")
+    return "\n".join(lines)
 
 
 def _tokens_handler(args: str) -> str:
-    return "Token estimation requires active session context"
+    """Estimate tokens for given text (or stdin-piped text).
+
+    Uses a fast heuristic: ~4 chars/token for English. Not tokenizer-exact
+    but useful as a ballpark.
+    """
+    text = args.strip()
+    if not text:
+        return (
+            "Usage: /tokens <text>    (estimate tokens for text)\n"
+            "Message-window totals need Session state — use the rich REPL."
+        )
+    # Heuristic: ~4 chars/token for English. More accurate than word count
+    # for typical code/prose mix.
+    char_count = len(text)
+    word_count = len(text.split())
+    est_tokens = max(1, char_count // 4)
+    return (
+        f"~{est_tokens} tokens  "
+        f"({char_count} chars, {word_count} words, heuristic ~4 chars/token)"
+    )
 
 
 def _env_handler(args: str) -> str:
@@ -310,15 +598,69 @@ def _env_handler(args: str) -> str:
 
 
 def _export_handler(args: str) -> str:
-    """Export session as HTML."""
+    """Export the most-recent on-disk session to HTML.
+
+    Usage: /export              -> uses most-recent session file
+           /export <slug>       -> uses ~/.chimera/sessions/<slug>.jsonl
+           /export <slug> <out> -> writes to <out> instead of default
+    """
+    import json
     from pathlib import Path
 
     from chimera.core.html_export import export_session_html
 
-    output = args.strip() or "session_export.html"
-    # Placeholder: in a real session the messages would come from session context
-    path = export_session_html([], Path(output))
-    return f"Session exported to {path}"
+    parts = args.split()
+    session_dir = Path.home() / ".chimera" / "sessions"
+
+    if not session_dir.exists():
+        return (
+            "No sessions to export: ~/.chimera/sessions/ does not exist.\n"
+            "Run the rich REPL first to generate session data."
+        )
+
+    if parts:
+        slug = parts[0]
+        src = session_dir / f"{slug}.jsonl"
+        if not src.exists():
+            return f"Session not found: {src}"
+        out_path = Path(parts[1]) if len(parts) > 1 else Path(f"{slug}.html")
+    else:
+        files = sorted(
+            session_dir.glob("*.jsonl"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+        if not files:
+            return "No session files found."
+        src = files[0]
+        out_path = Path(f"{src.stem}.html")
+
+    # Parse the session file — it's JSONL with message entries
+    messages: list = []
+    try:
+        for line in src.read_text().splitlines():
+            if not line.strip():
+                continue
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            # Message entries have role/content; skip tree bookkeeping entries
+            if "role" in entry and "content" in entry:
+                messages.append(entry)
+            elif "message" in entry and isinstance(entry["message"], dict):
+                messages.append(entry["message"])
+    except OSError as e:
+        return f"Error reading {src}: {e}"
+
+    if not messages:
+        return f"{src.name} has no exportable messages."
+
+    try:
+        path = export_session_html(messages, out_path)
+    except Exception as e:
+        return f"Export failed: {e}"
+    return f"Exported {len(messages)} messages from {src.name} to {path}"
 
 
 # ---------------------------------------------------------------------------
