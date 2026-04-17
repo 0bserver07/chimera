@@ -137,14 +137,100 @@ class MigrationPlanner:
                 description="Replace xrange with range",
                 file_glob="*.py",
             ),
+            # d.has_key(k) -> k in d
+            MigrationRule(
+                pattern=r"\b([A-Za-z_][A-Za-z_0-9]*)\.has_key\(\s*([^()]+?)\s*\)",
+                replacement=r"\2 in \1",
+                description="Replace dict.has_key(k) with k in dict",
+                file_glob="*.py",
+            ),
+            # except Exception, e:  ->  except Exception as e:
+            MigrationRule(
+                pattern=r"\bexcept\s+([A-Za-z_][A-Za-z_0-9.]*)\s*,\s*([A-Za-z_][A-Za-z_0-9]*)\s*:",
+                replacement=r"except \1 as \2:",
+                description="Convert 'except Exception, e:' to 'except Exception as e:'",
+                file_glob="*.py",
+            ),
+            # dict iteration methods
+            MigrationRule(
+                pattern=r"\.iteritems\(\)",
+                replacement=".items()",
+                description="Replace dict.iteritems() with dict.items()",
+                file_glob="*.py",
+            ),
+            MigrationRule(
+                pattern=r"\.iterkeys\(\)",
+                replacement=".keys()",
+                description="Replace dict.iterkeys() with dict.keys()",
+                file_glob="*.py",
+            ),
+            MigrationRule(
+                pattern=r"\.itervalues\(\)",
+                replacement=".values()",
+                description="Replace dict.itervalues() with dict.values()",
+                file_glob="*.py",
+            ),
+            # basestring -> str (py3 has no basestring)
+            MigrationRule(
+                pattern=r"\bbasestring\b",
+                replacement="str",
+                description="Replace basestring with str",
+                file_glob="*.py",
+            ),
+            # unicode(x) -> str(x); the type alias went away
+            MigrationRule(
+                pattern=r"\bunicode\s*\(",
+                replacement="str(",
+                description="Replace unicode() with str()",
+                file_glob="*.py",
+            ),
+            # u"..." / u'...' literals are redundant in py3 (valid but noisy)
+            MigrationRule(
+                pattern=r'(?<![A-Za-z0-9_])u"([^"\\]*(?:\\.[^"\\]*)*)"',
+                replacement=r'"\1"',
+                description="Drop redundant u-prefix on double-quoted string literal",
+                file_glob="*.py",
+            ),
+            MigrationRule(
+                pattern=r"(?<![A-Za-z0-9_])u'([^'\\]*(?:\\.[^'\\]*)*)'",
+                replacement=r"'\1'",
+                description="Drop redundant u-prefix on single-quoted string literal",
+                file_glob="*.py",
+            ),
         ],
         "commonjs-to-esm": [
+            # const/let/var X = require('mod');  ->  import X from "mod";
+            # Require statement-ending context to avoid swallowing method chains.
             MigrationRule(
-                pattern=r"const\s+(\w+)\s*=\s*require\(['\"]([^'\"]+)['\"]\);?",
-                replacement=r'import \1 from "\2";',
-                description="Convert require() to import statement",
+                pattern=r"(?:const|let|var)\s+(\w+)\s*=\s*require\(\s*['\"]([^'\"]+)['\"]\s*\)\s*(?=[;\r\n]|$)",
+                replacement=r'import \1 from "\2"',
+                description="Convert require() to default import",
                 file_glob="*.js",
             ),
+            # const { a, b } = require('mod');  ->  import { a, b } from "mod";
+            # Requires the require() call to end the statement (followed by ; or newline),
+            # not a method access like .promises.
+            MigrationRule(
+                pattern=r"(?:const|let|var)\s*\{\s*([^}]+?)\s*\}\s*=\s*require\(\s*['\"]([^'\"]+)['\"]\s*\)\s*(?=[;\r\n]|$)",
+                replacement=r'import { \1 } from "\2"',
+                description="Convert destructuring require() to named import",
+                file_glob="*.js",
+            ),
+            # module.exports.name = value  ->  export const name = value
+            MigrationRule(
+                pattern=r"module\.exports\.(\w+)\s*=\s*",
+                replacement=r"export const \1 = ",
+                description="Convert module.exports.name to named export",
+                file_glob="*.js",
+            ),
+            # exports.name = value  ->  export const name = value
+            MigrationRule(
+                pattern=r"(?<![A-Za-z0-9_.])exports\.(\w+)\s*=\s*",
+                replacement=r"export const \1 = ",
+                description="Convert exports.name to named export",
+                file_glob="*.js",
+            ),
+            # module.exports = value  ->  export default value
             MigrationRule(
                 pattern=r"module\.exports\s*=\s*",
                 replacement="export default ",

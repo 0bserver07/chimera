@@ -185,3 +185,95 @@ class TestMigrationPlanner:
         plan = planner.plan({"test.py": "foo baz"})
         assert rule_match in plan.rules
         assert rule_nomatch not in plan.rules
+
+
+# ---------------------------------------------------------------------------
+# Preset coverage tests (python2-to-3)
+# ---------------------------------------------------------------------------
+
+
+class TestPython2To3Preset:
+    def test_has_key_converted_to_in(self) -> None:
+        p = MigrationPlanner.from_preset("python2-to-3")
+        out = p.apply({"a.py": "d.has_key(k)\n"})["a.py"]
+        assert out == "k in d\n"
+
+    def test_except_comma_syntax_converted_to_as(self) -> None:
+        p = MigrationPlanner.from_preset("python2-to-3")
+        src = "try:\n    x()\nexcept ValueError, e:\n    raise\n"
+        out = p.apply({"a.py": src})["a.py"]
+        assert "except ValueError as e:" in out
+        assert "except ValueError, e:" not in out
+
+    def test_dict_iter_methods(self) -> None:
+        p = MigrationPlanner.from_preset("python2-to-3")
+        src = (
+            "for k, v in d.iteritems(): pass\n"
+            "for k in d.iterkeys(): pass\n"
+            "for v in d.itervalues(): pass\n"
+        )
+        out = p.apply({"a.py": src})["a.py"]
+        assert ".items()" in out
+        assert ".keys()" in out
+        assert ".values()" in out
+        assert "iter" not in out  # no stale iter* calls
+
+    def test_basestring_and_unicode(self) -> None:
+        p = MigrationPlanner.from_preset("python2-to-3")
+        src = "isinstance(x, basestring)\ns = unicode(b)\n"
+        out = p.apply({"a.py": src})["a.py"]
+        assert "isinstance(x, str)" in out
+        assert "s = str(b)" in out
+
+    def test_u_prefix_dropped(self) -> None:
+        p = MigrationPlanner.from_preset("python2-to-3")
+        src = 'a = u"hello"\nb = u\'world\'\n'
+        out = p.apply({"a.py": src})["a.py"]
+        assert 'a = "hello"' in out
+        assert "b = 'world'" in out
+
+
+# ---------------------------------------------------------------------------
+# Preset coverage tests (commonjs-to-esm)
+# ---------------------------------------------------------------------------
+
+
+class TestCommonJsToEsmPreset:
+    def test_let_and_var_require_converted(self) -> None:
+        p = MigrationPlanner.from_preset("commonjs-to-esm")
+        src = "let path = require('path');\nvar os = require('os');\n"
+        out = p.apply({"b.js": src})["b.js"]
+        assert 'import path from "path";' in out
+        assert 'import os from "os";' in out
+
+    def test_destructuring_require(self) -> None:
+        p = MigrationPlanner.from_preset("commonjs-to-esm")
+        src = "const { a, b } = require('./util');\n"
+        out = p.apply({"b.js": src})["b.js"]
+        assert 'import { a, b } from "./util";' in out
+
+    def test_module_exports_property_to_named_export(self) -> None:
+        p = MigrationPlanner.from_preset("commonjs-to-esm")
+        src = "module.exports.foo = bar;\n"
+        out = p.apply({"b.js": src})["b.js"]
+        assert "export const foo = bar;" in out
+
+    def test_exports_property_to_named_export(self) -> None:
+        p = MigrationPlanner.from_preset("commonjs-to-esm")
+        src = "exports.baz = qux;\n"
+        out = p.apply({"b.js": src})["b.js"]
+        assert "export const baz = qux;" in out
+
+    def test_method_chain_on_require_not_converted(self) -> None:
+        """require('fs').promises shouldn't be auto-converted — too risky."""
+        p = MigrationPlanner.from_preset("commonjs-to-esm")
+        src = "const fsp = require('fs').promises;\n"
+        out = p.apply({"b.js": src})["b.js"]
+        # Should be left alone rather than producing broken output.
+        assert "require('fs').promises" in out
+
+    def test_module_exports_default_still_works(self) -> None:
+        p = MigrationPlanner.from_preset("commonjs-to-esm")
+        src = "module.exports = handler;\n"
+        out = p.apply({"b.js": src})["b.js"]
+        assert "export default handler;" in out
