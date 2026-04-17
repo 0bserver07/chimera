@@ -66,3 +66,34 @@ def test_proxy_factory_requires_base_url():
     factory = get_provider_factory("proxy")
     with pytest.raises(ValueError, match="base_url required"):
         factory(model="m")
+
+
+def test_complete_accepts_thinking_kwarg():
+    """Regression: ProxyProvider.complete must accept ``thinking``.
+
+    Its absence breaks the default Provider.stream() wrapper, which
+    forwards thinking through to complete().
+    """
+    from chimera.providers.thinking import ThinkingLevel
+    provider = ProxyProvider(proxy_url="http://localhost:8080", model="m")
+    captured: dict = {}
+
+    def _fake_urlopen(req):
+        captured["data"] = json.loads(req.data.decode())
+        return _mock_response()
+
+    with patch("chimera.providers.proxy.urllib.request.urlopen", side_effect=_fake_urlopen):
+        provider.complete([Message.user("hi")], thinking=ThinkingLevel.LOW)
+
+    assert captured["data"]["thinking"] == "low"
+
+
+def test_complete_stream_default_forwards_thinking():
+    """Provider.stream() default wrapper must call complete() with thinking."""
+    from chimera.providers.thinking import ThinkingLevel
+    provider = ProxyProvider(proxy_url="http://localhost:8080", model="m")
+    with patch("chimera.providers.proxy.urllib.request.urlopen",
+               return_value=_mock_response("streamed")):
+        events = list(provider.stream([Message.user("hi")], thinking=ThinkingLevel.OFF))
+    text_events = [e for e in events if e.type == "text_delta"]
+    assert text_events and text_events[0].content == "streamed"

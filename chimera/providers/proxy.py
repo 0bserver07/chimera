@@ -37,16 +37,32 @@ class ProxyProvider(Provider):
         tools: list[dict[str, Any]] | None = None,
         temperature: float = 0.0,
         max_tokens: int | None = None,
+        thinking: Any = None,
     ) -> Response:
         payload: dict[str, Any] = {
             "model": self._model,
-            "messages": [{"role": m.role, "content": m.content} for m in messages],
+            "messages": [
+                {
+                    "role": m.role,
+                    "content": m.content,
+                    **({"tool_calls": [
+                        {"id": tc.id, "name": tc.name, "arguments": tc.arguments}
+                        for tc in m.tool_calls
+                    ]} if m.tool_calls else {}),
+                    **({"call_id": m.call_id} if m.call_id else {}),
+                }
+                for m in messages
+            ],
             "temperature": temperature,
         }
         if max_tokens is not None:
             payload["max_tokens"] = max_tokens
         if tools:
             payload["tools"] = tools
+        if thinking is not None:
+            # Forward thinking level as a string so proxies/LLM backends can
+            # map it to their own budget conventions.
+            payload["thinking"] = str(getattr(thinking, "value", thinking))
 
         data = json.dumps(payload).encode()
         headers: dict[str, str] = {"Content-Type": "application/json"}
