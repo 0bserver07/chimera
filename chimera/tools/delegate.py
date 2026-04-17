@@ -11,6 +11,7 @@ from chimera.types import ToolResult
 class DelegateTool(BaseTool):
     """Wraps an Agent as a tool, enabling sub-agent delegation."""
 
+    name = "delegate"  # default; overridden per-instance via ``tool_name``
     description = "Delegate a task to a sub-agent."
     parameters: dict[str, Any] = {
         "type": "object",
@@ -22,12 +23,21 @@ class DelegateTool(BaseTool):
 
     def __init__(self, sub_agent: Any, tool_name: str = "delegate") -> None:
         from chimera.core.agent import Agent
+        if sub_agent is None:
+            raise ValueError("DelegateTool requires a non-None sub_agent")
         self._sub_agent: Agent = sub_agent
         self.name = tool_name
 
     def execute(self, args: dict[str, Any], env: Environment | None) -> ToolResult:
+        if "task" not in args:
+            return ToolResult(output="", error="'task' is required")
         task = args["task"]
-        result = self._sub_agent.run(task, env)
+        if not isinstance(task, str) or not task.strip():
+            return ToolResult(output="", error="'task' must be a non-empty string")
+        try:
+            result = self._sub_agent.run(task, env)
+        except Exception as exc:  # noqa: BLE001 — surface any sub-agent failure
+            return ToolResult(output="", error=f"Sub-agent error: {exc}")
         if result.success:
             return ToolResult(output=result.output)
         return ToolResult(output=result.output, error=result.error)

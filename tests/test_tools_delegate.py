@@ -10,7 +10,6 @@ from chimera.core.loop import ReAct
 from chimera.env.local import LocalEnvironment
 from chimera.providers.base import Provider, Response
 from chimera.tools.delegate import DelegateTool
-from chimera.types import Message, ToolCall
 
 
 class EchoProvider(Provider):
@@ -55,3 +54,24 @@ class TestDelegateTool:
         sub_agent = Agent(provider=EchoProvider())
         tool = DelegateTool(sub_agent=sub_agent, tool_name="ask_researcher")
         assert tool.name == "ask_researcher"
+
+    def test_delegate_rejects_none_sub_agent(self):
+        with pytest.raises(ValueError, match="sub_agent"):
+            DelegateTool(sub_agent=None)
+
+    def test_delegate_rejects_empty_task(self):
+        sub_agent = Agent(provider=EchoProvider())
+        tool = DelegateTool(sub_agent=sub_agent)
+        result = tool.execute({"task": ""}, None)
+        assert result.error is not None
+        assert "task" in result.error.lower()
+
+    def test_delegate_rejects_missing_task(self):
+        sub_agent = Agent(provider=EchoProvider())
+        tool = DelegateTool(sub_agent=sub_agent)
+        result = tool.execute({}, None)
+        assert result.error is not None
+
+    def test_delegate_class_has_default_name(self):
+        """Class-level introspection must find a ``name`` attribute."""
+        assert DelegateTool.name == "delegate"
