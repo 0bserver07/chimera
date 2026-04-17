@@ -419,13 +419,17 @@ async def async_execute_tool_calls_incremental(
 
     Runs permission and detection checks synchronously (in-memory, no I/O).
     Executes approved tool calls concurrently via ``asyncio.gather()``.
-    Results are ordered to match *tool_calls* order.
+    Results are ordered to match *tool_calls* order — denied and
+    unknown-tool entries are placed at their original index, with
+    approved-tool results filling the remaining slots.
 
     :exc:`LoopBreak` is still raised (callers must handle it).
     """
     result = ToolExecutionResult()
 
     # Phase 1: pre-process — permission checks, tool resolution (sequential)
+    # ordered_results: slot-aligned to tool_calls so final ordering is preserved.
+    ordered_results: list[ToolResult | None] = [None] * len(tool_calls)
     approved: list[tuple[int, ToolCall, BaseTool]] = []
 
     for i, tc in enumerate(tool_calls):
@@ -450,10 +454,15 @@ async def async_execute_tool_calls_incremental(
                 )
             if action == PermissionAction.DENY:
                 context.add(Message.tool(tc.id, f"Permission denied for {tc.name}"))
-                tr = ToolResult(output=f"Permission denied for {tc.name}")
-                result.results.append(tr)
+                ordered_results[i] = ToolResult(
+                    output=f"Permission denied for {tc.name}",
+                )
                 continue
             if action == PermissionAction.ASK:
+                # Flush what we've ordered so far in their original slots
+                for r in ordered_results[:i]:
+                    if r is not None:
+                        result.results.append(r)
                 result.pending = PendingApproval(
                     tool_call=tc,
                     tool_name=tc.name,
@@ -485,8 +494,7 @@ async def async_execute_tool_calls_incremental(
         tool = tool_map.get(tc.name)
         if tool is None:
             context.add(Message.tool(tc.id, f"Error: unknown tool {tc.name}"))
-            tr = ToolResult(output="", error=f"Unknown tool {tc.name}")
-            result.results.append(tr)
+            ordered_results[i] = ToolResult(output="", error=f"Unknown tool {tc.name}")
             result.executed += 1
             continue
 
@@ -505,6 +513,10 @@ async def async_execute_tool_calls_incremental(
         approved.append((i, tc, tool))
 
     if not approved:
+        # Only denial / unknown tools — emit in order, skip empty slots
+        for r in ordered_results:
+            if r is not None:
+                result.results.append(r)
         return result
 
     # Phase 2: execute all approved tools concurrently
@@ -518,8 +530,23 @@ async def async_execute_tool_calls_incremental(
         *[_run(tc, t) for _, tc, t in approved]
     )
 
+    # Slot approved tool results back into their original indexes so order is preserved.
+    for (idx, _tc, _tool), tr in zip(approved, tool_results):
+        ordered_results[idx] = tr
+
     # Phase 3: post-process — add to context, emit events, detect loops
-    for (_, tc, _tool), tr in zip(approved, tool_results):
+    # Walk tool_calls in order; for approved slots, run the full post-processing.
+    approved_index_map = {idx for idx, _, _ in approved}
+    for i, tc in enumerate(tool_calls):
+        tr_opt = ordered_results[i]
+        if tr_opt is None:
+            continue
+        tr = tr_opt
+        if i not in approved_index_map:
+            # Denied or unknown — already appended context message; just record result.
+            result.results.append(tr)
+            continue
+        # Proceed to full post-processing for this approved tool call.
         content = tr.output if tr.success else f"Error: {tr.error}\n{tr.output}"
 
         # -- Truncation --

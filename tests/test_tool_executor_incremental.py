@@ -259,3 +259,45 @@ class TestAsyncExecutorSideEffects:
             [make_tc()], {"echo": EchoTool()}, ctx, None, config,
         )
         wire.send.assert_called()
+
+    @pytest.mark.asyncio
+    async def test_async_results_preserve_tool_calls_order_with_denials(self) -> None:
+        """Docstring promises 'Results are ordered to match tool_calls order'.
+
+        Regression: denied tool calls were appended to result.results
+        immediately in phase 1 while approved ones were appended after
+        gather() in phase 3, so ordering went [denied1, denied2,
+        approved1, approved2] instead of matching the original mix.
+        """
+        from chimera.core.loop_config import LoopConfig
+        from chimera.core.tool_executor import (
+            async_execute_tool_calls_incremental,
+        )
+        from chimera.permissions.presets import AllowList
+
+        # allowlist: only "echo" allowed; "fail" will be denied
+        policy = AllowList(allowed=["echo"])
+        config = LoopConfig(permissions=policy)
+        ctx = Context()
+
+        # Interleave denied and allowed: fail, echo, fail, echo
+        tcs = [
+            make_tc(name="fail", call_id="c1"),
+            make_tc(name="echo", call_id="c2"),
+            make_tc(name="fail", call_id="c3"),
+            make_tc(name="echo", call_id="c4"),
+        ]
+        result = await async_execute_tool_calls_incremental(
+            tcs,
+            {"echo": EchoTool(), "fail": FailTool()},
+            ctx,
+            None,
+            config,
+        )
+
+        assert len(result.results) == 4
+        # Order must match tool_calls: denied, allowed, denied, allowed
+        assert "Permission denied" in (result.results[0].output or "")  # c1 denied
+        assert "echo" in (result.results[1].output or "")  # c2 allowed
+        assert "Permission denied" in (result.results[2].output or "")  # c3 denied
+        assert "echo" in (result.results[3].output or "")  # c4 allowed
