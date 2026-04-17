@@ -647,44 +647,76 @@ def run_migrate(args: argparse.Namespace) -> int:
 
 
 def run_plugins(args: argparse.Namespace) -> int:
-    """Execute the plugins command."""
-    from chimera.plugins.marketplace import Marketplace
+    """Execute the plugins command.
 
-    marketplace = Marketplace()
+    Plugins are Python packages registered via the ``chimera.plugins`` entry
+    point group — installation goes through pip/uv like any other dep.
+    This command lists/searches what's currently installed; it does not run
+    a remote marketplace.
+    """
+    from chimera.plugins.manager import PluginManager
+
+    manager = PluginManager()
+    try:
+        discovered = manager.discover()
+    except Exception as exc:
+        print(f"Error discovering plugins: {exc}", file=sys.stderr)
+        return 1
 
     if args.action == "search":
-        if not args.query:
-            print("Error: search requires a query", file=sys.stderr)
-            return 1
-        results = marketplace.search(args.query)
-        if results:
-            for info in results:
-                print(f"  {info.name} v{info.version} - {info.description}")
+        query = (args.query or "").lower().strip()
+        if not query:
+            # Empty query = list everything
+            matches = discovered
         else:
-            print("No plugins found.")
+            matches = [name for name in discovered if query in name.lower()]
+        if not matches:
+            if discovered:
+                print(f"No plugins match '{args.query}'. Installed: {', '.join(discovered)}")
+            else:
+                print(
+                    "No plugins installed.\n"
+                    "Chimera plugins ship as Python packages registered via the\n"
+                    "`chimera.plugins` entry point group. Install with:\n"
+                    "  pip install chimera-plugin-<name>\n"
+                    "  # or\n"
+                    "  uv pip install chimera-plugin-<name>"
+                )
+            return 0
+        for name in matches:
+            print(f"  {name}")
         return 0
-    elif args.action == "install":
+
+    if args.action == "install":
         if not args.query:
             print("Error: install requires a plugin name", file=sys.stderr)
             return 1
-        success = marketplace.install(args.query)
-        if success:
-            print(f"Installed: {args.query}")
-        else:
-            print(f"Plugin not found: {args.query}", file=sys.stderr)
-            return 1
-        return 0
-    elif args.action == "uninstall":
+        print(
+            f"Chimera doesn't run its own installer — plugins are Python packages.\n"
+            f"To install '{args.query}':\n"
+            f"  pip install {args.query}\n"
+            f"  # or\n"
+            f"  uv pip install {args.query}\n"
+            f"Then verify with: chimera plugins search {args.query}",
+            file=sys.stderr,
+        )
+        return 1
+
+    if args.action == "uninstall":
         if not args.query:
             print("Error: uninstall requires a plugin name", file=sys.stderr)
             return 1
-        success = marketplace.uninstall(args.query)
-        if success:
-            print(f"Uninstalled: {args.query}")
-        else:
-            print(f"Plugin not installed: {args.query}", file=sys.stderr)
+        if args.query not in discovered:
+            print(f"Plugin '{args.query}' is not installed.", file=sys.stderr)
             return 1
-        return 0
+        print(
+            f"Chimera doesn't run its own uninstaller — use pip/uv:\n"
+            f"  pip uninstall {args.query}\n"
+            f"  # or\n"
+            f"  uv pip uninstall {args.query}",
+            file=sys.stderr,
+        )
+        return 1
 
     return 1
 
