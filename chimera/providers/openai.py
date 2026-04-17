@@ -81,7 +81,31 @@ class OpenAIProvider(Provider):
         return kwargs
 
     @staticmethod
-    def _parse_response(response: Any) -> Response:
+    def _extract_usage(usage_obj: Any) -> dict[str, int]:
+        """Extract granular token counts from an OpenAI ``usage`` object.
+
+        Includes reasoning_tokens (o1/o3/o4-mini) and cached input tokens
+        (prompt caching, available for gpt-4o and reasoning models) when
+        present.
+        """
+        usage: dict[str, int] = {
+            "input_tokens": getattr(usage_obj, "prompt_tokens", 0) or 0,
+            "output_tokens": getattr(usage_obj, "completion_tokens", 0) or 0,
+        }
+        details = getattr(usage_obj, "completion_tokens_details", None)
+        if details is not None:
+            reasoning = getattr(details, "reasoning_tokens", None)
+            if reasoning:
+                usage["reasoning_tokens"] = int(reasoning)
+        prompt_details = getattr(usage_obj, "prompt_tokens_details", None)
+        if prompt_details is not None:
+            cached = getattr(prompt_details, "cached_tokens", None)
+            if cached:
+                usage["cache_read_input_tokens"] = int(cached)
+        return usage
+
+    @classmethod
+    def _parse_response(cls, response: Any) -> Response:
         """Convert an OpenAI API response into a :class:`Response`."""
         choice = response.choices[0]
         content = choice.message.content or ""
@@ -96,10 +120,7 @@ class OpenAIProvider(Provider):
         return Response(
             content=content,
             tool_calls=tool_calls,
-            usage={
-                "input_tokens": response.usage.prompt_tokens,
-                "output_tokens": response.usage.completion_tokens,
-            },
+            usage=cls._extract_usage(response.usage),
         )
 
     # ------------------------------------------------------------------
@@ -140,10 +161,7 @@ class OpenAIProvider(Provider):
             if not chunk.choices:
                 # Final chunk may have usage only
                 if chunk.usage:
-                    usage = {
-                        "input_tokens": chunk.usage.prompt_tokens,
-                        "output_tokens": chunk.usage.completion_tokens,
-                    }
+                    usage = self._extract_usage(chunk.usage)
                 continue
 
             choice = chunk.choices[0]
@@ -245,10 +263,7 @@ class OpenAIProvider(Provider):
         async for chunk in response_stream:
             if not chunk.choices:
                 if chunk.usage:
-                    usage = {
-                        "input_tokens": chunk.usage.prompt_tokens,
-                        "output_tokens": chunk.usage.completion_tokens,
-                    }
+                    usage = self._extract_usage(chunk.usage)
                 continue
 
             choice = chunk.choices[0]

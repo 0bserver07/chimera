@@ -91,3 +91,34 @@ def test_context_window(provider):
 def test_model_name(provider):
     prov, _ = provider
     assert prov.model_name == "gpt-4o"
+
+
+def test_extract_usage_reasoning_and_cache_tokens():
+    """OpenAI reasoning (o1/o3) and cache tokens are surfaced in Response.usage."""
+
+    class _UsageObj:
+        prompt_tokens = 1000
+        completion_tokens = 500
+        class completion_tokens_details:  # noqa: N801
+            reasoning_tokens = 150
+        class prompt_tokens_details:  # noqa: N801
+            cached_tokens = 800
+
+    usage = OpenAIProvider._extract_usage(_UsageObj)
+    assert usage["input_tokens"] == 1000
+    assert usage["output_tokens"] == 500
+    assert usage["reasoning_tokens"] == 150
+    assert usage["cache_read_input_tokens"] == 800
+
+
+def test_extract_usage_without_details():
+    """When the SDK returns no details objects, only basic tokens are set."""
+
+    class _UsageObj:
+        prompt_tokens = 100
+        completion_tokens = 20
+        completion_tokens_details = None
+        prompt_tokens_details = None
+
+    usage = OpenAIProvider._extract_usage(_UsageObj)
+    assert usage == {"input_tokens": 100, "output_tokens": 20}
