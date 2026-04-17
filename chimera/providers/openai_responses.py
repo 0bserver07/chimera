@@ -156,8 +156,43 @@ class OpenAIResponsesProvider(Provider):
         return Response(
             content=msg.get("content", ""),
             tool_calls=tool_calls,
-            usage=data.get("usage", {}),
+            usage=self._normalise_usage(data.get("usage", {})),
         )
+
+    @staticmethod
+    def _normalise_usage(raw: dict[str, Any]) -> dict[str, int]:
+        """Translate OpenAI usage keys into Chimera's (input_tokens/output_tokens).
+
+        Responses API uses ``input_tokens``/``output_tokens`` directly while
+        chat completions uses ``prompt_tokens``/``completion_tokens``.
+        Reasoning and cached tokens are preserved when present.
+        """
+        if not raw:
+            return {}
+        usage: dict[str, int] = {
+            "input_tokens": int(
+                raw.get("input_tokens", raw.get("prompt_tokens", 0)) or 0,
+            ),
+            "output_tokens": int(
+                raw.get("output_tokens", raw.get("completion_tokens", 0)) or 0,
+            ),
+        }
+        # Responses API nests reasoning under output_tokens_details
+        details = raw.get("output_tokens_details") or raw.get(
+            "completion_tokens_details",
+        )
+        if isinstance(details, dict):
+            reasoning = details.get("reasoning_tokens")
+            if reasoning:
+                usage["reasoning_tokens"] = int(reasoning)
+        prompt_details = raw.get("input_tokens_details") or raw.get(
+            "prompt_tokens_details",
+        )
+        if isinstance(prompt_details, dict):
+            cached = prompt_details.get("cached_tokens")
+            if cached:
+                usage["cache_read_input_tokens"] = int(cached)
+        return usage
 
     # ------------------------------------------------------------------
     # Message formatting
@@ -236,7 +271,7 @@ class OpenAIResponsesProvider(Provider):
         return Response(
             content=content,
             tool_calls=tool_calls,
-            usage=data.get("usage", {}),
+            usage=self._normalise_usage(data.get("usage", {})),
         )
 
     # ------------------------------------------------------------------

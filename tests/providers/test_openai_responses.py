@@ -154,3 +154,56 @@ class TestOpenAIResponsesProvider:
         """supports_tool_use returns True."""
         provider = OpenAIResponsesProvider(model="gpt-4o", api_key="k")
         assert provider.supports_tool_use is True
+
+    def test_normalise_usage_chat_completions_keys(self) -> None:
+        """prompt_tokens/completion_tokens are renamed to input/output."""
+        norm = OpenAIResponsesProvider._normalise_usage(
+            {"prompt_tokens": 120, "completion_tokens": 34, "total_tokens": 154},
+        )
+        assert norm["input_tokens"] == 120
+        assert norm["output_tokens"] == 34
+
+    def test_normalise_usage_responses_api_keys(self) -> None:
+        """input_tokens/output_tokens passthrough, reasoning + cache extracted."""
+        norm = OpenAIResponsesProvider._normalise_usage({
+            "input_tokens": 200,
+            "output_tokens": 50,
+            "output_tokens_details": {"reasoning_tokens": 20},
+            "input_tokens_details": {"cached_tokens": 180},
+        })
+        assert norm["input_tokens"] == 200
+        assert norm["output_tokens"] == 50
+        assert norm["reasoning_tokens"] == 20
+        assert norm["cache_read_input_tokens"] == 180
+
+    def test_chat_fallback_usage_has_input_tokens(self) -> None:
+        """Regression: chat-completions fallback response must expose input_tokens.
+
+        Previously we passed the raw OpenAI usage dict (prompt_tokens/
+        completion_tokens) through unchanged, so chimera.providers.cost
+        always returned $0.00 for this provider.
+        """
+        provider = OpenAIResponsesProvider(model="gpt-4o", api_key="k")
+        mock_client = MagicMock()
+        mock_responses_resp = MagicMock()
+        mock_responses_resp.raise_for_status.side_effect = Exception("404")
+        mock_client.post.side_effect = [
+            mock_responses_resp,
+            MagicMock(
+                json=MagicMock(return_value={
+                    "choices": [{"message": {"content": "ok", "tool_calls": None}}],
+                    "usage": {"prompt_tokens": 1000, "completion_tokens": 200},
+                }),
+                raise_for_status=MagicMock(),
+            ),
+        ]
+        provider._client = mock_client
+
+        resp = provider.complete([Message.user("hi")])
+        assert resp.usage["input_tokens"] == 1000
+        assert resp.usage["output_tokens"] == 200
+
+        # And chimera.providers.cost now computes a non-zero cost for it.
+        from chimera.providers.cost import calculate_cost
+        cost = calculate_cost("gpt-4o", resp.usage)
+        assert cost > 0
