@@ -26,12 +26,31 @@ class TestTool(BaseTool):
         if path:
             # Run specific test file using bash
             result = env.run_command(f"python -m pytest {path} -v")
-        else:
-            # Run full test suite via env.run_tests()
-            test_result = env.run_tests()
-            return ToolResult(output=test_result.output)
+            output = result.stdout
+            if result.stderr:
+                output += f"\n{result.stderr}"
+            if not result.success:
+                return ToolResult(
+                    output=output,
+                    error=f"Tests failed (exit code {result.exit_code})",
+                )
+            return ToolResult(output=output)
 
-        output = result.stdout
-        if result.stderr:
-            output += f"\n{result.stderr}"
-        return ToolResult(output=output)
+        # Run full test suite via env.run_tests()
+        test_result = env.run_tests()
+        metadata: dict[str, Any] = {}
+        for attr in ("passed", "failed", "errors", "total"):
+            value = getattr(test_result, attr, None)
+            if value is not None:
+                metadata[attr] = value
+        if getattr(test_result, "success", True) is False:
+            failed = metadata.get("failed")
+            err = (
+                f"{failed} test(s) failed"
+                if failed
+                else "Test run reported failure"
+            )
+            return ToolResult(
+                output=test_result.output, error=err, metadata=metadata
+            )
+        return ToolResult(output=test_result.output, metadata=metadata)

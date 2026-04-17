@@ -38,6 +38,23 @@ class TestTestTool:
         result = tool.execute({}, env)
         assert "failed" in result.output.lower()
 
+    def test_specific_file_failure_sets_error(self, env):
+        """When a targeted test file fails, ToolResult must signal error."""
+        env.write_file("test_fail.py", "def test_fail():\n    assert False\n")
+        tool = TestTool()
+        result = tool.execute({"path": "test_fail.py"}, env)
+        assert result.error is not None
+        assert "failed" in result.error.lower() or "exit" in result.error.lower()
+        # Output still contains the pytest report.
+        assert "FAILED" in result.output or "failed" in result.output.lower()
+
+    def test_specific_file_success_no_error(self, env):
+        env.write_file("test_ok.py", "def test_ok():\n    assert True\n")
+        tool = TestTool()
+        result = tool.execute({"path": "test_ok.py"}, env)
+        assert result.error is None
+        assert result.success
+
     def test_schema(self):
         tool = TestTool()
         assert tool.name == "test"
