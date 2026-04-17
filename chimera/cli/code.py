@@ -230,7 +230,20 @@ def cmd_session(session: Any, env: Any, args: str, out: PrintFn) -> None:
         else:
             out("Session save not available.")
     elif sub == "list":
-        out("Session management: /session save [name] | /session list")
+        from pathlib import Path
+
+        session_dir = Path.home() / ".chimera" / "sessions"
+        if not session_dir.exists():
+            out("No sessions (~/.chimera/sessions/ does not exist).")
+            return
+        files = sorted(session_dir.glob("*.jsonl"))
+        if not files:
+            out("No sessions saved yet.")
+            return
+        out(f"Saved sessions ({len(files)}):")
+        for f in files:
+            size_kb = f.stat().st_size / 1024
+            out(f"  {f.stem}  ({size_kb:.1f} KB)")
     elif sub == "fork":
         if hasattr(session, "fork"):
             session.fork()
@@ -238,7 +251,7 @@ def cmd_session(session: Any, env: Any, args: str, out: PrintFn) -> None:
         else:
             out("Session fork not available.")
     else:
-        out(f"Unknown session command: {sub}")
+        out(f"Unknown session command: {sub}. Try: save, list, fork")
 
 
 def cmd_tree(session: Any, env: Any, args: str, out: PrintFn) -> None:
