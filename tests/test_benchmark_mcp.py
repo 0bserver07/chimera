@@ -84,6 +84,29 @@ class TestBenchmarkMCPServer:
         tool_names = [t["name"] for t in tools]
         assert "chimera_eval" in tool_names
         assert "chimera_humaneval" in tool_names
+        assert "chimera_list_benchmarks" in tool_names
+
+    def test_list_benchmarks_tool_call(self) -> None:
+        """chimera_list_benchmarks enumerates real problem IDs."""
+        from chimera.mcp_servers.benchmark_server import HUMANEVAL_PROBLEMS
+
+        server = BenchmarkMCPServer()
+        resp = server.handle_message({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "chimera_list_benchmarks",
+                "arguments": {},
+            },
+        })
+        assert resp is not None
+        text = resp["result"]["content"][0]["text"]
+        # Every real problem ID must appear in the listing
+        for pid in HUMANEVAL_PROBLEMS:
+            assert f"HumanEval/{pid}" in text
+        # And the printed count must match reality
+        assert f"({len(HUMANEVAL_PROBLEMS)})" in text
 
     def test_eval_tool_call(self) -> None:
         server = BenchmarkMCPServer()

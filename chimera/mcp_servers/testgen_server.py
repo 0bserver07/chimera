@@ -194,6 +194,9 @@ class TestgenMCPServer:
             instance.  A new one is created if not provided.
     """
 
+    # Prevent pytest from collecting this class as a test class.
+    __test__ = False
+
     def __init__(
         self,
         generator: TestGenerator | None = None,

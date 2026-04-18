@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """MCP server for running code evaluations.
 
-Exposes two tools:
+Exposes three tools:
 
 - ``chimera_eval(code, test_code)`` -- run Python code against test code
   and return pass/fail with output.
 - ``chimera_humaneval(problem_id)`` -- return a HumanEval problem prompt
   for a given problem ID (offline subset).
+- ``chimera_list_benchmarks()`` -- enumerate the HumanEval problem IDs
+  available in this build.
 
 Usage::
 
@@ -81,7 +83,8 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "name": "chimera_humaneval",
         "description": (
             "Get a HumanEval problem prompt by ID. Returns the function "
-            "signature, docstring, and test cases for the problem."
+            "signature, docstring, and test cases for the problem. "
+            "Use ``chimera_list_benchmarks`` to discover available IDs."
         ),
         "inputSchema": {
             "type": "object",
@@ -90,11 +93,22 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
                     "type": "string",
                     "description": (
                         "Problem ID (e.g. 'HumanEval/0' or just '0'). "
-                        "Available problems: 0-9 (built-in subset)."
+                        "Call chimera_list_benchmarks for the full list."
                     ),
                 },
             },
             "required": ["problem_id"],
+        },
+    },
+    {
+        "name": "chimera_list_benchmarks",
+        "description": (
+            "List the HumanEval problem IDs that this server can serve "
+            "offline, with a one-line summary per problem."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {},
         },
     },
 ]
@@ -301,6 +315,30 @@ HUMANEVAL_PROBLEMS: dict[str, dict[str, str]] = {
 }
 
 
+def _summarize_problem(problem: dict[str, str]) -> str:
+    """Return a one-line summary for a HumanEval problem.
+
+    Extracts the function signature (first ``def`` line) from the prompt.
+    Falls back to the first non-empty line of the prompt.
+
+    Args:
+        problem: Problem dict with ``"prompt"`` and ``"test"`` keys.
+
+    Returns:
+        Short single-line description of the problem.
+    """
+    prompt = problem.get("prompt", "")
+    for raw in prompt.splitlines():
+        stripped = raw.strip()
+        if stripped.startswith("def "):
+            return stripped.rstrip(":")
+    for raw in prompt.splitlines():
+        stripped = raw.strip()
+        if stripped:
+            return stripped[:80]
+    return "(no description)"
+
+
 def get_humaneval_problem(problem_id: str) -> dict[str, str] | None:
     """Retrieve a HumanEval problem by ID.
 
@@ -380,6 +418,8 @@ class BenchmarkMCPServer:
             return self._call_eval(arguments)
         elif tool_name == "chimera_humaneval":
             return self._call_humaneval(arguments)
+        elif tool_name == "chimera_list_benchmarks":
+            return self._call_list_benchmarks(arguments)
         else:
             return {
                 "content": [{"type": "text", "text": f"Unknown tool: {tool_name}"}],
@@ -424,6 +464,25 @@ class BenchmarkMCPServer:
             lines.append(f"\nOutput:\n{result.output}")
         if result.error:
             lines.append(f"\nError:\n{result.error}")
+
+        return {
+            "content": [{"type": "text", "text": "\n".join(lines)}],
+        }
+
+    def _call_list_benchmarks(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        """Execute chimera_list_benchmarks tool.
+
+        Args:
+            arguments: Unused.
+
+        Returns:
+            MCP content response enumerating available problem IDs with a
+            short summary per problem.
+        """
+        lines = [f"Available HumanEval problems ({len(HUMANEVAL_PROBLEMS)}):", ""]
+        for pid in sorted(HUMANEVAL_PROBLEMS.keys(), key=lambda s: int(s)):
+            summary = _summarize_problem(HUMANEVAL_PROBLEMS[pid])
+            lines.append(f"  HumanEval/{pid}: {summary}")
 
         return {
             "content": [{"type": "text", "text": "\n".join(lines)}],
