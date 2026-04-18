@@ -24,6 +24,12 @@ class PatternCycleDetector(DetectionStrategy):
     """
 
     def __init__(self, window: int = 10, threshold: int = 2) -> None:
+        if threshold < 2:
+            raise ValueError(
+                "PatternCycleDetector requires threshold >= 2; a cycle "
+                "by definition needs at least two repetitions of the "
+                "base sub-sequence. Got threshold=%r." % (threshold,)
+            )
         self.window = window
         self.threshold = threshold
         self._history: deque[str] = deque(maxlen=window)

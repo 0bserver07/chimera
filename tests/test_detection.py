@@ -139,6 +139,42 @@ class TestPatternCycleDetector:
         d.reset()
         assert d.check() is None
 
+    def test_threshold_less_than_two_is_rejected(self):
+        """Regression: threshold=1 previously produced vacuous matches.
+
+        With threshold=1 the inner `all(...)` over an empty range returned
+        True, so any two-call tail was flagged as a cycle.  A cycle by
+        definition requires at least 2 repetitions, so the constructor
+        must refuse threshold < 2 instead of silently producing nonsense
+        detections.
+        """
+        import pytest
+        with pytest.raises(ValueError, match="threshold >= 2"):
+            PatternCycleDetector(window=10, threshold=1)
+        with pytest.raises(ValueError, match="threshold >= 2"):
+            PatternCycleDetector(window=10, threshold=0)
+
+    def test_long_range_abc_abc_abc_cycle(self):
+        """Detector handles A-B-C cycles repeated threshold=3 times."""
+        d = PatternCycleDetector(window=20, threshold=3)
+        for _ in range(3):
+            d.record("a", {"x": 1})
+            d.record("b", {"x": 2})
+            d.record("c", {"x": 3})
+        result = d.check()
+        assert result is not None
+        assert "period 3" in result.pattern
+        assert "3 times" in result.pattern
+
+    def test_no_false_positive_on_legitimate_next_file_loop(self):
+        """Regression: repeated same-tool calls with different args (e.g.
+        reading a sequence of files) must not be flagged as a cycle.
+        """
+        d = PatternCycleDetector(window=10, threshold=2)
+        for i in range(6):
+            d.record("read_file", {"path": f"file_{i}.py"})
+        assert d.check() is None
+
 
 # ---------------------------------------------------------------------------
 # CompositeDetector
