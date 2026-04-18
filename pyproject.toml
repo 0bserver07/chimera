@@ -73,3 +73,7 @@ line-length = 100
 [tool.mypy]
 python_version = "3.11"
 strict = true
+# Optional-dep imports use `# type: ignore[import-not-found]` which flips
+# between used/unused depending on whether the dep is installed in the
+# current venv. Don't flag that as a lint failure.
+warn_unused_ignores = false
