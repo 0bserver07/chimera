@@ -2,8 +2,33 @@
   "mcpServers": {
     "chimera-search": {
       "command": "python3",
-      "args": ["chimera/mcp_servers/search_server.py"],
+      "args": ["-m", "chimera.mcp_servers.search_server"],
       "description": "Chimera codebase search — TF-IDF file search and symbol lookup"
+    },
+    "chimera-review": {
+      "command": "python3",
+      "args": ["-m", "chimera.mcp_servers.review_server"],
+      "description": "Chimera multi-perspective code review (logic, security, tests, architecture, ...)"
+    },
+    "chimera-testgen": {
+      "command": "python3",
+      "args": ["-m", "chimera.mcp_servers.testgen_server"],
+      "description": "Chimera test skeleton generation and coverage-gap analysis"
+    },
+    "chimera-migration": {
+      "command": "python3",
+      "args": ["-m", "chimera.mcp_servers.migration_server"],
+      "description": "Chimera migration scan/apply with presets (python2-to-3, commonjs-to-esm)"
+    },
+    "chimera-rag": {
+      "command": "python3",
+      "args": ["-m", "chimera.mcp_servers.rag_server"],
+      "description": "Chimera RAG — doc search, API lookup, grounded answers"
+    },
+    "chimera-benchmark": {
+      "command": "python3",
+      "args": ["-m", "chimera.mcp_servers.benchmark_server"],
+      "description": "Chimera benchmarking — HumanEval, SWE-bench, custom suites"
     }
   }
 }

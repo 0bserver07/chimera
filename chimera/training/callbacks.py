@@ -5,6 +5,25 @@ import json
 from chimera.training.strategies.base import Callback, EpochResult, SynthesisResult
 
 
+def _to_epoch_result(
+    epoch: int | EpochResult, result: EpochResult | None
+) -> EpochResult:
+    """Normalize the two-arg / one-arg on_epoch_end signatures.
+
+    Callers pass either ``(epoch_int, epoch_result)`` (two-arg form) or
+    ``(epoch_result, None)`` (one-arg form). This helper returns the
+    ``EpochResult`` regardless, raising ``TypeError`` on malformed calls.
+    """
+    if result is not None:
+        return result
+    if isinstance(epoch, EpochResult):
+        return epoch
+    raise TypeError(
+        f"on_epoch_end expected an EpochResult; got epoch={epoch!r} with "
+        "result=None. Pass either (epoch_int, EpochResult) or (EpochResult,)."
+    )
+
+
 class CheckpointCallback(Callback):
     """Save a checkpoint every N epochs."""
 
@@ -13,7 +32,7 @@ class CheckpointCallback(Callback):
         self.epochs_seen: list[EpochResult] = []
 
     def on_epoch_end(self, epoch: int | EpochResult, result: EpochResult | None = None) -> bool:
-        er = result if result is not None else epoch
+        er = _to_epoch_result(epoch, result)
         self.epochs_seen.append(er)
         return True
 
@@ -33,7 +52,7 @@ class CostLimitCallback(Callback):
         self.exceeded = False
 
     def on_epoch_end(self, epoch: int | EpochResult, result: EpochResult | None = None) -> bool:
-        er = result if result is not None else epoch
+        er = _to_epoch_result(epoch, result)
         self.total_cost += er.cost
         if self.total_cost > self.max_cost:
             self.exceeded = True
@@ -54,7 +73,7 @@ class ProgressCallback(Callback):
         self.epochs: list[EpochResult] = []
 
     def on_epoch_end(self, epoch: int | EpochResult, result: EpochResult | None = None) -> bool:
-        er = result if result is not None else epoch
+        er = _to_epoch_result(epoch, result)
         self.epochs.append(er)
         return True
 
@@ -77,7 +96,7 @@ class ProgressBar(Callback):
         print(f"Synthesis starting (max {self.max_iterations} iterations)")
 
     def on_epoch_end(self, epoch: int | EpochResult, result: EpochResult | None = None) -> bool:
-        er = result if result is not None else epoch
+        er = _to_epoch_result(epoch, result)
         bar_len = 30
         filled = int(bar_len * er.pass_rate)
         bar = "\u2588" * filled + "\u2591" * (bar_len - filled)
@@ -112,7 +131,7 @@ class CostLimit(Callback):
         self._total_cost = 0.0
 
     def on_epoch_end(self, epoch: int | EpochResult, result: EpochResult | None = None) -> bool:
-        er = result if result is not None else epoch
+        er = _to_epoch_result(epoch, result)
         self._total_cost += er.cost
         return self._total_cost < self.max_cost
 
@@ -128,7 +147,7 @@ class EpochCheckpoint(Callback):
         self.checkpoints: list[str] = []
 
     def on_epoch_end(self, epoch: int | EpochResult, result: EpochResult | None = None) -> bool:
-        er = result if result is not None else epoch
+        er = _to_epoch_result(epoch, result)
         epoch_num = epoch if isinstance(epoch, int) else er.epoch
         if epoch_num % self.every == 0 and er.checkpoint_id is not None:
             self.checkpoints.append(er.checkpoint_id)
@@ -151,7 +170,7 @@ class HistoryRecorder(Callback):
         self.final_result = None
 
     def on_epoch_end(self, epoch: int | EpochResult, result: EpochResult | None = None) -> bool:
-        er = result if result is not None else epoch
+        er = _to_epoch_result(epoch, result)
         self.epochs.append(er)
         return True
 
@@ -178,7 +197,7 @@ class TrainingCurveCallback(Callback):
 
     def on_epoch_end(self, epoch: int | EpochResult, result: EpochResult | None = None) -> bool:
         """Record the epoch result."""
-        er = result if result is not None else epoch
+        er = _to_epoch_result(epoch, result)
         self.epochs.append(er)
         return True
 
@@ -283,7 +302,7 @@ class TrainingCurveCallback(Callback):
 
         return warnings
 
-    def to_dict(self) -> list[dict]:
+    def to_dict(self) -> list[dict[str, float | int]]:
         """JSON-serializable list of epoch data.
 
         Returns:
@@ -303,5 +322,7 @@ class TrainingCurveCallback(Callback):
 
     def _write_json(self) -> None:
         """Write ``to_dict()`` to ``self._output_path``."""
+        if self._output_path is None:
+            return
         with open(self._output_path, "w") as f:
             json.dump(self.to_dict(), f, indent=2)
