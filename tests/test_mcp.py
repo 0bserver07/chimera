@@ -1,6 +1,7 @@
 # tests/test_mcp.py
 import json
 
+import pytest
 
 from chimera.mcp.transport import MCPTransport, StdioTransport, HTTPTransport
 from chimera.mcp.client import MCPClient
