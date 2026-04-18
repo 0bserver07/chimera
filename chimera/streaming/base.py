@@ -44,10 +44,14 @@ class StreamHandler(ABC):
         """Called when the entire streaming run is complete."""
 
     def handle_event(self, event: StreamEvent) -> None:
-        """Dispatch a :class:`StreamEvent` to the appropriate handler method."""
+        """Dispatch a :class:`StreamEvent` to the appropriate handler method.
+
+        Only dispatches incremental/token-level events (``text_delta``) to
+        the handler.  Semantic life-cycle events (``tool_call_start``,
+        ``tool_call_complete``, ``done``) are **intentionally not
+        dispatched here** — the ReAct loop raises those explicitly at the
+        step boundary so the handler sees exactly one ``on_tool_start``
+        per tool call and one ``on_done`` at the end of the whole run.
+        """
         if event.type == "text_delta":
             self.on_text(event.content)
-        elif event.type == "tool_call_start" and event.tool_call:
-            self.on_tool_start(event.tool_call.name, event.tool_call.id)
-        elif event.type == "done":
-            self.on_done()

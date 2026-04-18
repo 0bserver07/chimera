@@ -148,6 +148,50 @@ class TestReActStreaming:
         assert "tool_start" in types
         assert "tool_end" in types
 
+    def test_handler_does_not_double_emit_tool_start_or_done(self):
+        """Regression: handle_event + explicit on_tool_start/on_done once each.
+
+        Previously, _accumulate_stream forwarded every StreamEvent through
+        StreamHandler.handle_event, which dispatched on_tool_start for
+        tool_call_start events *and* on_done for mid-stream done events.
+        The loop then explicitly called on_tool_start and on_done again,
+        producing duplicate events.
+        """
+        from chimera.core.tool import tool as tool_decorator
+        from chimera.types import ToolResult
+
+        @tool_decorator(name="greet2", description="Say hi", parameters={
+            "type": "object",
+            "properties": {"name": {"type": "string"}},
+            "required": ["name"],
+        })
+        def greet2(args, env):
+            return ToolResult(output=f"Hi {args['name']}")
+
+        tc = ToolCall(id="c1", name="greet2", arguments={"name": "A"})
+        step1 = [
+            StreamEvent(type="tool_call_start", tool_call=tc),
+            StreamEvent(type="tool_call_complete", tool_call=tc),
+            StreamEvent(type="done", usage={"input_tokens": 1, "output_tokens": 1}),
+        ]
+        step2 = [
+            StreamEvent(type="text_delta", content="ok"),
+            StreamEvent(type="done", usage={"input_tokens": 1, "output_tokens": 1}),
+        ]
+        provider = FakeStreamProvider([step1, step2])
+        handler = CollectStreamHandler()
+        loop = ReAct(config=LoopConfig(handler=handler))
+
+        drain_steps(loop.iter_steps(provider, [greet2], Context(), None))
+
+        types = [e["type"] for e in handler.events]
+        # Exactly one tool_start for the single tool call
+        assert types.count("tool_start") == 1
+        # Exactly one tool_end
+        assert types.count("tool_end") == 1
+        # Exactly one terminal done (mid-stream done events no longer leak)
+        assert types.count("done") == 1
+
     def test_accumulate_stream_static(self):
         """ReAct._accumulate_stream works identically to StreamingReAct's."""
         events = [
