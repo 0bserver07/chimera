@@ -107,7 +107,14 @@ class WebSocketTransport(BridgeTransport):
         await self._ws.send(json.dumps(message))
 
     async def receive(self) -> AsyncGenerator[dict[str, Any], None]:
-        """Receive messages from WebSocket."""
+        """Receive messages from WebSocket.
+
+        Yields parsed JSON objects. Invalid JSON lines are skipped. If
+        the underlying WebSocket raises an exception (including normal
+        connection close), this generator marks itself disconnected and
+        re-raises so the caller can tell why the stream ended instead
+        of seeing a silent StopAsyncIteration.
+        """
         if not self._ws:
             raise ConnectionError("WebSocket not connected. Call connect() first.")
         try:
@@ -118,6 +125,7 @@ class WebSocketTransport(BridgeTransport):
                     continue
         except Exception:
             self._connected = False
+            raise
 
     async def disconnect(self) -> None:
         """Close the WebSocket connection."""

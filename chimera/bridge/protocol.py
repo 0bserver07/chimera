@@ -6,6 +6,7 @@ transport.
 """
 from __future__ import annotations
 
+import inspect
 from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator
 from typing import Any, Callable
@@ -49,10 +50,16 @@ class BridgeProtocol:
         """Listen for messages and dispatch to registered handlers.
 
         Runs until the transport's receive generator is exhausted or the
-        task is cancelled.
+        task is cancelled.  Both sync and async handlers are supported:
+        async handlers (or sync handlers that return a coroutine) are
+        awaited so their side effects actually happen.  Without this,
+        registering an ``async def`` handler would silently do nothing.
         """
         async for message in self._transport.receive():
             msg_type = message.get("type")
             if msg_type and msg_type in self._handlers:
+                data = message.get("data", {})
                 for handler in self._handlers[msg_type]:
-                    handler(message.get("data", {}))
+                    result = handler(data)
+                    if inspect.isawaitable(result):
+                        await result

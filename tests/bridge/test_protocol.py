@@ -51,3 +51,34 @@ class TestBridgeProtocol:
 
         assert len(received) == 1
         assert received[0]["seq"] == 1
+
+    @pytest.mark.asyncio
+    async def test_async_handler_is_awaited(self) -> None:
+        """Async handlers registered via on_message must actually run.
+
+        Regression test: listen() previously called the handler but did
+        not await the returned coroutine, so async handlers (like the
+        ones REPLBridge registers) silently did nothing.
+        """
+        transport = InMemoryTransport()
+        protocol = BridgeProtocol(transport)
+
+        received: list[dict] = []
+
+        async def handler(data: dict) -> None:
+            # force a suspension so the coroutine can't complete synchronously
+            await asyncio.sleep(0)
+            received.append(data)
+
+        protocol.on_message("tick", handler)
+        transport.inject({"type": "tick", "data": {"seq": 1}})
+
+        listen_task = asyncio.create_task(protocol.listen())
+        await asyncio.sleep(0.05)
+        listen_task.cancel()
+        try:
+            await listen_task
+        except asyncio.CancelledError:
+            pass
+
+        assert received == [{"seq": 1}]

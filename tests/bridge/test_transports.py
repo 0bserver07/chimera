@@ -192,3 +192,30 @@ class TestWebSocketTransport:
         # Should not raise
         await transport.disconnect()
         assert transport.is_connected is False
+
+    @pytest.mark.asyncio
+    async def test_receive_reraises_underlying_ws_exception(self):
+        """receive() must re-raise (not swallow) ws exceptions.
+
+        Regression test: previously ``async for raw in self._ws`` was
+        wrapped in ``except Exception: self._connected = False`` which
+        turned a dropped connection into a silent StopAsyncIteration so
+        callers could not distinguish a closed socket from no messages.
+        """
+        transport = WebSocketTransport("ws://localhost:8080")
+
+        class BrokenWS:
+            def __aiter__(self):
+                return self
+
+            async def __anext__(self):
+                raise ConnectionError("ws peer gone")
+
+        transport._ws = BrokenWS()
+        transport._connected = True
+
+        with pytest.raises(ConnectionError, match="ws peer gone"):
+            async for _ in transport.receive():
+                pass
+        # And the state flag must be cleared so callers can tell.
+        assert transport.is_connected is False
