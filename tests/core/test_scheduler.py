@@ -1,8 +1,6 @@
 """Tests for chimera.core.scheduler — Scheduled Agent Events."""
 from __future__ import annotations
 
-import asyncio
-import json
 import time
 import pytest
 from pathlib import Path

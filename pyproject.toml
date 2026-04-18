@@ -63,6 +63,13 @@ markers = [
 target-version = "py311"
 line-length = 100
 
+[tool.ruff.lint.per-file-ignores]
+# Tests commonly need: conditional imports after env setup (E402),
+# single-letter loop vars (E741 — `l` for line, etc).
+"tests/**/*.py" = ["E402", "E741"]
+# Examples: short iteration vars are readable in small scripts.
+"examples/**/*.py" = ["E741"]
+
 [tool.mypy]
 python_version = "3.11"
 strict = true

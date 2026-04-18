@@ -19,7 +19,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
-import time
+from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -139,7 +139,6 @@ async def run_instance(instance: dict, model: str, max_turns: int) -> dict:
         )
 
         # Run CodingAgent
-        start = time.time()
         agent = CodingAgent(
             model=model,
             preset="claude_code",

@@ -16,7 +16,6 @@ import os
 import tempfile
 from unittest.mock import MagicMock
 
-import pytest
 
 import chimera
 from chimera.agents.presets.agent_styles import AgentPreset

@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 
 from chimera.hooks.emitter import HookEmitter
 from chimera.hooks.events import HookEvent

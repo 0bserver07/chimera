@@ -116,18 +116,21 @@ class HookExecutor:
 
             stderr_text = stderr.decode().strip() if stderr else ""
             stdout_text = stdout.decode().strip() if stdout else ""
+            # Prefer stderr for diagnostics, but fall back to stdout — some
+            # hook scripts report errors on stdout only.
+            msg = stderr_text or stdout_text
 
             if proc.returncode == 0:
                 return HookOutput(continue_execution=True)
             elif proc.returncode == 2:
                 return HookOutput(
                     continue_execution=False,
-                    reason=stderr_text or "Blocked by hook",
+                    reason=msg or "Blocked by hook",
                 )
             else:
                 return HookOutput(
                     continue_execution=True,
-                    system_message=stderr_text or f"Hook exited with code {proc.returncode}",
+                    system_message=msg or f"Hook exited with code {proc.returncode}",
                 )
 
         except asyncio.TimeoutError:

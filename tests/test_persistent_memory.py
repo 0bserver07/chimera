@@ -4,7 +4,7 @@ from __future__ import annotations
 import os
 import tempfile
 
-from chimera.context.persistent_memory import PersistentMemory, PersistentMemoryConfig
+from chimera.context.persistent_memory import PersistentMemory
 from chimera.types import Message
 
 

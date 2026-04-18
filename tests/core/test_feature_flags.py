@@ -1,7 +1,6 @@
 """Tests for chimera.core.feature_flags — FeatureFlags class-level state."""
 from __future__ import annotations
 
-import os
 
 import pytest
 

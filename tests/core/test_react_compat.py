@@ -7,9 +7,8 @@ import pytest
 from chimera.core.context import Context
 from chimera.core.loop import ReAct
 from chimera.core.loop_events import LoopEvent, LoopEventType
-from chimera.core.tool import BaseTool
 from chimera.providers.base import Response
-from chimera.types import AgentResult, Message, ToolResult
+from chimera.types import AgentResult, Message
 
 
 # ---------------------------------------------------------------------------

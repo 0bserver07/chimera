@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 
-from chimera.types import Message, ToolResult
+from chimera.types import Message
 
 
 class QuerySource(Enum):

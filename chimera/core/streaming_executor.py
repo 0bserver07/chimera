@@ -10,7 +10,6 @@ signal so other in-flight tasks can observe the failure and short-circuit.
 from __future__ import annotations
 
 import asyncio
-from typing import Any
 
 from chimera.core.abort import AbortSignal
 from chimera.core.tool import BaseTool

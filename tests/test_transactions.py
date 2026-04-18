@@ -7,7 +7,7 @@ from unittest.mock import patch
 import pytest
 
 from chimera.env.local import LocalEnvironment
-from chimera.transactions import FileTransaction, StagedChange, TransactionState
+from chimera.transactions import FileTransaction, TransactionState
 from chimera.types import ChangeType, FileChange
 
 

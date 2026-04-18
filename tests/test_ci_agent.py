@@ -1,7 +1,6 @@
 """Tests for CI failure parsing and fix workflow."""
 from __future__ import annotations
 
-import pytest
 
 from chimera.ci.failure_parser import FailureInfo, parse_ci_log
 from chimera.ci.fix_workflow import CIFixWorkflow
@@ -131,9 +130,7 @@ class TestCIFixWorkflowRun:
 
     def test_run_retries_until_max_attempts(self):
         from chimera.core.agent import Agent
-        from chimera.core.loop import ReAct
         from chimera.providers.base import Response
-        from chimera.types import AgentResult
 
         # Agent.run returns AgentResult with success=False when no tool calls
         # The ReAct loop returns success=True when the model gives a text-only response

@@ -18,7 +18,6 @@ from chimera.core.agent import Agent
 from chimera.core.loop import ReAct
 from chimera.core.prompt import Prompt
 from chimera.eval.benchmarks.custom import CustomBenchmark
-from chimera.eval.benchmarks.human_eval import HumanEval
 from chimera.eval.benchmarks.swe_bench import SWEBench, SWEBenchInstance
 from chimera.eval.harness import Harness
 from chimera.eval.metrics import pass_at_k, resolve_rate

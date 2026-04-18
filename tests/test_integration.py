@@ -10,7 +10,6 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
-import pytest
 
 from chimera.core.agent import Agent
 from chimera.core.loop import ReAct

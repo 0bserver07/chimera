@@ -2,7 +2,6 @@
 
 from pathlib import Path
 
-import pytest
 
 from chimera.core.prompt_template import PromptTemplate, PromptTemplateLoader
 

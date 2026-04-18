@@ -8,7 +8,6 @@ import tempfile
 from chimera.hooks.events import HookEvent
 from chimera.hooks.loader import HookLoader
 from chimera.hooks.session_hooks import SessionHookManager
-from chimera.hooks.hook_types import HookOutput
 
 
 # ---------------------------------------------------------------------------

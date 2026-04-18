@@ -2,9 +2,8 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
-import pytest
 
 from chimera.providers.openai_responses import OpenAIResponsesProvider
 from chimera.providers.base import Response

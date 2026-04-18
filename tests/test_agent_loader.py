@@ -4,9 +4,7 @@ from __future__ import annotations
 import os
 import tempfile
 
-import pytest
 
-from chimera.agents.config import AgentConfig
 from chimera.agents.loader import create_default_registry, load_custom_agents
 from chimera.agents.registry import AgentRegistry
 

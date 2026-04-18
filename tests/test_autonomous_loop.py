@@ -6,7 +6,7 @@ from chimera.core.loop import drain_steps
 from chimera.core.loops.autonomous import AutonomousLoop, _parse_plan
 from chimera.core.tool import BaseTool
 from chimera.providers.base import Provider, Response
-from chimera.types import AgentResult, Message, ToolCall, ToolResult
+from chimera.types import Message, ToolCall, ToolResult
 
 
 # ---------------------------------------------------------------------------
@@ -339,7 +339,7 @@ class TestReplansOnFailure:
         ctx = Context()
         ctx.add(Message.user("Complete the project"))
 
-        result = loop.run(provider, [_DummyTool()], ctx, None)
+        loop.run(provider, [_DummyTool()], ctx, None)
 
         assert loop.replan_count == 1
         # Step 1 succeeded, step 2 failed + replanned

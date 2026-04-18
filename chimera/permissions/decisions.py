@@ -1,7 +1,7 @@
 """Permission decision types returned by the checker."""
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from chimera.permissions.rules import PermissionBehavior

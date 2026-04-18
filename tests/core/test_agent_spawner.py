@@ -6,7 +6,7 @@ import asyncio
 import pytest
 
 from chimera.core.abort import AbortSignal
-from chimera.core.agent_context import AgentContext, IsolationLevel
+from chimera.core.agent_context import AgentContext
 from chimera.core.agent_definition import AgentDefinition
 from chimera.core.agent_spawner import AgentSpawner
 from chimera.core.loop_events import LoopEventType

@@ -1,5 +1,4 @@
 from chimera.core.tool import BaseTool, tool
-from chimera.env.local import LocalEnvironment
 from chimera.types import ToolResult
 
 

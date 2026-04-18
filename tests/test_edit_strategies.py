@@ -6,7 +6,6 @@ import pytest
 from chimera.env.local import LocalEnvironment
 from chimera.tools.edit import EditFileTool
 from chimera.tools.strategies import (
-    DEFAULT_STRATEGIES,
     ExactMatch,
     FuzzyEditor,
     IndentFlexible,

@@ -1,7 +1,6 @@
 """Tests for chimera.core.agent_loop — AgentLoop with AsyncGenerator protocol."""
 from __future__ import annotations
 
-import asyncio
 
 import pytest
 
@@ -11,9 +10,8 @@ from chimera.core.system_prompt import SystemPrompt, PromptLayer
 from chimera.core.tool import BaseTool
 from chimera.permissions.checker import PermissionChecker
 from chimera.permissions.context import PermissionContext
-from chimera.permissions.decisions import PermissionDecision
 from chimera.permissions.modes import PermissionMode
-from chimera.permissions.rules import PermissionBehavior, RuleSource
+from chimera.permissions.rules import RuleSource
 from chimera.providers.base import Response
 from chimera.types import Message, ToolCall, ToolResult
 

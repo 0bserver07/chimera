@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, call
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -11,7 +11,6 @@ from chimera.training.strategies.cegis import CEGISStrategy
 from chimera.training.strategies.base import (
     Callback,
     EpochResult,
-    SynthesisResult,
 )
 from chimera.training.spec import Spec
 
@@ -37,7 +36,7 @@ def mock_agent():
 
 def _make_test_result(passed: int, failed: int, failed_names: list[str] | None = None) -> TestResult:
     """Build a TestResult with pytest-style FAILED lines in output."""
-    total = passed + failed
+    passed + failed
     if failed == 0:
         output = f"{passed} passed"
     else:

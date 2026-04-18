@@ -4,7 +4,7 @@ import pytest
 
 from chimera.core.context import Context
 from chimera.tools.dmail import DMailTool
-from chimera.types import Message, ToolResult
+from chimera.types import Message
 
 
 @pytest.fixture
@@ -189,7 +189,6 @@ def test_agent_binds_context():
     from unittest.mock import MagicMock
 
     from chimera.core.agent import Agent
-    from chimera.core.tool import ContextAwareTool
 
     provider = MagicMock()
     provider.complete.return_value = MagicMock(

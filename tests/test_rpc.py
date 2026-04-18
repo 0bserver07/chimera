@@ -5,7 +5,6 @@ import io
 import json
 from unittest.mock import MagicMock
 
-import pytest
 
 from chimera.rpc.types import (
     CancelCommand,
@@ -15,7 +14,6 @@ from chimera.rpc.types import (
     MessageEvent,
     PromptCommand,
     RpcCommand,
-    RpcEvent,
     RpcResponse,
     SetModelCommand,
     StateResponse,

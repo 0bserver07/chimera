@@ -1,7 +1,6 @@
 """Tests for ComponentRegistry extension methods (IG-10)."""
 from __future__ import annotations
 
-import pytest
 
 from chimera.plugins.base import ComponentRegistry
 

@@ -22,7 +22,7 @@ from chimera.core.abort import AbortSignal
 from chimera.core.content_replacement import ContentReplacementState
 from chimera.core.file_state_cache import FileStateCache
 from chimera.core.loop_events import LoopEvent, LoopEventType, LoopResult
-from chimera.core.loop_state import LoopState, QuerySource, RetryPolicy, RETRY_POLICIES
+from chimera.core.loop_state import LoopState, QuerySource, RETRY_POLICIES
 from chimera.core.message_queue import SteeringMessageQueue
 from chimera.core.recovery import ErrorRecovery, WithheldError
 from chimera.core.streaming_executor import StreamingToolExecutor
@@ -214,7 +214,7 @@ class AgentLoop:
             try:
                 # Streaming path: use async_stream if available and requested
                 if stream and hasattr(provider, "async_stream"):
-                    from chimera.providers.base import Response as _Response, StreamEvent
+                    from chimera.providers.base import Response as _Response
 
                     accumulated_content = ""
                     accumulated_tool_calls: list[ToolCall] = []

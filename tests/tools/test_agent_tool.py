@@ -4,7 +4,6 @@ from __future__ import annotations
 import pytest
 
 from chimera.tools.agent_tool import AgentTool
-from chimera.types import ToolResult
 
 
 class TestAgentTool:

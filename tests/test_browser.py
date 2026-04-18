@@ -5,9 +5,7 @@ All Playwright interactions are mocked so the tests run without a real browser.
 from __future__ import annotations
 
 import base64
-import sys
-from types import ModuleType
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 from chimera.training.strategies.base import EpochResult, SynthesisResult
-from chimera.training.tuner import SearchSpace, SynthesisTuner, TrialResult, TunerResult
+from chimera.training.tuner import SearchSpace, SynthesisTuner
 
 
 # ---------------------------------------------------------------------------

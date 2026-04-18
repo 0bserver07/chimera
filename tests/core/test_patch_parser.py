@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from chimera.core.patch_parser import PatchParser, PatchHunk, FilePatch, MatchPass
+from chimera.core.patch_parser import PatchParser, PatchHunk, FilePatch
 
 
 class TestParsing:

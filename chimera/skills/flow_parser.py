@@ -1,6 +1,6 @@
 from __future__ import annotations
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 @dataclass
 class FlowNode:
@@ -116,7 +116,6 @@ class MermaidFlowParser:
 
     def _classify_node(self, nid: str, label: str) -> FlowNode:
         nid_lower = nid.lower()
-        label_lower = label.lower()
         if nid_lower in ("begin", "start"):
             return FlowNode(id=nid, label=label, node_type="begin")
         if nid_lower in ("end", "done", "finish"):

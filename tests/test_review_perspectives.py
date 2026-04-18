@@ -1,7 +1,6 @@
 """Tests for review perspectives and perspective registry."""
 from __future__ import annotations
 
-from unittest.mock import MagicMock
 
 from chimera.review.perspective import BUILTIN_PERSPECTIVES, ReviewPerspective
 from chimera.review.registry import PerspectiveRegistry

@@ -73,7 +73,6 @@ class TestGitEnvironmentCheckpoint:
 
 def test_git_env_has_session_attr():
     """GitEnvironment inherits session support from LocalEnvironment."""
-    import shutil
     import tempfile
     from chimera.env.git_env import GitEnvironment
     with tempfile.TemporaryDirectory() as tmpdir:

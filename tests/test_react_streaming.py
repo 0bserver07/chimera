@@ -6,7 +6,7 @@ from chimera.core.loop import ReAct, drain_steps
 from chimera.core.loop_config import LoopConfig
 from chimera.providers.base import Provider, Response, StreamEvent
 from chimera.streaming.handlers import CollectStreamHandler
-from chimera.types import Message, ToolCall
+from chimera.types import ToolCall
 
 
 class FakeStreamProvider(Provider):

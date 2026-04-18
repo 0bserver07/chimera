@@ -1,11 +1,9 @@
 """Tests for Phase 38: Close remaining coding agent gaps."""
 from __future__ import annotations
 
-import os
 import time
 from unittest.mock import MagicMock
 
-import pytest
 
 from chimera.types import Message, ToolCall
 
@@ -286,8 +284,10 @@ class TestResponseCaching:
         mock.complete.return_value = Response(content="R", tool_calls=[], usage={})
         cached = CachedProvider(mock)
         threads = [threading.Thread(target=lambda: cached.complete([Message.user(f"msg{i}")])) for i in range(10)]
-        for t in threads: t.start()
-        for t in threads: t.join()
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
         # Should not crash
 
     def test_thinking_is_part_of_cache_key(self):

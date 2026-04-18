@@ -1,10 +1,9 @@
 """Tests for multi-agent code review."""
 from __future__ import annotations
 
-import pytest
 
 from chimera.review.feedback import ReviewComment, ReviewFeedback, Severity
-from chimera.review.orchestrator import ReviewOrchestrator, ReviewRound
+from chimera.review.orchestrator import ReviewOrchestrator
 
 
 class TestReviewFeedback:

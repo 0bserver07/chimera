@@ -14,7 +14,6 @@ import os
 import tempfile
 from unittest.mock import MagicMock
 
-import pytest
 
 import chimera
 from chimera.types import ToolCall
@@ -214,7 +213,6 @@ def test_think_and_ask_user():
 # ---------------------------------------------------------------
 
 def test_wire_monitoring():
-    from chimera.wire.types import StepBegin, StepEnd
 
     wire = chimera.Wire()
     received = []

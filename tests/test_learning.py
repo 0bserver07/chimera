@@ -3,9 +3,7 @@ from __future__ import annotations
 
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock
 
-import pytest
 
 from chimera.events.types import ToolCallEvent, ToolResultEvent
 from chimera.learning.feedback import FeedbackTracker, _error_signature

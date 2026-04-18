@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-import os
 
 import pytest
 
 from chimera.core.agent import Agent
-from chimera.core.loop import ReAct
 from chimera.core.prompt import Prompt
 from chimera.core.tool import BaseTool
 from chimera.providers.base import Provider, Response
@@ -15,7 +13,6 @@ from chimera.sessions import (
     SQLiteStorage,
     Session,
     SessionData,
-    Storage,
 )
 from chimera.types import Message, ToolCall, ToolResult
 

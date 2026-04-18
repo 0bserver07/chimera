@@ -1,5 +1,5 @@
-from chimera.providers.base import Provider, Response, StreamEvent
-from chimera.types import Message, ToolCall
+from chimera.providers.base import Response, StreamEvent
+from chimera.types import ToolCall
 
 
 def test_response_dataclass():

@@ -1,7 +1,6 @@
 """Tests for chimera.permissions.modes — PermissionMode enum."""
 from __future__ import annotations
 
-import pytest
 
 from chimera.permissions.modes import PermissionMode
 

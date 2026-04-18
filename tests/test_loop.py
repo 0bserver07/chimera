@@ -2,7 +2,7 @@ from chimera.core.context import Context
 from chimera.core.loop import ReAct
 from chimera.core.tool import BaseTool
 from chimera.providers.base import Provider, Response
-from chimera.types import AgentResult, Message, ToolCall, ToolResult
+from chimera.types import Message, ToolCall, ToolResult
 
 
 # --- Mock provider ---

@@ -20,10 +20,10 @@ import pytest
 
 from chimera.core.agent import Agent
 from chimera.core.loop import ReAct
-from chimera.docs.generator import DocGenerator, DocSection
+from chimera.docs.generator import DocGenerator
 from chimera.migration.planner import MigrationPlanner
 from chimera.providers.anthropic import AnthropicProvider
-from chimera.research.researcher import Finding, Researcher, Source
+from chimera.research.researcher import Researcher
 from chimera.review.orchestrator import ReviewOrchestrator
 from chimera.testgen.generator import TestGenerator
 

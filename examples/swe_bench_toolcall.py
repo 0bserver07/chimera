@@ -243,14 +243,6 @@ def execute_tool(container: str, tool_call: ToolCall) -> str:
                 return "Error: old_str is required for str_replace"
 
             # Use Python for reliable str_replace (handles multiline, special chars)
-            py_script = (
-                f"import pathlib; "
-                f"p = pathlib.Path('{path}'); "
-                f"content = p.read_text(); "
-                f"old = '''{old_str}'''; "
-                f"new = '''{new_str}'''; "
-                f"count = content.count(old); "
-            )
             if old_str.count("'''") > 0 or new_str.count("'''") > 0:
                 # Fallback for strings containing triple quotes
                 code, out = docker_exec(container,

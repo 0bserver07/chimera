@@ -1,5 +1,4 @@
-import pytest
-from chimera.context.focus import FocusChain, ContextItem
+from chimera.context.focus import FocusChain
 
 
 def test_select_fits_budget():

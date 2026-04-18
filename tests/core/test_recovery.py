@@ -6,7 +6,6 @@ import pytest
 from chimera.core.loop_state import LoopState
 from chimera.core.recovery import (
     ErrorRecovery,
-    RecoveryResult,
     RecoveryStrategy,
     WithheldError,
 )

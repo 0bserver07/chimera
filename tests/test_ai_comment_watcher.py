@@ -1,9 +1,7 @@
 # tests/test_ai_comment_watcher.py
 """Tests for AICommentWatcher in chimera.env.watcher."""
-import tempfile
-from pathlib import Path
 
-from chimera.env.watcher import AIComment, AICommentWatcher
+from chimera.env.watcher import AICommentWatcher
 
 
 class TestAICommentWatcher:

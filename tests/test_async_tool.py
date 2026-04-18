@@ -104,7 +104,6 @@ class TestConcurrentAsyncExecution:
 
 from chimera.core.context import Context
 from chimera.core.tool_executor import (
-    ToolExecutionResult,
     async_execute_tool_calls_incremental,
 )
 from chimera.types import Message, ToolCall

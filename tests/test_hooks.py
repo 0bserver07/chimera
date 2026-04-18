@@ -4,9 +4,7 @@ import json
 import os
 import subprocess
 import sys
-import tempfile
 
-import pytest
 
 from chimera.hooks.validate_path import validate, _find_suggestions
 

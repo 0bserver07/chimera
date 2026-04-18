@@ -5,21 +5,14 @@ work TOGETHER within the agent loop using mocked providers.
 """
 from __future__ import annotations
 
-import os
 import time
-from pathlib import Path
 from unittest.mock import MagicMock
 
-import pytest
 
-from chimera.core.agent import Agent
 from chimera.core.context import Context
-from chimera.core.loop import ReAct
-from chimera.core.loop_config import LoopConfig
 from chimera.core.tool import BaseTool
-from chimera.env.local import LocalEnvironment
 from chimera.providers.base import Provider, Response
-from chimera.types import Message, ToolCall, ToolResult
+from chimera.types import Message, ToolResult
 
 
 # ---------------------------------------------------------------------------
@@ -160,7 +153,7 @@ class TestGhostCommitsOnWrite:
 
         ghost = GhostCommitManager(workdir=str(tmp_path))
 
-        snap_id = ghost.snapshot("write_file: new.py", paths=["new.py"])
+        ghost.snapshot("write_file: new.py", paths=["new.py"])
         snap = ghost.peek()
         assert snap is not None
         assert snap.files["new.py"] == ""  # file didn't exist

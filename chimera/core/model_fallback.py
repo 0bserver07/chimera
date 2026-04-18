@@ -7,7 +7,7 @@ fallback model when the primary model returns HTTP 429 (rate limited) or
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass

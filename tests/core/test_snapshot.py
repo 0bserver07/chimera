@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from chimera.core.snapshot import FileState, Snapshot, SnapshotManager
+from chimera.core.snapshot import SnapshotManager
 
 
 @pytest.mark.asyncio

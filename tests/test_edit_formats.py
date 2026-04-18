@@ -4,7 +4,6 @@ from chimera.tools.edit_formats import (
     DiffFormat,
     EditFormatType,
     SearchReplaceFormat,
-    UdiffFormat,
     WholeFileFormat,
     get_format,
     select_format,

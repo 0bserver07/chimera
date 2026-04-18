@@ -1,7 +1,6 @@
 """Tests for PluginManager aggregation methods (get_all_commands, get_all_hooks, get_all_skills)."""
 from __future__ import annotations
 
-import pytest
 
 from chimera.plugins.base import BasePlugin, ComponentRegistry
 from chimera.plugins.manager import PluginManager

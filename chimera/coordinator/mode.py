@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from chimera.core.feature_flags import FeatureFlags
 

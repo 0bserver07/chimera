@@ -1,7 +1,6 @@
 """Tests for extended constraint factory methods (Phase 13)."""
 from __future__ import annotations
 
-import pytest
 
 from chimera.training.constraint import Constraint
 from chimera.types import TestResult

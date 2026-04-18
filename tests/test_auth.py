@@ -1,7 +1,6 @@
 # tests/test_auth.py
 from __future__ import annotations
 
-import json
 import os
 import stat
 import time

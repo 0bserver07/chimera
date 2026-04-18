@@ -1,7 +1,7 @@
 # tests/test_approval.py
 from __future__ import annotations
 
-from chimera.core.approval import ApprovalPolicy, AutoApprove, AlwaysDeny, AllowList
+from chimera.core.approval import AutoApprove, AlwaysDeny, AllowList
 from chimera.core.tool import BaseTool
 from chimera.types import ToolResult
 

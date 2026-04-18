@@ -3,7 +3,7 @@ import tempfile
 
 import pytest
 
-from chimera.training.impact import CallerInfo, ImpactAnalyzer, ImpactReport
+from chimera.training.impact import ImpactAnalyzer
 
 
 @pytest.fixture

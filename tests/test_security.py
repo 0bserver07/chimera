@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-import pytest
 
 from chimera.events.base import EventBus
 from chimera.events.types import SecurityEvent
@@ -11,7 +10,6 @@ from chimera.security.analyzer import (
     CompositeSecurityAnalyzer,
     LLMSecurityAnalyzer,
     RuleBasedSecurityAnalyzer,
-    SecurityAnalyzer,
 )
 from chimera.security.policy import (
     AlwaysConfirm,

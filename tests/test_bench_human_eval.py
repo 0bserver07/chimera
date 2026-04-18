@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import tempfile
 from dataclasses import dataclass
-from typing import Any
 
 from chimera.eval.benchmarks.human_eval import HumanEval
 

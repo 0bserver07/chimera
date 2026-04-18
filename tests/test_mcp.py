@@ -1,11 +1,10 @@
 # tests/test_mcp.py
 import json
 
-import pytest
 
 from chimera.mcp.transport import MCPTransport, StdioTransport, HTTPTransport
 from chimera.mcp.client import MCPClient
-from chimera.mcp.tools import MCPTool, MCPToolSource
+from chimera.mcp.tools import MCPTool
 
 
 class MockTransport(MCPTransport):
@@ -36,7 +35,7 @@ class MockTransport(MCPTransport):
 class TestStdioTransport:
     def test_write_message_newline_delimited(self):
         """Verify stdio uses newline-delimited JSON (not Content-Length)."""
-        transport = StdioTransport("echo", [])
+        StdioTransport("echo", [])
         msg = {"jsonrpc": "2.0", "method": "test"}
         encoded = json.dumps(msg).encode("utf-8") + b"\n"
         # Verify the encoding is newline-delimited

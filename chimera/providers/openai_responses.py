@@ -11,7 +11,7 @@ import json
 import os
 from typing import Any
 
-from chimera.providers.base import Provider, Response, StreamEvent, ToolSchema
+from chimera.providers.base import Provider, Response, ToolSchema
 from chimera.types import Message, ToolCall
 
 try:

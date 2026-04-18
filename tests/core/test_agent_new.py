@@ -6,7 +6,7 @@ import pytest
 from chimera.core.agent import Agent
 from chimera.core.loop_events import LoopEventType
 from chimera.providers.base import Response
-from chimera.types import AgentResult, Message, ToolCall
+from chimera.types import AgentResult, ToolCall
 
 
 # ---------------------------------------------------------------------------

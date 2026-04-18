@@ -3,16 +3,14 @@ from __future__ import annotations
 
 from typing import Any
 
-import pytest
 
 from chimera.core.agent import Agent
-from chimera.core.context import Context
 from chimera.core.loop import drain_steps
 from chimera.core.tool import BaseTool
 from chimera.env.base import Environment
-from chimera.providers.base import Provider, Response, ToolSchema
+from chimera.providers.base import Provider, Response
 from chimera.sessions.session import Session
-from chimera.types import AgentResult, Message, StepResult, ToolCall, ToolResult
+from chimera.types import AgentResult, ToolCall, ToolResult
 
 
 # ---------------------------------------------------------------------------

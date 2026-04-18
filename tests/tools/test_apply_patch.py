@@ -1,13 +1,10 @@
 """Tests for chimera.tools.apply_patch — Phase 9."""
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
-import pytest
 
 from chimera.tools.apply_patch import ApplyPatchTool
-from chimera.types import ToolResult
 
 
 class TestApplyPatchTool:

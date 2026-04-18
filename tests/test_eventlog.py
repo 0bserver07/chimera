@@ -2,16 +2,14 @@
 
 from __future__ import annotations
 
-import json
 import os
-import time
 from pathlib import Path
-from unittest.mock import MagicMock, PropertyMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
 from chimera.events.base import Event
-from chimera.sessions.eventlog.log import LOCK_TIMEOUT, EventLog, _FileLock
+from chimera.sessions.eventlog.log import EventLog, _FileLock
 from chimera.sessions.eventlog.session import EventSourcedSession
 
 
@@ -26,7 +24,7 @@ def _make_event(event_type: str = "test", **meta: object) -> Event:
 
 def _make_mock_agent() -> MagicMock:
     """Build a mock Agent with the minimum interface required by Session."""
-    from chimera.types import AgentResult, Message
+    from chimera.types import AgentResult
 
     agent = MagicMock()
     agent.prompt.render.return_value = "system prompt"

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from chimera.eval.anti_overfit import (
-    OverfitSignal,
     check_hardcoded_answers,
     check_output_similarity,
 )

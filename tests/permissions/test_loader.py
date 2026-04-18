@@ -5,7 +5,6 @@ import json
 import tempfile
 from pathlib import Path
 
-import pytest
 
 from chimera.permissions.context import PermissionContext
 from chimera.permissions.loader import PermissionRuleLoader

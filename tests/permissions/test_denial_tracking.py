@@ -1,7 +1,6 @@
 """Tests for chimera.permissions.denial_tracking — DenialTrackingState."""
 from __future__ import annotations
 
-import pytest
 
 from chimera.permissions.denial_tracking import DenialTrackingState
 

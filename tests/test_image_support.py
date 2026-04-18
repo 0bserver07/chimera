@@ -6,9 +6,8 @@ import base64
 import os
 import tempfile
 
-import pytest
 
-from chimera.types import ContentBlock, ImageContent, Message, TextContent
+from chimera.types import ImageContent, Message, TextContent
 from chimera.tools.image_read import ImageReadTool
 
 

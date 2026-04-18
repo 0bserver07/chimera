@@ -2,12 +2,20 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 from pathlib import Path
 from typing import Any
 
 from chimera.types import Message
+
+try:
+    import aiofiles
+
+    _HAS_AIOFILES = True
+except ImportError:  # pragma: no cover
+    _HAS_AIOFILES = False
 
 
 def _dict_to_message(entry: dict) -> Message:
@@ -20,15 +28,6 @@ def _dict_to_message(entry: dict) -> Message:
         return Message.tool(entry.get("call_id", ""), content)
     else:
         return Message.user(content)
-
-try:
-    import aiofiles
-
-    _HAS_AIOFILES = True
-except ImportError:  # pragma: no cover
-    _HAS_AIOFILES = False
-
-import asyncio
 
 
 class TranscriptStorage:

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import sys
-import types
 from unittest.mock import MagicMock, mock_open, patch
 
 import pytest
@@ -294,7 +293,6 @@ class TestErrorHandling:
 class TestImportError:
     def test_import_error_message(self):
         with patch.dict(sys.modules, {"httpx": None}):
-            import importlib
             import chimera.env.remote as remote_mod
 
             # Force the module-level httpx to be None

@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
 
 from chimera.permissions.modes import PermissionMode
 from chimera.permissions.rules import RuleSource

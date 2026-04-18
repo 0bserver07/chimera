@@ -6,10 +6,9 @@ user input back to the agent via an :class:`asyncio.Queue`.
 from __future__ import annotations
 
 import asyncio
-import json
-from typing import AsyncGenerator, Any, Callable
+from typing import AsyncGenerator
 
-from chimera.bridge.protocol import BridgeProtocol, BridgeTransport
+from chimera.bridge.protocol import BridgeProtocol
 from chimera.core.loop_events import LoopEvent, LoopEventType
 
 __all__ = ["REPLBridge", "BRIDGE_MESSAGES"]

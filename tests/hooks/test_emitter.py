@@ -8,7 +8,6 @@ from chimera.hooks.events import HookEvent
 from chimera.hooks.executor import HookExecutor
 from chimera.hooks.hook_types import (
     FunctionHook,
-    HookInput,
     HookMatcher,
     HookOutput,
 )
@@ -69,7 +68,6 @@ class TestWithExecutor:
         """emit() should pass session_id to the HookInput."""
         captured_inputs = []
 
-        original_execute = HookExecutor.execute
 
         async def spy_execute(self, event, input_data, matchers, abort_signal=None):
             captured_inputs.append(input_data)

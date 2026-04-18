@@ -28,7 +28,7 @@ def test_create_google():
 
 
 def test_create_ollama():
-    with patch("chimera.providers.ollama.httpx") as mock:
+    with patch("chimera.providers.ollama.httpx"):
         p = create_provider("ollama", model="llama3.1")
         assert p.model_name == "llama3.1"
 

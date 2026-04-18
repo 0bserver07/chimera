@@ -11,7 +11,7 @@ from chimera.types import Message
 @pytest.fixture
 def provider():
     with (
-        patch("chimera.providers.modal.modal") as mock_modal,
+        patch("chimera.providers.modal.modal"),
         patch("chimera.providers.modal.httpx") as mock_httpx,
     ):
         p = ModalProvider(
@@ -87,8 +87,8 @@ def test_complete_tool_call(provider):
 
 def test_env_vars_for_credentials():
     with (
-        patch("chimera.providers.modal.modal") as mock_modal,
-        patch("chimera.providers.modal.httpx") as mock_httpx,
+        patch("chimera.providers.modal.modal"),
+        patch("chimera.providers.modal.httpx"),
         patch.dict(os.environ, {
             "MODAL_TOKEN_ID": "env-token-id",
             "MODAL_TOKEN_SECRET": "env-token-secret",

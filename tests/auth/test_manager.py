@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from chimera.auth.manager import AuthManager, StoredCredential
+from chimera.auth.manager import AuthManager
 
 
 class TestLoadFromEnv:

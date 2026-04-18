@@ -1,6 +1,6 @@
 """Integration test: all 7 pi-mono features wired together."""
 from chimera.core.agent import Agent
-from chimera.core.cancellation import CancellationToken, OperationCancelled
+from chimera.core.cancellation import CancellationToken
 from chimera.core.file_tracker import FileTracker
 from chimera.core.loop import ReAct
 from chimera.core.loop_config import LoopConfig
@@ -10,7 +10,6 @@ from chimera.providers.base import Provider, Response
 from chimera.providers.registry import list_providers, _ensure_builtins_registered
 from chimera.rpc.server import RpcServer
 from chimera.rpc.handler import RpcHandler
-from chimera.rpc.types import GetStateCommand
 from chimera.sessions.session import Session
 from chimera.sessions.tree import SessionTree
 from chimera.tools.read import ReadFileTool

@@ -1,5 +1,4 @@
 from unittest.mock import MagicMock
-import pytest
 from chimera.agents.presets.agent_styles import AgentPreset
 
 

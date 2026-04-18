@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import pytest
-import asyncio
 
 from chimera.core.agent_loop import AgentLoop
 from chimera.core.loop_events import LoopEventType
@@ -11,15 +10,13 @@ from chimera.core.feature_flags import FeatureFlags
 from chimera.core.system_prompt import SystemPromptBuilder
 from chimera.core.memory import PersistentMemory
 from chimera.hooks.executor import HookExecutor
-from chimera.hooks.hook_types import HookMatcher, FunctionHook, HookInput, HookOutput
-from chimera.hooks.events import HookEvent
+from chimera.hooks.hook_types import HookMatcher, FunctionHook
 from chimera.permissions.checker import PermissionChecker
 from chimera.commands.registry import CommandRegistry
-from chimera.core.agent_context import AgentContext, IsolationLevel
+from chimera.core.agent_context import AgentContext
 from chimera.core.content_replacement import ContentReplacementState
-from chimera.types import Message, ToolCall, ToolResult
+from chimera.types import Message
 from chimera.providers.base import Response
-from chimera.core.tool import BaseTool
 
 
 class MockProvider:

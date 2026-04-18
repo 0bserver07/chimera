@@ -3,17 +3,15 @@ from __future__ import annotations
 
 from typing import Any
 
-import pytest
 
 from chimera.core.context import Context
-from chimera.core.loop import drain_steps
 from chimera.core.loops.plan_execute import PlanAndExecute
 from chimera.core.loops.reflexion import Reflexion
 from chimera.core.loops.tree_of_thought import TreeOfThought
 from chimera.core.tool import BaseTool
 from chimera.env.base import Environment
-from chimera.providers.base import Provider, Response, ToolSchema
-from chimera.types import AgentResult, Message, ToolCall, ToolResult
+from chimera.providers.base import Provider, Response
+from chimera.types import Message, ToolCall, ToolResult
 
 
 # ---------------------------------------------------------------------------

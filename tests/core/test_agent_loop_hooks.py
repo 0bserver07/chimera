@@ -8,7 +8,7 @@ from chimera.core.loop_events import LoopEventType
 from chimera.core.tool import BaseTool
 from chimera.hooks.events import HookEvent
 from chimera.hooks.executor import HookExecutor
-from chimera.hooks.hook_types import FunctionHook, HookInput, HookMatcher, HookOutput
+from chimera.hooks.hook_types import FunctionHook, HookMatcher, HookOutput
 from chimera.providers.base import Response
 from chimera.types import Message, ToolCall, ToolResult
 

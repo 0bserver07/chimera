@@ -21,7 +21,7 @@ from chimera.core.tool import BaseTool
 from chimera.env.base import Environment
 from chimera.env.local import LocalEnvironment
 from chimera.providers.base import Provider, Response
-from chimera.types import AgentResult, Message, ToolResult
+from chimera.types import Message, ToolResult
 
 
 # ---------------------------------------------------------------------------

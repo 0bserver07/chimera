@@ -5,7 +5,6 @@ from __future__ import annotations
 from chimera.detection import (
     CompositeDetector,
     DetectionResult,
-    DetectionStrategy,
     ExactRepeatDetector,
     LoopDetector,
     OnDetect,

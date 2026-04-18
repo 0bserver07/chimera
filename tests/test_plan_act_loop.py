@@ -6,7 +6,7 @@ from chimera.core.loop import drain_steps
 from chimera.core.loops.plan_act import PlanActLoop, READ_ONLY_TOOLS
 from chimera.core.tool import BaseTool
 from chimera.providers.base import Provider, Response
-from chimera.types import AgentResult, Message, ToolCall, ToolResult
+from chimera.types import Message, ToolCall, ToolResult
 
 
 # ---------------------------------------------------------------------------

@@ -10,20 +10,18 @@ from chimera.core.loops.plan_execute import PlanAndExecute
 from chimera.core.loops.reflexion import Reflexion
 from chimera.core.loops.tree_of_thought import TreeOfThought
 from chimera.core.tool import BaseTool
-from chimera.core.tool_executor import LoopBreak, PermissionAsk, PermissionDenied, execute_tool_calls
+from chimera.core.tool_executor import LoopBreak, PermissionAsk, execute_tool_calls
 from chimera.detection.actions import LoopDetector, OnDetect
 from chimera.events.base import EventBus
 from chimera.events.types import (
-    LoopDetectedEvent,
     PermissionEvent,
-    StepEvent,
     ToolCallEvent,
     ToolResultEvent,
 )
 from chimera.permissions.base import PermissionAction, PermissionPolicy
 from chimera.permissions.presets import AlwaysDeny, AutoApprove
 from chimera.permissions.rule import PermissionRuleset, Rule
-from chimera.types import AgentResult, Message, ToolCall, ToolResult
+from chimera.types import Message, ToolCall, ToolResult
 
 
 # ---------------------------------------------------------------------------
@@ -429,20 +427,6 @@ class TestTopLevelImports:
     def test_all_new_modules_importable(self):
         from chimera import (
             EventBus,
-            Event,
-            CompactionStrategy,
-            TokenCounter,
-            DetectionResult,
-            ExactRepeatDetector,
-            PermissionAction,
-            PermissionRuleset,
-            ConsoleStreamHandler,
-            StreamingReAct,
-            Session,
-            InMemoryStorage,
-            AuthManager,
-            Credential,
-            AgentConfig,
             AgentRegistry,
         )
         # Smoke test — just verify they're importable

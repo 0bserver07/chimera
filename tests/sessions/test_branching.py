@@ -1,8 +1,7 @@
 """Tests for SessionTree branching."""
 
-import pytest
 
-from chimera.sessions.branching import Branch, SessionTree
+from chimera.sessions.branching import SessionTree
 from chimera.types import Message
 
 

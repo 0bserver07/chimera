@@ -1,10 +1,8 @@
 """Tests for chimera.tools.multi_edit — Issue #122."""
 from __future__ import annotations
 
-import tempfile
 from pathlib import Path
 
-import pytest
 
 from chimera.tools.multi_edit import MultiEditTool
 

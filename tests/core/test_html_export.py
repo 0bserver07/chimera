@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import os
 
-import pytest
 
 from chimera.core.html_export import export_session_html
 from chimera.types import Message

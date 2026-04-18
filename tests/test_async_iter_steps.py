@@ -1,7 +1,6 @@
 """Tests for ReAct.async_iter_steps() and async_drain_steps()."""
 from __future__ import annotations
 
-import asyncio
 from typing import Any
 
 import pytest

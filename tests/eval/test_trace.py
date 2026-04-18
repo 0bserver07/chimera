@@ -4,12 +4,10 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
-import pytest
 
 from chimera.core.loop_events import LoopEvent, LoopEventType, LoopResult
 from chimera.eval.trace import RunTrace, TraceCollector, ToolTrace, TurnTrace
 from chimera.types import Message, ToolCall, ToolResult
-from chimera.providers.base import Response
 
 
 class TestRunTraceDiagnosis:

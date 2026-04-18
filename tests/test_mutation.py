@@ -1,4 +1,4 @@
-from chimera.training.mutation import MutationTester, Mutation, MutationResult
+from chimera.training.mutation import MutationTester
 
 
 def test_generate_swap_operator():

@@ -6,9 +6,6 @@ smart compaction, tool-use streaming (via existing provider), codebase index.
 """
 from __future__ import annotations
 
-import json
-import os
-import tempfile
 from io import StringIO
 from unittest.mock import MagicMock
 
@@ -416,7 +413,7 @@ class TestTrajectory:
 class TestDiffProposal:
 
     def test_create_and_accept_all(self):
-        from chimera.core.proposed_edit import EditProposal, EditStatus
+        from chimera.core.proposed_edit import EditProposal
         proposal = EditProposal()
         proposal.add("a.py", "old", "new", "Fix bug")
         proposal.add("b.py", "", "new file", "Add file")

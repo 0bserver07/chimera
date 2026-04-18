@@ -4,9 +4,8 @@ from __future__ import annotations
 import os
 import tempfile
 
-import pytest
 
-from chimera.testgen.generator import TestCase, TestGenerator
+from chimera.testgen.generator import TestGenerator
 from chimera.testgen.coverage import CoverageReport, parse_coverage
 
 

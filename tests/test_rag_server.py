@@ -1,7 +1,6 @@
 """Tests for chimera.mcp_servers.rag_server — RAG / doc retrieval MCP server."""
 from __future__ import annotations
 
-import tempfile
 import textwrap
 from pathlib import Path
 
@@ -11,9 +10,7 @@ from chimera.mcp_servers.rag_server import (
     RAGServer,
     _extract_docstrings,
     _extract_snippet,
-    TOOL_DEFINITIONS,
 )
-from chimera.tools.codebase_index import CodebaseIndex
 
 
 # ── Helpers ───────────────────────────────────────────────────────────

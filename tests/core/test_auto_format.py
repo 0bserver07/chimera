@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from chimera.core.auto_format import AutoFormatter, FormatterConfig, FORMATTERS
+from chimera.core.auto_format import AutoFormatter
 
 
 class TestDetectFormatters:

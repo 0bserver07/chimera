@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-import pytest
 
 from chimera.core.context import Context
 from chimera.critic.base import Critic, CriticConfig, CriticMode, CriticResult

@@ -7,7 +7,6 @@ from unittest.mock import MagicMock
 import pytest
 
 from chimera.training.spec import Spec
-from chimera.training.strategies.base import EpochResult
 from chimera.training.strategies.incremental import (
     IncrementalStrategy,
     SynthesisTarget,

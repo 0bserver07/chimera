@@ -147,7 +147,7 @@ class TestAnthropicProviderAuthManager:
         mgr = _mock_auth_manager("anth-key")
         mock_anthropic_lib.Anthropic.return_value = MagicMock()
 
-        provider = AnthropicProvider(model="claude-sonnet-4", auth_manager=mgr)
+        AnthropicProvider(model="claude-sonnet-4", auth_manager=mgr)
         mgr.get_token.assert_called_once_with("anthropic")
         # The key passed to Anthropic() should be the auth_manager token
         call_kwargs = mock_anthropic_lib.Anthropic.call_args
@@ -190,7 +190,7 @@ class TestOpenAIProviderAuthManager:
         mgr = _mock_auth_manager("oai-key")
         mock_openai_lib.OpenAI.return_value = MagicMock()
 
-        provider = OpenAIProvider(model="gpt-4o", auth_manager=mgr)
+        OpenAIProvider(model="gpt-4o", auth_manager=mgr)
         mgr.get_token.assert_called_once_with("openai")
         call_kwargs = mock_openai_lib.OpenAI.call_args
         assert call_kwargs[1]["api_key"] == "oai-key"

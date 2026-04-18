@@ -1,11 +1,10 @@
 """Tests for chimera.skills.flow_executor (Issue #126)."""
 from __future__ import annotations
 
-import asyncio
 
 import pytest
 
-from chimera.skills.flow_executor import FlowExecutionResult, FlowExecutor
+from chimera.skills.flow_executor import FlowExecutor
 from chimera.skills.flow_parser import FlowGraph, FlowNode, MermaidFlowParser
 
 

@@ -5,7 +5,6 @@ import pytest
 
 from chimera.context.window_manager import (
     ContextWindowManager,
-    WindowState,
     WindowUrgency,
     _estimate_tokens,
 )

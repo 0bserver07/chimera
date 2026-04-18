@@ -4,7 +4,6 @@ from __future__ import annotations
 import os
 import tempfile
 
-import pytest
 
 from chimera.docs.generator import DocGenerator, DocSection
 

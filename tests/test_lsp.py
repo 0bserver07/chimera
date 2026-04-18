@@ -1,8 +1,7 @@
 """Tests for the LSP module."""
 from __future__ import annotations
 
-from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -148,7 +147,6 @@ class TestImports:
 # Tests: LSPSession background reader + diagnostics cache
 # ---------------------------------------------------------------------------
 
-import json
 import threading
 from chimera.lsp.session import LSPSession
 

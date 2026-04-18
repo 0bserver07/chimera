@@ -4,7 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from chimera.commands.types import Command, CommandType, PromptCommand
+from chimera.commands.types import Command, PromptCommand
 
 if TYPE_CHECKING:
     pass

@@ -9,7 +9,6 @@ import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
 
 from chimera.hooks.auto_test import find_test_files, handle as auto_test_handle, run_tests
 from chimera.hooks.auto_lint import (

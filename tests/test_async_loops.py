@@ -1,9 +1,7 @@
 """Tests for ReAct.async_run(), StreamingReAct.async_run(), and Agent.async_run()."""
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
 from typing import Any
-from unittest.mock import AsyncMock
 
 import pytest
 
@@ -12,8 +10,8 @@ from chimera.core.context import Context
 from chimera.core.loop import ReAct
 from chimera.core.tool import BaseTool
 from chimera.env.base import Environment
-from chimera.providers.base import Provider, Response, StreamEvent, ToolSchema
-from chimera.types import AgentResult, Message, ToolCall, ToolResult
+from chimera.providers.base import Provider, Response
+from chimera.types import Message, ToolCall, ToolResult
 
 
 # ---------------------------------------------------------------------------

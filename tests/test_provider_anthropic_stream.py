@@ -1,7 +1,6 @@
 """Tests for AnthropicProvider.stream() with mocked Anthropic SDK."""
 from __future__ import annotations
 
-from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch

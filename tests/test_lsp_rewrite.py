@@ -4,10 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import pytest
 
-from chimera.lsp.base import Diagnostic, Severity
-from chimera.lsp.servers import LanguageServerConfig, BUILTIN_SERVERS
+from chimera.lsp.servers import BUILTIN_SERVERS
 from chimera.lsp.session import LSPSession
 from chimera.lsp.manager import LSPManager
 from chimera.lsp.tool import LSPTool
@@ -33,7 +31,7 @@ class TestLanguageServerConfig:
 class TestLSPSession:
     def test_write_message_content_length(self):
         """Verify LSP uses Content-Length framing (not newline-delimited)."""
-        session = LSPSession(["echo"])
+        LSPSession(["echo"])
         import json
         msg = {"jsonrpc": "2.0", "method": "test"}
         body = json.dumps(msg).encode("utf-8")

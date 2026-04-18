@@ -1,9 +1,8 @@
 """Tests for chimera.bridge.repl_bridge — REPLBridge."""
 from __future__ import annotations
 
-import asyncio
 from typing import AsyncGenerator
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 

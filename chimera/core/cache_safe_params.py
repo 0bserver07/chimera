@@ -6,7 +6,7 @@ tracking the current parameters.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, ClassVar
 
 from chimera.core.system_prompt import SystemPrompt

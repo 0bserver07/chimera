@@ -1,6 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass
-from chimera.skills.flow_parser import FlowGraph, FlowNode
+from chimera.skills.flow_parser import FlowGraph
 
 @dataclass
 class FlowExecutionResult:

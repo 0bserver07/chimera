@@ -1,14 +1,8 @@
 # tests/test_search_mcp.py
 """Tests for the Chimera search MCP server."""
-import json
-import os
-import tempfile
 
-import pytest
 
-from chimera.mcp_servers.search_server import SearchMCPServer, TOOL_DEFINITIONS
-from chimera.tools.codebase_index import CodebaseIndex
-from chimera.tools.definition_lookup import DefinitionFinder
+from chimera.mcp_servers.search_server import SearchMCPServer
 
 
 class TestSearchMCPServer:

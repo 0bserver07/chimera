@@ -1,7 +1,6 @@
 """Tests for steering/follow-up message injection in AgentLoop."""
 from __future__ import annotations
 
-import asyncio
 
 import pytest
 

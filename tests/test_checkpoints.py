@@ -2,11 +2,10 @@
 from __future__ import annotations
 
 import tempfile
-import time
 
 import pytest
 
-from chimera.checkpoints import CheckpointInfo, CheckpointManager
+from chimera.checkpoints import CheckpointManager
 from chimera.env.local import LocalEnvironment
 
 

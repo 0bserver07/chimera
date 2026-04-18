@@ -58,8 +58,6 @@ def main():
     parser.add_argument("--provider", default=None)
     args = parser.parse_args()
 
-    api_key = os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")
-
     # Create a temp project with tests
     workdir = tempfile.mkdtemp(prefix="chimera-example-")
     tests_dir = os.path.join(workdir, "tests")

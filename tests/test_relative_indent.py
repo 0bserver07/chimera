@@ -1,7 +1,6 @@
 # tests/test_relative_indent.py
 """Tests for chimera.tools.relative_indent — robust indent-aware search/replace."""
 from chimera.tools.relative_indent import (
-    IndentMatch,
     find_with_relative_indent,
     replace_with_relative_indent,
 )

@@ -7,7 +7,6 @@ from chimera.core.agent import Agent
 from chimera.core.loop import ReAct
 from chimera.env.local import LocalEnvironment
 from chimera.providers.base import Provider, Response
-from chimera.types import Message
 
 
 class CounterProvider(Provider):

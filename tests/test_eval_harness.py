@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from chimera.eval.harness import Benchmark, EvalResult, Harness, TaskEvalResult
+from chimera.eval.harness import Benchmark, Harness, TaskEvalResult
 
 
 # -- Helpers ------------------------------------------------------------------

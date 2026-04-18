@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from chimera.mcp_servers.benchmark_server import (
     BenchmarkMCPServer,
-    EvalResult,
     get_humaneval_problem,
     run_eval,
 )

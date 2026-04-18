@@ -1,5 +1,4 @@
 # tests/test_env_local.py
-import os
 import tempfile
 
 import pytest

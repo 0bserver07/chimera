@@ -4,14 +4,13 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import MagicMock
 
-import pytest
 
 from chimera.core.context import Context
 from chimera.core.loop import ReAct, drain_steps
 from chimera.core.tool import BaseTool
 from chimera.env.base import Environment
 from chimera.providers.base import Provider, Response, ToolSchema
-from chimera.types import AgentResult, Message, StepResult, ToolCall, ToolResult
+from chimera.types import AgentResult, Message, ToolCall, ToolResult
 
 
 # ---------------------------------------------------------------------------
@@ -132,7 +131,7 @@ class TestIterStepsAgentResult:
         result = None
         try:
             while True:
-                step = next(gen)
+                next(gen)
         except StopIteration as e:
             result = e.value
 

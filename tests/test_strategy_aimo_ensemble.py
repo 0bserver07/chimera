@@ -2,13 +2,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
 from unittest.mock import MagicMock, patch
 
-import pytest
 
 from chimera.training.strategies.aimo_ensemble import AIMOEnsemble
-from chimera.training.strategies.base import SynthesisResult, EpochResult
+from chimera.training.strategies.base import SynthesisResult
 
 
 @dataclass

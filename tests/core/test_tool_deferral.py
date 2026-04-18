@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from chimera.core.tool import BaseTool
 from chimera.core.tool_deferral import ToolDeferralManager
-from chimera.env.base import Environment
 from chimera.types import ToolResult
 
 

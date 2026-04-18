@@ -9,7 +9,7 @@ from chimera.training.trainer import Trainer
 from chimera.training.callbacks import CostLimit, EpochCheckpoint, HistoryRecorder
 from chimera.training.spec import Spec
 from chimera.training.architecture import Architecture, Layer
-from chimera.training.strategies.base import EpochResult, SynthesisResult, Callback, Strategy
+from chimera.training.strategies.base import EpochResult, SynthesisResult, Strategy
 
 
 # ---- Callback Tests ----

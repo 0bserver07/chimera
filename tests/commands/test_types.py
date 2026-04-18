@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from chimera.commands.types import (
-    Command,
     CommandType,
     LocalCommand,
     LocalUICommand,

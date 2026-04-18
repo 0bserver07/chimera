@@ -83,7 +83,6 @@ class CodingAgent:
         self._command_registry = CommandRegistry()
 
         # Prompt selection — use preset-specific prompt, fall back to tool-set prompt
-        from chimera.assembly.system_prompts import PRESET_PROMPTS
         tool_factory = {
             "coding": coding_tools,
             "minimal": minimal_tools,

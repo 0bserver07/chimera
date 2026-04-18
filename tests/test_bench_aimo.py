@@ -1,6 +1,5 @@
 # tests/test_bench_aimo.py
 import json
-from typing import Any
 
 import pytest
 

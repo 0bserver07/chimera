@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from chimera.cli.main import build_parser, main
+from chimera.cli.main import build_parser
 
 
 class TestCliEval:

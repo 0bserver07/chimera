@@ -1,7 +1,6 @@
 # tests/test_tools_web_fetch.py
 from unittest.mock import patch, MagicMock
 
-import pytest
 
 from chimera.tools.web_fetch import WebFetchTool
 

@@ -4,7 +4,6 @@ from __future__ import annotations
 import os
 from unittest.mock import patch
 
-import pytest
 
 from chimera.events.base import Event, EventBus
 from chimera.events.types import ToolResultEvent

@@ -3,7 +3,6 @@
 import pytest
 
 from chimera.tools.todo import TodoItem, TodoTool
-from chimera.types import ToolResult
 
 
 @pytest.fixture

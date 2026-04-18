@@ -1,5 +1,4 @@
 """Tests for chimera.core.operations."""
-import os
 from chimera.core.operations import (
     ReadOps, WriteOps, BashOps, SearchOps,
     LocalReadOps, LocalWriteOps, LocalBashOps, LocalSearchOps,

@@ -77,7 +77,9 @@ class AgentContext:
 
         # set_app_state: depends on isolation level
         if isolation == IsolationLevel.FULL:
-            child_set_app_state: Callable[[Any], None] = lambda updater: None
+            def _noop_set_app_state(updater: Any) -> None:
+                return None
+            child_set_app_state: Callable[[Any], None] = _noop_set_app_state
         else:
             # SELECTIVE and SHARED both share set_app_state with parent
             child_set_app_state = parent.set_app_state

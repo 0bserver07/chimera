@@ -1,5 +1,4 @@
 # tests/test_provider_catalog.py
-import os
 
 import pytest
 

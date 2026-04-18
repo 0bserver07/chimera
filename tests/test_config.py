@@ -1,11 +1,9 @@
 # tests/test_config.py
-import tempfile
-from pathlib import Path
 
 import pytest
 
 from chimera.config.loader import FileConfigSource, ProjectConfig
-from chimera.config.skills import Skill, SkillRegistry, _parse_frontmatter
+from chimera.config.skills import SkillRegistry, _parse_frontmatter
 from chimera.config.structured import StructuredOutput, ValidationError
 
 

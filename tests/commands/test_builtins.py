@@ -209,7 +209,7 @@ class TestExpandedBuiltinCommands:
                 stdout="ok\n",
                 stderr="",
             )
-            result = cmd.handler("python -m unittest")
+            cmd.handler("python -m unittest")
             called_cmd = mock_run.call_args[0][0]
             assert "unittest" in called_cmd
 

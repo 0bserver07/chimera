@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from chimera.permissions.decisions import DecisionReason, PermissionDecision
+from chimera.permissions.decisions import PermissionDecision
 from chimera.permissions.denial_tracking import DenialTrackingState
 from chimera.permissions.interactive import InteractivePermissionHandler
 from chimera.permissions.rules import PermissionBehavior

@@ -1,7 +1,6 @@
 """Tests for chimera.permissions.sandbox — SandboxConfig, CommandResult, SandboxAdapter."""
 from __future__ import annotations
 
-import asyncio
 
 import pytest
 

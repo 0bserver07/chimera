@@ -6,7 +6,7 @@ matching (exact -> rstrip -> trim -> normalized).
 from __future__ import annotations
 
 import unicodedata
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from typing import Callable
 

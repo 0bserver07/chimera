@@ -1,9 +1,8 @@
 """Tests for chimera.skills.flow_parser (Issue #126)."""
 from __future__ import annotations
 
-import pytest
 
-from chimera.skills.flow_parser import FlowEdge, FlowGraph, FlowNode, MermaidFlowParser
+from chimera.skills.flow_parser import FlowGraph, FlowNode, MermaidFlowParser
 
 
 class TestParseSimpleLinearFlow:

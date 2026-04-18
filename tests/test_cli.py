@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
 from chimera.cli.main import create_parser, main
 
 
@@ -84,7 +83,7 @@ def test_parser_synthesize_defaults():
     assert args.max_cost is None
 
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from chimera.training.strategies.base import SynthesisResult
 
 

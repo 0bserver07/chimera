@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import sys
-import time
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -69,7 +68,7 @@ class TestSetupNewSandbox:
         }
 
         # Health check for parent setup()
-        health_resp = MagicMock()
+        MagicMock()
 
         client.post.return_value = create_resp
         client.get.return_value = status_resp

@@ -2,13 +2,10 @@
 from __future__ import annotations
 
 import os
-import tempfile
 
-import pytest
 
 from chimera.core.file_state_cache import FileStateCache
 from chimera.tools.cached_read import CachedReadTool
-from chimera.types import ToolResult
 
 
 # ---------------------------------------------------------------------------

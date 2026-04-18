@@ -147,7 +147,7 @@ class TestTunerPicksBestConfig:
     """SynthesisTuner should return a result with the better config."""
 
     def test_tuner_picks_best_config(self, glm5_provider: AnthropicProvider) -> None:
-        with tempfile.TemporaryDirectory() as tmpdir:
+        with tempfile.TemporaryDirectory():
             # Simple task for tuner to work with
             src = (
                 "def double(x):\n"

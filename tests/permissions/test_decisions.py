@@ -1,7 +1,6 @@
 """Tests for chimera.permissions.decisions — DecisionReason, PermissionDecision."""
 from __future__ import annotations
 
-import pytest
 
 from chimera.permissions.decisions import DecisionReason, PermissionDecision
 from chimera.permissions.rules import PermissionBehavior

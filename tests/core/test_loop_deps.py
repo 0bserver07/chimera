@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from chimera.core.loop_deps import LoopDeps, production_deps
+from chimera.core.loop_deps import LoopDeps
 
 
 def test_loop_deps_has_required_fields() -> None:

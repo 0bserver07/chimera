@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from chimera.hooks.events import HookEvent
 from chimera.hooks.hook_types import HookOutput

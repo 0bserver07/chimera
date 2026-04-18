@@ -7,18 +7,15 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-import pytest
 
 from chimera.core.agent import Agent
-from chimera.core.context import Context
 from chimera.core.loop import ReAct
 from chimera.core.loop_config import LoopConfig
-from chimera.core.tool import BaseTool
 from chimera.tools.ask_user import AskUserTool
 from chimera.tools.dmail import DMailTool
 from chimera.tools.think import ThinkTool
 from chimera.tools.todo import TodoTool
-from chimera.types import Message, ToolCall, ToolResult
+from chimera.types import ToolCall
 from chimera.wire.wire import Wire
 from chimera.wire.types import StepBegin, StepEnd
 
@@ -87,7 +84,7 @@ def test_dmail_rewind_actually_truncates_agent_context():
     cp_call = ToolCall(id="tc1", name="dmail", arguments={"action": "checkpoint"})
     # Step 2: generate noise
     # Step 3: send d-mail to rewind
-    send_call = ToolCall(id="tc3", name="dmail", arguments={
+    ToolCall(id="tc3", name="dmail", arguments={
         "action": "send", "checkpoint_id": 0,
         "message": "Skip the noise, the answer is X."
     })

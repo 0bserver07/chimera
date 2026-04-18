@@ -1,7 +1,6 @@
 """Tests for permission UX: audit logging and risk classification."""
 from __future__ import annotations
 
-import pytest
 
 from chimera.permissions.audit import AuditEntry, AuditLog
 from chimera.permissions.risk import RiskLevel, classify_risk, format_risk

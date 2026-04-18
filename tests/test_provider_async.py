@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import pytest
-import pytest_asyncio
 
 from chimera.providers.base import Provider, Response, StreamEvent, ToolSchema
 from chimera.types import Message, ToolCall

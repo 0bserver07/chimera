@@ -1,17 +1,14 @@
 """Tests for chimera.hooks.file_watcher — FileWatcher emitting CWD_CHANGED and FILE_CHANGED."""
 from __future__ import annotations
 
-import os
-import tempfile
 import time
 
 import pytest
 
 from chimera.hooks.emitter import HookEmitter
 from chimera.hooks.events import HookEvent
-from chimera.hooks.executor import HookExecutor
 from chimera.hooks.file_watcher import FileWatcher
-from chimera.hooks.hook_types import FunctionHook, HookMatcher, HookOutput
+from chimera.hooks.hook_types import HookOutput
 
 
 # ---------------------------------------------------------------------------
@@ -23,7 +20,6 @@ def _make_recording_emitter() -> tuple[HookEmitter, list[tuple[HookEvent, dict]]
     """Return an emitter that records every (event, kwargs) it receives."""
     recordings: list[tuple[HookEvent, dict]] = []
 
-    original_emit = HookEmitter.emit
 
     async def recording_emit(self, event, **kwargs):
         recordings.append((event, kwargs))

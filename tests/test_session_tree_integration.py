@@ -8,7 +8,6 @@ from chimera.sessions.session import Session
 from chimera.core.agent import Agent
 from chimera.core.loop import ReAct
 from chimera.providers.base import Provider, Response
-from chimera.types import Message
 
 
 class MockProvider(Provider):

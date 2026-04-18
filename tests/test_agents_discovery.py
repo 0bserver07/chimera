@@ -1,10 +1,7 @@
 # tests/test_agents_discovery.py
 """Tests for AGENTS.md hierarchical discovery in project_discovery.py."""
-import tempfile
-from pathlib import Path
 
 from chimera.config.project_discovery import (
-    AgentDoc,
     discover_agents_docs,
 )
 

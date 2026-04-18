@@ -1,6 +1,5 @@
 # tests/test_repl_commands.py
 """Tests for /init and /yolo REPL commands."""
-import pytest
 from unittest.mock import MagicMock, patch
 
 from chimera.cli.code import cmd_init, cmd_yolo, _COMMANDS

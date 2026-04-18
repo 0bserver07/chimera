@@ -14,7 +14,6 @@ from chimera.discipline import (
     DepthGuard,
     DisciplineViolation,
     Gate,
-    GuardResult,
     InstructionAnchor,
     Phase,
     PhasedWorkflow,

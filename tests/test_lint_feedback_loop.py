@@ -37,7 +37,7 @@ def test_lint_errors_trigger_fix():
     with patch.object(loop, "_run_linter", side_effect=["error: unused import\n", ""]):
         ctx = Context(system="test")
         ctx.add(Message.user("write code"))
-        result = loop.run(MagicMock(), [], ctx, None)
+        loop.run(MagicMock(), [], ctx, None)
         # inner.run called twice: original + fix
         assert inner.run.call_count == 2
         assert len(loop.lint_history) == 2

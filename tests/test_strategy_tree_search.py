@@ -2,7 +2,6 @@
 """Tests for TreeSearch strategy."""
 from __future__ import annotations
 
-import pytest
 
 from chimera.training.strategies.tree_search import SearchNode
 
@@ -341,7 +340,7 @@ class TestTreeSearchRun:
             spec = Spec.from_tests(tmpdir, "Implement calculator")
 
             ts = TreeSearch(branch_factor=2, max_depth=2, max_nodes=10)
-            result = ts.run(agent, spec, env)
+            ts.run(agent, spec, env)
 
             calc_content = env.read_file("calc.py")
             assert "def add" in calc_content
@@ -396,7 +395,7 @@ class TestAllBranchesFail:
     """Regression test: search terminates when all branches raise exceptions."""
 
     def test_all_branches_fail_terminates(self):
-        from chimera.providers.base import Provider, Response
+        from chimera.providers.base import Provider
 
         class AlwaysFailProvider(Provider):
             def complete(self, messages, tools=None, temperature=0.0, max_tokens=None):

@@ -6,7 +6,6 @@ import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from chimera.eval.graders.base import GradeResult, Grader
 from chimera.eval.graders.builtin import (
     CompositeGrader,
     FileExistsGrader,

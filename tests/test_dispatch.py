@@ -4,7 +4,6 @@ from __future__ import annotations
 import json
 import tempfile
 from pathlib import Path
-from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -13,7 +12,7 @@ from chimera.agents.config import AgentConfig
 from chimera.agents.dispatch.classifier import Complexity, RequestClassifier
 from chimera.agents.dispatch.dispatcher import Dispatcher
 from chimera.agents.dispatch.index import AgentIndex
-from chimera.agents.dispatch.router import AgentRouter, RouteResult
+from chimera.agents.dispatch.router import AgentRouter
 from chimera.agents.dispatch.rules import ForceRoute, RouteRule
 from chimera.agents.registry import AgentRegistry
 

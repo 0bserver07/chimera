@@ -3,7 +3,6 @@ from __future__ import annotations
 import tempfile
 import time
 from pathlib import Path
-from unittest.mock import MagicMock
 
 from chimera.composition.ensemble import Ensemble
 from chimera.core.agent import Agent
@@ -11,7 +10,6 @@ from chimera.core.loop import ReAct
 from chimera.env.base import Environment
 from chimera.env.local import LocalEnvironment
 from chimera.providers.base import Provider, Response
-from chimera.types import Message
 
 
 class LabelProvider(Provider):

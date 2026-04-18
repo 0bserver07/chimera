@@ -80,7 +80,7 @@ class TestCostTrackerInLoop:
     @pytest.mark.asyncio
     async def test_budget_stops_loop(self) -> None:
         """CostTracker budget stops the ReAct loop."""
-        from chimera.core.loop import ReAct, async_drain_steps
+        from chimera.core.loop import ReAct
         from chimera.core.loop_config import LoopConfig
         from chimera.core.context import Context
         from chimera.providers.base import Provider, Response

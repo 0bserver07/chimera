@@ -5,7 +5,6 @@ from pathlib import Path
 
 import pytest
 
-from chimera.core.content_replacement import ContentReplacementEntry
 from chimera.core.tool_result_persister import ToolResultPersister
 from chimera.sessions.resume import SessionResumer
 from chimera.sessions.transcript import TranscriptStorage
@@ -34,7 +33,8 @@ async def test_resume_reconstructs_content_replacement_state():
         await storage.record(tool_msg)
 
         # Also store replacement info in the transcript as a metadata line
-        import json, time
+        import json
+        import time
 
         replacement_entry = {
             "type": "content_replacement",

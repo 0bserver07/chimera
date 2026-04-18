@@ -1,7 +1,6 @@
 """Tests for chimera.core.agent_context — AgentContext with isolation levels."""
 from __future__ import annotations
 
-import pytest
 
 from chimera.core.abort import AbortSignal
 from chimera.core.agent_context import AgentContext, IsolationLevel

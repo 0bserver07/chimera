@@ -5,7 +5,7 @@ import json
 import pytest
 from pathlib import Path
 
-from chimera.packages.manager import PackageManager, InstalledPackage
+from chimera.packages.manager import PackageManager
 
 
 @pytest.fixture

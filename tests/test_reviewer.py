@@ -1,6 +1,6 @@
 # tests/test_reviewer.py
 """Tests for chimera.core.reviewer — multi-stage solution ranking."""
-from unittest.mock import MagicMock, call
+from unittest.mock import MagicMock
 
 from chimera.core.reviewer import RankedResult, ReviewerChooser
 from chimera.providers.base import Response

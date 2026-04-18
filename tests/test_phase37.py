@@ -1,14 +1,10 @@
 """Tests for Phase 37: Gemini CLI + Cursor/Windsurf gap closure."""
 from __future__ import annotations
 
-import os
-import tempfile
-from io import StringIO
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from chimera.types import Message
 
 
 # ===================================================================

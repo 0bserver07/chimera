@@ -6,16 +6,14 @@ import asyncio
 import pytest
 
 from chimera.core.abort import AbortSignal
-from chimera.core.agent_context import AgentContext, IsolationLevel
+from chimera.core.agent_context import AgentContext
 from chimera.core.agent_definition import AgentDefinition
 from chimera.core.agent_spawner import AgentSpawner
 from chimera.core.auto_background import AutoBackgroundConfig
-from chimera.core.loop_events import LoopEvent, LoopEventType
+from chimera.core.loop_events import LoopEventType
 from chimera.core.loop_state import QuerySource
 from chimera.core.task_manager import TaskManager
-from chimera.core.tool import BaseTool
 from chimera.providers.base import Response
-from chimera.types import Message, ToolResult
 
 
 # ---------------------------------------------------------------------------

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import pytest
 
 from chimera.core.loop_state import (
     RETRY_POLICIES,
@@ -8,7 +7,7 @@ from chimera.core.loop_state import (
     QuerySource,
     RetryPolicy,
 )
-from chimera.types import Message, ToolResult
+from chimera.types import Message
 
 
 def test_query_source_enum() -> None:

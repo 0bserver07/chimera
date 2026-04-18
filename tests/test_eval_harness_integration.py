@@ -68,7 +68,7 @@ class TestEvalHarnessGLM5:
         assert len(result.results) == 3
         # GLM-5 should solve at least 1 of 3 trivial arithmetic problems
         assert result.passed >= 1, (
-            f"Expected at least 1 pass. Results: "
+            "Expected at least 1 pass. Results: "
             + str([(r.task_id, r.passed, r.output[:80]) for r in result.results])
         )
 

@@ -57,7 +57,7 @@ def test_verify_code_error(tool, env):
 
 def test_verify_timeout(tool, env):
     env.run_command.return_value = CommandResult(stdout="True\n", stderr="", exit_code=0)
-    result = tool.execute({"code": "import time; time.sleep(999)", "timeout": 5}, env)
+    tool.execute({"code": "import time; time.sleep(999)", "timeout": 5}, env)
     env.run_command.assert_called_once()
     # Verify timeout was passed to run_command
     call_args = env.run_command.call_args

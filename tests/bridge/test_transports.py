@@ -60,7 +60,6 @@ class TestStdioBridgeTransport:
         with patch.object(sys, "stdin", io.StringIO("".join(lines))):
             # We need to patch run_in_executor to read from our fake stdin
             loop = asyncio.get_event_loop()
-            original_run_in_executor = loop.run_in_executor
 
             call_count = 0
 

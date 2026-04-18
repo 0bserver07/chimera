@@ -1,8 +1,6 @@
 # tests/test_consolidation.py
 """Tests for chimera.context.consolidation — two-phase memory pipeline."""
 from chimera.context.consolidation import (
-    ConsolidatedMemory,
-    Fact,
     MemoryConsolidator,
 )
 from chimera.types import Message

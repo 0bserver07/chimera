@@ -1,6 +1,5 @@
 """Tests for Wire integration with ReAct loop."""
 from unittest.mock import MagicMock
-import pytest
 
 from chimera.core.context import Context
 from chimera.core.loop import ReAct
@@ -8,7 +7,7 @@ from chimera.core.loop_config import LoopConfig
 from chimera.core.tool import BaseTool
 from chimera.types import Message, ToolResult
 from chimera.wire.wire import Wire
-from chimera.wire.types import TurnBegin, TurnEnd, StepBegin, StepEnd
+from chimera.wire.types import StepBegin, StepEnd
 
 
 class _EchoTool(BaseTool):

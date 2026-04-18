@@ -1,7 +1,6 @@
 """Interactive permission prompt handler with pluggable callback."""
 from __future__ import annotations
 
-import asyncio
 from typing import Callable, Awaitable
 
 from chimera.permissions.decisions import DecisionReason, PermissionDecision

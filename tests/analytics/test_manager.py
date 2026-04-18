@@ -5,7 +5,7 @@ import asyncio
 
 import pytest
 
-from chimera.analytics.manager import AnalyticsEvent, AnalyticsManager
+from chimera.analytics.manager import AnalyticsManager
 from chimera.analytics.sinks import InMemorySink
 
 

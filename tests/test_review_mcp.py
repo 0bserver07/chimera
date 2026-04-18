@@ -1,7 +1,7 @@
 """Tests for chimera.mcp_servers.review_server — code review MCP server."""
 from __future__ import annotations
 
-from chimera.mcp_servers.review_server import ReviewFinding, ReviewMCPServer, review_diff
+from chimera.mcp_servers.review_server import ReviewMCPServer, review_diff
 
 
 SAMPLE_DIFF = """\

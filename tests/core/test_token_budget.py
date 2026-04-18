@@ -2,8 +2,6 @@
 from __future__ import annotations
 
 from chimera.core.token_budget import (
-    COMPLETION_THRESHOLD,
-    DIMINISHING_THRESHOLD,
     TokenBudget,
     TokenBudgetResult,
 )

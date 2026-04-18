@@ -4,12 +4,10 @@ from __future__ import annotations
 
 import shutil
 import subprocess
-import time
 
 import pytest
 
 from chimera.env.session import SessionMixin
-from chimera.types import CommandResult
 
 # Skip all tests if tmux is not installed
 pytestmark = pytest.mark.skipif(

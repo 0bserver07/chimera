@@ -1,5 +1,5 @@
 """Tests for chimera.sessions.tree."""
-from chimera.sessions.tree import SessionTree, MessageEntry
+from chimera.sessions.tree import SessionTree
 from chimera.types import Message, ToolCall
 
 
@@ -40,7 +40,7 @@ def test_persistence(tmp_path):
 
 def test_fork_and_branch(tmp_path):
     tree = SessionTree(tmp_path / "session.jsonl")
-    id1 = tree.add_message(Message.user("hello"))
+    tree.add_message(Message.user("hello"))
     id2 = tree.add_message(Message.assistant("hi"))
     tree.add_message(Message.user("continue"))
     tree.fork(id2)

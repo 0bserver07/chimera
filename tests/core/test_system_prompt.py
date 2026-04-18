@@ -1,7 +1,7 @@
 """Tests for chimera.core.system_prompt — Phase 5."""
 from __future__ import annotations
 
-from chimera.core.system_prompt import PromptLayer, SystemPrompt, SystemPromptBuilder
+from chimera.core.system_prompt import SystemPromptBuilder
 
 
 class TestSystemPromptBuilder:
