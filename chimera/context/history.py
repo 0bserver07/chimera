@@ -43,8 +43,17 @@ class PruneProcessor(HistoryProcessor):
 
         for i, msg in enumerate(messages):
             if msg.role == "tool" and i < prune_before:
-                # Prune: replace content with summary
-                result.append(Message(role="tool", content="[pruned]"))
+                # Prune: replace content with summary but preserve the
+                # tool call id — without it the message is invalid for
+                # Anthropic/OpenAI (which require tool_call_id on tool
+                # role messages to match a prior assistant tool_call).
+                result.append(
+                    Message(
+                        role="tool",
+                        content="[pruned]",
+                        call_id=msg.call_id,
+                    )
+                )
             else:
                 result.append(msg)
         return result

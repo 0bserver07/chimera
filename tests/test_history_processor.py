@@ -38,6 +38,35 @@ def test_prune_removes_old_tool_results():
     assert tool_msgs[-1].content == "long result 3"
 
 
+def test_prune_preserves_call_id_on_pruned_tool_messages():
+    """Regression: Anthropic/OpenAI require tool_call_id on tool messages.
+
+    Previously PruneProcessor created replacement tool messages with
+    ``content='[pruned]'`` but no ``call_id``, producing histories that
+    real providers reject because every tool result must match a prior
+    assistant tool_call by id.
+    """
+    msgs = [
+        Message.user("q1"),
+        Message.tool("call_a", "result A"),
+        Message.user("q2"),
+        Message.tool("call_b", "result B"),
+        Message.user("q3"),
+        Message.tool("call_c", "result C"),
+    ]
+    proc = PruneProcessor(keep_last_n_results=1)
+    result = proc.process(msgs)
+    tool_msgs = [m for m in result if m.role == "tool"]
+    # First 2 tool messages pruned but must retain their call_ids
+    assert tool_msgs[0].content == "[pruned]"
+    assert tool_msgs[0].call_id == "call_a"
+    assert tool_msgs[1].content == "[pruned]"
+    assert tool_msgs[1].call_id == "call_b"
+    # Last tool message intact
+    assert tool_msgs[2].content == "result C"
+    assert tool_msgs[2].call_id == "call_c"
+
+
 def test_compress_summarizes_old():
     msgs = [Message.user(f"turn {i}") for i in range(8)]
     proc = CompressProcessor(keep_recent=3)
