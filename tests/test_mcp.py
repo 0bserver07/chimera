@@ -35,6 +35,7 @@ class MockTransport(MCPTransport):
 class TestStdioTransport:
     def test_write_message_newline_delimited(self):
         """Verify stdio uses newline-delimited JSON (not Content-Length)."""
+        # Instantiating StdioTransport just to verify import path works.
         StdioTransport("echo", [])
         msg = {"jsonrpc": "2.0", "method": "test"}
         encoded = json.dumps(msg).encode("utf-8") + b"\n"
@@ -368,6 +369,51 @@ class TestMCPHealthCheck:
         client._transports = {"dead": DeadTransport()}
         result = client.ping()
         assert result == {"dead": False}
+
+
+class TestMCPInitializeErrors:
+    """Connect-time errors must surface loudly, not silently succeed."""
+
+    def test_initialize_error_response_raises(self):
+        """If the server rejects initialize, connect_all raises."""
+        mock = MockTransport([
+            {"jsonrpc": "2.0", "id": 1, "error": {"code": -32602, "message": "bad version"}},
+        ])
+        client = MCPClient()
+        client.add_transport("bad", mock)
+        with pytest.raises(ConnectionError, match="bad version"):
+            client.connect_all()
+
+    def test_initialize_no_response_raises(self):
+        """If the server closes before replying, connect_all raises."""
+        mock = MockTransport([None])
+        client = MCPClient()
+        client.add_transport("dead", mock)
+        with pytest.raises(ConnectionError, match="closed stream"):
+            client.connect_all()
+
+    def test_discover_tools_error_registers_empty(self):
+        """tools/list failure still registers the server (with 0 tools)."""
+        mock = MockTransport([
+            {"jsonrpc": "2.0", "id": 1, "result": {"capabilities": {}}},
+            None,
+            # tools/list responds with an error instead of tools
+            {"jsonrpc": "2.0", "id": 2, "error": {"code": -32601, "message": "not supported"}},
+        ])
+        client = MCPClient()
+        client.add_transport("sparse", mock)
+        client.connect_all()
+        assert "sparse" in client._tool_defs
+        assert client._tool_defs["sparse"] == []
+        assert client.tools == []
+
+    def test_ping_none_response_is_unreachable(self):
+        """ping() treats a None response as unreachable, not reachable."""
+        mock = MockTransport([None])
+        client = MCPClient()
+        client._transports = {"silent": mock}
+        result = client.ping()
+        assert result == {"silent": False}
 
 
 class TestMCPToolRefresh:

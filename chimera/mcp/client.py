@@ -78,8 +78,13 @@ class MCPClient:
         return self._request_id
 
     def _initialize(self, name: str, transport: MCPTransport) -> None:
-        """Send initialize request to an MCP server."""
-        transport.send({
+        """Send initialize request to an MCP server.
+
+        Raises:
+            ConnectionError: If the server responds with an error, or if
+                it closes the stream before replying.
+        """
+        response = transport.send({
             "jsonrpc": "2.0",
             "id": self._next_id(),
             "method": "initialize",
@@ -89,6 +94,16 @@ class MCPClient:
                 "clientInfo": {"name": "chimera", "version": "0.1.0"},
             },
         })
+        if response is None:
+            raise ConnectionError(
+                f"MCP server '{name}' closed stream before replying to initialize",
+            )
+        if "error" in response:
+            err = response["error"]
+            raise ConnectionError(
+                f"MCP server '{name}' rejected initialize: "
+                f"{err.get('code')} {err.get('message', '')}",
+            )
         # Send initialized notification
         transport.send({
             "jsonrpc": "2.0",
@@ -96,7 +111,12 @@ class MCPClient:
         })
 
     def _discover_tools(self, name: str, transport: MCPTransport) -> None:
-        """Discover tools from an MCP server."""
+        """Discover tools from an MCP server.
+
+        Populates ``self._tool_defs[name]``. If the server returns an
+        error or no response, the entry is set to an empty list so the
+        server's presence is still recorded but no tools are exposed.
+        """
         response = transport.send({
             "jsonrpc": "2.0",
             "id": self._next_id(),
@@ -104,6 +124,11 @@ class MCPClient:
         })
         if response and "result" in response:
             self._tool_defs[name] = response["result"].get("tools", [])
+        else:
+            # Keep the server registered but with zero tools; never drop it
+            # silently, since callers inspect _tool_defs / .tools to decide
+            # whether a connection succeeded.
+            self._tool_defs[name] = []
 
     @property
     def tools(self) -> list:
@@ -185,14 +210,20 @@ class MCPClient:
         results: dict[str, bool] = {}
         for srv_name, transport in targets.items():
             try:
-                transport.send({
+                response = transport.send({
                     "jsonrpc": "2.0",
                     "id": self._next_id(),
                     "method": "ping",
                 })
-                results[srv_name] = True
             except Exception:
                 results[srv_name] = False
+                continue
+            # A reachable server must send back *some* JSON-RPC payload.
+            # stdio transports return None when the peer closes the pipe,
+            # which we treat as unreachable. An error response (e.g. the
+            # server doesn't know 'ping') still counts as reachable since
+            # the process is alive and talking JSON-RPC.
+            results[srv_name] = response is not None
         return results
 
     def refresh_tools(self, name: str | None = None) -> None:
