@@ -85,3 +85,46 @@ class ProgramRegistry:
             self._bundles.remove(slug)
             del index[slug]
             self._save_index(index)
+
+    def rename(self, old_slug: str, new_slug: str) -> None:
+        """Rename an installed program from ``old_slug`` to ``new_slug``.
+
+        Moves the on-disk ``.chi`` bundle to the new slug filename and
+        updates the registry index.  The operation is best-effort atomic:
+        the index is only rewritten after the bundle file has been moved.
+
+        Args:
+            old_slug: Slug of the program to rename; must exist.
+            new_slug: Target slug; must not already exist.
+
+        Raises:
+            CacheMissError: If ``old_slug`` is not installed.
+            ValueError: If ``new_slug`` already exists, is empty, or equals
+                ``old_slug``.
+        """
+        if not new_slug:
+            raise ValueError("new_slug must be a non-empty string")
+        if old_slug == new_slug:
+            raise ValueError("new_slug is identical to old_slug")
+
+        index = self._load_index()
+        if old_slug not in index:
+            raise CacheMissError(kind="program", key=old_slug)
+        if new_slug in index:
+            raise ValueError(f"slug already exists: {new_slug!r}")
+
+        entry = index[old_slug]
+        old_path = Path(entry["bundle_path"])
+        new_path = self.dirs.bundles / f"{new_slug}.chi"
+        if new_path.exists():
+            # On-disk collision even though the index did not know about it.
+            raise ValueError(f"bundle file already exists: {new_path}")
+
+        new_path.parent.mkdir(parents=True, exist_ok=True)
+        old_path.rename(new_path)
+
+        new_entry = dict(entry)
+        new_entry["bundle_path"] = str(new_path)
+        index[new_slug] = new_entry
+        del index[old_slug]
+        self._save_index(index)
