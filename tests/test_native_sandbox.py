@@ -93,6 +93,23 @@ class TestDetectCapabilities:
         caps2 = SandboxCapabilities(seatbelt=False, landlock=False, platform="Windows")
         assert caps2.has_native_sandbox is False
 
+    def test_landlock_never_reported_as_available(self):
+        """Landlock has no real enforcement -- must never advertise it."""
+        # Regardless of /sys/kernel/security/landlock, detect_capabilities
+        # must return landlock=False until a real ctypes backend is wired in.
+        caps = detect_capabilities()
+        assert caps.landlock is False, (
+            "Landlock is not implemented; advertising it would silently "
+            "run commands unsandboxed."
+        )
+
+    def test_run_landlock_raises_not_implemented(self):
+        """_run_landlock must fail loudly, not silently skip sandboxing."""
+        policy = SandboxPolicy()
+        sandbox = NativeSandbox(policy)
+        with pytest.raises(NotImplementedError, match="Landlock"):
+            sandbox._run_landlock("echo hi", cwd=None, timeout=5)
+
 
 class TestNativeSandbox:
 

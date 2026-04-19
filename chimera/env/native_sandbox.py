@@ -53,12 +53,13 @@ def detect_capabilities() -> SandboxCapabilities:
             pass
 
     elif system == "Linux":
-        # Check for Landlock support (kernel 5.13+)
-        try:
-            if os.path.exists("/sys/kernel/security/landlock"):
-                caps.landlock = True
-        except Exception:
-            pass
+        # Landlock would require ctypes bindings to landlock_create_ruleset,
+        # landlock_add_rule, and landlock_restrict_self. Those are not
+        # implemented here, so we do NOT advertise Linux as sandboxed even
+        # when /sys/kernel/security/landlock exists. Reporting landlock=True
+        # here would be a lie: run() would silently fall through to
+        # unsandboxed execution. See _run_landlock for details.
+        caps.landlock = False
 
     return caps
 
@@ -228,18 +229,24 @@ class NativeSandbox:
     def _run_landlock(
         self, command: str, cwd: str | None, timeout: int,
     ) -> CommandResult:
-        """Run with Linux Landlock restrictions.
+        """Reserved for future Linux Landlock enforcement.
 
-        Note: Full Landlock enforcement requires a C helper or Python ctypes
-        bindings. This implementation generates the policy but runs the
-        command unsandboxed with a marker, as a placeholder for the
-        native integration.
+        Not implemented: real enforcement requires ctypes bindings for
+        ``landlock_create_ruleset``, ``landlock_add_rule``, and
+        ``landlock_restrict_self``. Until those bindings land,
+        :func:`detect_capabilities` reports ``landlock=False`` on Linux,
+        so :meth:`run` never dispatches here -- it falls back to
+        :meth:`_run_unsandboxed` with no pretense of sandboxing.
+
+        Raises:
+            NotImplementedError: Always. Callers must not invoke this
+                method directly unless they have supplied a real Landlock
+                implementation.
         """
-        # Landlock requires syscalls that aren't easily callable from Python
-        # without ctypes. For now, validate the policy and run unsandboxed.
-        # A full implementation would use ctypes to call:
-        #   landlock_create_ruleset, landlock_add_rule, landlock_restrict_self
-        return self._run_unsandboxed(command, cwd, timeout)
+        raise NotImplementedError(
+            "Landlock enforcement is not implemented. Install a real "
+            "ctypes-based Landlock backend and override detect_capabilities."
+        )
 
     def _run_unsandboxed(
         self, command: str, cwd: str | None, timeout: int,
