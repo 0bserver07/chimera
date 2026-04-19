@@ -2,7 +2,7 @@
 
 AI that reads, writes, and debugs code — tools like Claude Code and Codex do this. Chimera is a Python library for building these tools yourself, and a plugin that makes Claude Code better.
 
-**Status: Alpha** — 3601 tests, benchmarked on HumanEval (90.9%) and SWE-bench.
+**Status: Alpha** — 3904 tests, benchmarked on HumanEval (90.9%) and SWE-bench.
 
 ## Who This Is For
 
@@ -157,8 +157,11 @@ Where code runs     Your filesystem, a Docker container, a git branch,
 - [Quick Start: Claude Code Plugin](docs/playbooks/00-quick-start.md) — hooks, MCP servers, skills
 - [Build Your Own Agent](docs/playbooks/08-building-agents.md) — full library guide
 - [All Playbooks](docs/playbooks/) — 13 guides covering every feature
-- [Examples](examples/) — 41 runnable scripts
+- [Examples](examples/) — 46 runnable scripts
 - [Function Synthesis](docs/function-synthesis.md) — compile specs into callable `.chi` bundles
+  - 3 runtime backends (llama.cpp, transformers, ONNX), schema validation, streaming invoke
+  - `LocalCompiler` for real PEFT fine-tuning; publish and fetch bundles via `chimera fs push | pull` (Hugging Face Hub + S3)
+  - 10 CLI sub-verbs: `compile`, `run`, `list`, `rm`, `info`, `push`, `pull`, `import-peft`, `login`, `rename`
 - [Benchmarks](docs/benchmarks/README.md) — transparency framework
 - [Contributing](CONTRIBUTING.md) — setup, workflow, code style
 - [Changelog](CHANGELOG.md) — version history
