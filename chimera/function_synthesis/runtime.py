@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +31,29 @@ class RuntimeBackend(ABC):
     @abstractmethod
     def invoke(self, user_input: str, *, max_tokens: int = 256) -> str:
         """Run the loaded function against ``user_input`` and return text."""
+
+    def stream(self, user_input: str, *, max_tokens: int = 256) -> Iterator[str]:
+        """Run the loaded function and yield text chunks as they are produced.
+
+        The default implementation raises :class:`NotImplementedError` so
+        existing backends that predate streaming continue to work unchanged.
+        Backends that support incremental decoding should override this to
+        return an iterator that yields non-empty text chunks.
+
+        Args:
+            user_input: The user-facing input to the compiled function.
+            max_tokens: Maximum number of new tokens to produce.
+
+        Yields:
+            Non-empty text chunks in generation order.
+
+        Raises:
+            NotImplementedError: If the backend does not support streaming.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} does not implement stream(); "
+            "call invoke() for a single-shot response."
+        )
 
     @abstractmethod
     def close(self) -> None:
@@ -87,6 +111,21 @@ class CompiledFunction:
         if self._validate:
             self._validate_output(output)
         return output
+
+    def stream(self, user_input: str, *, max_tokens: int = 256) -> Iterator[str]:
+        """Stream text chunks from the loaded function.
+
+        Delegates to :meth:`RuntimeBackend.stream`, which raises
+        :class:`NotImplementedError` for backends without streaming support.
+
+        Args:
+            user_input: The user-facing input to the compiled function.
+            max_tokens: Maximum number of new tokens to produce.
+
+        Yields:
+            Non-empty text chunks in generation order.
+        """
+        return self._backend.stream(user_input, max_tokens=max_tokens)
 
     def close(self) -> None:
         self._backend.close()
