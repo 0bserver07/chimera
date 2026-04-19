@@ -1,8 +1,11 @@
-"""`chimera fs` subcommands: compile, run, list, rm, info, import-peft."""
+"""`chimera fs` subcommands: compile, run, list, rm, info, import-peft, login, rename."""
 from __future__ import annotations
 
 import argparse
+import getpass
 import json
+import re
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -11,9 +14,19 @@ from chimera.function_synthesis.compiler import CompilerBackend
 from chimera.function_synthesis.compilers.mock import MockCompiler
 from chimera.function_synthesis.compilers.remote import RemoteCompiler
 from chimera.function_synthesis.convert import import_peft, save_peft_bundle
+from chimera.function_synthesis.credentials import CredentialStore
+from chimera.function_synthesis.errors import CacheMissError
 from chimera.function_synthesis.hub import HubAdapter, parse_hub_spec
 from chimera.function_synthesis.registry import ProgramRegistry, slug_for
 from chimera.function_synthesis.spec import FunctionSpec
+
+
+_SLUG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+
+
+def _valid_slug(slug: str) -> bool:
+    """Return ``True`` if ``slug`` is alphanumeric + ``.-_`` and non-empty."""
+    return bool(_SLUG_RE.match(slug))
 
 
 def _load_spec(path: Path) -> FunctionSpec:
@@ -194,6 +207,92 @@ def cmd_info(args: argparse.Namespace) -> int:
     return 0
 
 
+def _fail(message: str, code: int = 1) -> int:
+    """Print ``message`` to stderr and return ``code``.
+
+    Also raises :class:`SystemExit` with the same code so that
+    ``python -m chimera`` exits non-zero even when the caller does not
+    forward the return value.  Tests that invoke handlers in-process can
+    still catch :class:`SystemExit` or rely on the returned code.
+    """
+    print(message, file=sys.stderr)
+    raise SystemExit(code)
+
+
+def cmd_login(args: argparse.Namespace) -> int:
+    """Manage credentials for remote function-synthesis services.
+
+    Modes:
+        * ``--list``: print stored service names (no tokens).
+        * ``<service> --delete``: remove credentials for ``service``.
+        * ``<service> [--token T]``: save ``T`` (or a token read from stdin
+          via ``getpass`` so it is not echoed) for ``service``.
+    """
+    store = CredentialStore()
+
+    if args.list:
+        for name in store.list_services():
+            print(name)
+        return 0
+
+    service = args.service
+    if not service:
+        _fail("error: <service> is required (or use --list)", code=2)
+
+    if args.delete:
+        store.delete(service)
+        print(f"Removed credentials for {service}")
+        return 0
+
+    token = args.token
+    if token is None:
+        # getpass hides the input so the token never echoes to the terminal.
+        try:
+            token = getpass.getpass(f"Token for {service}: ")
+        except (EOFError, KeyboardInterrupt):
+            _fail("\nerror: no token provided", code=1)
+
+    if not token:
+        # Never include the (empty) token in the message; keep phrasing generic.
+        _fail("error: empty token", code=1)
+
+    try:
+        store.set(service, token)
+    except ValueError:
+        # Do not echo the token in error paths.
+        _fail("error: invalid service or token", code=1)
+
+    print(f"Saved credentials for {service}")
+    return 0
+
+
+def cmd_rename(args: argparse.Namespace) -> int:
+    """Rename an installed program slug.
+
+    The registry validates existence and collisions; this handler adds a
+    format check on ``new_slug`` (alphanumeric plus ``.-_``) so invalid
+    filenames never reach disk.
+    """
+    new_slug = args.new_slug
+    if not _valid_slug(new_slug):
+        _fail(
+            f"error: invalid slug {new_slug!r}; "
+            "use alphanumerics, '-', '_' or '.'",
+            code=2,
+        )
+
+    registry = ProgramRegistry.default()
+    try:
+        registry.rename(args.old_slug, new_slug)
+    except CacheMissError:
+        _fail(f"error: slug not found: {args.old_slug}", code=1)
+    except ValueError as exc:
+        _fail(f"error: {exc}", code=1)
+
+    print(new_slug)
+    return 0
+
+
 def register(subparsers: argparse._SubParsersAction) -> None:  # type: ignore[type-arg]
     fs = subparsers.add_parser("fs", help="function-synthesis operations")
     fs_sub = fs.add_subparsers(dest="fs_cmd", required=True)
@@ -279,3 +378,38 @@ def register(subparsers: argparse._SubParsersAction) -> None:  # type: ignore[ty
         help="override the installed slug (default: <name>-<hash8>)",
     )
     p_import.set_defaults(func=cmd_import_peft)
+
+    p_login = fs_sub.add_parser(
+        "login",
+        help="save, list, or delete credentials for a remote service",
+    )
+    p_login.add_argument(
+        "service",
+        nargs="?",
+        default=None,
+        help="service name (e.g. 'huggingface', 's3', 'compile.example.com')",
+    )
+    p_login.add_argument(
+        "--token",
+        default=None,
+        help="token value; if omitted, read from stdin via getpass",
+    )
+    p_login.add_argument(
+        "--list",
+        action="store_true",
+        help="list stored service names (no tokens printed)",
+    )
+    p_login.add_argument(
+        "--delete",
+        action="store_true",
+        help="delete credentials for <service>",
+    )
+    p_login.set_defaults(func=cmd_login)
+
+    p_rename = fs_sub.add_parser(
+        "rename",
+        help="rename an installed program slug",
+    )
+    p_rename.add_argument("old_slug", help="current slug")
+    p_rename.add_argument("new_slug", help="new slug (alphanumerics, '-', '_', '.')")
+    p_rename.set_defaults(func=cmd_rename)
