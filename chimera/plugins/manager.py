@@ -62,7 +62,7 @@ class PluginManager:
         plugin: BasePlugin = plugin_cls()
         registry = ComponentRegistry()
         plugin.activate(registry)
-        plugin._registry = registry
+        plugin._registry = registry  # type: ignore[attr-defined]  # dynamic attr for plugin bookkeeping
         self._plugins[plugin.name] = plugin
         self._registries[plugin.name] = registry
         return plugin
@@ -80,7 +80,7 @@ class PluginManager:
             raise ValueError(f"Plugin '{plugin.name}' is already loaded")
         registry = ComponentRegistry()
         plugin.activate(registry)
-        plugin._registry = registry
+        plugin._registry = registry  # type: ignore[attr-defined]  # dynamic attr for plugin bookkeeping
         self._plugins[plugin.name] = plugin
         self._registries[plugin.name] = registry
 

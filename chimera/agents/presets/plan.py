@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import dataclasses
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from chimera.agents.config import AgentConfig
 
@@ -31,7 +31,7 @@ PLAN_CONFIG = AgentConfig(
 def PlanAgent(
     provider: Provider,
     env: Environment | None = None,
-    **overrides: object,
+    **overrides: Any,
 ) -> Agent:
     """Create a plan agent with optional config overrides."""
     config = dataclasses.replace(PLAN_CONFIG, **overrides) if overrides else PLAN_CONFIG

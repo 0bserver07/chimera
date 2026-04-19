@@ -205,7 +205,7 @@ class Session:
                 if isinstance(self._compaction, FileAwareCompaction):
                     self._compaction.set_metadata(config.file_tracker.to_metadata())
             compacted = self._compaction.compact(self._context.messages, budget)
-            self._context._messages = compacted
+            self._context._messages = compacted  # type: ignore[attr-defined]  # internal mutation
 
     def steer(self, message: str) -> None:
         """Inject a steering message into the running turn."""

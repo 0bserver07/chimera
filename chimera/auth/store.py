@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+from typing import Any
 
 from chimera.auth.base import Credential
 
@@ -49,12 +50,12 @@ class CredentialStore:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _load(self) -> dict[str, object]:
+    def _load(self) -> dict[str, Any]:
         if not self._path.exists():
             return {}
         return json.loads(self._path.read_text())  # type: ignore[no-any-return]
 
-    def _write(self, data: dict[str, object]) -> None:
+    def _write(self, data: dict[str, Any]) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._path.write_text(json.dumps(data, indent=2))
         os.chmod(self._path, 0o600)

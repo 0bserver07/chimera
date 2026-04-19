@@ -205,7 +205,7 @@ class IncrementalStrategy(Strategy):
         # Parse file:line from test output (skip test files)
         pattern = re.compile(r"(\S+\.py):(\d+)")
         seen: set[str] = set()
-        for match in pattern.finditer(test_result.output):  # type: ignore[union-attr]
+        for match in pattern.finditer(test_result.output):  # type: ignore[attr-defined]
             filepath = match.group(1)
             line = int(match.group(2))
             if "test_" in filepath or filepath.startswith("test"):
@@ -222,11 +222,11 @@ class IncrementalStrategy(Strategy):
                     targets.append(
                         SynthesisTarget(
                             file=filepath,
-                            function_name=func["name"],
-                            line_start=func["start"],
-                            line_end=func["end"],
-                            source=func["source"],
-                            related_failure=test_result.output[:500],  # type: ignore[union-attr]
+                            function_name=str(func["name"]),
+                            line_start=int(func["start"]),  # type: ignore[arg-type]
+                            line_end=int(func["end"]),  # type: ignore[arg-type]
+                            source=str(func["source"]),
+                            related_failure=test_result.output[:500],  # type: ignore[attr-defined]
                         )
                     )
             except Exception:
@@ -282,6 +282,6 @@ class IncrementalStrategy(Strategy):
             f"The bug is in `{target.function_name}()` in `{target.file}` "
             f"(lines {target.line_start}-{target.line_end}).\n\n"
             f"Current implementation:\n```python\n{target.source}\n```\n\n"
-            f"Test failure:\n```\n{test_result.output[:1000]}\n```\n\n"  # type: ignore[union-attr]
+            f"Test failure:\n```\n{test_result.output[:1000]}\n```\n\n"  # type: ignore[attr-defined]
             f"Fix ONLY this function. Do not rewrite other code."
         )

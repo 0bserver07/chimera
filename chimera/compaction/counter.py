@@ -29,7 +29,7 @@ class TokenCounter:
     def count(self, text: str) -> int:
         """Return the estimated token count for *text*."""
         if self._encoding is not None:
-            return len(self._encoding.encode(text))  # type: ignore[union-attr]
+            return len(self._encoding.encode(text))  # type: ignore[attr-defined]
         return len(text) // 4
 
     def count_messages(self, messages: list[Message]) -> int:

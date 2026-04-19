@@ -42,7 +42,7 @@ def main(
     # --- Agent ---
     agent = chimera.Agent(
         provider=provider,
-        tools=[chimera.tools.bash, chimera.tools.read_file, chimera.tools.write_file, VerifyTool()],
+        tools=[chimera.tools.bash, chimera.tools.read_file, chimera.tools.write_file, VerifyTool()],  # type: ignore[attr-defined]  # notebook demo; attrs are dynamically registered
         loop=chimera.ReAct(max_steps=30),
     )
 

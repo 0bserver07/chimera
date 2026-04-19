@@ -54,7 +54,7 @@ class ChimeraConfig:
             An Environment subclass instance.
         """
         from chimera.env.base import Environment
-        env: Environment = Environment.from_config(self.data.get("environment", {"type": "local"}))
+        env: Environment = Environment.from_config(self.data.get("environment", {"type": "local"}))  # type: ignore[attr-defined]  # discriminated-union dispatch
         return env
 
     def create_strategy(self) -> Strategy:
@@ -64,7 +64,7 @@ class ChimeraConfig:
             A Strategy subclass instance.
         """
         from chimera.training.strategies.base import Strategy
-        strategy: Strategy = Strategy.from_config(
+        strategy: Strategy = Strategy.from_config(  # type: ignore[attr-defined]  # discriminated-union dispatch
             self.data.get("training", {}).get("strategy", {"type": "test_convergence"})
         )
         return strategy
@@ -78,7 +78,7 @@ class ChimeraConfig:
         comp = self.data.get("compaction")
         if comp:
             from chimera.compaction.base import CompactionStrategy
-            strategy: CompactionStrategy = CompactionStrategy.from_config(comp)
+            strategy: CompactionStrategy = CompactionStrategy.from_config(comp)  # type: ignore[attr-defined]  # discriminated-union dispatch
             return strategy
         return None
 

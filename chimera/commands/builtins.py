@@ -658,7 +658,7 @@ def _export_handler(args: str) -> str:
         return f"{src.name} has no exportable messages."
 
     try:
-        path = export_session_html(messages, out_path)
+        path = export_session_html(messages, out_path)  # type: ignore[arg-type]  # legacy export accepts JSONL dicts
     except Exception as e:
         return f"Export failed: {e}"
     return f"Exported {len(messages)} messages from {src.name} to {path}"

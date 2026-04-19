@@ -121,7 +121,7 @@ class GoogleProvider(Provider):
         """Convert tool schemas to Gemini function declarations."""
         declarations = []
         for tool in tools:
-            schema = tool.get("input_schema", tool.get("parameters", {}))
+            schema = tool.get("input_schema", tool.get("parameters", {})) or {}
             declarations.append({
                 "name": tool["name"],
                 "description": tool.get("description", ""),

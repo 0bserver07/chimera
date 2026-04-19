@@ -294,7 +294,7 @@ class TreeSearch(Strategy):
             prompts = self._get_prompts(spec, parent, n_branches)
 
             # Run branches in parallel
-            branch_results = self._expand_parallel(agent, env, parent, prompts)
+            branch_results = self._expand_parallel(agent, env, parent, prompts)  # type: ignore[arg-type]  # caller passes LocalEnvironment via typed entry
 
             # If all branches failed, mark parent as exhausted so it
             # drops off the frontier (prevents infinite loop).

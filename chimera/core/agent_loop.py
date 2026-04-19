@@ -267,8 +267,8 @@ class AgentLoop:
                         type=error_type,
                         original_error=exc,
                     )
-                    result = await recovery.attempt_recovery(state, withheld)
-                    if result.should_continue:
+                    recovery_result = await recovery.attempt_recovery(state, withheld)
+                    if recovery_result.should_continue:
                         continue
                 # Unrecoverable — re-raise
                 raise

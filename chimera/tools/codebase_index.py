@@ -251,7 +251,8 @@ class SemanticSearchTool(BaseTool):
             # Try to auto-index from environment
             if env is not None:
                 workdir = getattr(env, "_workdir", None) or getattr(env, "workdir", ".")
-                self._index.index_directory(workdir)
+                if workdir:
+                    self._index.index_directory(workdir)
 
         results = self._index.search(query, max_results=max_results)
 

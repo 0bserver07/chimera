@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import dataclasses
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from chimera.agents.config import AgentConfig
 
@@ -31,7 +31,7 @@ REVIEW_CONFIG = AgentConfig(
 def ReviewAgent(
     provider: Provider,
     env: Environment | None = None,
-    **overrides: object,
+    **overrides: Any,
 ) -> Agent:
     """Create a review agent with optional config overrides."""
     config = dataclasses.replace(REVIEW_CONFIG, **overrides) if overrides else REVIEW_CONFIG

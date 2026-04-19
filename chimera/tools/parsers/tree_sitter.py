@@ -118,7 +118,7 @@ class TreeSitterParser(LanguageParser):
         if parser is None:
             return []
 
-        tree = parser.parse(source.encode())  # type: ignore[union-attr]
+        tree = parser.parse(source.encode())  # type: ignore[attr-defined]
         return self._extract_symbols(tree.root_node, source)
 
     def _get_parser(self, language: str) -> object | None:
@@ -241,10 +241,10 @@ class TreeSitterParser(LanguageParser):
         symbols: list[Symbol] = []
 
         for child in self._walk(node):
-            if child.type in self._DEFINITION_TYPES:
+            if child.type in self._DEFINITION_TYPES:  # type: ignore[attr-defined]
                 name = self._get_name(child, source)
                 if name:
-                    kind = self._KIND_MAP.get(child.type, "unknown")
+                    kind = self._KIND_MAP.get(child.type, "unknown")  # type: ignore[attr-defined]
                     children: list[Symbol] = []
                     # For classes/structs/impls/traits, extract nested methods
                     if kind in ("class", "struct", "impl", "trait"):

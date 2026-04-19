@@ -43,7 +43,9 @@ class Prompt:
 
         # Append tool names if provided
         if tools:
-            tool_list = ", ".join(str(t) for t in tools)
+            # tools is typed as object via **kwargs; it's expected to be iterable
+            assert hasattr(tools, "__iter__")
+            tool_list = ", ".join(str(t) for t in tools)  # type: ignore[attr-defined]
             result += f"\n\nAvailable tools: {tool_list}"
 
         return result

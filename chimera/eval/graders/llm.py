@@ -56,7 +56,7 @@ class LLMRubricGrader(Grader):
         )
 
         messages = [{"role": "user", "content": prompt}]
-        response = self._provider.complete(messages)
+        response = self._provider.complete(messages)  # type: ignore[arg-type]  # legacy call-site; providers tolerate dict messages
 
         try:
             parsed = json.loads(response.content)

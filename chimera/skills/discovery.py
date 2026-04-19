@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -19,7 +20,7 @@ class Skill:
 _NAME_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 
 
-def discover_skills(search_paths: list[str | Path]) -> list[Skill]:
+def discover_skills(search_paths: Sequence[str | Path]) -> list[Skill]:
     """Walk directories for SKILL.md files and parse them.
 
     Search paths are checked in order. Later paths can override

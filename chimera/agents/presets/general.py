@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import dataclasses
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from chimera.agents.config import AgentConfig
 
@@ -34,7 +34,7 @@ GENERAL_CONFIG = AgentConfig(
 def GeneralAgent(
     provider: Provider,
     env: Environment | None = None,
-    **overrides: object,
+    **overrides: Any,
 ) -> Agent:
     """Create a general agent with optional config overrides."""
     config = dataclasses.replace(GENERAL_CONFIG, **overrides) if overrides else GENERAL_CONFIG

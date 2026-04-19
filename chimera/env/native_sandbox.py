@@ -125,8 +125,8 @@ def generate_seatbelt_profile(policy: SandboxPolicy) -> str:
 
     # Network rules
     has_network = False
-    for rule in policy.network_rules:
-        if rule.allow:
+    for net_rule in policy.network_rules:
+        if net_rule.allow:
             has_network = True
             break
 
