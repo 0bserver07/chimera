@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -64,8 +64,7 @@ class FeedbackTracker:
     def __init__(self, store: LearningStore, window_size: int = 3) -> None:
         self._store = store
         self._window_size = window_size
-        self._pending: list[_PendingFeedback] = field(default_factory=list)  # type: ignore[assignment]
-        self._pending = []
+        self._pending: list[_PendingFeedback] = []
 
     def on_tool_result(self, event: Event) -> None:
         """Handle a ToolResultEvent.
