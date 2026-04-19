@@ -220,7 +220,7 @@ def _peft_bundle() -> ChiBundle:
             "stop": [],
         },
         adapter_format=ADAPTER_FORMAT_PEFT,
-        peft_files={
+        adapter_peft_files={
             "adapter_config.json": b'{"peft_type": "LORA"}',
             "adapter_model.safetensors": b"\x00\x01\x02WEIGHTS",
         },

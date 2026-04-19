@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from chimera.function_synthesis.bundle import (
-    ADAPTER_FORMAT_GGUF_LORA,
+    ADAPTER_FORMAT_GGUF,
     ADAPTER_FORMAT_PEFT,
     ChiBundle,
 )
@@ -129,16 +129,16 @@ class TransformersBackend(RuntimeBackend):
         return f"{system}\n\n{user}".strip()
 
     def _extract_peft_adapter(self, bundle: ChiBundle) -> Path:
-        """Materialize ``bundle.peft_files`` into a fresh temp directory.
+        """Materialize ``bundle.adapter_peft_files`` into a fresh temp directory.
 
         Args:
-            bundle: The bundle whose ``peft_files`` should be written to disk.
+            bundle: The bundle whose ``adapter_peft_files`` should be written to disk.
 
         Returns:
             Path to the temp directory holding the PEFT adapter.
         """
         tmp_dir = Path(tempfile.mkdtemp(prefix="chimera-peft-"))
-        for rel_name, blob in bundle.peft_files.items():
+        for rel_name, blob in bundle.adapter_peft_files.items():
             out = tmp_dir / rel_name
             out.parent.mkdir(parents=True, exist_ok=True)
             out.write_bytes(blob)
@@ -159,7 +159,7 @@ class TransformersBackend(RuntimeBackend):
                 (use :class:`LlamaCppBackend` for GGUF adapters).
             ValueError: If the bundle declares an unknown adapter format.
         """
-        if bundle.adapter_format == ADAPTER_FORMAT_GGUF_LORA:
+        if bundle.adapter_format == ADAPTER_FORMAT_GGUF:
             raise NotImplementedError(
                 "TransformersBackend cannot load 'gguf-lora' bundles; "
                 "use LlamaCppBackend for gguf adapters. "
