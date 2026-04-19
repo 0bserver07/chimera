@@ -51,6 +51,11 @@ function_synthesis_transformers = [
     "torch>=2.0",
     "safetensors>=0.4",
 ]
+function_synthesis_onnx = [
+    "onnxruntime>=1.18",
+    "transformers>=4.40",
+    "optimum[onnxruntime]>=1.24",
+]
 
 [project.scripts]
 chimera = "chimera.cli.main:main"
