@@ -1,14 +1,16 @@
-"""`chimera fs` subcommands: compile, run, list, rm, info."""
+"""`chimera fs` subcommands: compile, run, list, rm, info, import-peft."""
 from __future__ import annotations
 
 import argparse
 import json
 from pathlib import Path
 
+from chimera.function_synthesis.bundle import ChiBundle
 from chimera.function_synthesis.compiler import CompilerBackend
 from chimera.function_synthesis.compilers.mock import MockCompiler
 from chimera.function_synthesis.compilers.remote import RemoteCompiler
-from chimera.function_synthesis.registry import ProgramRegistry
+from chimera.function_synthesis.convert import import_peft, save_peft_bundle
+from chimera.function_synthesis.registry import ProgramRegistry, slug_for
 from chimera.function_synthesis.spec import FunctionSpec
 
 
@@ -68,6 +70,49 @@ def cmd_rm(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_import_peft(args: argparse.Namespace) -> int:
+    spec = _load_spec(Path(args.spec))
+    peft_dir = Path(args.peft_dir)
+    prompts_path = Path(args.prompts) if args.prompts else None
+    prompts: dict
+    if prompts_path and prompts_path.exists():
+        prompts = json.loads(prompts_path.read_text())
+    else:
+        prompts = {"system": spec.description, "user_template": "{input}", "stop": []}
+
+    bundle = import_peft(
+        peft_dir,
+        spec=spec,
+        prompts=prompts,
+        base_model=args.base_model,
+    )
+
+    slug = args.out or slug_for(spec)
+    registry = ProgramRegistry.default()
+    # Write the PEFT .chi directly into the registry's bundles directory so
+    # the peft/ subtree is preserved (ChiBundle.save would strip it).
+    target = registry.dirs.bundles / f"{slug}.chi"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    save_peft_bundle(bundle, peft_dir, target)
+
+    # Update the index manually — ProgramRegistry has no hook for
+    # pre-written archives, but the format of each index entry matches.
+    index_file = registry.dirs.index_file
+    index = json.loads(index_file.read_text()) if index_file.exists() else {}
+    index[slug] = {
+        "bundle_path": str(target),
+        "spec": json.loads(spec.to_json()),
+        "metadata": bundle.metadata,
+    }
+    index_file.write_text(json.dumps(index, sort_keys=True, indent=2))
+
+    # Sanity-check that what we wrote still loads as a ChiBundle.
+    ChiBundle.load(target)
+
+    print(slug)
+    return 0
+
+
 def cmd_info(args: argparse.Namespace) -> int:
     entry = ProgramRegistry.default().resolve(args.slug)
     payload = {
@@ -108,3 +153,26 @@ def register(subparsers: argparse._SubParsersAction) -> None:  # type: ignore[ty
     p_info = fs_sub.add_parser("info", help="show details for a slug")
     p_info.add_argument("slug")
     p_info.set_defaults(func=cmd_info)
+
+    p_import = fs_sub.add_parser(
+        "import-peft",
+        help="package a HuggingFace PEFT adapter directory as a .chi bundle",
+    )
+    p_import.add_argument("peft_dir", help="path to a PEFT adapter directory")
+    p_import.add_argument("spec", help="path to a spec JSON file")
+    p_import.add_argument(
+        "--prompts",
+        default=None,
+        help="optional JSON file with {system, user_template, stop}",
+    )
+    p_import.add_argument(
+        "--base-model",
+        default=None,
+        help="override base model identifier (defaults to value in adapter_config.json)",
+    )
+    p_import.add_argument(
+        "--out",
+        default=None,
+        help="override the installed slug (default: <name>-<hash8>)",
+    )
+    p_import.set_defaults(func=cmd_import_peft)
