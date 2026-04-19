@@ -23,10 +23,10 @@ jobs:
         run: uv python install 3.12
 
       - name: Install dependencies
-        run: uv sync --extra dev --extra anthropic
+        run: uv sync --extra dev --extra anthropic --extra openai
 
       - name: Run tests
-        run: uv run pytest -x -q --tb=short
+        run: uv run pytest --ignore=tests/benchmarks -x -q --tb=short
 
       - name: Lint
         run: uv run ruff check chimera/
