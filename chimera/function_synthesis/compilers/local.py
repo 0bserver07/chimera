@@ -278,7 +278,7 @@ def _import_deps() -> dict[str, Any]:
     except ImportError as exc:
         raise ImportError(f"peft missing: {_INSTALL_HINT}") from exc
     try:
-        from datasets import Dataset  # type: ignore[import-not-found]
+        from datasets import Dataset  # type: ignore[import-not-found, import-untyped]
     except ImportError as exc:
         raise ImportError(f"datasets missing: {_INSTALL_HINT}") from exc
 
