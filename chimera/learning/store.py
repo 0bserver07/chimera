@@ -273,6 +273,46 @@ class LearningStore:
         self._conn.commit()
         return cursor.rowcount
 
+    def log(
+        self,
+        *,
+        request: str,
+        complexity: str,
+        agent_name: str,
+        score: float,
+        reason: str,
+        project_path: str = "",
+    ) -> None:
+        """Record a dispatch decision as an observation.
+
+        Used by :class:`chimera.agents.dispatch.dispatcher.Dispatcher` to
+        capture which agent was chosen for a request. Stored in the
+        ``effectiveness`` category so that later analysis can see routing
+        decisions and their outcomes.
+
+        Args:
+            request: The original user request text (first 200 chars kept).
+            complexity: Classified complexity level (e.g. ``"moderate"``).
+            agent_name: Name of the routed agent.
+            score: Routing match score in [0.0, 1.0].
+            reason: Human-readable routing explanation.
+            project_path: Optional project scope.
+        """
+        obs = Observation(
+            topic="dispatch",
+            key=f"{complexity}:{agent_name}",
+            value=(
+                f"request={request[:200]!r} agent={agent_name} "
+                f"score={score:.2f} reason={reason}"
+            ),
+            category=ObservationCategory.EFFECTIVENESS,
+            confidence=max(0.0, min(1.0, score)),
+            tags=[complexity, agent_name],
+            source="dispatcher",
+            project_path=project_path,
+        )
+        self.record(obs)
+
     def close(self) -> None:
         """Close the database connection."""
         self._conn.close()

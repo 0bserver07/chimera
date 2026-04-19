@@ -291,6 +291,46 @@ class TestStorePrune:
             store.close()
 
 
+class TestStoreLogDispatch:
+    """test_store_log_dispatch — log() records a dispatch decision."""
+
+    def test_log_creates_observation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = _make_store(tmp)
+            store.log(
+                request="build a feature",
+                complexity="moderate",
+                agent_name="build",
+                score=0.85,
+                reason="Trigger match score 0.85 for agent 'build'",
+            )
+
+            # Query should return the logged decision
+            results = store.query("build", category=ObservationCategory.EFFECTIVENESS)
+            assert len(results) == 1
+            assert results[0].topic == "dispatch"
+            assert results[0].key == "moderate:build"
+            assert "build" in results[0].tags
+            assert results[0].source == "dispatcher"
+            assert 0.84 < results[0].confidence < 0.86
+            store.close()
+
+    def test_log_clamps_score_to_confidence_range(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = _make_store(tmp)
+            store.log(
+                request="x",
+                complexity="simple",
+                agent_name="a",
+                score=2.0,  # out of range
+                reason="r",
+            )
+            results = store.query("x", category=ObservationCategory.EFFECTIVENESS)
+            assert len(results) == 1
+            assert results[0].confidence == 1.0
+            store.close()
+
+
 # ---------------------------------------------------------------------------
 # FeedbackTracker tests
 # ---------------------------------------------------------------------------
