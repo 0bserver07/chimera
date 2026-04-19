@@ -46,10 +46,16 @@ class TestDetectFormatters:
         assert detected[".go"].name == "gofmt"
 
     @pytest.mark.asyncio
-    async def test_format_file_formatter_not_installed(self, tmp_path: Path):
+    async def test_format_file_formatter_not_installed(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
         """When the formatter binary is not found, return (True, '') gracefully."""
+        import shutil
+
+        # Force shutil.which → None so the "not installed" branch runs even on
+        # machines that actually have gofmt (CI runners preinstall Go).
+        monkeypatch.setattr(shutil, "which", lambda _cmd: None)
         af = AutoFormatter(tmp_path)
-        # .go always has gofmt; use a bogus file path
         success, output = await af.format_file("nonexistent.go")
         assert success is True
         assert output == ""
