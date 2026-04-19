@@ -1,6 +1,7 @@
 # tests/test_consolidation.py
 """Tests for chimera.context.consolidation — two-phase memory pipeline."""
 from chimera.context.consolidation import (
+    Fact,
     MemoryConsolidator,
 )
 from chimera.types import Message
@@ -66,3 +67,48 @@ class TestMemoryConsolidator:
         mc.add_fact("something")
         mc.clear()
         assert len(mc.raw_facts) == 0
+
+    def test_consolidate_does_not_mutate_raw_facts(self):
+        """Bug fix: consolidate() must not mutate the Fact objects it
+        stores in _raw_facts. Previously it assigned fact.category
+        directly, which leaked back into the caller's view of raw_facts.
+        """
+        mc = MemoryConsolidator()
+        # Uncategorized fact that would be auto-categorized during
+        # consolidate(). Before the fix, its .category was written in
+        # place.
+        mc.add_fact("The API endpoint is /v1/users", source="docs")
+        # Snapshot the raw facts before consolidation.
+        pre_category = mc.raw_facts[0].category
+        pre_content = mc.raw_facts[0].content
+        assert pre_category == ""
+
+        result = mc.consolidate()
+
+        # The consolidated copy gets the inferred category…
+        assert result.facts[0].category == "api"
+        # …but the raw fact remains pristine.
+        assert mc.raw_facts[0].category == pre_category == ""
+        assert mc.raw_facts[0].content == pre_content
+        # And the returned Fact is a different object.
+        assert result.facts[0] is not mc.raw_facts[0]
+
+    def test_consolidate_does_not_mutate_externally_held_facts(self):
+        """External references to Fact objects must also remain unchanged."""
+        mc = MemoryConsolidator()
+        mc.add_fact("Tests use pytest.")
+        # Grab an external reference BEFORE consolidate runs.
+        external_ref = mc.raw_facts[0]
+        assert external_ref.category == ""
+
+        mc.consolidate()
+
+        # The external reference to the underlying Fact is untouched.
+        assert external_ref.category == ""
+
+    def test_fact_is_dataclass(self):
+        # Sanity check: Fact must still be importable and constructible
+        # the same way callers expect.
+        f = Fact(content="x", category="testing")
+        assert f.content == "x"
+        assert f.category == "testing"

@@ -17,8 +17,9 @@ Example::
 """
 from __future__ import annotations
 
+import copy
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -142,13 +143,22 @@ class MemoryConsolidator:
     def consolidate(self) -> ConsolidatedMemory:
         """Phase 2: Deduplicate and structure collected facts.
 
+        This method does *not* mutate the facts stored in
+        :attr:`raw_facts` (or any :class:`Fact` objects passed into the
+        consolidator). New :class:`Fact` instances are constructed for
+        the returned :class:`ConsolidatedMemory` whenever a field (e.g.
+        ``category``) needs to change.
+
         Returns:
             A ConsolidatedMemory with categorized, deduplicated facts
             and a text summary.
         """
-        # Deduplicate by normalized content
+        # Deduplicate by normalized content. We defensively copy each
+        # fact so that downstream category assignment can never mutate
+        # the caller-visible Fact objects.
         seen: dict[str, Fact] = {}
-        for fact in self._raw_facts:
+        for original in self._raw_facts:
+            fact = copy.copy(original)
             key = fact.content.lower().strip()
             if key in seen:
                 # Keep higher confidence version
@@ -157,12 +167,14 @@ class MemoryConsolidator:
             else:
                 seen[key] = fact
 
-        unique_facts = list(seen.values())
-
-        # Auto-categorize uncategorized facts
-        for fact in unique_facts:
+        # Auto-categorize uncategorized facts by constructing a new Fact
+        # via dataclasses.replace so the copies above are also not
+        # retroactively mutated — the returned list is wholly new.
+        unique_facts: list[Fact] = []
+        for fact in seen.values():
             if not fact.category:
-                fact.category = _auto_categorize(fact.content)
+                fact = replace(fact, category=_auto_categorize(fact.content))
+            unique_facts.append(fact)
 
         # Group by category
         categories: dict[str, list[Fact]] = {}
