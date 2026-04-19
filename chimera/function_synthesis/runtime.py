@@ -6,11 +6,13 @@ implementation using ``llama-cpp-python``.
 """
 from __future__ import annotations
 
+import json
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
 
 from chimera.function_synthesis.bundle import ChiBundle
+from chimera.function_synthesis.schema import SchemaError, validate
 
 
 class RuntimeBackend(ABC):
@@ -35,17 +37,40 @@ class RuntimeBackend(ABC):
 
 
 class CompiledFunction:
-    """A loaded ``.chi`` bundle you can call like a Python function."""
+    """A loaded ``.chi`` bundle you can call like a Python function.
 
-    def __init__(self, bundle: ChiBundle, backend: RuntimeBackend) -> None:
+    Args:
+        bundle: The loaded :class:`ChiBundle`.
+        backend: The :class:`RuntimeBackend` that will execute it.
+        validate: If True, validate the user input against
+            ``bundle.spec.input_schema`` before invoking and validate the
+            backend output against ``bundle.spec.output_schema``
+            afterwards. Opt-in to avoid breaking existing callers that
+            rely on free-form strings.
+    """
+
+    def __init__(
+        self,
+        bundle: ChiBundle,
+        backend: RuntimeBackend,
+        *,
+        validate: bool = False,
+    ) -> None:
         self._bundle = bundle
         self._backend = backend
+        self._validate = validate
         backend.load(bundle)
 
     @classmethod
-    def from_path(cls, path: str | Path, *, backend: RuntimeBackend) -> CompiledFunction:
+    def from_path(
+        cls,
+        path: str | Path,
+        *,
+        backend: RuntimeBackend,
+        validate: bool = False,
+    ) -> CompiledFunction:
         """Load a ``.chi`` bundle from ``path`` and bind it to ``backend``."""
-        return cls(ChiBundle.load(path), backend)
+        return cls(ChiBundle.load(path), backend, validate=validate)
 
     @property
     def name(self) -> str:
@@ -56,7 +81,12 @@ class CompiledFunction:
         return self._bundle.spec
 
     def __call__(self, user_input: str, *, max_tokens: int = 256) -> str:
-        return self._backend.invoke(user_input, max_tokens=max_tokens)
+        if self._validate:
+            self._validate_input(user_input)
+        output = self._backend.invoke(user_input, max_tokens=max_tokens)
+        if self._validate:
+            self._validate_output(output)
+        return output
 
     def close(self) -> None:
         self._backend.close()
@@ -66,3 +96,66 @@ class CompiledFunction:
 
     def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
         self.close()
+
+    # --- internal validation helpers ----------------------------------
+    def _validate_input(self, user_input: str) -> None:
+        """Validate raw user input against ``spec.input_schema``.
+
+        When the schema expects a string we pass the input through
+        unchanged. For any other declared type we try to JSON-decode
+        first, since the calling convention for a CompiledFunction is
+        that non-string inputs arrive as JSON-encoded strings.
+
+        Raises:
+            SchemaError: If the input is malformed JSON for a
+                non-string schema, or if it fails validation.
+        """
+        schema = self._bundle.spec.input_schema
+        if schema is None:
+            return
+        decoded = _decode_for_schema(user_input, schema, where="input")
+        validate(decoded, schema, path="input")
+
+    def _validate_output(self, output: str) -> None:
+        """Validate backend output against ``spec.output_schema``.
+
+        Same decoding rule as :meth:`_validate_input`.
+
+        Raises:
+            SchemaError: If the output violates the declared schema.
+        """
+        schema = self._bundle.spec.output_schema
+        if schema is None:
+            return
+        decoded = _decode_for_schema(output, schema, where="output")
+        validate(decoded, schema, path="output")
+
+
+def _decode_for_schema(raw: str, schema: dict[str, Any], *, where: str) -> Any:
+    """Return ``raw`` coerced to the shape the schema expects.
+
+    Strings pass through untouched; everything else is json-decoded
+    first. A JSON decode error is raised as :class:`SchemaError` to
+    keep the error surface narrow for callers.
+    """
+    declared = schema.get("type")
+    # Both "string" and ["string", ...] with string first/only member
+    # should skip JSON decoding. A list of types that contains both
+    # "string" and non-string types is ambiguous — we optimistically
+    # try JSON first, fall back to the raw string.
+    if declared == "string":
+        return raw
+    if isinstance(declared, list) and declared == ["string"]:
+        return raw
+    if isinstance(declared, list) and "string" in declared:
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            return raw
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise SchemaError(
+            f"{where}: expected JSON matching schema type "
+            f"{declared!r}, but decode failed: {exc}"
+        ) from exc

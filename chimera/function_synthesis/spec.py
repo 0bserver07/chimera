@@ -57,3 +57,35 @@ class FunctionSpec:
             input_schema=data.get("input_schema"),
             output_schema=data.get("output_schema"),
         )
+
+    def validate_input(self, value: Any) -> None:
+        """Validate ``value`` against :attr:`input_schema`.
+
+        No-op when ``input_schema`` is None. See
+        :mod:`chimera.function_synthesis.schema` for the supported
+        subset of JSON Schema.
+
+        Raises:
+            SchemaError: If the value violates the schema.
+        """
+        if self.input_schema is None:
+            return
+        # Local import to keep this module lean when schema helpers
+        # aren't needed.
+        from chimera.function_synthesis.schema import validate
+
+        validate(value, self.input_schema, path="input")
+
+    def validate_output(self, value: Any) -> None:
+        """Validate ``value`` against :attr:`output_schema`.
+
+        No-op when ``output_schema`` is None.
+
+        Raises:
+            SchemaError: If the value violates the schema.
+        """
+        if self.output_schema is None:
+            return
+        from chimera.function_synthesis.schema import validate
+
+        validate(value, self.output_schema, path="output")
