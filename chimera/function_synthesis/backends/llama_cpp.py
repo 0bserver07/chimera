@@ -61,19 +61,24 @@ class LlamaCppBackend(RuntimeBackend):
                 "Install with: pip install 'chimera[function_synthesis]'"
             ) from exc
 
-        # llama.cpp reads the adapter from disk; extract it to a tempfile.
-        tmp = tempfile.NamedTemporaryFile(suffix=".gguf", delete=False)
-        tmp.write(bundle.adapter_bytes)
-        tmp.close()
-        self._adapter_tmp = Path(tmp.name)
-
         kwargs: dict[str, Any] = {
             "model_path": str(self._base_model_path),
-            "lora_path": str(self._adapter_tmp),
             "n_ctx": self._n_ctx,
         }
         if self._n_threads is not None:
             kwargs["n_threads"] = self._n_threads
+
+        # Only attach a LoRA if the bundle actually carries one. Passing an
+        # empty path to lora_path makes llama.cpp try to read an empty file
+        # as a LoRA and fail with "failed to read magic".
+        if bundle.adapter_bytes:
+            tmp = tempfile.NamedTemporaryFile(suffix=".gguf", delete=False)
+            tmp.write(bundle.adapter_bytes)
+            tmp.close()
+            self._adapter_tmp = Path(tmp.name)
+            kwargs["lora_path"] = str(self._adapter_tmp)
+        else:
+            self._adapter_tmp = None
 
         self._llm = llama_cpp.Llama(**kwargs)
         self._bundle = bundle
