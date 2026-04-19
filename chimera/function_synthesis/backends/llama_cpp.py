@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import pickle
 import tempfile
+from collections.abc import Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -200,6 +201,49 @@ class LlamaCppBackend(RuntimeBackend):
                             pass
 
         return str(result["choices"][0]["message"]["content"])
+
+    def stream(self, user_input: str, *, max_tokens: int = 256) -> Iterator[str]:
+        """Stream text chunks from the llama.cpp chat completion API.
+
+        Uses ``create_chat_completion(stream=True)`` and yields each non-empty
+        delta content string. Prefix-cache save/load is skipped in streaming
+        mode — the cache layer is an offline optimization for full-response
+        invocations and mixing it with streaming produces inconsistent state.
+
+        Args:
+            user_input: The user-facing input to the compiled function.
+            max_tokens: Maximum number of new tokens to produce.
+
+        Yields:
+            Non-empty text chunks in generation order.
+
+        Raises:
+            RuntimeError: If the backend is not loaded.
+        """
+        if self._llm is None or self._bundle is None:
+            raise RuntimeError("backend not loaded; call load() first")
+        prompts = self._bundle.prompts
+        system = prompts.get("system", "")
+        user_msg = prompts.get("user_template", "{input}").format(input=user_input)
+
+        messages = [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user_msg},
+        ]
+        chunks = self._llm.create_chat_completion(
+            messages=messages,
+            max_tokens=max_tokens,
+            stop=prompts.get("stop") or None,
+            stream=True,
+        )
+        for chunk in chunks:
+            choices = chunk.get("choices") if isinstance(chunk, dict) else None
+            if not choices:
+                continue
+            delta = choices[0].get("delta") or {}
+            content = delta.get("content")
+            if content:
+                yield str(content)
 
     def close(self) -> None:
         self._llm = None
