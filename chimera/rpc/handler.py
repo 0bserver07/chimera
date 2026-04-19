@@ -11,6 +11,7 @@ from chimera.rpc.types import (
     MessageEvent,
     PromptCommand,
     RpcResponse,
+    SetModelCommand,
     StateResponse,
     SteerCommand,
 )
@@ -100,6 +101,56 @@ class RpcHandler:
             self._server._session.compact()
         self._server._emit(RpcResponse(command="compact", id=cmd.id))
 
+    def handle_set_model(self, cmd: SetModelCommand) -> None:
+        """Switch the model used by the agent mid-session.
+
+        Delegates to ``session.set_model(model)`` if available, otherwise
+        sets ``provider._model`` directly on the active agent (the
+        conventional storage field used by all built-in providers).
+
+        Args:
+            cmd: Inbound set_model command.
+        """
+        if not cmd.model:
+            self._server._emit(
+                RpcResponse(
+                    command="set_model",
+                    id=cmd.id,
+                    success=False,
+                    error="model field is required",
+                )
+            )
+            return
+
+        session = self._server._session
+        try:
+            if hasattr(session, "set_model"):
+                session.set_model(cmd.model)
+            else:
+                agent = getattr(session, "_agent", None)
+                provider = getattr(agent, "provider", None) if agent else None
+                if provider is None:
+                    raise RuntimeError("session has no agent.provider to update")
+                # Built-in providers store model in self._model; model_name
+                # is a property that returns it.
+                if hasattr(provider, "_model"):
+                    provider._model = cmd.model
+                elif hasattr(provider, "model"):
+                    provider.model = cmd.model
+                else:
+                    raise RuntimeError(
+                        f"provider {type(provider).__name__} exposes no "
+                        "writable model field"
+                    )
+        except Exception as e:
+            self._server._emit(
+                RpcResponse(
+                    command="set_model", id=cmd.id, success=False, error=str(e),
+                )
+            )
+            return
+        self._server._emit(RpcResponse(command="set_model", id=cmd.id))
+
     # ------------------------------------------------------------------
     # Handler registry
     # ------------------------------------------------------------------
@@ -118,4 +169,5 @@ class RpcHandler:
             "cancel": self.handle_cancel,
             "get_state": self.handle_get_state,
             "compact": self.handle_compact,
+            "set_model": self.handle_set_model,
         }

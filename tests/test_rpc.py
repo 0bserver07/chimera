@@ -208,6 +208,72 @@ def test_handler_get_state():
     assert parsed["model"] == "glm-5"
 
 
+def test_handler_set_model_via_session_method():
+    """Prefer session.set_model() when available."""
+    mock_session = MagicMock()
+    mock_session.set_model = MagicMock()
+
+    server = RpcServer.__new__(RpcServer)
+    server._session = mock_session
+    server._stdout = io.StringIO()
+
+    handler = RpcHandler(server)
+    handler.handle_set_model(SetModelCommand(id="m1", model="glm-5"))
+
+    mock_session.set_model.assert_called_once_with("glm-5")
+    output = server._stdout.getvalue()
+    parsed = json.loads(output.strip())
+    assert parsed["command"] == "set_model"
+    assert parsed["success"] is True
+
+
+def test_handler_set_model_via_provider_attr():
+    """Fall back to provider._model when session has no set_model."""
+    # No set_model, no spec -- MagicMock auto-creates set_model attr, so use
+    # a plain object for the session and an object with _model for provider.
+    class _Provider:
+        _model = "old-model"
+    class _Agent:
+        provider = _Provider()
+    class _Session:
+        _agent = _Agent()
+
+    session = _Session()
+    server = RpcServer.__new__(RpcServer)
+    server._session = session
+    server._stdout = io.StringIO()
+
+    handler = RpcHandler(server)
+    handler.handle_set_model(SetModelCommand(id="m2", model="new-model"))
+
+    assert session._agent.provider._model == "new-model"
+    output = server._stdout.getvalue()
+    parsed = json.loads(output.strip())
+    assert parsed["success"] is True
+
+
+def test_handler_set_model_rejects_empty():
+    server = RpcServer.__new__(RpcServer)
+    server._session = MagicMock()
+    server._stdout = io.StringIO()
+
+    handler = RpcHandler(server)
+    handler.handle_set_model(SetModelCommand(id="m3", model=""))
+
+    output = server._stdout.getvalue()
+    parsed = json.loads(output.strip())
+    assert parsed["success"] is False
+    assert "required" in parsed["error"]
+
+
+def test_handler_set_model_registered_in_handlers():
+    """handlers dict must include set_model so the server dispatches it."""
+    server = RpcServer.__new__(RpcServer)
+    server._session = MagicMock()
+    handler = RpcHandler(server)
+    assert "set_model" in handler.handlers
+
+
 def test_server_run_processes_lines():
     mock_session = MagicMock()
     mock_session.messages = []
