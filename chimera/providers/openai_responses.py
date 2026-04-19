@@ -86,7 +86,7 @@ class OpenAIResponsesProvider(Provider):
     # Complete
     # ------------------------------------------------------------------
 
-    def complete(
+    def complete(  # type: ignore[override]  # accepts extra kwargs
         self,
         messages: list[Message],
         tools: list[ToolSchema] | None = None,
@@ -278,7 +278,7 @@ class OpenAIResponsesProvider(Provider):
     # Async
     # ------------------------------------------------------------------
 
-    async def async_complete(
+    async def async_complete(  # type: ignore[override]  # accepts extra kwargs
         self,
         messages: list[Message],
         tools: list[ToolSchema] | None = None,

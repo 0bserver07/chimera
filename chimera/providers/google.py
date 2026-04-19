@@ -95,7 +95,7 @@ class GoogleProvider(Provider):
 
     def _convert_messages(self, messages: list[Message]) -> list[dict[str, Any]]:
         """Convert Chimera messages to Gemini contents format."""
-        contents = []
+        contents: list[dict[str, Any]] = []
         for msg in messages:
             if msg.role == "system":
                 # Gemini handles system prompt separately; prepend as user context
@@ -103,7 +103,7 @@ class GoogleProvider(Provider):
             elif msg.role == "user":
                 contents.append({"role": "user", "parts": [{"text": msg.content}]})
             elif msg.role == "assistant":
-                parts = []
+                parts: list[dict[str, Any]] = []
                 if msg.content:
                     parts.append({"text": msg.content})
                 for tc in msg.tool_calls:

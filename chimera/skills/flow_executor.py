@@ -19,8 +19,8 @@ class FlowExecutor:
 
     async def execute(
         self,
-        run_action: Callable[[Any], Awaitable[str] | str],
-        choose_branch: Callable[[Any, list[Any]], Awaitable[str] | str],
+        run_action: Callable[[Any], Awaitable[str]],
+        choose_branch: Callable[[Any, list[Any]], Awaitable[str]],
     ) -> FlowExecutionResult:
         """
         Walk the graph from BEGIN to END.
@@ -32,7 +32,7 @@ class FlowExecutor:
         if not current:
             return FlowExecutionResult(completed=False, path=[], output="No BEGIN node found")
 
-        outputs = []
+        outputs: list[str] = []
         max_steps = 100  # Safety limit
 
         for _ in range(max_steps):

@@ -56,8 +56,8 @@ def main(
     answers: dict[str, int] = {}
     total_cost = 0.0
     for task in tasks:
-        spec = Spec(prompt=task["prompt"], tests=[])
-        result = strategy.run(agent, spec, chimera.LocalEnvironment())
+        spec = Spec(prompt=task["prompt"], tests=[])  # type: ignore[call-arg]  # notebook demo; Spec API may drift
+        result = strategy.run(agent, spec, chimera.LocalEnvironment())  # type: ignore[call-arg]  # notebook demo; LocalEnvironment signature may drift
         total_cost += result.total_cost
         answer = extract_answer(result.history[-1].agent_output) if result.history else None
         answers[task["id"]] = answer if answer is not None else 0

@@ -83,9 +83,10 @@ class TaskManager:
         if self._emitter:
             from chimera.hooks.events import HookEvent
 
+            emitter = self._emitter
             asyncio.get_event_loop().call_soon(
                 lambda: asyncio.create_task(
-                    self._emitter.emit(HookEvent.TASK_CREATED, tool_name=task.description)
+                    emitter.emit(HookEvent.TASK_CREATED, tool_name=task.description)
                 )
             )
 
@@ -118,9 +119,10 @@ class TaskManager:
         if self._emitter:
             from chimera.hooks.events import HookEvent
 
+            emitter = self._emitter
             asyncio.get_event_loop().call_soon(
                 lambda: asyncio.create_task(
-                    self._emitter.emit(HookEvent.TASK_COMPLETED, tool_name=task.description)
+                    emitter.emit(HookEvent.TASK_COMPLETED, tool_name=task.description)
                 )
             )
 

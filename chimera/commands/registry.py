@@ -103,5 +103,5 @@ class CommandRegistry:
         # Bundled skills
         from chimera.skills.bundled import get_bundled_skills
 
-        for cmd in get_bundled_skills():
-            self.register(cmd)
+        for bundled_cmd in get_bundled_skills():
+            self.register(bundled_cmd)

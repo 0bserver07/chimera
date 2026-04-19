@@ -163,7 +163,7 @@ class TreeSearch(Strategy):
                     executor.submit(self._run_branch, agent, clones[i], prompts[i]): i
                     for i in range(n)
                 }
-                branch_results: dict[int, dict[str, Any]] = {}
+                branch_results: dict[int, dict[str, Any] | None] = {}
                 for future in concurrent.futures.as_completed(futures):
                     idx = futures[future]
                     try:

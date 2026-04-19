@@ -91,7 +91,7 @@ class OpenAICompatibleProvider(Provider):
         )
 
     def _convert_messages(self, messages: list[Message]) -> list[dict[str, Any]]:
-        api_messages = []
+        api_messages: list[dict[str, Any]] = []
         for msg in messages:
             if msg.role == "tool":
                 api_messages.append({

@@ -313,7 +313,7 @@ class OpenAIProvider(Provider):
 
     def _convert_messages(self, messages: list[Message]) -> list[dict[str, Any]]:
         """Convert Chimera messages to OpenAI format."""
-        api_messages = []
+        api_messages: list[dict[str, Any]] = []
         for msg in messages:
             if msg.role == "tool":
                 api_messages.append({

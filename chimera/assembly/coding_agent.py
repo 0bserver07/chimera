@@ -105,6 +105,7 @@ class CodingAgent:
             )
 
         # Agent spawner (for sub-agents and forked skills)
+        self._spawner: Any = None
         try:
             from chimera.core.agent_spawner import AgentSpawner
 

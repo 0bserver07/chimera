@@ -57,7 +57,7 @@ class LLMSecurityAnalyzer(SecurityAnalyzer):
         from chimera.types import Message
 
         messages = [Message.user(prompt)]
-        response = self.provider.complete(messages, model=self.model)
+        response = self.provider.complete(messages, model=self.model)  # type: ignore[call-arg]  # some providers accept model kwarg
         return self._parse_risk(response.content)
 
     def _build_prompt(self, tool_call: ToolCall) -> str:

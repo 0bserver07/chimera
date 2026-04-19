@@ -137,7 +137,7 @@ class MCPClient:
     def tools(self) -> list[BaseTool]:
         """All discovered tools as BaseTool instances."""
         from chimera.mcp.tools import MCPTool
-        result = []
+        result: list[BaseTool] = []
         for name, defs in self._tool_defs.items():
             transport = self._transports[name]
             for tool_def in defs:

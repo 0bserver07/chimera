@@ -25,7 +25,7 @@ from chimera.providers.factory import create_provider
 from chimera.types import Message
 
 
-class ChimeraAgent(BaseAgent):
+class ChimeraAgent(BaseAgent):  # type: ignore[misc]  # BaseAgent stubbed to Any when TB not installed
     """Chimera-powered agent for Terminal-Bench.
 
     Uses Chimera's provider layer to interact with the LLM and

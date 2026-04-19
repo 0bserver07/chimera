@@ -1,7 +1,7 @@
 """Perspective registry: register and retrieve review perspectives."""
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, List
 
 from chimera.review.perspective import BUILTIN_PERSPECTIVES
 
@@ -50,7 +50,7 @@ class PerspectiveRegistry:
         """
         return sorted(self._perspectives.keys())
 
-    def for_language(self, language: str) -> list[ReviewPerspective]:
+    def for_language(self, language: str) -> List[ReviewPerspective]:
         """Return perspectives applicable to a language.
 
         Perspectives with ``languages=None`` apply to all languages.

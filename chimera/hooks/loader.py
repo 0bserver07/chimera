@@ -115,9 +115,9 @@ class HookLoader:
             if not prompt:
                 return None
             timeout = config.get("timeout", 30)
-            hook = PromptHook(prompt=prompt, timeout=timeout)
+            prompt_hook = PromptHook(prompt=prompt, timeout=timeout)
             return HookMatcher(
-                hooks=[hook],
+                hooks=[prompt_hook],
                 matcher=matcher_pattern,
                 source=source,
             )

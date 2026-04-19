@@ -223,8 +223,8 @@ class IncrementalStrategy(Strategy):
                         SynthesisTarget(
                             file=filepath,
                             function_name=str(func["name"]),
-                            line_start=int(func["start"]),  # type: ignore[arg-type]
-                            line_end=int(func["end"]),  # type: ignore[arg-type]
+                            line_start=int(func["start"]),  # type: ignore[call-overload]
+                            line_end=int(func["end"]),  # type: ignore[call-overload]
                             source=str(func["source"]),
                             related_failure=test_result.output[:500],  # type: ignore[attr-defined]
                         )

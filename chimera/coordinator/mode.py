@@ -70,10 +70,11 @@ class CoordinatorMode:
 
         definition = self._definitions[agent_type]
         agent_id = str(uuid.uuid4())
+        spawner = self._spawner
 
         if run_in_background:
             async def _run() -> None:
-                async for _event in self._spawner.spawn(
+                async for _event in spawner.spawn(
                     definition,
                     task,
                     parent_context,

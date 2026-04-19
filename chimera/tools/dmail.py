@@ -57,7 +57,7 @@ class DMailTool(ContextAwareTool):
     }
 
     def __init__(self) -> None:
-        self._context: Context | None = None  # Set by bind_context()
+        self._context: Context | None = None  # type: ignore[assignment]  # set by bind_context()
         self._checkpoints: dict[int, int] = {}  # checkpoint_id -> message_index
         self._next_id: int = 0
 
@@ -107,10 +107,11 @@ class DMailTool(ContextAwareTool):
             )
 
         elif action == "send":
-            cp_id = args.get("checkpoint_id")
+            cp_id_arg = args.get("checkpoint_id")
             message = args.get("message")
-            if cp_id is None or message is None:
+            if cp_id_arg is None or message is None:
                 return ToolResult(output="", error="'send' requires checkpoint_id and message")
+            cp_id = int(cp_id_arg)
 
             if cp_id not in self._checkpoints:
                 return ToolResult(

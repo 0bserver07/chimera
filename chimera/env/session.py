@@ -60,6 +60,7 @@ class SessionMixin:
         """Kill the tmux session and all its windows."""
         if not self.has_session:
             return
+        assert self._session_name is not None
         subprocess.run(
             ["tmux", "kill-session", "-t", self._session_name],
             capture_output=True,
@@ -76,6 +77,7 @@ class SessionMixin:
             raise RuntimeError("No active session")
         if name in self.list_shells():
             raise ValueError(f"Shell '{name}' already exists")
+        assert self._session_name is not None
         subprocess.run(
             ["tmux", "new-window", "-t", self._session_name, "-n", name],
             check=True,
@@ -86,6 +88,7 @@ class SessionMixin:
         """List names of all active shells in the session."""
         if not self.has_session:
             return []
+        assert self._session_name is not None
         result = subprocess.run(
             [
                 "tmux", "list-windows",

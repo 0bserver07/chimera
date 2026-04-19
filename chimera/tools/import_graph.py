@@ -66,7 +66,7 @@ class ImportGraph:
         return []
 
     def _extract_python_imports(self, filepath: str, source: str) -> list[ImportEdge]:
-        edges = []
+        edges: list[ImportEdge] = []
         try:
             tree = ast.parse(source)
         except SyntaxError:

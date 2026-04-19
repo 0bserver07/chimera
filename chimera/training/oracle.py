@@ -106,6 +106,7 @@ class OracleCallback(Callback):
             f"Output each test as a standalone function starting with test_. "
             f"Do not include import statements -- they will be added automatically."
         )
+        assert self._provider is not None
         response = self._provider.complete([Message.user(prompt)], max_tokens=1000)
         return self._parse_test_functions(response.content)
 

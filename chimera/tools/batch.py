@@ -76,7 +76,7 @@ class BatchTool(BaseTool):
                     results.append(f"[{call.get('tool')}] ERROR: {done[j]}")
                     j += 1
                 else:
-                    results.append(f"[{call.get('tool')}] {done[j].output[:500]}")
+                    results.append(f"[{call.get('tool')}] {done[j].output[:500]}")  # type: ignore[union-attr]
                     j += 1
         else:
             for call, _ in tasks:

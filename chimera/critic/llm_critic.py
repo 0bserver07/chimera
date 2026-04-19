@@ -45,8 +45,8 @@ class LLMCritic(Critic):
         messages = context.to_messages()
         prompt = self._build_eval_prompt(messages, current_action)
         response = self.provider.complete(
-            [{"role": "user", "content": prompt}],
-            model=self.config.critic_model,
+            [{"role": "user", "content": prompt}],  # type: ignore[list-item]  # providers accept dict or Message
+            model=self.config.critic_model,  # type: ignore[call-arg]
         )
         return self._parse_result(response.content)
 
@@ -129,8 +129,8 @@ class ChecklistCritic(Critic):
         """
         prompt = self._build_prompt(context, current_action)
         response = self.provider.complete(
-            [{"role": "user", "content": prompt}],
-            model=self.config.critic_model,
+            [{"role": "user", "content": prompt}],  # type: ignore[list-item]  # providers accept dict or Message
+            model=self.config.critic_model,  # type: ignore[call-arg]
         )
         return self._parse_result(response.content)
 

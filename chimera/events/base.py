@@ -68,7 +68,7 @@ class EventBus:
             return
 
         # Build middleware chain (outermost wraps innermost).
-        chain = _dispatch
+        chain: Callable[[Event], None] = _dispatch
         for mw in reversed(self._middlewares):
             # Capture *mw* and *chain* in the closure via default args.
             def _wrap(e: Event, _mw: Middleware = mw, _next: Callable[[Event], None] = chain) -> None:
