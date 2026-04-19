@@ -347,7 +347,7 @@ def _load_benchmark(
     dataset: str | None = None,
     limit: int | None = None,
     tasks_dir: str | None = None,
-):
+) -> Any:
     """Instantiate a benchmark by name."""
     if name not in _BENCHMARKS:
         raise ValueError(f"Unknown benchmark: {name}. Available: {', '.join(_BENCHMARKS)}")

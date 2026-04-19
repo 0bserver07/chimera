@@ -138,7 +138,12 @@ class OllamaProvider(Provider):
 from chimera.providers.registry import register_provider as _register  # noqa: E402
 
 
-def _ollama_factory(model="", base_url=None, api_key=None, **kw):
+def _ollama_factory(
+    model: str = "",
+    base_url: str | None = None,
+    api_key: str | None = None,
+    **kw: Any,
+) -> OllamaProvider:
     return OllamaProvider(model=model, base_url=base_url or "http://localhost:11434", **kw)
 
 

@@ -1,5 +1,7 @@
 from __future__ import annotations
 from dataclasses import dataclass
+from typing import Any, Awaitable, Callable
+
 from chimera.skills.flow_parser import FlowGraph
 
 @dataclass
@@ -15,7 +17,11 @@ class FlowExecutor:
         self._graph = graph
         self._path: list[str] = []
 
-    async def execute(self, run_action, choose_branch) -> FlowExecutionResult:
+    async def execute(
+        self,
+        run_action: Callable[[Any], Awaitable[str] | str],
+        choose_branch: Callable[[Any, list[Any]], Awaitable[str] | str],
+    ) -> FlowExecutionResult:
         """
         Walk the graph from BEGIN to END.
 

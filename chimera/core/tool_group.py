@@ -1,6 +1,8 @@
 # chimera/core/tool_group.py
 from __future__ import annotations
 
+from typing import Any, Iterator
+
 from chimera.core.tool import BaseTool
 
 
@@ -22,10 +24,10 @@ class ToolGroup:
         self.tools.append(tool)
         self._map[tool.name] = tool
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[BaseTool]:
         return iter(self.tools)
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.tools)
 
 
@@ -72,10 +74,10 @@ AGENT_TOOLS = _make_agent_tools()
 
 
 def create_default_tools(
-    read_ops=None,
-    write_ops=None,
-    bash_ops=None,
-    search_ops=None,
+    read_ops: Any = None,
+    write_ops: Any = None,
+    bash_ops: Any = None,
+    search_ops: Any = None,
 ) -> ToolGroup:
     """Create default tool set with optional operation backends.
 

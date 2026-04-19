@@ -108,7 +108,7 @@ class ComponentRegistry:
     # Extension registrations: commands, hooks, skills
     # ------------------------------------------------------------------
 
-    def register_command(self, command) -> None:
+    def register_command(self, command: Any) -> None:
         """Register a command provided by a plugin.
 
         Args:
@@ -117,7 +117,7 @@ class ComponentRegistry:
         self._commands = getattr(self, "_commands", [])
         self._commands.append(command)
 
-    def register_hook(self, event: str, matcher) -> None:
+    def register_hook(self, event: str, matcher: Any) -> None:
         """Register a hook matcher for a given event.
 
         Args:
@@ -127,7 +127,7 @@ class ComponentRegistry:
         self._hooks = getattr(self, "_hooks", {})
         self._hooks.setdefault(event, []).append(matcher)
 
-    def register_skill(self, skill) -> None:
+    def register_skill(self, skill: Any) -> None:
         """Register a skill provided by a plugin.
 
         Args:

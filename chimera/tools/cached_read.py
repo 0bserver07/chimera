@@ -21,12 +21,12 @@ class CachedReadTool(ReadFileTool):
     def __init__(
         self,
         cache: FileStateCache | None = None,
-        ops=None,
+        ops: Any = None,
     ) -> None:
         super().__init__(ops=ops)
         self._cache = cache
 
-    def execute(self, args: dict[str, Any], env=None) -> ToolResult:
+    def execute(self, args: dict[str, Any], env: Any = None) -> ToolResult:
         path = args.get("file_path") or args.get("path", "")
 
         # Check cache first

@@ -23,6 +23,8 @@ Pending (require integration points not yet built):
 """
 from __future__ import annotations
 
+from typing import Any
+
 from chimera.hooks.events import HookEvent
 from chimera.hooks.executor import HookExecutor
 from chimera.hooks.hook_types import HookInput, HookMatcher, HookOutput
@@ -44,7 +46,7 @@ class HookEmitter:
         self._executor = executor
         self._matchers = matchers or []
 
-    async def emit(self, event: HookEvent, **kwargs) -> HookOutput:
+    async def emit(self, event: HookEvent, **kwargs: Any) -> HookOutput:
         """Fire hooks for *event* and return the merged output.
 
         Keyword arguments are forwarded to :class:`HookInput`.  The

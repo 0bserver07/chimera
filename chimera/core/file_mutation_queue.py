@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 from collections import defaultdict
+from typing import Any
 
 
 class FileMutationQueue:
@@ -28,13 +29,13 @@ class FileMutationQueue:
         if path in self._locks:
             self._locks[path].release()
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> "FileMutationQueue":
         return self
 
-    async def __aexit__(self, *args):
+    async def __aexit__(self, *args: Any) -> None:
         pass
 
-    def lock(self, path: str):
+    def lock(self, path: str) -> "_FileLock":
         """Context manager for a specific file path."""
         return _FileLock(self, path)
 
@@ -44,9 +45,9 @@ class _FileLock:
         self._queue = queue
         self._path = path
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> "_FileLock":
         await self._queue.acquire(self._path)
         return self
 
-    async def __aexit__(self, *args):
+    async def __aexit__(self, *args: Any) -> None:
         self._queue.release(self._path)

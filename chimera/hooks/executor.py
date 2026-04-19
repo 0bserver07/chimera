@@ -4,7 +4,7 @@ from __future__ import annotations
 import asyncio
 import fnmatch
 import inspect
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from chimera.hooks.hook_types import (
     CommandHook,
@@ -27,7 +27,7 @@ class HookExecutor:
     callables), and prompt hooks (LLM-evaluated prompts via a callback).
     """
 
-    def __init__(self, prompt_evaluator=None):
+    def __init__(self, prompt_evaluator: Any = None) -> None:
         """Initialize the executor.
 
         Args:

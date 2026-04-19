@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from chimera.hooks.emitter import HookEmitter
@@ -8,7 +8,7 @@ if TYPE_CHECKING:
 class CompactionIntegration:
     """Integration between the agent loop and context compaction."""
 
-    def __init__(self, compressor=None, estimator=None, emitter: HookEmitter | None = None):
+    def __init__(self, compressor: Any = None, estimator: Any = None, emitter: HookEmitter | None = None) -> None:
         self._compressor = compressor
         self._estimator = estimator
         self._emitter = emitter

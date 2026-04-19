@@ -126,7 +126,7 @@ class AgentPreset:
                 tools.append(tool_map[name])
         return tools
 
-    def _build_loop(self):
+    def _build_loop(self) -> Any:
         """Build the appropriate loop based on :attr:`loop_type`.
 
         Returns:

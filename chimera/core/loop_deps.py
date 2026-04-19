@@ -29,7 +29,7 @@ class LoopDeps:
     uuid: Callable[[], str] = field(default_factory=lambda: lambda: str(uuid4()))
 
 
-def production_deps(provider, compactor) -> LoopDeps:
+def production_deps(provider: Any, compactor: Any) -> LoopDeps:
     """Build a :class:`LoopDeps` from production-ready objects.
 
     Parameters
