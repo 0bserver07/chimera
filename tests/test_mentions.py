@@ -108,3 +108,44 @@ def test_resolve_folder_not_found():
     _, mentions = resolver.resolve("@folder:does_not_exist_xyz")
     assert len(mentions) == 1
     assert "not found" in mentions[0].content
+
+
+def test_trailing_punctuation_is_stripped():
+    """Bug fix: regex previously greedily consumed trailing punctuation.
+
+    Inputs like ``"check @file:foo.py, please"`` used to resolve the
+    reference as ``"foo.py,"`` (with the comma), which obviously fails
+    to match any real file. Each of the samples below must resolve to
+    the clean reference.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        with open(os.path.join(d, "foo.py"), "w") as f:
+            f.write("x = 1")
+        resolver = MentionResolver(workdir=d)
+
+        for wrapped, expected_ref in [
+            ("check @file:foo.py, please", "foo.py"),
+            ("see @file:foo.py.", "foo.py"),
+            ("run @file:foo.py; then stop", "foo.py"),
+            ("look at (@file:foo.py)", "foo.py"),
+            ("entries are [@file:foo.py]", "foo.py"),
+        ]:
+            _, mentions = resolver.resolve(wrapped)
+            assert len(mentions) == 1, f"failed on: {wrapped!r}"
+            assert mentions[0].reference == expected_ref, (
+                f"got {mentions[0].reference!r} for {wrapped!r}"
+            )
+            # And critically the file actually resolved (i.e. we ended
+            # up with the real content, not a 'file not found' sentinel).
+            assert "x = 1" in mentions[0].content, (
+                f"expected file content for {wrapped!r}, got "
+                f"{mentions[0].content!r}"
+            )
+
+
+def test_url_trailing_punctuation():
+    """URLs embedded in prose should strip trailing sentence punctuation."""
+    resolver = MentionResolver()
+    _, mentions = resolver.resolve("See @url:https://example.com.")
+    assert len(mentions) == 1
+    assert mentions[0].reference == "https://example.com"

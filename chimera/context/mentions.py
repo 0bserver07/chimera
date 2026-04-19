@@ -18,7 +18,13 @@ if TYPE_CHECKING:
     from chimera.env.base import Environment
 
 
-_MENTION_RE = re.compile(r"@(file|folder|url):(\S+)")
+# Match @file:/@folder:/@url: followed by a run of non-whitespace
+# characters. The reference group deliberately excludes trailing
+# punctuation like ',' '.' ';' ')' ']' so that prose-embedded mentions
+# such as "see @file:foo.py, please" resolve to ``foo.py`` rather than
+# ``foo.py,``. The character class allows '.' and '/' inside the path
+# (e.g. "foo.py", "src/a.py") but not as the final character.
+_MENTION_RE = re.compile(r"@(file|folder|url):([^\s,;)\]]*[^\s,.;)\]])")
 
 
 @dataclass
