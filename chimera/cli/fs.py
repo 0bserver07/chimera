@@ -10,6 +10,7 @@ from chimera.function_synthesis.compiler import CompilerBackend
 from chimera.function_synthesis.compilers.mock import MockCompiler
 from chimera.function_synthesis.compilers.remote import RemoteCompiler
 from chimera.function_synthesis.convert import import_peft, save_peft_bundle
+from chimera.function_synthesis.hub import HubAdapter, parse_hub_spec
 from chimera.function_synthesis.registry import ProgramRegistry, slug_for
 from chimera.function_synthesis.spec import FunctionSpec
 
@@ -113,6 +114,73 @@ def cmd_import_peft(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_push(args: argparse.Namespace) -> int:
+    """Upload an installed bundle to a remote hub."""
+    registry = ProgramRegistry.default()
+    entry = registry.resolve(args.slug)
+    adapter = parse_hub_spec(args.hub)
+    description = args.description or entry.spec.description
+    uri = adapter.push(args.slug, entry.bundle_path, description=description)
+    print(uri)
+    return 0
+
+
+def cmd_pull(args: argparse.Namespace) -> int:
+    """Download a bundle from a remote hub and install it locally."""
+    uri = args.uri
+    adapter: HubAdapter
+    if uri.startswith("hf://"):
+        # Reuse the same repo_id embedded in the URI for the pull client.
+        from chimera.function_synthesis.hub import HFHubAdapter, parse_hf_uri
+
+        repo_id, _ = parse_hf_uri(uri)
+        adapter = HFHubAdapter(repo_id=repo_id)
+    elif uri.startswith("s3://"):
+        from chimera.function_synthesis.hub import S3HubAdapter, parse_s3_uri
+
+        bucket, _ = parse_s3_uri(uri)
+        adapter = S3HubAdapter(bucket=bucket, prefix="")
+    else:
+        raise SystemExit(
+            f"unknown URI scheme: {uri!r}; expected 'hf://' or 's3://'"
+        )
+
+    data = adapter.pull(uri)
+
+    # Parse the bundle (to recover the spec) from the raw bytes, then write
+    # the exact downloaded bytes into the registry.  Round-tripping through
+    # ``ChiBundle.save`` would rewrite the manifest timestamp and lose byte
+    # equality, so we bypass ``registry.install`` here.
+    import tempfile
+
+    registry = ProgramRegistry.default()
+    registry.dirs.ensure()
+    with tempfile.NamedTemporaryFile(suffix=".chi", delete=False) as tmp:
+        tmp.write(data)
+        tmp_path = Path(tmp.name)
+    try:
+        bundle = ChiBundle.load(tmp_path)
+        slug = args.slug or slug_for(bundle.spec)
+        target = registry.dirs.bundles / f"{slug}.chi"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(data)
+        index_file = registry.dirs.index_file
+        index = (
+            json.loads(index_file.read_text()) if index_file.exists() else {}
+        )
+        index[slug] = {
+            "bundle_path": str(target),
+            "spec": json.loads(bundle.spec.to_json()),
+            "metadata": bundle.metadata,
+        }
+        index_file.write_text(json.dumps(index, sort_keys=True, indent=2))
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+    print(slug)
+    return 0
+
+
 def cmd_info(args: argparse.Namespace) -> int:
     entry = ProgramRegistry.default().resolve(args.slug)
     payload = {
@@ -153,6 +221,40 @@ def register(subparsers: argparse._SubParsersAction) -> None:  # type: ignore[ty
     p_info = fs_sub.add_parser("info", help="show details for a slug")
     p_info.add_argument("slug")
     p_info.set_defaults(func=cmd_info)
+
+    p_push = fs_sub.add_parser(
+        "push",
+        help="upload an installed bundle to a remote hub",
+    )
+    p_push.add_argument("slug", help="slug of the installed bundle to push")
+    p_push.add_argument(
+        "--hub",
+        required=True,
+        help=(
+            "remote backend, e.g. 'hf:<org>/<repo>' or 's3:<bucket>[/<prefix>]'"
+        ),
+    )
+    p_push.add_argument(
+        "--description",
+        default=None,
+        help="optional human-readable description for the remote entry",
+    )
+    p_push.set_defaults(func=cmd_push)
+
+    p_pull = fs_sub.add_parser(
+        "pull",
+        help="download a bundle by URI and install it into the local registry",
+    )
+    p_pull.add_argument(
+        "uri",
+        help="remote URI, e.g. 'hf://<org>/<repo>/<slug>.chi' or 's3://<bucket>/<key>'",
+    )
+    p_pull.add_argument(
+        "--slug",
+        default=None,
+        help="override the installed slug (default: slug_for(spec))",
+    )
+    p_pull.set_defaults(func=cmd_pull)
 
     p_import = fs_sub.add_parser(
         "import-peft",
