@@ -1,3 +1,7 @@
+import math
+
+import pytest
+
 from chimera.context.focus import FocusChain
 
 
@@ -47,3 +51,35 @@ def test_empty():
 def test_budget_property():
     fc = FocusChain(token_budget=2000)
     assert fc.budget == 2000
+
+
+def test_add_rejects_relevance_above_one():
+    """Bug fix: relevance above 1.0 must raise ValueError."""
+    fc = FocusChain()
+    with pytest.raises(ValueError, match="relevance"):
+        fc.add("content", "src", relevance=1.5)
+    assert len(fc.items) == 0
+
+
+def test_add_rejects_negative_relevance():
+    """Bug fix: negative relevance must raise ValueError."""
+    fc = FocusChain()
+    with pytest.raises(ValueError, match="relevance"):
+        fc.add("content", "src", relevance=-0.1)
+    assert len(fc.items) == 0
+
+
+def test_add_rejects_nan_relevance():
+    """Bug fix: NaN relevance must raise (breaks ordering otherwise)."""
+    fc = FocusChain()
+    with pytest.raises(ValueError, match="relevance"):
+        fc.add("content", "src", relevance=math.nan)
+    assert len(fc.items) == 0
+
+
+def test_add_accepts_boundary_values():
+    """0.0 and 1.0 are explicitly allowed."""
+    fc = FocusChain()
+    fc.add("low", "a", relevance=0.0)
+    fc.add("high", "b", relevance=1.0)
+    assert len(fc.items) == 2

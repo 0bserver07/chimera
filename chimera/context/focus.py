@@ -63,7 +63,20 @@ class FocusChain:
             content: Raw text to include as context.
             source: Label describing the origin of this content.
             relevance: Score between 0.0 and 1.0 indicating importance.
+
+        Raises:
+            ValueError: If *relevance* is outside the closed interval
+                ``[0.0, 1.0]`` or is NaN. The docstring has always
+                advertised this range; we now enforce it so callers
+                don't silently inject bogus scores that break the
+                downstream ranking in :meth:`select`.
         """
+        # NaN compares False with every inequality, so this catches
+        # both out-of-range and NaN in one check.
+        if not (0.0 <= relevance <= 1.0):
+            raise ValueError(
+                f"relevance must be in [0.0, 1.0], got {relevance!r}"
+            )
         tokens = len(content) // 4  # rough estimate
         self._items.append(
             ContextItem(content=content, source=source, tokens=tokens, relevance=relevance)
