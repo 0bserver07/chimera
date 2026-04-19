@@ -161,6 +161,32 @@ class TestDockerEnvironmentCheckpoint:
         with pytest.raises(ValueError, match="not found"):
             env.restore("nonexistent")
 
+    def test_checkpoint_with_live_container_raises(self):
+        """Live-container snapshotting is not implemented -- must fail loudly."""
+        DockerEnvironment = _import_docker_env()
+
+        env = DockerEnvironment.__new__(DockerEnvironment)
+        env._container = MagicMock()  # pretend a live container is attached
+        env._client = None
+        env._checkpoints = {}
+        env._files = {}
+
+        with pytest.raises(NotImplementedError, match="live containers"):
+            env.checkpoint()
+
+    def test_restore_with_live_container_raises(self):
+        """Live-container restore is not implemented -- must fail loudly."""
+        DockerEnvironment = _import_docker_env()
+
+        env = DockerEnvironment.__new__(DockerEnvironment)
+        env._container = MagicMock()
+        env._client = None
+        env._checkpoints = {"cp1": {}}
+        env._files = {}
+
+        with pytest.raises(NotImplementedError, match="live containers"):
+            env.restore("cp1")
+
 
 class TestDockerEnvironmentImportGuard:
     def test_import_error_when_docker_missing(self):

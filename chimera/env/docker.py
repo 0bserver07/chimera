@@ -169,15 +169,47 @@ class DockerEnvironment(Environment):
         return TestResult(passed=passed, failed=failed, errors=errors, output=output)
 
     # ------------------------------------------------------------------
-    # Checkpointing (in-memory)
+    # Checkpointing
     # ------------------------------------------------------------------
+    #
+    # NOTE: Only the in-memory fallback (no live container) is supported.
+    # Snapshotting a live container would require ``docker commit`` + a
+    # new container with the same name/mounts; that's a non-trivial
+    # operation with its own lifecycle and is NOT implemented. Calls
+    # made while a container is attached raise NotImplementedError so
+    # callers cannot mistake a no-op for a real snapshot.
 
     def checkpoint(self) -> str:
+        """Snapshot the current state.
+
+        Raises:
+            NotImplementedError: If a live Docker container is attached.
+                Container-level snapshotting is not implemented; use
+                GitEnvironment or restart the container to reset state.
+        """
+        if self._container is not None:
+            raise NotImplementedError(
+                "DockerEnvironment.checkpoint() is not implemented for "
+                "live containers. Use GitEnvironment for snapshotting, "
+                "or tear down and recreate the container."
+            )
         cp_id = uuid.uuid4().hex[:8]
         self._checkpoints[cp_id] = dict(self._files)
         return cp_id
 
     def restore(self, checkpoint_id: str) -> None:
+        """Restore a previous snapshot.
+
+        Raises:
+            NotImplementedError: If a live Docker container is attached.
+            ValueError: If ``checkpoint_id`` was never recorded.
+        """
+        if self._container is not None:
+            raise NotImplementedError(
+                "DockerEnvironment.restore() is not implemented for "
+                "live containers. Use GitEnvironment for snapshotting, "
+                "or tear down and recreate the container."
+            )
         if checkpoint_id not in self._checkpoints:
             raise ValueError(f"Checkpoint {checkpoint_id} not found")
         self._files = dict(self._checkpoints[checkpoint_id])
