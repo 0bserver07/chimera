@@ -52,7 +52,7 @@ class SandboxAdapter:
         self,
         command: str,
         cwd: str,
-        env: dict | None = None,
+        env: dict[str, str] | None = None,
     ) -> CommandResult:
         """Execute command with sandbox restrictions enforced."""
         # 1. Pre-execution: check for denied path access in the command

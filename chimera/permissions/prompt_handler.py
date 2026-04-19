@@ -1,12 +1,12 @@
 """Interactive permission prompt handler with pluggable callback."""
 from __future__ import annotations
 
-from typing import Callable, Awaitable
+from typing import Any, Awaitable, Callable
 
 from chimera.permissions.decisions import DecisionReason, PermissionDecision
 from chimera.permissions.denial_tracking import DenialTrackingState
 
-PromptCallback = Callable[[str, dict, PermissionDecision], Awaitable[str]]
+PromptCallback = Callable[[str, dict[str, Any], PermissionDecision], Awaitable[str]]
 # Callback receives (tool_name, input_args, decision) -> returns
 # "allow_once"|"allow_always"|"deny_once"|"deny_always"
 
@@ -27,7 +27,7 @@ class PermissionPromptHandler:
     async def handle_ask(
         self,
         tool_name: str,
-        input_args: dict,
+        input_args: dict[str, Any],
         decision: PermissionDecision,
     ) -> PermissionDecision:
         """Handle an ASK decision by prompting the user (or auto-denying after threshold)."""

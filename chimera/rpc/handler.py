@@ -105,7 +105,7 @@ class RpcHandler:
     # ------------------------------------------------------------------
 
     @property
-    def handlers(self) -> dict[str, Callable]:
+    def handlers(self) -> dict[str, Callable[..., Any]]:
         """Return the command-type → handler mapping.
 
         Returns:

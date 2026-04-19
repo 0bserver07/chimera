@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass
@@ -10,7 +11,7 @@ class AuditEntry:
     """Record of a single permission decision."""
     timestamp: float
     tool_name: str
-    arguments: dict
+    arguments: dict[str, Any]
     decision: str  # "approved", "denied", "auto_approved", "auto_denied"
     reason: str = ""
 
@@ -25,7 +26,7 @@ class AuditLog:
     def __init__(self) -> None:
         self._entries: list[AuditEntry] = []
 
-    def record(self, tool_name: str, arguments: dict, decision: str, reason: str = "") -> None:
+    def record(self, tool_name: str, arguments: dict[str, Any], decision: str, reason: str = "") -> None:
         self._entries.append(AuditEntry(
             timestamp=time.time(),
             tool_name=tool_name,

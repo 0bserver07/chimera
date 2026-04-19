@@ -10,7 +10,7 @@ Inspired by OpenHands' microagent pattern.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from chimera.core.agent import Agent
 from chimera.core.loop import ReAct
@@ -74,7 +74,7 @@ class MicroagentSpawner:
             "Complete the task concisely and return the result."
         )
 
-        loop_kwargs: dict = {"max_steps": config.max_steps}
+        loop_kwargs: dict[str, Any] = {"max_steps": config.max_steps}
 
         # If there's a cost budget, use a LoopConfig with CostTracker
         if config.max_cost > 0:

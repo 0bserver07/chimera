@@ -18,7 +18,7 @@ except ImportError:  # pragma: no cover
     _HAS_AIOFILES = False
 
 
-def _dict_to_message(entry: dict) -> Message:
+def _dict_to_message(entry: dict[str, Any]) -> Message:
     """Convert a raw JSONL dict to a :class:`~chimera.types.Message`."""
     role = entry.get("role", "user")
     content = entry.get("content", "")
@@ -54,7 +54,7 @@ class TranscriptStorage:
     def subagents_dir(self) -> Path:
         return self._subagents_dir
 
-    def _message_to_dict(self, message: Any, parent_uuid: str | None = None) -> dict:
+    def _message_to_dict(self, message: Any, parent_uuid: str | None = None) -> dict[str, Any]:
         """Serialize a message to a JSON-compatible dict."""
         # Handle progress messages — skip them
         metadata = getattr(message, "metadata", None)
@@ -120,7 +120,7 @@ class TranscriptStorage:
         line = json.dumps(entry, default=str)
         await self._append_line(path, line)
 
-    async def _read_jsonl(self, path: Path) -> list[dict]:
+    async def _read_jsonl(self, path: Path) -> list[dict[str, Any]]:
         """Read all lines from a JSONL file."""
         if not path.exists():
             return []
@@ -132,7 +132,7 @@ class TranscriptStorage:
         lines = text.strip().splitlines()
         return [json.loads(line) for line in lines if line.strip()]
 
-    async def load_raw(self) -> list[dict]:
+    async def load_raw(self) -> list[dict[str, Any]]:
         """Read all raw JSONL dicts from the main transcript (includes metadata entries)."""
         return await self._read_jsonl(self._main_path)
 

@@ -29,7 +29,7 @@ class MCPServerLifecycle:
     _connected_keys: set[str] = field(default_factory=set)
 
     async def connect(
-        self, config: dict, *, eager_connect: bool = False
+        self, config: dict[str, Any], *, eager_connect: bool = False
     ) -> MCPClient:
         """Register an MCP server client. Memoized — same config reuses client.
 
@@ -89,7 +89,7 @@ class MCPServerLifecycle:
         return client
 
     async def connect_for_agent(
-        self, config: dict, agent_id: str, *, eager_connect: bool = False
+        self, config: dict[str, Any], agent_id: str, *, eager_connect: bool = False
     ) -> Any:
         """Connect for a specific agent. Tracks ownership for cleanup.
 
@@ -128,5 +128,5 @@ class MCPServerLifecycle:
         self._agent_owned.clear()
         self._connected_keys.clear()
 
-    def _cache_key(self, config: dict) -> str:
+    def _cache_key(self, config: dict[str, Any]) -> str:
         return json.dumps(config, sort_keys=True)

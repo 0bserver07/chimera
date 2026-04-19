@@ -64,7 +64,7 @@ class Benchmark(ABC):
         ...
 
     @abstractmethod
-    def evaluate(self, task: dict, agent_output: str, env: Any) -> bool:
+    def evaluate(self, task: dict[str, Any], agent_output: str, env: Any) -> bool:
         """Judge whether the agent's output passes a task.
 
         Args:

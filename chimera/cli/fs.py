@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+from typing import Any
 
 from chimera.function_synthesis.bundle import ChiBundle
 from chimera.function_synthesis.compiler import CompilerBackend
@@ -75,7 +76,7 @@ def cmd_import_peft(args: argparse.Namespace) -> int:
     spec = _load_spec(Path(args.spec))
     peft_dir = Path(args.peft_dir)
     prompts_path = Path(args.prompts) if args.prompts else None
-    prompts: dict
+    prompts: dict[str, Any]
     if prompts_path and prompts_path.exists():
         prompts = json.loads(prompts_path.read_text())
     else:

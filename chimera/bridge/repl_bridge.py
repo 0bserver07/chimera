@@ -6,7 +6,7 @@ user input back to the agent via an :class:`asyncio.Queue`.
 from __future__ import annotations
 
 import asyncio
-from typing import AsyncGenerator
+from typing import Any, AsyncGenerator
 
 from chimera.bridge.protocol import BridgeProtocol
 from chimera.core.loop_events import LoopEvent, LoopEventType
@@ -48,12 +48,12 @@ class REPLBridge:
         protocol.on_message("user_message", self._handle_user_message)
         protocol.on_message("permission_response", self._handle_permission_response)
 
-    async def _handle_user_message(self, data: dict) -> None:
+    async def _handle_user_message(self, data: dict[str, Any]) -> None:
         """Route user input from bridge to the agent."""
         text = data.get("text", "")
         await self._user_input_queue.put(text)
 
-    async def _handle_permission_response(self, data: dict) -> None:
+    async def _handle_permission_response(self, data: dict[str, Any]) -> None:
         """Handle permission decision from the bridge UI."""
         self._last_permission_response = data.get("decision", "deny_once")
 
@@ -71,7 +71,7 @@ class REPLBridge:
             self._running = False
             await self._protocol.send("session_end", {"timestamp": asyncio.get_event_loop().time()})
 
-    def _event_to_message(self, event: LoopEvent) -> dict | None:
+    def _event_to_message(self, event: LoopEvent) -> dict[str, Any] | None:
         """Convert a LoopEvent to a bridge message."""
         if event.type == LoopEventType.assistant:
             return {

@@ -2,6 +2,7 @@
 """Concrete StreamHandler implementations."""
 from __future__ import annotations
 
+from typing import Any
 
 from chimera.streaming.base import StreamHandler
 
@@ -38,7 +39,7 @@ class CollectStreamHandler(StreamHandler):
     """Collects all events into a list for testing and inspection."""
 
     def __init__(self) -> None:
-        self.events: list[dict] = []
+        self.events: list[dict[str, Any]] = []
 
     def on_text(self, text: str) -> None:
         self.events.append({"type": "text", "content": text})

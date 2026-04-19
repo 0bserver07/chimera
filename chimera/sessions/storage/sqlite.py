@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+from typing import Any
 
 from chimera.sessions.base import SessionData, SessionID, Storage
 from chimera.types import Message, ToolCall
@@ -96,7 +97,7 @@ class SQLiteStorage(Storage):
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _serialise_messages(messages: list[Message]) -> list[dict]:
+    def _serialise_messages(messages: list[Message]) -> list[dict[str, Any]]:
         return [
             {
                 "role": m.role,
@@ -111,7 +112,7 @@ class SQLiteStorage(Storage):
         ]
 
     @staticmethod
-    def _deserialise_messages(raw: list[dict]) -> list[Message]:
+    def _deserialise_messages(raw: list[dict[str, Any]]) -> list[Message]:
         messages: list[Message] = []
         for m in raw:
             tool_calls = [
@@ -129,7 +130,7 @@ class SQLiteStorage(Storage):
         return messages
 
     @staticmethod
-    def _row_to_session_data(row: tuple) -> SessionData:
+    def _row_to_session_data(row: tuple[Any, ...]) -> SessionData:
         (
             session_id,
             system,

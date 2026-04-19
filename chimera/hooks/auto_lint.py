@@ -18,6 +18,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 
 # Tools that modify files and should trigger lint.
@@ -37,7 +38,7 @@ _DEFAULT_LINTERS: dict[str, list[list[str]]] = {
 }
 
 
-def _read_input() -> dict:
+def _read_input() -> dict[str, Any]:
     """Read tool input from stdin or TOOL_INPUT env var.
 
     Returns:
@@ -147,7 +148,7 @@ def run_lint(
 
 
 def handle(
-    tool_input: dict,
+    tool_input: dict[str, Any],
     custom_linter: str | None = None,
     project_root: str | None = None,
 ) -> str:

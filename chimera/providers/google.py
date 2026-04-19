@@ -130,7 +130,7 @@ class GoogleProvider(Provider):
         return [{"function_declarations": declarations}]
 
     @staticmethod
-    def _clean_schema(schema: dict) -> dict:
+    def _clean_schema(schema: dict[str, Any]) -> dict[str, Any]:
         """Strip JSON Schema keys unsupported by Gemini."""
         unsupported = {"$schema", "$id", "$ref", "$comment", "$defs",
                        "additionalProperties", "patternProperties",

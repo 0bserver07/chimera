@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+from typing import Any
 
 from chimera.sessions.base import SessionData, SessionID, Storage
 from chimera.types import Message, ToolCall
@@ -57,7 +58,7 @@ class FileStorage(Storage):
         return self._directory / f"{session_id}.json"
 
     @staticmethod
-    def _serialise(data: SessionData) -> dict:
+    def _serialise(data: SessionData) -> dict[str, Any]:
         """Convert *SessionData* to a JSON-safe dictionary."""
         return {
             "session_id": data.session_id,
@@ -85,7 +86,7 @@ class FileStorage(Storage):
         }
 
     @staticmethod
-    def _deserialise(raw: dict) -> SessionData:
+    def _deserialise(raw: dict[str, Any]) -> SessionData:
         """Reconstruct a *SessionData* from a parsed JSON dictionary."""
         messages: list[Message] = []
         for m in raw["messages"]:

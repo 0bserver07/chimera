@@ -30,8 +30,8 @@ class LoopEvent:
 @dataclass
 class LoopResult:
     reason: str
-    messages: list
-    usage: dict
+    messages: list[Any]
+    usage: dict[str, Any]
     cost_usd: float
     duration_ms: float
     turn_count: int

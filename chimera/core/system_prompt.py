@@ -7,6 +7,7 @@ with fine-grained cache control.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 
 @dataclass
@@ -38,7 +39,7 @@ class SystemPrompt:
         ]
         return "\n\n".join(parts)
 
-    def to_api_messages(self) -> list[dict]:
+    def to_api_messages(self) -> list[dict[str, Any]]:
         """Convert layers to API message blocks.
 
         Each layer becomes ``{"type": "text", "text": content}``.
@@ -46,7 +47,7 @@ class SystemPrompt:
         added — *except* the last cacheable layer (to allow the API to
         see the full prefix before caching).
         """
-        messages: list[dict] = []
+        messages: list[dict[str, Any]] = []
         for layer in self.layers:
             if not layer.content:
                 continue

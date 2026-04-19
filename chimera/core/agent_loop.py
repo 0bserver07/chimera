@@ -445,7 +445,7 @@ class AgentLoop:
             # Separate tool calls into those that need hooks (sequential)
             # vs those that can be batched (CG-8)
             hook_blocked: set[str] = set()  # tc.id -> blocked by hook
-            effective_args_map: dict[str, dict] = {}  # tc.id -> possibly modified args
+            effective_args_map: dict[str, dict[str, Any]] = {}  # tc.id -> possibly modified args
 
             for tc in response.tool_calls:
                 effective_args = dict(tc.arguments)

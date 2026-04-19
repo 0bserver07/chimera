@@ -52,9 +52,9 @@ class RpcServer:
         self._session = session
         self._stdin = stdin or sys.stdin
         self._stdout = stdout or sys.stdout
-        self._handlers: dict[str, Callable] = {}
+        self._handlers: dict[str, Callable[..., Any]] = {}
 
-    def set_handlers(self, handlers: dict[str, Callable]) -> None:
+    def set_handlers(self, handlers: dict[str, Callable[..., Any]]) -> None:
         """Register command-type → callable mapping.
 
         Args:

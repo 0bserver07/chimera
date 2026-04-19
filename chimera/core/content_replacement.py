@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 from dataclasses import dataclass, field
+from typing import Any
 
 
 @dataclass
@@ -83,7 +84,7 @@ class ContentReplacementState:
             preview_size_bytes=self.preview_size_bytes,
         )
 
-    def enforce_budget(self, messages: list) -> list:
+    def enforce_budget(self, messages: list[Any]) -> list[Any]:
         """Replace persisted tool results with previews in message list."""
         result = []
         for msg in messages:

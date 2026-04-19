@@ -22,7 +22,7 @@ class HumanEval(Benchmark):
     ) -> None:
         self._dataset_path = dataset_path
         self._limit = limit
-        self._tasks: list[dict] | None = None
+        self._tasks: list[dict[str, Any]] | None = None
 
     def name(self) -> str:
         return "human-eval"
@@ -32,7 +32,7 @@ class HumanEval(Benchmark):
             self._tasks = self._load_tasks()
         return self._tasks
 
-    def evaluate(self, task: dict, agent_output: str, env: Any) -> bool:
+    def evaluate(self, task: dict[str, Any], agent_output: str, env: Any) -> bool:
         """Evaluate by executing test cases against the generated code.
 
         The task should contain a 'test' field with test code. The agent_output
@@ -60,7 +60,7 @@ class HumanEval(Benchmark):
         except Exception:
             return False
 
-    def _load_tasks(self) -> list[dict]:
+    def _load_tasks(self) -> list[dict[str, Any]]:
         if self._dataset_path:
             import json
             from pathlib import Path

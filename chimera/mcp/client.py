@@ -2,9 +2,12 @@
 from __future__ import annotations
 
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from chimera.mcp.transport import MCPTransport, StdioTransport, HTTPTransport
+
+if TYPE_CHECKING:
+    from chimera.core.tool import BaseTool
 
 
 class MCPClient:
@@ -131,7 +134,7 @@ class MCPClient:
             self._tool_defs[name] = []
 
     @property
-    def tools(self) -> list:
+    def tools(self) -> list[BaseTool]:
         """All discovered tools as BaseTool instances."""
         from chimera.mcp.tools import MCPTool
         result = []

@@ -16,6 +16,7 @@ import json
 import os
 import re
 import sys
+from typing import Any
 
 
 # Tools that execute commands and should be scanned.
@@ -48,7 +49,7 @@ _DANGEROUS_PATTERNS: list[tuple[re.Pattern[str], str]] = [
 ]
 
 
-def _read_input() -> dict:
+def _read_input() -> dict[str, Any]:
     """Read tool input from stdin or TOOL_INPUT env var.
 
     Returns:
@@ -119,7 +120,7 @@ def scan_command(command: str) -> tuple[bool, str]:
     return True, ""
 
 
-def handle(tool_input: dict) -> tuple[bool, str]:
+def handle(tool_input: dict[str, Any]) -> tuple[bool, str]:
     """Handle a PreToolUse event for security scanning.
 
     Args:

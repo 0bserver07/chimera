@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from chimera.compaction.base import CompactionStrategy
@@ -44,7 +44,7 @@ class ChimeraConfig:
             data = json.load(open(path))
         return cls(data or {})
 
-    def __init__(self, data: dict) -> None:
+    def __init__(self, data: dict[str, Any]) -> None:
         self.data = data
 
     def create_environment(self) -> Environment:
@@ -80,14 +80,14 @@ class ChimeraConfig:
         return None
 
 
-def _parse_simple_yaml(text: str) -> dict:
+def _parse_simple_yaml(text: str) -> dict[str, Any]:
     """Minimal YAML parser for simple key-value configs.
 
     Handles nested dicts (by indentation), strings, numbers, lists.
     This is a fallback when PyYAML is not installed.
     """
-    result: dict = {}
-    stack: list[tuple[int, dict]] = [(-1, result)]
+    result: dict[str, Any] = {}
+    stack: list[tuple[int, dict[str, Any]]] = [(-1, result)]
 
     for line in text.splitlines():
         stripped = line.strip()
@@ -110,7 +110,7 @@ def _parse_simple_yaml(text: str) -> dict:
 
         if not raw_value:
             # Nested dict
-            child: dict = {}
+            child: dict[str, Any] = {}
             parent[key] = child
             stack.append((indent, child))
         elif raw_value.startswith("[") and raw_value.endswith("]"):

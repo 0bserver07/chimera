@@ -46,7 +46,7 @@ class CodingAgent:
         *,
         provider: Any = None,
         permission_callback: Any = None,
-        tools_override: list | None = None,
+        tools_override: list[Any] | None = None,
     ) -> None:
         from chimera.assembly.presets import PRESETS
         from chimera.assembly.system_prompts import CODING_AGENT_PROMPT, PRESET_PROMPTS
@@ -155,7 +155,7 @@ class CodingAgent:
 
         # Hooks (if enabled)
         self._hook_executor = None
-        self._hook_matchers: list | None = None
+        self._hook_matchers: list[Any] | None = None
         if config.hooks:
             try:
                 from chimera.hooks.executor import HookExecutor

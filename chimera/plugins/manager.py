@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import importlib.metadata
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from chimera.plugins.base import BasePlugin, ComponentRegistry
 
@@ -128,21 +128,21 @@ class PluginManager:
     # Aggregation helpers
     # ------------------------------------------------------------------
 
-    def get_all_commands(self) -> list:
+    def get_all_commands(self) -> list[Any]:
         """Return commands from all loaded plugins."""
-        commands: list = []
+        commands: list[Any] = []
         for registry in self._registries.values():
             commands.extend(registry.commands)
         return commands
 
-    def get_all_hooks(self, event: str | None = None) -> dict | list:
+    def get_all_hooks(self, event: str | None = None) -> dict[str, list[Any]] | list[Any]:
         """Return hooks from all loaded plugins.
 
         If *event* is ``None``, returns a dict mapping event names to
         lists of matchers.  If *event* is given, returns just the list
         for that event (or an empty list).
         """
-        hooks: dict[str, list] = {}
+        hooks: dict[str, list[Any]] = {}
         for registry in self._registries.values():
             for ev, matchers in registry.hooks.items():
                 if event is None or ev == event:
@@ -151,9 +151,9 @@ class PluginManager:
             return hooks.get(event, [])
         return hooks
 
-    def get_all_skills(self) -> list:
+    def get_all_skills(self) -> list[Any]:
         """Return skills from all loaded plugins."""
-        skills: list = []
+        skills: list[Any] = []
         for registry in self._registries.values():
             skills.extend(registry.skills)
         return skills

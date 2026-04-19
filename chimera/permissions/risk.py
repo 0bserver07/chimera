@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import re
 from enum import Enum
+from typing import Any
 
 
 class RiskLevel(Enum):
@@ -51,7 +52,7 @@ _TOOL_DEFAULTS: dict[str, RiskLevel] = {
 }
 
 
-def classify_risk(tool_name: str, arguments: dict) -> tuple[RiskLevel, str]:
+def classify_risk(tool_name: str, arguments: dict[str, Any]) -> tuple[RiskLevel, str]:
     """Classify the risk level of a tool call.
 
     Returns (risk_level, reason).

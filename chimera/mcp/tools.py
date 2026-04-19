@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from chimera.mcp.client import MCPClient
     from chimera.mcp.transport import MCPTransport
 
-_ACTIVE_CLIENTS: list = []  # Hold references to prevent GC
+_ACTIVE_CLIENTS: list[Any] = []  # Hold references to prevent GC
 
 
 class MCPTool(BaseTool):
@@ -107,7 +107,7 @@ class MCPToolSource:
         return client.tools
 
     @staticmethod
-    def from_config(config: dict) -> tuple[MCPClient, list[BaseTool]]:
+    def from_config(config: dict[str, Any]) -> tuple[MCPClient, list[BaseTool]]:
         """Load MCP servers from a config dict.
 
         Config format::

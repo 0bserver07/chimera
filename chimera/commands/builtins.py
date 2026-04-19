@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+from typing import Any
 
 from chimera.commands.types import LocalCommand
 
@@ -636,7 +637,7 @@ def _export_handler(args: str) -> str:
         out_path = Path(f"{src.stem}.html")
 
     # Parse the session file — it's JSONL with message entries
-    messages: list = []
+    messages: list[dict[str, Any]] = []
     try:
         for line in src.read_text().splitlines():
             if not line.strip():

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Callable
+from typing import Any, Callable
 from uuid import uuid4
 
 __all__ = ["LoopDeps", "production_deps"]
@@ -24,9 +24,9 @@ class LoopDeps:
         to a ``uuid4``-based generator; override in tests for determinism.
     """
 
-    call_model: Callable
-    compact: Callable
-    uuid: Callable = field(default_factory=lambda: lambda: str(uuid4()))
+    call_model: Callable[..., Any]
+    compact: Callable[..., Any]
+    uuid: Callable[[], str] = field(default_factory=lambda: lambda: str(uuid4()))
 
 
 def production_deps(provider, compactor) -> LoopDeps:

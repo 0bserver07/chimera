@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from chimera.agents.config import AgentConfig
 from chimera.plugins.base import BasePlugin, ComponentRegistry, Hook, MCPServerConfig
@@ -49,7 +49,7 @@ class DirectoryPluginLoader:
         manifest = self._load_manifest(path)
         return _DirectoryPlugin(manifest, path)
 
-    def _load_manifest(self, path: Path) -> dict:
+    def _load_manifest(self, path: Path) -> dict[str, Any]:
         """Load the plugin manifest file.
 
         Args:
@@ -68,7 +68,7 @@ class DirectoryPluginLoader:
 class _DirectoryPlugin(BasePlugin):
     """Plugin loaded from a directory."""
 
-    def __init__(self, manifest: dict, path: Path) -> None:
+    def __init__(self, manifest: dict[str, Any], path: Path) -> None:
         self._name = manifest.get("name", path.name)
         self.version = manifest.get("version", "0.0.0")
         self.description = manifest.get("description", "")

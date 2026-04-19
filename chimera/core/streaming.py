@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import sys
 from abc import ABC, abstractmethod
+from typing import Any
 
 from chimera.providers.base import StreamEvent
 
@@ -65,7 +66,7 @@ class CollectStreamHandler(StreamHandler):
 
     def __init__(self) -> None:
         self.text = ""
-        self.events: list[dict] = []
+        self.events: list[dict[str, Any]] = []
 
     def on_text(self, text: str) -> None:
         self.text += text

@@ -18,13 +18,14 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 
 # Tools that modify files and should trigger test runs.
 _CHECKED_TOOLS = {"Write", "Edit", "write", "edit"}
 
 
-def _read_input() -> dict:
+def _read_input() -> dict[str, Any]:
     """Read tool input from stdin or TOOL_INPUT env var.
 
     Returns:
@@ -148,7 +149,7 @@ def run_tests(test_files: list[str], project_root: str | None = None) -> tuple[b
         return True, "pytest not found — skipping test run."
 
 
-def handle(tool_input: dict, project_root: str | None = None) -> str:
+def handle(tool_input: dict[str, Any], project_root: str | None = None) -> str:
     """Handle a PostToolUse event for auto-testing.
 
     Args:

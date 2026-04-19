@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from time import monotonic
-from typing import Callable
+from typing import Any, Callable
 
 
 __all__ = [
@@ -117,7 +117,7 @@ class CostTracker:
         self.total_calls: int = 0
 
         # Per-model breakdown
-        self._by_model: dict[str, dict] = {}
+        self._by_model: dict[str, dict[str, Any]] = {}
 
         # Per-step tracking
         self._steps: list[StepUsage] = []
@@ -312,7 +312,7 @@ class CostTracker:
         return list(self._steps)
 
     @property
-    def by_model(self) -> dict[str, dict]:
+    def by_model(self) -> dict[str, dict[str, Any]]:
         """Per-model usage breakdown."""
         return dict(self._by_model)
 
@@ -326,7 +326,7 @@ class CostTracker:
         """Per-model cost breakdown (backward-compatible)."""
         return {k: v["cost"] for k, v in self._by_model.items()}
 
-    def summary(self) -> dict:
+    def summary(self) -> dict[str, Any]:
         """Get a full usage summary.
 
         Returns:

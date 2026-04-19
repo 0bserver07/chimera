@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+from typing import Any
 
 __all__ = ["SecretDetector"]
 
@@ -34,7 +35,7 @@ class SecretDetector:
         patterns = self.PATTERNS + (extra_patterns or [])
         self._compiled = [re.compile(p, re.IGNORECASE) for p in patterns]
 
-    def detect(self, text: str) -> list[dict]:
+    def detect(self, text: str) -> list[dict[str, Any]]:
         """Find potential secrets in text.
 
         Args:
@@ -43,7 +44,7 @@ class SecretDetector:
         Returns:
             List of dicts with keys: pattern, match, start, end.
         """
-        findings: list[dict] = []
+        findings: list[dict[str, Any]] = []
         for pattern in self._compiled:
             for match in pattern.finditer(text):
                 findings.append({

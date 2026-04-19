@@ -20,6 +20,7 @@ import os
 import sys
 from difflib import get_close_matches
 from pathlib import Path
+from typing import Any
 
 
 # Tools that operate on file paths and should be validated.
@@ -36,7 +37,7 @@ _IGNORE_DIRS = {
 _MAX_SCAN_FILES = 50_000
 
 
-def _read_input() -> dict:
+def _read_input() -> dict[str, Any]:
     """Read tool input from stdin or TOOL_INPUT env var.
 
     Returns:
@@ -133,7 +134,7 @@ def _find_suggestions(target: str, root: str, max_suggestions: int = 5) -> list[
     return result
 
 
-def validate(tool_input: dict) -> tuple[bool, str]:
+def validate(tool_input: dict[str, Any]) -> tuple[bool, str]:
     """Validate a tool call's file path.
 
     Args:

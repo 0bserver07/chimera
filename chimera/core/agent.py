@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncGenerator, Generator
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from chimera.core.context import Context
 from chimera.core.loop import ReAct
@@ -143,7 +143,7 @@ class Agent:
         permission_checker: PermissionChecker | None = None,
         permission_context: PermissionContext | None = None,
         hook_executor: HookExecutor | None = None,
-        hook_matchers: list | None = None,
+        hook_matchers: list[Any] | None = None,
         transcript: TranscriptStorage | None = None,
         content_replacement: ContentReplacementState | None = None,
     ) -> AsyncGenerator[LoopEvent, None]:

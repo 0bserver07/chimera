@@ -1,7 +1,7 @@
 """Discriminated union base class for polymorphic config serialization."""
 from __future__ import annotations
 
-from typing import ClassVar, TypeVar
+from typing import Any, ClassVar, TypeVar
 
 T = TypeVar("T", bound="DiscriminatedUnion")
 
@@ -51,7 +51,7 @@ class DiscriminatedUnion:
         return None
 
     @classmethod
-    def from_config(cls, config: dict) -> DiscriminatedUnion:
+    def from_config(cls, config: dict[str, Any]) -> DiscriminatedUnion:
         """Create an instance from a config dict with a ``type`` field.
 
         Args:
@@ -93,13 +93,13 @@ class DiscriminatedUnion:
         """
         return list(cls._registry.keys())
 
-    def to_config(self) -> dict:
+    def to_config(self) -> dict[str, Any]:
         """Serialize to a config dict.
 
         Returns:
             Dictionary with ``type`` and all public instance attributes.
         """
-        config: dict = {"type": self.type_name}
+        config: dict[str, Any] = {"type": self.type_name}
         for key, value in self.__dict__.items():
             if not key.startswith("_"):
                 if isinstance(value, DiscriminatedUnion):

@@ -61,7 +61,7 @@ class AIMOBenchmark(Benchmark):
     ) -> None:
         self._problems_path = problems_path
         self._limit = limit
-        self._tasks: list[dict] | None = None
+        self._tasks: list[dict[str, Any]] | None = None
 
     def name(self) -> str:
         return "aimo3"
@@ -71,7 +71,7 @@ class AIMOBenchmark(Benchmark):
             self._tasks = self._load_tasks()
         return self._tasks
 
-    def evaluate(self, task: dict, agent_output: str, env: Any) -> bool:
+    def evaluate(self, task: dict[str, Any], agent_output: str, env: Any) -> bool:
         expected = task.get("answer")
         if expected is None:
             return False
@@ -80,7 +80,7 @@ class AIMOBenchmark(Benchmark):
             return False
         return extracted == expected
 
-    def _load_tasks(self) -> list[dict]:
+    def _load_tasks(self) -> list[dict[str, Any]]:
         if self._problems_path:
             data = json.loads(Path(self._problems_path).read_text())
             problems = data if isinstance(data, list) else data.get("problems", [])

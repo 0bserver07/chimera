@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from chimera.core.content_replacement import (
     ContentReplacementEntry,
     ContentReplacementState,
@@ -18,7 +20,7 @@ class SessionResumer:
         session_id: str,
         storage: TranscriptStorage,
         persister: ToolResultPersister,
-    ) -> tuple[list[dict], ContentReplacementState]:
+    ) -> tuple[list[dict[str, Any]], ContentReplacementState]:
         """Load transcript entries and reconstruct content replacement state.
 
         Returns:
@@ -27,7 +29,7 @@ class SessionResumer:
         entries = await storage.load_raw()
 
         # Separate content-replacement metadata entries from regular messages
-        messages: list[dict] = []
+        messages: list[dict[str, Any]] = []
         cr_entries: list[ContentReplacementEntry] = []
 
         for entry in entries:

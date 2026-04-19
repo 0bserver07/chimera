@@ -17,7 +17,7 @@ class CustomBenchmark(Benchmark):
     def __init__(
         self,
         tasks_dir: str | None = None,
-        tasks_list: list[dict] | None = None,
+        tasks_list: list[dict[str, Any]] | None = None,
     ) -> None:
         self._tasks_dir = tasks_dir
         self._tasks_list = tasks_list or []
@@ -30,7 +30,7 @@ class CustomBenchmark(Benchmark):
             return self._load_from_dir()
         return self._tasks_list
 
-    def evaluate(self, task: dict, agent_output: str, env: Any) -> bool:
+    def evaluate(self, task: dict[str, Any], agent_output: str, env: Any) -> bool:
         """Evaluate by running tests in the environment.
 
         Falls back to checking if agent output is non-empty when no env.
@@ -39,11 +39,11 @@ class CustomBenchmark(Benchmark):
             return False
         return env.run_tests().all_passed
 
-    def _load_from_dir(self) -> list[dict]:
+    def _load_from_dir(self) -> list[dict[str, Any]]:
         import json
         from pathlib import Path
 
-        tasks: list[dict] = []
+        tasks: list[dict[str, Any]] = []
         tasks_path = Path(self._tasks_dir)  # type: ignore[arg-type]
         for f in sorted(tasks_path.glob("*.json")):
             tasks.append(json.loads(f.read_text()))

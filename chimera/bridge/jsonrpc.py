@@ -27,7 +27,7 @@ class JsonRpcResponse:
     error: dict[str, Any] | None = None
     id: int | str | None = None
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         d: dict[str, Any] = {"jsonrpc": "2.0", "id": self.id}
         if self.error:
             d["error"] = self.error

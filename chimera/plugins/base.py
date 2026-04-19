@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from chimera.core.tool import BaseTool
@@ -137,17 +137,17 @@ class ComponentRegistry:
         self._skills.append(skill)
 
     @property
-    def commands(self) -> list:
+    def commands(self) -> list[Any]:
         """All registered commands."""
         return list(getattr(self, "_commands", []))
 
     @property
-    def hooks(self) -> dict[str, list]:
+    def hooks(self) -> dict[str, list[Any]]:
         """All registered hooks, keyed by event name."""
         return dict(getattr(self, "_hooks", {}))
 
     @property
-    def skills(self) -> list:
+    def skills(self) -> list[Any]:
         """All registered skills."""
         return list(getattr(self, "_skills", []))
 

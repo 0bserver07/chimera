@@ -23,8 +23,8 @@ class TokenEstimator:
 
     async def count_messages(
         self,
-        messages: list,
-        tools: list | None = None,
+        messages: list[Any],
+        tools: list[Any] | None = None,
     ) -> int | None:
         """Try API-based token counting with caching.
 

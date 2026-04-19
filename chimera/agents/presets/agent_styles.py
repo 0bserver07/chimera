@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from chimera.core.agent import Agent
+    from chimera.core.tool import BaseTool
     from chimera.env.base import Environment
     from chimera.providers.base import Provider
 
@@ -103,7 +104,7 @@ class AgentPreset:
 
         return Agent(provider=provider, tools=tools, loop=loop, prompt=prompt)
 
-    def _build_tools(self) -> list:
+    def _build_tools(self) -> list[BaseTool]:
         """Build tool list from names.
 
         Returns:

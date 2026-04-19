@@ -11,7 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from typing import Sequence
+from typing import Any, Sequence
 
 from chimera.synthesize import synthesize as synthesize_fn
 
@@ -357,7 +357,7 @@ def _load_benchmark(
     cls = getattr(module, class_name)
     if name == "custom":
         return cls(tasks_dir=tasks_dir or dataset)
-    kwargs: dict = {}
+    kwargs: dict[str, Any] = {}
     if dataset:
         kwargs["dataset_path"] = dataset
     if limit:
@@ -365,7 +365,7 @@ def _load_benchmark(
     return cls(**kwargs)
 
 
-def _result_to_dict(result) -> dict:
+def _result_to_dict(result: Any) -> dict[str, Any]:
     """Convert EvalResult to a JSON-serializable dict."""
     import dataclasses
     return {
