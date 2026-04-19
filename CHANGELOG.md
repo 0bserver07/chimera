@@ -1,5 +1,85 @@
 # Changelog
 
+## 0.3.0 (2026-04-19) — Real Runtimes, Real Compilation, Honest Errors
+
+### Function Synthesis — 3 real runtime backends
+- `TransformersBackend` — HuggingFace transformers + PEFT adapter loading, aligned with bundle PEFT API
+- `OnnxBackend` — ONNX Runtime execution, gated by new `function_synthesis_onnx` optional extra
+- `ChiBundle` — `adapter_format` now accepts `peft` and `onnx` alongside the existing GGUF path
+- `RuntimeBackend.stream()` — new ABC method; `LlamaCppBackend.stream()` implemented via `create_chat_completion(stream=True)`; all backends now stream
+- Opt-in JSON-schema validation for input/output (minimal built-in validator, no extra deps)
+
+### Function Synthesis — real compilation path
+- `LocalCompiler` — fine-tunes PEFT LoRA adapters on-device, emits a loadable `.chi` bundle
+- `import` path for existing HuggingFace PEFT adapters into `.chi` bundles
+
+### Function Synthesis — CLI additions
+- `chimera fs import-peft` — register an existing PEFT adapter as an installed program
+- `chimera fs push` / `chimera fs pull` — move `.chi` bundles to/from a configured hub
+- `chimera fs login` — write credentials via a file-backed `CredentialStore`
+- `chimera fs rename` — slug-level moves via `ProgramRegistry.rename`
+
+### Function Synthesis — hub adapters
+- `HubAdapter` ABC + `HubError`
+- `HFHubAdapter` — HuggingFace Hub upload/download for `.chi` bundles
+- `S3HubAdapter` — S3-compatible object store upload/download
+- All exported from the `function_synthesis` package
+
+### Function Synthesis — top-level facade
+- `compile()`, `load()`, `installed()`, `uninstall()` — one-liner lifecycle, exported from the package root
+- Full-lifecycle demo added to docs, runnable without a GGUF
+
+### Real bugs fixed (caught by live verification, not unit tests)
+- `env/native_sandbox` — stop advertising Landlock; enforcement was never wired
+- `env/docker` — checkpoint/restore now honest for live containers instead of silently no-op
+- `rpc` — `SetModelCommand` handler was declared but never dispatched; now wired
+- `learning` — `LearningStore.log()` was missing; `Dispatcher` wiring was dead
+- `learning` — removed dead `field()` assignment in `FeedbackTracker.__init__`
+- `function_synthesis` — `LlamaCppBackend` no longer hangs passing an empty `lora_path`
+- `function_synthesis` — `PrefixCache` actually hits: pickle llama.cpp state so cold-start elimination works
+- `review` — `ReviewFeedback.parse_from_text` was flipping "not approved" into an approval
+- `providers` — `OpenAIResponsesProvider` normalises usage to Chimera keys (was reporting $0)
+- `providers` — `OpenAIProvider` surfaces `reasoning_tokens` and `cache_read` tokens
+- `providers` — `AnthropicProvider` stream emits cache tokens in the `done` usage frame
+- `providers` — `ProxyProvider.complete` now accepts `thinking` and forwards tool calls
+- `providers` — `CachedProvider` accepts + keys on `thinking`, forwards only when non-None
+- `core` — `AutonomousLoop.iter_steps` now fires the same checkpoints/events as `run()`
+- `core` — `PlanActLoop.iter_steps` actually yields plan-phase steps
+- `core` — `TreeOfThought` `StepResult.cost` was always `0.0`, now reflects real spend
+- `core` — async tool executor preserves `tool_calls` order; incremental variant now runs audit/checkpoint/wire hooks
+- `context` — `FocusChain.add` validates relevance in `[0.0, 1.0]`; `MentionResolver` no longer captures trailing punctuation; `MemoryConsolidator.consolidate` no longer mutates input facts
+- `detection` — `PatternCycleDetector` rejects `threshold<2` instead of vacuously matching
+- `streaming` — `StreamHandler.handle_event` no longer double-dispatches `tool_start` and `done`
+- `mcp` — `MCPServerLifecycle.connect` actually connects when asked; `initialize`/`tools-list` errors surface instead of silent success; `benchmark_server` exposes `list_benchmarks`
+- `context` — `PruneProcessor` preserves `tool_call_id` on pruned tool messages
+- `bridge` — `listen()` awaits async handlers; stops swallowing websocket errors
+- `ci` — `CIFixWorkflow.run` honours `max_attempts` via a verify callback
+- `migration` — `python2-to-3` and `commonjs-to-esm` expanded from skeletons to real rule sets
+- `tools` — `DelegateTool` validates inputs and exposes class-level `name`; `TestTool` surfaces failure via `ToolResult.error`; `ImportGraphTool` wrapper exposes `import_graph` to agents
+- `cli` — `/session list` in the rich REPL lists real sessions; `plugins` CLI uses the real `PluginManager` instead of a fake `Marketplace`; `/session` and `/history` stubs replaced with real impls; 13 fake/stub handlers replaced with real implementations
+- `examples` — 19 broken examples fail friendly instead of tracebacking
+- `hooks` — renamed `chimera/hooks/types.py` → `hook_types.py` (fixes 7 tests)
+- `plugin` — `.mcp.json` now advertises all 6 MCP servers; `hooks.json` uses the Claude Code plugin format with module-loadable commands
+- `docs` — `DocGenerator` emits complete signatures with defaults, varargs, annotations, and return types
+
+### Type and lint sweeps
+- Mypy: 299 errors → 0 across assignment, union-attr, attr-defined, arg-type, generic parameterisation, optional-dep imports, and untyped signatures
+- Ruff: 446 lint errors → 0
+- `warn_unused_ignores` disabled to stop churn against optional-dep shims
+
+### CLI / REPL
+- `_run_new_stack` REPL gains `/cost` and `/clear` plus an accurate `/help`
+
+### Live-verified against real models
+- llama.cpp — TinyLlama 460MB GGUF
+- transformers — Qwen2-0.5B + PEFT adapter
+- ONNX — tiny-gpt2 with `merge_and_unload`
+- `LocalCompiler` → `TransformersBackend` chain exercised end-to-end
+
+### Stats
+- Tests: 3574 → 3879 (+305)
+- 0 mypy errors, 0 ruff errors
+
 ## 0.2.0 (2026-04-16) — Function Synthesis Subsystem
 
 ### New: `chimera.function_synthesis`
