@@ -5,7 +5,7 @@ import json
 from chimera.types import Message
 
 try:
-    import tiktoken  # type: ignore[import-untyped]
+    import tiktoken  # type: ignore[import-not-found]  # optional dep
     _HAS_TIKTOKEN = True
 except ImportError:
     tiktoken = None  # type: ignore[assignment]

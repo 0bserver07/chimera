@@ -36,7 +36,7 @@ class ChimeraConfig:
         text = path.read_text()
         if path.suffix in (".yaml", ".yml"):
             try:
-                import yaml
+                import yaml  # type: ignore[import-untyped]
                 data = yaml.safe_load(text)
             except ImportError:
                 data = _parse_simple_yaml(text)

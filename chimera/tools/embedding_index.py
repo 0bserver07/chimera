@@ -19,7 +19,7 @@ from typing import Any, Callable
 from chimera.tools.codebase_index import CodebaseIndex, SearchResult
 
 try:
-    import numpy as np
+    import numpy as np  # type: ignore[import-not-found]
     _HAS_NUMPY = True
 except ImportError:
     np = None  # type: ignore[assignment]

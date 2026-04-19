@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from chimera.auth.manager import AuthManager
 
 try:
-    import google.generativeai as genai
+    import google.generativeai as genai  # type: ignore[import-not-found]
 except ImportError:
     genai = None  # type: ignore[assignment]
 

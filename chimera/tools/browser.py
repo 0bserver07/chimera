@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from chimera.env.base import Environment
 
 try:
-    from playwright.sync_api import sync_playwright, Browser, BrowserContext, Page, Playwright
+    from playwright.sync_api import sync_playwright, Browser, BrowserContext, Page, Playwright  # type: ignore[import-not-found]
 except ImportError:
     sync_playwright = None  # type: ignore[assignment,misc]
     Browser = None  # type: ignore[assignment,misc]

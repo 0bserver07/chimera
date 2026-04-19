@@ -34,7 +34,7 @@ class PromptTemplate:
         if content.startswith("---"):
             parts = content.split("---", 2)
             if len(parts) >= 3:
-                import yaml
+                import yaml  # type: ignore[import-untyped]
 
                 frontmatter = yaml.safe_load(parts[1]) or {}
                 body = parts[2].strip()

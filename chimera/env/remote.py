@@ -6,7 +6,7 @@ from chimera.env.base import Environment
 from chimera.types import CommandResult, TestResult
 
 try:
-    import httpx
+    import httpx  # type: ignore[import-not-found]
 except ImportError:
     httpx = None  # type: ignore[assignment]
 

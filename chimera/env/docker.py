@@ -10,7 +10,7 @@ from chimera.security.sandbox import SandboxPolicy
 from chimera.types import CommandResult, TestResult
 
 try:
-    import docker
+    import docker  # type: ignore[import-untyped]
 except ImportError:
     docker = None  # type: ignore[assignment]
 

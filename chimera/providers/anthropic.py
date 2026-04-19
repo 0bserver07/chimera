@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from chimera.auth.manager import AuthManager
 
 try:
-    import anthropic
+    import anthropic  # type: ignore[import-not-found]
 except ImportError:
     anthropic = None  # type: ignore[assignment]
 

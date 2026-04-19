@@ -91,7 +91,7 @@ class WebSocketTransport(BridgeTransport):
     async def connect(self) -> None:
         """Connect to the WebSocket server."""
         try:
-            import websockets
+            import websockets  # type: ignore[import-not-found]
             self._ws = await websockets.connect(self._url)
             self._connected = True
         except ImportError:

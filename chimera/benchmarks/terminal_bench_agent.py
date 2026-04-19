@@ -13,9 +13,9 @@ from pathlib import Path
 from typing import Any
 
 try:
-    from terminal_bench.agents.base_agent import AgentResult, BaseAgent
-    from terminal_bench.agents.failure_mode import FailureMode
-    from terminal_bench.terminal import TmuxSession
+    from terminal_bench.agents.base_agent import AgentResult, BaseAgent  # type: ignore[import-not-found]
+    from terminal_bench.agents.failure_mode import FailureMode  # type: ignore[import-not-found]
+    from terminal_bench.terminal import TmuxSession  # type: ignore[import-not-found]
     _HAS_TB = True
 except ImportError:
     _HAS_TB = False

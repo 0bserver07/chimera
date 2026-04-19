@@ -108,7 +108,7 @@ class ImageReadTool(BaseTool):
     def _read_from_url(self, url: str) -> ToolResult:
         """Fetch an image from a URL and return base64-encoded content."""
         try:
-            import httpx as _httpx
+            import httpx as _httpx  # type: ignore[import-not-found]
         except ImportError:
             return ToolResult(output="", error="httpx not installed for URL image fetching")
 

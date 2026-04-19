@@ -9,12 +9,12 @@ from chimera.providers.base import Provider, Response, ToolSchema
 from chimera.types import Message, ToolCall
 
 try:
-    import modal
+    import modal  # type: ignore[import-not-found]
 except ImportError:
     modal = None  # type: ignore[assignment]
 
 try:
-    import httpx
+    import httpx  # type: ignore[import-not-found]
 except ImportError:
     httpx = None  # type: ignore[assignment]
 

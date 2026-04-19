@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from chimera.auth.manager import AuthManager
 
 try:
-    import openai
+    import openai  # type: ignore[import-not-found]
 except ImportError:
     openai = None  # type: ignore[assignment]
 

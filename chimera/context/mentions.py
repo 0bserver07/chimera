@@ -205,7 +205,7 @@ class MentionResolver:
             placeholder.
         """
         try:
-            import httpx
+            import httpx  # type: ignore[import-not-found]
 
             resp = httpx.get(url, timeout=10, follow_redirects=True)
             resp.raise_for_status()

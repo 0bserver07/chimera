@@ -34,7 +34,7 @@ _TS_LANGUAGES: dict[str, str] = {
 def tree_sitter_available() -> bool:
     """Check if tree-sitter is installed."""
     try:
-        import tree_sitter  # noqa: F401
+        import tree_sitter  # type: ignore[import-not-found]  # noqa: F401  # optional dep
 
         return True
     except ImportError:
@@ -109,7 +109,7 @@ class TreeSitterParser(LanguageParser):
             Extracted symbols.
         """
         try:
-            import tree_sitter  # noqa: F401
+            import tree_sitter  # type: ignore[import-not-found]  # noqa: F401  # optional dep
         except ImportError:
             return []
 
@@ -140,11 +140,11 @@ class TreeSitterParser(LanguageParser):
             return self._parsers[language]
 
         try:
-            import tree_sitter
+            import tree_sitter  # type: ignore[import-not-found]  # optional dep
 
             # Try the tree_sitter_languages convenience package first
             try:
-                from tree_sitter_languages import get_parser  # type: ignore[import-untyped]
+                from tree_sitter_languages import get_parser  # type: ignore[import-not-found]  # optional dep
 
                 parser = get_parser(language)
                 self._parsers[language] = parser

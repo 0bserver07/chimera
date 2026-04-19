@@ -11,7 +11,7 @@ from typing import Any
 from chimera.types import Message
 
 try:
-    import aiofiles
+    import aiofiles  # type: ignore[import-untyped]
 
     _HAS_AIOFILES = True
 except ImportError:  # pragma: no cover

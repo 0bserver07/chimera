@@ -93,7 +93,7 @@ class AgentContext:
 
         # Fresh denial tracking: try DenialTrackingState() if importable, else {}
         try:
-            from chimera.core.denial_tracking import DenialTrackingState
+            from chimera.core.denial_tracking import DenialTrackingState  # type: ignore[import-not-found]
             child_denial: Any = DenialTrackingState()
         except (ImportError, AttributeError):
             child_denial = {}

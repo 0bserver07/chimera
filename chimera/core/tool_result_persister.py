@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 try:
-    import aiofiles
+    import aiofiles  # type: ignore[import-untyped]
 
     _HAS_AIOFILES = True
 except ImportError:  # pragma: no cover
