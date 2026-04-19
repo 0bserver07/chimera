@@ -38,6 +38,12 @@ all = ["chimera-ai[anthropic,openai,browser,remote]"]
 dev = ["pytest>=8.0", "pytest-asyncio>=0.23", "ruff>=0.4", "mypy>=1.10"]
 docs = ["mkdocs>=1.6", "mkdocs-material>=9.5", "mkdocstrings[python]>=0.25"]
 function_synthesis = ["llama-cpp-python>=0.3.0", "huggingface_hub>=0.25"]
+function_synthesis_compile = [
+    "transformers>=4.40",
+    "peft>=0.10",
+    "torch>=2.0",
+    "datasets>=2.18",
+]
 
 [project.scripts]
 chimera = "chimera.cli.main:main"
