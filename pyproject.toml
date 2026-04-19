@@ -44,6 +44,12 @@ function_synthesis_compile = [
     "torch>=2.0",
     "datasets>=2.18",
 ]
+function_synthesis_transformers = [
+    "transformers>=4.40",
+    "peft>=0.10",
+    "torch>=2.0",
+    "safetensors>=0.4",
+]
 
 [project.scripts]
 chimera = "chimera.cli.main:main"
