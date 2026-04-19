@@ -112,6 +112,10 @@ class _FakeORTModel:
 
     last_kwargs: dict[str, Any] = {}
     last_model_path: str = ""
+    # Full (positional_args, kwargs, snapshot-of-model-dir) list so tests
+    # can assert ORTModelForCausalLM.from_pretrained was handed a real
+    # directory with expected contents *at the moment of the call*.
+    calls: list[tuple[tuple[Any, ...], dict[str, Any], dict[str, bytes]]] = []
 
     def __init__(self) -> None:
         self.generate_calls: list[dict[str, Any]] = []
@@ -120,6 +124,15 @@ class _FakeORTModel:
     def from_pretrained(cls, model_path: str, **kwargs: Any) -> _FakeORTModel:
         cls.last_model_path = model_path
         cls.last_kwargs = dict(kwargs)
+        # Snapshot the directory passed in so tests can verify *what was
+        # on disk when ORT saw it*, not what exists at test-time.
+        snapshot: dict[str, bytes] = {}
+        mp = Path(model_path)
+        if mp.is_dir():
+            for child in sorted(mp.rglob("*")):
+                if child.is_file():
+                    snapshot[str(child.relative_to(mp))] = child.read_bytes()
+        cls.calls.append(((model_path,), dict(kwargs), snapshot))
         return cls()
 
     def generate(self, **kwargs: Any) -> _FakeTensor:
@@ -135,13 +148,21 @@ class _FakeORTModel:
 
 
 class _FakeMergedModel:
+    # Track every save_pretrained call (path, snapshot-written-here) so
+    # tests can assert the merged model is persisted to a real dir
+    # *before* being handed to ORT for export.
+    save_calls: list[str] = []
+
     def save_pretrained(self, path: str) -> None:
         Path(path).mkdir(parents=True, exist_ok=True)
         (Path(path) / "pytorch_model.bin").write_bytes(b"MERGED_WEIGHTS")
         (Path(path) / "config.json").write_bytes(b'{"model_type": "fake"}')
+        type(self).save_calls.append(path)
 
 
 class _FakePeftWrapped:
+    merge_and_unload_calls: list[_FakePeftWrapped] = []
+
     def __init__(self, base: Any, adapter_dir: str) -> None:
         self.base = base
         self.adapter_dir = adapter_dir
@@ -149,35 +170,60 @@ class _FakePeftWrapped:
 
     def merge_and_unload(self) -> _FakeMergedModel:
         self.merged = True
+        type(self).merge_and_unload_calls.append(self)
         return _FakeMergedModel()
 
 
 class _FakePeftModel:
     last_adapter_dir: str = ""
+    last_base: Any = None
+    # (adapter_dir, snapshot-of-dir-at-call-time) — proves the peft files
+    # were on disk at the moment peft.from_pretrained was invoked.
+    calls: list[tuple[str, dict[str, bytes]]] = []
 
     @classmethod
     def from_pretrained(cls, base: Any, adapter_dir: str) -> _FakePeftWrapped:
         cls.last_adapter_dir = adapter_dir
+        cls.last_base = base
+        adapter_path = Path(adapter_dir)
+        snapshot: dict[str, bytes] = {}
+        if adapter_path.is_dir():
+            for child in sorted(adapter_path.rglob("*")):
+                if child.is_file():
+                    snapshot[str(child.relative_to(adapter_path))] = child.read_bytes()
+        cls.calls.append((adapter_dir, snapshot))
         return _FakePeftWrapped(base, adapter_dir)
 
 
 class _FakeAutoModelForCausalLM:
     last_name: str = ""
+    calls: list[str] = []
 
     @classmethod
     def from_pretrained(cls, name_or_path: str) -> object:
         cls.last_name = name_or_path
+        cls.calls.append(name_or_path)
         return object()
 
 
 class _FakeStreamer:
+    # Record every instantiation so tests can assert the streamer was
+    # built with the right tokenizer and flags.
+    init_calls: list[tuple[Any, dict[str, Any]]] = []
+
     def __init__(
         self, tokenizer: Any, *, skip_prompt: bool, skip_special_tokens: bool
     ) -> None:
         assert skip_prompt is True
         assert skip_special_tokens is True
+        self._tokenizer = tokenizer
+        self.skip_prompt = skip_prompt
+        self.skip_special_tokens = skip_special_tokens
         self._queue: list[str] = []
         self._closed = False
+        type(self).init_calls.append(
+            (tokenizer, {"skip_prompt": skip_prompt, "skip_special_tokens": skip_special_tokens})
+        )
 
     def put(self, chunks: list[str]) -> None:
         self._queue.extend(chunks)
@@ -242,8 +288,15 @@ def _reset_fake_state() -> None:
     _FakeAutoTokenizer.loaded_from = []
     _FakeORTModel.last_kwargs = {}
     _FakeORTModel.last_model_path = ""
+    _FakeORTModel.calls = []
     _FakePeftModel.last_adapter_dir = ""
+    _FakePeftModel.last_base = None
+    _FakePeftModel.calls = []
+    _FakePeftWrapped.merge_and_unload_calls = []
+    _FakeMergedModel.save_calls = []
     _FakeAutoModelForCausalLM.last_name = ""
+    _FakeAutoModelForCausalLM.calls = []
+    _FakeStreamer.init_calls = []
 
 
 # ---------------------------------------------------------------------------
@@ -379,6 +432,25 @@ def test_load_onnx_bundle_extracts_adapter_and_passes_providers(monkeypatch):
     ]
     assert "export" not in _FakeORTModel.last_kwargs
 
+    # ORTModelForCausalLM.from_pretrained must see the adapter files
+    # *at the moment of the call*, not merely at test-time. A backend
+    # that wrote them AFTER the ORT call would fail this snapshot check
+    # while still passing the disk assertions above.
+    assert len(_FakeORTModel.calls) == 1
+    (pos_args, kwargs, snapshot) = _FakeORTModel.calls[0]
+    assert pos_args == (str(adapter_dir),)
+    assert snapshot == {
+        "model.onnx": b"\x08ONNX_MODEL",
+        "config.json": b'{"model_type": "fake"}',
+        "tokenizer.json": b'{"fake": true}',
+    }
+    # Defensive: provider list is forwarded as a *list*, not a tuple or str.
+    assert isinstance(kwargs["providers"], list)
+    assert kwargs["providers"] == [
+        "CoreMLExecutionProvider",
+        "CPUExecutionProvider",
+    ]
+
     backend.close()
     # close() scrubs the extracted adapter dir.
     assert not adapter_dir.exists()
@@ -412,8 +484,37 @@ def test_load_peft_bundle_merges_and_exports(monkeypatch, tmp_path):
     assert peft_adapter_dir.is_dir()
     assert (peft_adapter_dir / "adapter_config.json").exists()
 
-    # Base model name was loaded by AutoModelForCausalLM.
+    # peft.from_pretrained must see the adapter files on disk *at call time*.
+    assert len(_FakePeftModel.calls) == 1
+    peft_call_dir, peft_snapshot = _FakePeftModel.calls[0]
+    assert peft_call_dir == str(peft_adapter_dir)
+    assert peft_snapshot == {
+        "adapter_config.json": b'{"peft_type": "LORA"}',
+        "adapter_model.safetensors": b"\x00\x01\x02WEIGHTS",
+    }
+
+    # Base model name was loaded by AutoModelForCausalLM — exactly once.
     assert _FakeAutoModelForCausalLM.last_name == "my-org/base-model"
+    assert _FakeAutoModelForCausalLM.calls == ["my-org/base-model"]
+    # And the object it returned is the base handed to peft.from_pretrained
+    # (not None / a stray sentinel). This catches a backend that reloads
+    # the base model twice by mistake.
+    assert _FakePeftModel.last_base is not None
+
+    # merge_and_unload must have been called on the peft-wrapped model
+    # exactly once. A backend that skipped merging would still succeed
+    # in the "pytorch_model.bin exists" assertion because the fake's
+    # save_pretrained also writes it.
+    assert len(_FakePeftWrapped.merge_and_unload_calls) == 1
+    merged_on = _FakePeftWrapped.merge_and_unload_calls[0]
+    assert merged_on.adapter_dir == str(peft_adapter_dir)
+    assert merged_on.merged is True
+
+    # save_pretrained must have been invoked on the merged model with a
+    # real directory path (so ORT can read it).
+    assert len(_FakeMergedModel.save_calls) == 1
+    merged_save_path = Path(_FakeMergedModel.save_calls[0])
+    assert merged_save_path.is_dir()
 
     # The merged model directory was handed to ORTModelForCausalLM with export=True.
     exported_dir = Path(_FakeORTModel.last_model_path)
@@ -421,6 +522,18 @@ def test_load_peft_bundle_merges_and_exports(monkeypatch, tmp_path):
     assert (exported_dir / "pytorch_model.bin").exists()
     assert _FakeORTModel.last_kwargs["export"] is True
     assert _FakeORTModel.last_kwargs["cache_dir"] == str(tmp_path / "cache")
+    # The default providers list must still ride along even on the peft path.
+    assert _FakeORTModel.last_kwargs["providers"] == ["CPUExecutionProvider"]
+    assert _FakeORTModel.last_kwargs["provider"] == "CPUExecutionProvider"
+    # And the exported dir handed to ORT must contain the merged + tokenizer
+    # files at call time (snapshot).
+    assert len(_FakeORTModel.calls) == 1
+    (_pos, _kw, ort_snapshot) = _FakeORTModel.calls[0]
+    assert "pytorch_model.bin" in ort_snapshot
+    assert ort_snapshot["pytorch_model.bin"] == b"MERGED_WEIGHTS"
+    assert ort_snapshot["config.json"] == b'{"model_type": "fake"}'
+    # Tokenizer was saved alongside (via _FakeTokenizer.save_pretrained).
+    assert "tokenizer.json" in ort_snapshot
 
     backend.close()
     assert not peft_adapter_dir.exists()
@@ -440,6 +553,13 @@ def test_invoke_builds_messages_and_decodes(monkeypatch):
     backend = OnnxBackend(base_model="my-org/base-model")
     backend.load(_onnx_bundle())
 
+    # Asserting only ``out == "HELLO_ONNX"`` would pass even if the
+    # backend never materialized the adapter. Assert the adapter bytes
+    # landed on disk alongside the decoded string.
+    adapter_dir = Path(_FakeORTModel.last_model_path)
+    assert adapter_dir.is_dir()
+    assert (adapter_dir / "model.onnx").read_bytes() == b"\x08ONNX_MODEL"
+
     out = backend.invoke("hello?", max_tokens=16)
     assert out == "HELLO_ONNX"
 
@@ -456,6 +576,14 @@ def test_invoke_builds_messages_and_decodes(monkeypatch):
     gen_kwargs = model.generate_calls[0]
     assert gen_kwargs["max_new_tokens"] == 16
     assert gen_kwargs["do_sample"] is False
+    # input_ids + attention_mask must be forwarded (not dropped).
+    assert "input_ids" in gen_kwargs
+    assert "attention_mask" in gen_kwargs
+    # pad_token_id must be non-None (backend falls back to eos when pad
+    # is None or falsy).
+    assert gen_kwargs["pad_token_id"] is not None
+    # No streamer on the one-shot invoke path.
+    assert "streamer" not in gen_kwargs
     # Only the *new* tokens should be decoded, not the prompt tokens.
     assert tokenizer.decoded == [[30, 31, 32]]
 
@@ -475,7 +603,22 @@ def test_stream_yields_multiple_chunks(monkeypatch):
     assert len(chunks) > 1
 
     model = backend._model
-    assert "streamer" in model.generate_calls[-1]
+    gen_kwargs = model.generate_calls[-1]
+    assert "streamer" in gen_kwargs
+    streamer = gen_kwargs["streamer"]
+    # TextIteratorStreamer must be constructed with *our* tokenizer and
+    # the right flags — a silent default would cause mis-decoded chunks.
+    assert isinstance(streamer, _FakeStreamer)
+    assert streamer._tokenizer is backend._tokenizer
+    assert streamer.skip_prompt is True
+    assert streamer.skip_special_tokens is True
+    assert len(_FakeStreamer.init_calls) == 1
+    init_tok, init_flags = _FakeStreamer.init_calls[0]
+    assert init_tok is backend._tokenizer
+    assert init_flags == {"skip_prompt": True, "skip_special_tokens": True}
+    # max_new_tokens must also be forwarded on the streaming path.
+    assert gen_kwargs["max_new_tokens"] == 8
+    assert gen_kwargs["do_sample"] is False
 
     backend.close()
 
@@ -533,3 +676,121 @@ def test_close_is_safe_when_never_loaded(monkeypatch):
     # Should not raise.
     backend.close()
     assert backend._model is None
+
+
+# ---------------------------------------------------------------------------
+# tests: regression / hardening (disk + kwargs parity)
+# ---------------------------------------------------------------------------
+
+
+def test_load_onnx_bundle_files_land_on_disk_with_correct_bytes(monkeypatch):
+    """Regression: every file in ``adapter_onnx_files`` must land on disk verbatim.
+
+    Equivalent to the llama_cpp lora-on-disk assertion in commit eff239b.
+    Uses 3 small files with distinct payloads (incl. NUL and high bytes)
+    so that a backend that concatenated / truncated / dropped any byte
+    would fail.
+    """
+    _install_onnx_only_fakes(monkeypatch)
+    _reset_fake_state()
+    from chimera.function_synthesis.backends.onnx import OnnxBackend
+
+    payloads = {
+        "model.onnx": b"\x08ONNX_MODEL_PAYLOAD\x00\x01",
+        "config.json": b'{"model_type":"fake","hidden":64}',
+        "tokenizer.json": b"{\xff\x00fake-tok}",
+    }
+    bundle = ChiBundle(
+        spec=FunctionSpec(name="echo", description="echoes input"),
+        prompts={"system": "", "user_template": "{input}", "stop": []},
+        adapter_format=ADAPTER_FORMAT_ONNX,
+        adapter_onnx_files=payloads,
+    )
+    backend = OnnxBackend(base_model="my-org/base-model")
+    backend.load(bundle)
+
+    adapter_dir = Path(_FakeORTModel.last_model_path)
+    assert adapter_dir.is_dir()
+    for rel, expected in payloads.items():
+        got = (adapter_dir / rel).read_bytes()
+        assert got == expected, (
+            f"byte mismatch for {rel}: got {got!r}, expected {expected!r}"
+        )
+
+    # Snapshot captured at ORTModelForCausalLM.from_pretrained call
+    # time must also match byte-for-byte. This catches a regression
+    # where the backend writes files AFTER handing the dir to ORT.
+    assert len(_FakeORTModel.calls) == 1
+    _pos, _kw, snapshot = _FakeORTModel.calls[0]
+    assert snapshot == payloads
+
+    backend.close()
+
+
+def test_load_onnx_providers_exact_list_coreml(monkeypatch):
+    """providers= must reach ORT as the exact list the user gave (order preserved)."""
+    _install_onnx_only_fakes(monkeypatch)
+    _reset_fake_state()
+    from chimera.function_synthesis.backends.onnx import OnnxBackend
+
+    user_providers = ["CoreMLExecutionProvider", "CPUExecutionProvider"]
+    backend = OnnxBackend(
+        base_model="my-org/base-model",
+        providers=user_providers,
+    )
+    backend.load(_onnx_bundle())
+
+    assert _FakeORTModel.last_kwargs["providers"] == [
+        "CoreMLExecutionProvider",
+        "CPUExecutionProvider",
+    ]
+    # Backend must *not* mutate the caller's list.
+    assert user_providers == ["CoreMLExecutionProvider", "CPUExecutionProvider"]
+    # First provider must also be forwarded via the legacy ``provider=`` kwarg.
+    assert _FakeORTModel.last_kwargs["provider"] == "CoreMLExecutionProvider"
+    backend.close()
+
+
+def test_load_peft_bundle_ort_call_uses_merged_dir_not_base(monkeypatch, tmp_path):
+    """Regression: ORT.from_pretrained must be called with the *merged* dir,
+    never directly with the HF base model id, on the peft path."""
+    _install_full_fakes(monkeypatch)
+    _reset_fake_state()
+    from chimera.function_synthesis.backends.onnx import OnnxBackend
+
+    backend = OnnxBackend(
+        base_model="my-org/base-model",
+        cache_dir=tmp_path / "cache",
+    )
+    backend.load(_peft_bundle())
+
+    # ORT must NOT be called with the raw base model id — a backend that
+    # skipped the merge+export would pass export=True and a base id and
+    # kinda-sorta work, but we explicitly forbid that path.
+    assert _FakeORTModel.last_model_path != "my-org/base-model"
+    # Instead it must be called with the merged dir written by
+    # _FakeMergedModel.save_pretrained.
+    assert _FakeORTModel.last_model_path in _FakeMergedModel.save_calls
+    # export=True on the peft path (so optimum exports on load), and
+    # cache_dir points at the user's chosen cache.
+    assert _FakeORTModel.last_kwargs["export"] is True
+    assert _FakeORTModel.last_kwargs["cache_dir"] == str(tmp_path / "cache")
+    backend.close()
+
+
+def test_invoke_forwards_max_new_tokens_verbatim(monkeypatch):
+    """``max_tokens`` on invoke() must forward as ``max_new_tokens``."""
+    _install_onnx_only_fakes(monkeypatch)
+    _reset_fake_state()
+    from chimera.function_synthesis.backends.onnx import OnnxBackend
+
+    backend = OnnxBackend(base_model="my-org/base-model")
+    backend.load(_onnx_bundle())
+    backend.invoke("hi", max_tokens=1)
+    backend.invoke("hi", max_tokens=512)
+
+    calls = backend._model.generate_calls
+    assert len(calls) == 2
+    assert calls[0]["max_new_tokens"] == 1
+    assert calls[1]["max_new_tokens"] == 512
+    backend.close()
