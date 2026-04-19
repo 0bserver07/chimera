@@ -111,7 +111,7 @@ class AuthManager:
         config_path = self._config_dir / "auth.json"
         if config_path.exists():
             data = json.loads(config_path.read_text())
-            key = data.get(provider, {}).get("api_key")
+            key: str | None = data.get(provider, {}).get("api_key")
             if key:
                 self._credentials[provider] = StoredCredential(
                     provider=provider, key=key, source="config",

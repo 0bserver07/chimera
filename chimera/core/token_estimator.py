@@ -43,7 +43,7 @@ class TokenEstimator:
             return self._cache[cache_key]
         if self._provider and hasattr(self._provider, "count_tokens"):
             try:
-                count = await self._provider.count_tokens(messages, tools)
+                count: int = await self._provider.count_tokens(messages, tools)
                 self._cache[cache_key] = count
                 return count
             except Exception:

@@ -44,14 +44,14 @@ class HumanEval(Benchmark):
             # Fall back to env-based testing
             if env is None:
                 return False
-            return env.run_tests().all_passed
+            return bool(env.run_tests().all_passed)
 
         # Combine generated code with test harness
         full_code = f"{agent_output}\n\n{test_code}"
         if env is not None:
             env.write_file("solution.py", full_code)
             result = env.run_command("python solution.py")
-            return result.exit_code == 0
+            return bool(result.exit_code == 0)
 
         # In-process execution fallback
         try:

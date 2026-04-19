@@ -82,7 +82,7 @@ class DiscriminatedUnion:
                 f"Available: {list(cls._registry.keys())}"
             )
 
-        return subcls(**config)
+        return subcls(**config)  # type: ignore[no-any-return]  # dynamic subclass dispatch
 
     @classmethod
     def available_types(cls) -> list[str]:

@@ -113,7 +113,8 @@ class StdioTransport(MCPTransport):
         line = self._process.stdout.readline()
         if not line:
             return None
-        return json.loads(line)
+        parsed: dict[str, Any] = json.loads(line)
+        return parsed
 
 
 class HTTPTransport(MCPTransport):
@@ -146,7 +147,8 @@ class HTTPTransport(MCPTransport):
                     self._session_id = session_id
                 response_data = resp.read().decode("utf-8")
                 if response_data:
-                    return json.loads(response_data)
+                    parsed: dict[str, Any] = json.loads(response_data)
+                    return parsed
         except urllib.error.HTTPError as e:
             raise ConnectionError(f"MCP HTTP error {e.code}: {e.reason}") from e
 

@@ -210,7 +210,8 @@ class MentionResolver:
             resp = httpx.get(url, timeout=10, follow_redirects=True)
             resp.raise_for_status()
             # Return first 5000 chars of text content
-            return resp.text[:5000]
+            text: str = resp.text[:5000]
+            return text
         except ImportError:
             return f"[httpx not installed — cannot fetch {url}]"
         except Exception as exc:

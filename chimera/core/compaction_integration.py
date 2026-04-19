@@ -49,13 +49,14 @@ class CompactionIntegration:
         if self._compressor is None:
             return None
         try:
-            return await self._compressor.compress(messages, aggressive=True)
+            compressed: list[Message] | None = await self._compressor.compress(messages, aggressive=True)
+            return compressed
         except Exception:
             return None
 
     async def _estimate_tokens(self, messages: list[Message]) -> int:
         if self._estimator:
-            count = await self._estimator.count_messages(messages)
+            count: int | None = await self._estimator.count_messages(messages)
             if count is not None:
                 return count
         # Fallback: rough estimate

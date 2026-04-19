@@ -107,7 +107,8 @@ class DockerEnvironment(Environment):
         exit_code, output = self._container.exec_run(f"cat {self._workdir}/{path}")
         if exit_code != 0:
             raise FileNotFoundError(path)
-        return output.decode()
+        decoded: str = output.decode()
+        return decoded
 
     def write_file(self, path: str, content: str) -> None:
         if self._container is None:

@@ -94,5 +94,5 @@ class CriticMixin:
         if hasattr(action, "tool_calls"):
             return not action.tool_calls
         if hasattr(action, "is_final"):
-            return action.is_final
+            return bool(action.is_final)
         return False

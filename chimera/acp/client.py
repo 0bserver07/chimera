@@ -113,7 +113,8 @@ class ACPClient:
         result = self._rpc("session/fork", {
             "session_id": self._session_id,
         })
-        return result["session_id"]
+        session_id: str = result["session_id"]
+        return session_id
 
     def stop(self) -> None:
         """Terminate the subprocess."""
@@ -168,7 +169,8 @@ class ACPClient:
                         raise RuntimeError(
                             f"ACP RPC error: {msg['error']}"
                         )
-                    return msg.get("result", {})
+                    rpc_result: dict[str, Any] = msg.get("result", {})
+                    return rpc_result
                 elif "method" in msg and notification_handler:
                     notification_handler(msg)
 

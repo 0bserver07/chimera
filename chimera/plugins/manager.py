@@ -59,7 +59,7 @@ class PluginManager:
         if not matches:
             raise KeyError(f"No plugin entry point named '{name}'")
         plugin_cls = matches[0].load()
-        plugin = plugin_cls()
+        plugin: BasePlugin = plugin_cls()
         registry = ComponentRegistry()
         plugin.activate(registry)
         plugin._registry = registry

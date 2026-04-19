@@ -78,7 +78,7 @@ class AIMOBenchmark(Benchmark):
         extracted = extract_answer(agent_output)
         if extracted is None:
             return False
-        return extracted == expected
+        return bool(extracted == expected)
 
     def _load_tasks(self) -> list[dict[str, Any]]:
         if self._problems_path:

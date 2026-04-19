@@ -37,7 +37,7 @@ class CustomBenchmark(Benchmark):
         """
         if env is None:
             return False
-        return env.run_tests().all_passed
+        return bool(env.run_tests().all_passed)
 
     def _load_from_dir(self) -> list[dict[str, Any]]:
         import json

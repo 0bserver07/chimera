@@ -94,7 +94,8 @@ class RpcServer:
         cls = _COMMAND_MAP.get(cmd_type, RpcCommand)
         valid_fields = {f.name for f in dataclasses.fields(cls)}
         filtered = {k: v for k, v in raw.items() if k in valid_fields}
-        return cls(**filtered)
+        cmd: RpcCommand = cls(**filtered)
+        return cmd
 
     def _dispatch(self, command: RpcCommand) -> None:
         """Look up and invoke the handler for *command*.

@@ -48,7 +48,8 @@ def _read_input() -> dict[str, Any]:
         try:
             raw = sys.stdin.read()
             if raw.strip():
-                return json.loads(raw)
+                parsed: dict[str, Any] = json.loads(raw)
+                return parsed
         except (json.JSONDecodeError, OSError):
             pass
 
@@ -56,7 +57,8 @@ def _read_input() -> dict[str, Any]:
     env_val = os.environ.get("TOOL_INPUT", "")
     if env_val:
         try:
-            return json.loads(env_val)
+            parsed_env: dict[str, Any] = json.loads(env_val)
+            return parsed_env
         except json.JSONDecodeError:
             pass
 

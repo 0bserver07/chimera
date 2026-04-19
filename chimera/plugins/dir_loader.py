@@ -61,7 +61,8 @@ class DirectoryPluginLoader:
         for name in self.MANIFEST_FILES:
             manifest_path = path / name
             if manifest_path.exists():
-                return json.loads(manifest_path.read_text())
+                parsed: dict[str, Any] = json.loads(manifest_path.read_text())
+                return parsed
         return {}
 
 
@@ -69,7 +70,7 @@ class _DirectoryPlugin(BasePlugin):
     """Plugin loaded from a directory."""
 
     def __init__(self, manifest: dict[str, Any], path: Path) -> None:
-        self._name = manifest.get("name", path.name)
+        self._name: str = manifest.get("name", path.name)
         self.version = manifest.get("version", "0.0.0")
         self.description = manifest.get("description", "")
         self.author = manifest.get("author", "")

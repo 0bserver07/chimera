@@ -26,14 +26,14 @@ def avg_cost(results: list[Any]) -> float:
     """Average cost across eval results."""
     if not results:
         return 0.0
-    return sum(r.cost for r in results) / len(results)
+    return float(sum(r.cost for r in results) / len(results))
 
 
 def avg_steps(results: list[Any]) -> float:
     """Average steps across eval results."""
     if not results:
         return 0.0
-    return sum(r.steps for r in results) / len(results)
+    return float(sum(r.steps for r in results) / len(results))
 
 
 def resolve_rate(results: list[Any]) -> float:

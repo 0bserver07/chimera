@@ -146,7 +146,7 @@ class TreeSitterParser(LanguageParser):
             try:
                 from tree_sitter_languages import get_parser  # type: ignore[import-not-found]  # optional dep
 
-                parser = get_parser(language)
+                parser: object = get_parser(language)
                 self._parsers[language] = parser
                 return parser
             except ImportError:
@@ -158,9 +158,9 @@ class TreeSitterParser(LanguageParser):
 
                 lang_mod = importlib.import_module(f"tree_sitter_{language}")
                 lang = tree_sitter.Language(lang_mod.language())
-                parser = tree_sitter.Parser(lang)
-                self._parsers[language] = parser
-                return parser
+                parser2: object = tree_sitter.Parser(lang)
+                self._parsers[language] = parser2
+                return parser2
             except (ImportError, AttributeError):
                 pass
 

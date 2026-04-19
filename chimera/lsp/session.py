@@ -134,7 +134,8 @@ class LSPSession:
             return None
         contents = hover_result.get("contents", "")
         if isinstance(contents, dict):
-            return contents.get("value", str(contents))
+            value: str = contents.get("value", str(contents))
+            return value
         if isinstance(contents, list):
             return "\n".join(c.get("value", str(c)) if isinstance(c, dict) else str(c) for c in contents)
         return str(contents)
@@ -227,7 +228,8 @@ class LSPSession:
         if content_length is None:
             return None
         body = self._process.stdout.read(content_length)
-        return json.loads(body)
+        parsed: dict[str, Any] = json.loads(body)
+        return parsed
 
     def _read_loop(self) -> None:
         """Background thread: read messages, route responses and notifications."""

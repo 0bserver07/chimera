@@ -35,8 +35,10 @@ class CacheSafeParams:
         def _tool_name(t: Any) -> str:
             # Accept BaseTool (has .name attr) or dict (has .get("name"))
             if isinstance(t, dict):
-                return t.get("name", "")
-            return getattr(t, "name", "")
+                name: str = t.get("name", "")
+                return name
+            attr_name: str = getattr(t, "name", "")
+            return attr_name
 
         self_tool_names = sorted(_tool_name(t) for t in self.tools)
         other_tool_names = sorted(_tool_name(t) for t in other.tools)

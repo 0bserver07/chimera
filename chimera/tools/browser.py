@@ -151,7 +151,8 @@ class BrowserTool(BaseTool):
             handler = getattr(self, f"_action_{action}", None)
             if handler is None:
                 return ToolResult(output="", error=f"Unknown browser action: {action}")
-            return handler(args)
+            result: ToolResult = handler(args)
+            return result
         except Exception as exc:
             return ToolResult(output="", error=str(exc))
 

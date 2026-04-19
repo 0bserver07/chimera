@@ -54,7 +54,8 @@ class ChimeraConfig:
             An Environment subclass instance.
         """
         from chimera.env.base import Environment
-        return Environment.from_config(self.data.get("environment", {"type": "local"}))
+        env: Environment = Environment.from_config(self.data.get("environment", {"type": "local"}))
+        return env
 
     def create_strategy(self) -> Strategy:
         """Create a Strategy from the config's ``training.strategy`` section.
@@ -63,9 +64,10 @@ class ChimeraConfig:
             A Strategy subclass instance.
         """
         from chimera.training.strategies.base import Strategy
-        return Strategy.from_config(
+        strategy: Strategy = Strategy.from_config(
             self.data.get("training", {}).get("strategy", {"type": "test_convergence"})
         )
+        return strategy
 
     def create_compaction(self) -> CompactionStrategy | None:
         """Create a CompactionStrategy from the config's ``compaction`` section.
@@ -76,7 +78,8 @@ class ChimeraConfig:
         comp = self.data.get("compaction")
         if comp:
             from chimera.compaction.base import CompactionStrategy
-            return CompactionStrategy.from_config(comp)
+            strategy: CompactionStrategy = CompactionStrategy.from_config(comp)
+            return strategy
         return None
 
 

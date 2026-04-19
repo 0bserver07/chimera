@@ -113,7 +113,7 @@ class AgentServer:
         env = thread["env"]
         thread["runs"] += 1
 
-        result = agent.run(event.task, env=env)
+        result: AgentResult = agent.run(event.task, env=env)
         self._results[event.thread_id] = result
         return result
 

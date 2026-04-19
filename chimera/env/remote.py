@@ -87,7 +87,8 @@ class RemoteEnvironment(Environment):
         """
         resp = self._client.get("/files/read", params={"path": path})
         resp.raise_for_status()
-        return resp.json()["content"]
+        content: str = resp.json()["content"]
+        return content
 
     def write_file(self, path: str, content: str) -> None:
         """Write a file to the remote workspace.
@@ -110,7 +111,8 @@ class RemoteEnvironment(Environment):
         """
         resp = self._client.get("/files/list", params={"pattern": pattern})
         resp.raise_for_status()
-        return resp.json()["files"]
+        files: list[str] = resp.json()["files"]
+        return files
 
     # ------------------------------------------------------------------
     # Command execution
@@ -169,7 +171,8 @@ class RemoteEnvironment(Environment):
         """
         resp = self._client.post("/checkpoint")
         resp.raise_for_status()
-        return resp.json()["checkpoint_id"]
+        checkpoint_id: str = resp.json()["checkpoint_id"]
+        return checkpoint_id
 
     def restore(self, checkpoint_id: str) -> None:
         """Restore the workspace to a previous checkpoint.

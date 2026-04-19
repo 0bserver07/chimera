@@ -754,7 +754,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     elif args.command == "plugins":
         return run_plugins(args)
     elif args.command == "fs":
-        return args.func(args)
+        rc: int = args.func(args)
+        return rc
     else:
         parser.print_help()
         return 1

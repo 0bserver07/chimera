@@ -132,4 +132,5 @@ class SubprocessLSPClient(LSPClient):
         except (IndexError, ValueError):
             return None
         body = self._process.stdout.read(length)
-        return json.loads(body)
+        parsed: dict[str, Any] = json.loads(body)
+        return parsed

@@ -131,7 +131,7 @@ class SWEBench(Benchmark):
         if hasattr(env, "run_tests"):
             try:
                 test_result = env.run_tests()
-                return test_result.all_passed
+                return bool(test_result.all_passed)
             except Exception:
                 return False
 

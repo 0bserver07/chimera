@@ -43,9 +43,11 @@ class ToolResultPersister:
             return None
         if _HAS_AIOFILES:
             async with aiofiles.open(path, "r") as f:
-                return await f.read()
+                content: str = await f.read()
+                return content
         else:
-            return await asyncio.to_thread(path.read_text)
+            text: str = await asyncio.to_thread(path.read_text)
+            return text
 
     def _generate_preview(self, content: str) -> str:
         """Return first half + '... [truncated] ...' + last half of preview bytes."""

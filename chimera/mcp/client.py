@@ -182,7 +182,8 @@ class MCPClient:
                     "params": {"name": tool_name, "arguments": arguments},
                 })
                 if response and "result" in response:
-                    return response["result"]
+                    result: dict[str, Any] = response["result"]
+                    return result
                 if response and "error" in response:
                     # Tool-level error — don't retry
                     return {"error": response["error"].get("message", "Unknown error")}

@@ -188,5 +188,6 @@ class PermissionChecker:
         """Extract 'content' from the tool (via optional hook) or return None."""
         get_fn = getattr(tool, "get_permission_content", None)
         if get_fn is not None:
-            return get_fn(input_args)
+            content: str | None = get_fn(input_args)
+            return content
         return None
