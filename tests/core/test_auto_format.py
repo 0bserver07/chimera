@@ -50,11 +50,15 @@ class TestDetectFormatters:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ):
         """When the formatter binary is not found, return (True, '') gracefully."""
-        import shutil
+        import asyncio
 
-        # Force shutil.which → None so the "not installed" branch runs even on
-        # machines that actually have gofmt (CI runners preinstall Go).
-        monkeypatch.setattr(shutil, "which", lambda _cmd: None)
+        # Force FileNotFoundError from subprocess spawn so the "not installed"
+        # branch runs even on machines that actually have gofmt (CI runners
+        # preinstall Go).
+        async def _raise_fnf(*args, **kwargs):
+            raise FileNotFoundError("fake: formatter not installed")
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", _raise_fnf)
         af = AutoFormatter(tmp_path)
         success, output = await af.format_file("nonexistent.go")
         assert success is True
