@@ -14,23 +14,46 @@ class MCPServerLifecycle:
     config → same client (memoized). Ownership tracking lets cleanup release
     clients when all owning agents are done.
 
-    The returned client is *registered* (has transport info) but not yet
-    connected — call ``client.connect_all()`` when you need live tools.
-    Connection is deferred so that lifecycle bookkeeping works in tests and
-    offline scenarios.
+    By default the returned client is *registered* (transport configured)
+    but not yet connected. Pass ``eager_connect=True`` to have
+    :meth:`connect` (and :meth:`connect_for_agent`) actually spin up the
+    transport via :meth:`MCPClient.connect_all` before returning. That
+    second mode is what real users want; the default keeps existing
+    offline/unit tests working without having to stand up a live server.
     """
 
     _connections: dict[str, MCPClient] = field(default_factory=dict)
     _agent_owned: dict[str, set[str]] = field(default_factory=dict)
+    # Tracks which cache keys have already had connect_all() called, so
+    # we don't double-connect when the same config is requested twice.
+    _connected_keys: set[str] = field(default_factory=set)
 
-    async def connect(self, config: dict) -> MCPClient:
+    async def connect(
+        self, config: dict, *, eager_connect: bool = False
+    ) -> MCPClient:
         """Register an MCP server client. Memoized — same config reuses client.
 
-        Config shape::
+        Args:
+            config: MCP server config. Shape::
 
-            {"name": str, "url": str}            # HTTP server
-            {"name": str, "command": str,        # stdio server
-             "args": [str], "env": {str: str}}
+                {"name": str, "url": str}            # HTTP server
+                {"name": str, "command": str,        # stdio server
+                 "args": [str], "env": {str: str}}
+
+            eager_connect: If True, call ``client.connect_all()`` to
+                actually bring the transport up before returning. When
+                connect_all() raises, we surface the failure as a
+                :class:`ConnectionError` so callers can react. Defaults
+                to False to preserve prior behaviour (used heavily by
+                offline tests).
+
+        Returns:
+            The registered (and optionally connected) MCPClient.
+
+        Raises:
+            ValueError: If the config lacks both ``url`` and ``command``.
+            ConnectionError: If ``eager_connect=True`` and
+                ``connect_all()`` fails.
         """
         key = self._cache_key(config)
         if key not in self._connections:
@@ -50,12 +73,34 @@ class MCPServerLifecycle:
                     f"MCP config needs 'url' or 'command': {config!r}"
                 )
             self._connections[key] = client
-        return self._connections[key]
 
-    async def connect_for_agent(self, config: dict, agent_id: str) -> Any:
-        """Connect for a specific agent. Tracks ownership for cleanup."""
+        client = self._connections[key]
+        if eager_connect and key not in self._connected_keys:
+            try:
+                client.connect_all()
+            except Exception as exc:
+                # Roll back registration so the caller can retry with a
+                # fixed config without tripping the memoization cache.
+                self._connections.pop(key, None)
+                raise ConnectionError(
+                    f"MCP connect_all() failed for {config!r}: {exc}"
+                ) from exc
+            self._connected_keys.add(key)
+        return client
+
+    async def connect_for_agent(
+        self, config: dict, agent_id: str, *, eager_connect: bool = False
+    ) -> Any:
+        """Connect for a specific agent. Tracks ownership for cleanup.
+
+        Args:
+            config: Same shape as :meth:`connect`.
+            agent_id: Identifier used to track which agent owns the
+                connection (for :meth:`cleanup_agent`).
+            eager_connect: Forwarded to :meth:`connect`.
+        """
         key = self._cache_key(config)
-        client = await self.connect(config)
+        client = await self.connect(config, eager_connect=eager_connect)
         self._agent_owned.setdefault(agent_id, set()).add(key)
         return client
 
@@ -66,6 +111,7 @@ class MCPServerLifecycle:
             other_owners = any(key in keys for keys in self._agent_owned.values())
             if not other_owners and key in self._connections:
                 client = self._connections.pop(key)
+                self._connected_keys.discard(key)
                 try:
                     client.disconnect_all()
                 except Exception:  # best-effort cleanup
@@ -80,6 +126,7 @@ class MCPServerLifecycle:
                 pass
         self._connections.clear()
         self._agent_owned.clear()
+        self._connected_keys.clear()
 
     def _cache_key(self, config: dict) -> str:
         return json.dumps(config, sort_keys=True)
