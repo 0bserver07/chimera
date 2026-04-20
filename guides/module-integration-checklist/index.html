@@ -103,8 +103,8 @@
 </ul>
 <div class="sl-heading-wrapper level-h2"><h2 id="4-documentation">4. Documentation</h2><a class="sl-anchor-link" href="#4-documentation"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentcolor" d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 0 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 1 0-1.42-1.42Zm8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 0 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 1 0 1.42 1.42l3.88-3.89a4.49 4.49 0 0 0 0-6.33ZM8.83 15.17a1 1 0 0 0 1.1.22 1 1 0 0 0 .32-.22l4.92-4.92a1 1 0 0 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42Z"></path></svg></span><span class="sr-only" data-pagefind-ignore="">Section titled “4. Documentation”</span></a></div>
 <ul class="contains-task-list">
-<li class="task-list-item"><input type="checkbox" disabled> Module page in <code dir="auto">docs/modules/&#x3C;module>.md</code> with working code examples</li>
-<li class="task-list-item"><input type="checkbox" disabled> Added to <code dir="auto">mkdocs.yml</code> nav</li>
+<li class="task-list-item"><input type="checkbox" disabled> Module page in <code dir="auto">site/src/content/docs/modules/&#x3C;module>.md</code> with working code examples</li>
+<li class="task-list-item"><input type="checkbox" disabled> If adding a new doc section, add it to <code dir="auto">site/astro.config.mjs</code> sidebar (autogenerate handles subdirs)</li>
 <li class="task-list-item"><input type="checkbox" disabled> CLAUDE.md module map updated if it’s a new package/directory</li>
 <li class="task-list-item"><input type="checkbox" disabled> README.md feature list updated (additive only — don’t rewrite existing content)</li>
 <li class="task-list-item"><input type="checkbox" disabled> Existing docs checked for stale references (tool counts, strategy counts, etc.)</li>
@@ -113,7 +113,7 @@
 <ul class="contains-task-list">
 <li class="task-list-item"><input type="checkbox" disabled> Full test suite passes: <code dir="auto">uv run pytest tests/ -q</code></li>
 <li class="task-list-item"><input type="checkbox" disabled> No regressions in existing tests</li>
-<li class="task-list-item"><input type="checkbox" disabled> <code dir="auto">uv run mkdocs build</code> succeeds (if docs were changed)</li>
+<li class="task-list-item"><input type="checkbox" disabled> <code dir="auto">cd site &#x26;&#x26; pnpm build</code> succeeds (if docs were changed)</li>
 <li class="task-list-item"><input type="checkbox" disabled> Git commit with descriptive message</li>
 <li class="task-list-item"><input type="checkbox" disabled> GitHub issue closed with commit reference (if applicable)</li>
 </ul>
