@@ -32,8 +32,8 @@ Every time a new module, tool, strategy, or feature is added to Chimera, go thro
 
 ## 4. Documentation
 
-- [ ] Module page in `docs/modules/<module>.md` with working code examples
-- [ ] Added to `mkdocs.yml` nav
+- [ ] Module page in `site/src/content/docs/modules/<module>.md` with working code examples
+- [ ] If adding a new doc section, add it to `site/astro.config.mjs` sidebar (autogenerate handles subdirs)
 - [ ] CLAUDE.md module map updated if it's a new package/directory
 - [ ] README.md feature list updated (additive only — don't rewrite existing content)
 - [ ] Existing docs checked for stale references (tool counts, strategy counts, etc.)
@@ -42,7 +42,7 @@ Every time a new module, tool, strategy, or feature is added to Chimera, go thro
 
 - [ ] Full test suite passes: `uv run pytest tests/ -q`
 - [ ] No regressions in existing tests
-- [ ] `uv run mkdocs build` succeeds (if docs were changed)
+- [ ] `cd site && pnpm build` succeeds (if docs were changed)
 - [ ] Git commit with descriptive message
 - [ ] GitHub issue closed with commit reference (if applicable)
 

@@ -11,7 +11,7 @@ Compose coding agents from modular primitives. Synthesize codebases from specifi
 - **Tests:** `uv run pytest` (2774 tests)
 - **Lint:** `uv run ruff check chimera/`
 - **Types:** `uv run mypy chimera/`
-- **Docs:** `uv sync --extra docs && uv run mkdocs serve`
+- **Docs:** Astro/Starlight in `site/`. Local: `cd site && pnpm install && pnpm dev`. Deploys to <https://0bserver07.github.io/chimera/> via `.github/workflows/ci.yml`.
 
 ## Architecture
 
