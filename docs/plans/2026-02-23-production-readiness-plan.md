@@ -95,7 +95,7 @@ class TestCalculateCost:
 
 **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_cost.py -v`
+Run: `cd . && python -m pytest tests/test_cost.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'chimera.providers.cost'`
 
 **Step 3: Write minimal implementation**
@@ -145,13 +145,13 @@ def calculate_cost(model: str, usage: dict[str, int]) -> float:
 
 **Step 4: Run tests to verify they pass**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_cost.py -v`
+Run: `cd . && python -m pytest tests/test_cost.py -v`
 Expected: 9 passed
 
 **Step 5: Commit**
 
 ```bash
-cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && git add chimera/providers/cost.py tests/test_cost.py && git commit -m "feat: add cost calculation utility with provider pricing table"
+cd . && git add chimera/providers/cost.py tests/test_cost.py && git commit -m "feat: add cost calculation utility with provider pricing table"
 ```
 
 ---
@@ -223,7 +223,7 @@ def test_react_tracks_cost():
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_loop.py::test_react_tracks_cost -v`
+Run: `cd . && python -m pytest tests/test_loop.py::test_react_tracks_cost -v`
 Expected: FAIL — `assert 0.0 > 0`
 
 **Step 3: Modify implementation**
@@ -293,13 +293,13 @@ def run(
 
 **Step 4: Run tests to verify they pass**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_loop.py -v`
+Run: `cd . && python -m pytest tests/test_loop.py -v`
 Expected: All passed
 
 **Step 5: Commit**
 
 ```bash
-cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && git add chimera/core/loop.py tests/test_loop.py && git commit -m "feat: track real costs in ReAct loop from provider usage"
+cd . && git add chimera/core/loop.py tests/test_loop.py && git commit -m "feat: track real costs in ReAct loop from provider usage"
 ```
 
 ---
@@ -431,7 +431,7 @@ def test_tree_of_thought_tracks_cost():
 
 **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_loop_cost.py -v`
+Run: `cd . && python -m pytest tests/test_loop_cost.py -v`
 Expected: FAIL — `assert 0.0 > 0` for all three
 
 **Step 3: Modify implementations**
@@ -454,13 +454,13 @@ Replace all three `cost=0.0` with `cost=total_cost`.
 
 **Step 4: Run tests to verify they pass**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_loop_cost.py -v`
+Run: `cd . && python -m pytest tests/test_loop_cost.py -v`
 Expected: 3 passed
 
 **Step 5: Commit**
 
 ```bash
-cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && git add chimera/core/loops/plan_execute.py chimera/core/loops/reflexion.py chimera/core/loops/tree_of_thought.py tests/test_loop_cost.py && git commit -m "feat: track real costs in PlanAndExecute, Reflexion, and TreeOfThought loops"
+cd . && git add chimera/core/loops/plan_execute.py chimera/core/loops/reflexion.py chimera/core/loops/tree_of_thought.py tests/test_loop_cost.py && git commit -m "feat: track real costs in PlanAndExecute, Reflexion, and TreeOfThought loops"
 ```
 
 ---
@@ -511,13 +511,13 @@ def test_cost_propagates_through_synthesis():
 
 **Step 2: Run test to verify it passes**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_integration.py::test_cost_propagates_through_synthesis -v`
+Run: `cd . && python -m pytest tests/test_integration.py::test_cost_propagates_through_synthesis -v`
 Expected: PASS (MockProvider returns usage dicts, cost tracking is now wired)
 
 **Step 3: Commit**
 
 ```bash
-cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && git add tests/test_integration.py && git commit -m "test: verify cost propagation through full synthesis loop"
+cd . && git add tests/test_integration.py && git commit -m "test: verify cost propagation through full synthesis loop"
 ```
 
 ---
@@ -662,7 +662,7 @@ class TestSynthesizeFunction:
 
 **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_synthesize_fn.py -v`
+Run: `cd . && python -m pytest tests/test_synthesize_fn.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'chimera.synthesize'`
 
 **Step 3: Write minimal implementation**
@@ -740,13 +740,13 @@ def synthesize(
 
 **Step 4: Run tests to verify they pass**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_synthesize_fn.py -v`
+Run: `cd . && python -m pytest tests/test_synthesize_fn.py -v`
 Expected: 3 passed
 
 **Step 5: Commit**
 
 ```bash
-cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && git add chimera/synthesize.py tests/test_synthesize_fn.py && git commit -m "feat: add chimera.synthesize() one-liner convenience function"
+cd . && git add chimera/synthesize.py tests/test_synthesize_fn.py && git commit -m "feat: add chimera.synthesize() one-liner convenience function"
 ```
 
 ---
@@ -771,7 +771,7 @@ def test_synthesize_one_liner():
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_integration.py::test_synthesize_one_liner -v`
+Run: `cd . && python -m pytest tests/test_integration.py::test_synthesize_one_liner -v`
 Expected: FAIL — `assert False` (hasattr returns False)
 
 **Step 3: Modify chimera/__init__.py**
@@ -787,13 +787,13 @@ Add `"synthesize"` to `__all__`.
 
 **Step 4: Run test to verify it passes**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_integration.py::test_synthesize_one_liner -v`
+Run: `cd . && python -m pytest tests/test_integration.py::test_synthesize_one_liner -v`
 Expected: PASS
 
 **Step 5: Commit**
 
 ```bash
-cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && git add chimera/__init__.py tests/test_integration.py && git commit -m "feat: export synthesize() from chimera top-level package"
+cd . && git add chimera/__init__.py tests/test_integration.py && git commit -m "feat: export synthesize() from chimera top-level package"
 ```
 
 ---
@@ -849,7 +849,7 @@ def test_run_synthesize_reports_failure():
 
 **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_cli.py::test_run_synthesize_calls_synthesize_function -v`
+Run: `cd . && python -m pytest tests/test_cli.py::test_run_synthesize_calls_synthesize_function -v`
 Expected: FAIL — `AttributeError: module has no attribute 'synthesize_fn'`
 
 **Step 3: Modify implementation**
@@ -901,13 +901,13 @@ def run_synthesize(args: argparse.Namespace) -> int:
 
 **Step 4: Run tests to verify they pass**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_cli.py -v`
+Run: `cd . && python -m pytest tests/test_cli.py -v`
 Expected: All passed
 
 **Step 5: Commit**
 
 ```bash
-cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && git add chimera/cli/main.py tests/test_cli.py && git commit -m "feat: wire CLI synthesize command to real synthesis logic"
+cd . && git add chimera/cli/main.py tests/test_cli.py && git commit -m "feat: wire CLI synthesize command to real synthesis logic"
 ```
 
 ---
@@ -918,7 +918,7 @@ cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && git add chimera/cli/main.py 
 
 **Step 1: Run full test suite**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest -v --tb=short 2>&1 | tail -30`
+Run: `cd . && python -m pytest -v --tb=short 2>&1 | tail -30`
 Expected: 410+ passed, 0 failed
 
 **Step 2: Fix any breakage, commit if needed**
@@ -1032,7 +1032,7 @@ class TestRepoMap:
 
 **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_repo_map.py -v`
+Run: `cd . && python -m pytest tests/test_repo_map.py -v`
 Expected: FAIL — `ImportError`
 
 **Step 3: Write minimal implementation**
@@ -1178,13 +1178,13 @@ class RepoMapTool(BaseTool):
 
 **Step 4: Run tests to verify they pass**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_repo_map.py -v`
+Run: `cd . && python -m pytest tests/test_repo_map.py -v`
 Expected: 7 passed
 
 **Step 5: Commit**
 
 ```bash
-cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && git add chimera/tools/repo_map.py tests/test_repo_map.py && git commit -m "feat: add RepoMap class and RepoMapTool for structural codebase overview"
+cd . && git add chimera/tools/repo_map.py tests/test_repo_map.py && git commit -m "feat: add RepoMap class and RepoMapTool for structural codebase overview"
 ```
 
 ---
@@ -1243,13 +1243,13 @@ class TestRepoMapTool:
 
 **Step 2: Run tests**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_repo_map.py -v`
+Run: `cd . && python -m pytest tests/test_repo_map.py -v`
 Expected: 11 passed
 
 **Step 3: Commit**
 
 ```bash
-cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && git add tests/test_repo_map.py && git commit -m "test: add RepoMapTool integration tests"
+cd . && git add tests/test_repo_map.py && git commit -m "test: add RepoMapTool integration tests"
 ```
 
 ---
@@ -1278,7 +1278,7 @@ class TestRepoMapExports:
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_repo_map.py::TestRepoMapExports -v`
+Run: `cd . && python -m pytest tests/test_repo_map.py::TestRepoMapExports -v`
 Expected: FAIL
 
 **Step 3: Modify exports**
@@ -1297,13 +1297,13 @@ And add `"RepoMapTool"` to `__all__`.
 
 **Step 4: Run tests to verify they pass**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_repo_map.py -v`
+Run: `cd . && python -m pytest tests/test_repo_map.py -v`
 Expected: 13 passed
 
 **Step 5: Commit**
 
 ```bash
-cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && git add chimera/tools/__init__.py chimera/__init__.py tests/test_repo_map.py && git commit -m "feat: export RepoMapTool from tools and chimera packages"
+cd . && git add chimera/tools/__init__.py chimera/__init__.py tests/test_repo_map.py && git commit -m "feat: export RepoMapTool from tools and chimera packages"
 ```
 
 ---
@@ -1323,13 +1323,13 @@ And add `"calculate_cost"` to `__all__`.
 
 **Step 2: Run full test suite**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest -v --tb=short 2>&1 | tail -30`
+Run: `cd . && python -m pytest -v --tb=short 2>&1 | tail -30`
 Expected: 420+ passed, 0 failed
 
 **Step 3: Commit**
 
 ```bash
-cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && git add chimera/__init__.py && git commit -m "feat: export calculate_cost, full regression passing"
+cd . && git add chimera/__init__.py && git commit -m "feat: export calculate_cost, full regression passing"
 ```
 
 ---
@@ -1394,5 +1394,5 @@ Add Phase 15-17 sections under Implementation Progress. Update test count.
 **Step 3: Commit**
 
 ```bash
-cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && git add docs/task-status.md CONTEXT.md && git commit -m "docs: update progress for Phases 15-17 (cost, synthesize, repo map)"
+cd . && git add docs/task-status.md CONTEXT.md && git commit -m "docs: update progress for Phases 15-17 (cost, synthesize, repo map)"
 ```

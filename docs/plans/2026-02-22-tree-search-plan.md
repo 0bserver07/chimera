@@ -82,7 +82,7 @@ class TestSearchNode:
 
 **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_strategy_tree_search.py -v`
+Run: `cd . && python -m pytest tests/test_strategy_tree_search.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'chimera.training.strategies.tree_search'`
 
 **Step 3: Write minimal implementation**
@@ -126,13 +126,13 @@ class SearchNode:
 
 **Step 4: Run tests to verify they pass**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_strategy_tree_search.py -v`
+Run: `cd . && python -m pytest tests/test_strategy_tree_search.py -v`
 Expected: 3 passed
 
 **Step 5: Commit**
 
 ```bash
-cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && git add chimera/training/strategies/tree_search.py tests/test_strategy_tree_search.py && git commit -m "feat: add SearchNode data model for tree search"
+cd . && git add chimera/training/strategies/tree_search.py tests/test_strategy_tree_search.py && git commit -m "feat: add SearchNode data model for tree search"
 ```
 
 ---
@@ -182,7 +182,7 @@ class TestTreeSearchInit:
 
 **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_strategy_tree_search.py::TestTreeSearchInit -v`
+Run: `cd . && python -m pytest tests/test_strategy_tree_search.py::TestTreeSearchInit -v`
 Expected: FAIL — `ImportError: cannot import name 'TreeSearch'`
 
 **Step 3: Write minimal implementation**
@@ -253,13 +253,13 @@ class TreeSearch(Strategy):
 
 **Step 4: Run tests to verify they pass**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_strategy_tree_search.py -v`
+Run: `cd . && python -m pytest tests/test_strategy_tree_search.py -v`
 Expected: 6 passed
 
 **Step 5: Commit**
 
 ```bash
-cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && git add chimera/training/strategies/tree_search.py tests/test_strategy_tree_search.py && git commit -m "feat: add TreeSearch constructor and Strategy subclass"
+cd . && git add chimera/training/strategies/tree_search.py tests/test_strategy_tree_search.py && git commit -m "feat: add TreeSearch constructor and Strategy subclass"
 ```
 
 ---
@@ -330,7 +330,7 @@ class TestCloneEnvironment:
 
 **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_strategy_tree_search.py::TestCloneEnvironment -v`
+Run: `cd . && python -m pytest tests/test_strategy_tree_search.py::TestCloneEnvironment -v`
 Expected: FAIL — `ImportError: cannot import name '_clone_environment'`
 
 **Step 3: Write minimal implementation**
@@ -385,13 +385,13 @@ def _clone_environment(env: LocalEnvironment, suffix: str = "clone") -> LocalEnv
 
 **Step 4: Run tests to verify they pass**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_strategy_tree_search.py -v`
+Run: `cd . && python -m pytest tests/test_strategy_tree_search.py -v`
 Expected: 9 passed
 
 **Step 5: Commit**
 
 ```bash
-cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && git add chimera/training/strategies/tree_search.py tests/test_strategy_tree_search.py && git commit -m "feat: add _clone_environment helper for parallel branch execution"
+cd . && git add chimera/training/strategies/tree_search.py tests/test_strategy_tree_search.py && git commit -m "feat: add _clone_environment helper for parallel branch execution"
 ```
 
 ---
@@ -643,7 +643,7 @@ class TestTreeSearchRun:
 
 **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_strategy_tree_search.py::TestTreeSearchRun -v`
+Run: `cd . && python -m pytest tests/test_strategy_tree_search.py::TestTreeSearchRun -v`
 Expected: FAIL — `NotImplementedError: TreeSearch.run() not yet implemented`
 
 **Step 3: Write minimal implementation**
@@ -970,13 +970,13 @@ The full `run()` method and its helpers:
 
 **Step 4: Run tests to verify they pass**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_strategy_tree_search.py -v`
+Run: `cd . && python -m pytest tests/test_strategy_tree_search.py -v`
 Expected: 15 passed
 
 **Step 5: Commit**
 
 ```bash
-cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && git add chimera/training/strategies/tree_search.py tests/test_strategy_tree_search.py && git commit -m "feat: implement TreeSearch.run() with parallel branch execution"
+cd . && git add chimera/training/strategies/tree_search.py tests/test_strategy_tree_search.py && git commit -m "feat: implement TreeSearch.run() with parallel branch execution"
 ```
 
 ---
@@ -1023,13 +1023,13 @@ class TestBranchFn:
 
 This should already pass since `_get_prompts()` calls `self.branch_fn` when set.
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_strategy_tree_search.py::TestBranchFn -v`
+Run: `cd . && python -m pytest tests/test_strategy_tree_search.py::TestBranchFn -v`
 Expected: 1 passed
 
 **Step 3: Commit**
 
 ```bash
-cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && git add tests/test_strategy_tree_search.py && git commit -m "test: verify custom branch_fn integration with TreeSearch"
+cd . && git add tests/test_strategy_tree_search.py && git commit -m "test: verify custom branch_fn integration with TreeSearch"
 ```
 
 ---
@@ -1062,7 +1062,7 @@ class TestExports:
 
 **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_strategy_tree_search.py::TestExports -v`
+Run: `cd . && python -m pytest tests/test_strategy_tree_search.py::TestExports -v`
 Expected: FAIL on `test_importable_from_strategies` and `test_importable_from_chimera`
 
 **Step 3: Write minimal implementation**
@@ -1110,13 +1110,13 @@ And add `"TreeSearch"` to the `__all__` list in the Training section.
 
 **Step 4: Run tests to verify they pass**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_strategy_tree_search.py -v`
+Run: `cd . && python -m pytest tests/test_strategy_tree_search.py -v`
 Expected: All pass
 
 **Step 5: Commit**
 
 ```bash
-cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && git add chimera/training/strategies/__init__.py chimera/__init__.py tests/test_strategy_tree_search.py && git commit -m "feat: export TreeSearch from strategies and chimera packages"
+cd . && git add chimera/training/strategies/__init__.py chimera/__init__.py tests/test_strategy_tree_search.py && git commit -m "feat: export TreeSearch from strategies and chimera packages"
 ```
 
 ---
@@ -1127,7 +1127,7 @@ cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && git add chimera/training/str
 
 **Step 1: Run full test suite**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest -v --tb=short 2>&1 | tail -20`
+Run: `cd . && python -m pytest -v --tb=short 2>&1 | tail -20`
 Expected: 410+ passed, 0 failed
 
 **Step 2: Fix any breakage, commit if needed**
@@ -1166,5 +1166,5 @@ Add Phase 15 section under Implementation Progress. Update total test count.
 **Step 3: Commit**
 
 ```bash
-cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && git add docs/task-status.md CONTEXT.md && git commit -m "docs: update progress for Phase 15 (tree search strategy)"
+cd . && git add docs/task-status.md CONTEXT.md && git commit -m "docs: update progress for Phase 15 (tree search strategy)"
 ```

@@ -124,7 +124,7 @@ def test_env_vars_for_credentials():
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_provider_modal.py -v`
+Run: `cd . && python -m pytest tests/test_provider_modal.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'chimera.providers.modal'`
 
 **Step 3: Write the implementation**
@@ -314,18 +314,18 @@ In `chimera/providers/factory.py`, add the `"modal"` case to `create_provider()`
 
 **Step 6: Run tests to verify they pass**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_provider_modal.py -v`
+Run: `cd . && python -m pytest tests/test_provider_modal.py -v`
 Expected: All 6 tests PASS
 
 **Step 7: Run full test suite to verify no regressions**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/ -v`
+Run: `cd . && python -m pytest tests/ -v`
 Expected: All 448+ tests PASS
 
 **Step 8: Commit**
 
 ```bash
-cd /Users/yadkonrad/dev_dev/year26/feb26/chimera
+cd .
 git add chimera/providers/modal.py chimera/providers/factory.py tests/test_provider_modal.py
 git commit -m "feat: add ModalProvider for serverless GPU inference"
 ```
@@ -423,7 +423,7 @@ def test_to_anthropic_schema(tool):
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_tools_verify.py -v`
+Run: `cd . && python -m pytest tests/test_tools_verify.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'chimera.tools.verify'`
 
 **Step 3: Write the implementation**
@@ -509,18 +509,18 @@ Add `"VerifyTool"` and `"verify"` to `__all__`.
 
 **Step 5: Run tests to verify they pass**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_tools_verify.py -v`
+Run: `cd . && python -m pytest tests/test_tools_verify.py -v`
 Expected: All 7 tests PASS
 
 **Step 6: Run full test suite**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/ -v`
+Run: `cd . && python -m pytest tests/ -v`
 Expected: All tests PASS
 
 **Step 7: Commit**
 
 ```bash
-cd /Users/yadkonrad/dev_dev/year26/feb26/chimera
+cd .
 git add chimera/tools/verify.py chimera/tools/__init__.py tests/test_tools_verify.py
 git commit -m "feat: add VerifyTool for answer cross-checking"
 ```
@@ -629,7 +629,7 @@ class TestAIMOBenchmark:
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_bench_aimo.py -v`
+Run: `cd . && python -m pytest tests/test_bench_aimo.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'chimera.eval.benchmarks.aimo'`
 
 **Step 3: Write the implementation**
@@ -752,18 +752,18 @@ Add `"AIMOBenchmark"` to `__all__`.
 
 **Step 5: Run tests to verify they pass**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_bench_aimo.py -v`
+Run: `cd . && python -m pytest tests/test_bench_aimo.py -v`
 Expected: All 12 tests PASS
 
 **Step 6: Run full test suite**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/ -v`
+Run: `cd . && python -m pytest tests/ -v`
 Expected: All tests PASS
 
 **Step 7: Commit**
 
 ```bash
-cd /Users/yadkonrad/dev_dev/year26/feb26/chimera
+cd .
 git add chimera/eval/benchmarks/aimo.py chimera/eval/benchmarks/__init__.py tests/test_bench_aimo.py
 git commit -m "feat: add AIMOBenchmark for AIMO Progress Prize 3"
 ```
@@ -933,7 +933,7 @@ class TestMajorityVoting:
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_strategy_majority_voting.py -v`
+Run: `cd . && python -m pytest tests/test_strategy_majority_voting.py -v`
 Expected: FAIL — `ModuleNotFoundError`
 
 **Step 3: Write the implementation**
@@ -1088,18 +1088,18 @@ Add `MajorityVoting` to the strategies import block and `__all__`.
 
 **Step 6: Run tests to verify they pass**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_strategy_majority_voting.py -v`
+Run: `cd . && python -m pytest tests/test_strategy_majority_voting.py -v`
 Expected: All 8 tests PASS
 
 **Step 7: Run full test suite**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/ -v`
+Run: `cd . && python -m pytest tests/ -v`
 Expected: All tests PASS
 
 **Step 8: Commit**
 
 ```bash
-cd /Users/yadkonrad/dev_dev/year26/feb26/chimera
+cd .
 git add chimera/training/strategies/majority_voting.py chimera/training/strategies/__init__.py chimera/__init__.py tests/test_strategy_majority_voting.py
 git commit -m "feat: add MajorityVoting strategy for pass@N consensus"
 ```
@@ -1212,7 +1212,7 @@ class TestAIMOEnsemble:
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_strategy_aimo_ensemble.py -v`
+Run: `cd . && python -m pytest tests/test_strategy_aimo_ensemble.py -v`
 Expected: FAIL — `ModuleNotFoundError`
 
 **Step 3: Write the implementation**
@@ -1314,18 +1314,18 @@ Add `AIMOEnsemble` to the strategies import block and `__all__`.
 
 **Step 6: Run tests**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_strategy_aimo_ensemble.py -v`
+Run: `cd . && python -m pytest tests/test_strategy_aimo_ensemble.py -v`
 Expected: All 3 tests PASS
 
 **Step 7: Run full test suite**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/ -v`
+Run: `cd . && python -m pytest tests/ -v`
 Expected: All tests PASS
 
 **Step 8: Commit**
 
 ```bash
-cd /Users/yadkonrad/dev_dev/year26/feb26/chimera
+cd .
 git add chimera/training/strategies/aimo_ensemble.py chimera/training/strategies/__init__.py chimera/__init__.py tests/test_strategy_aimo_ensemble.py
 git commit -m "feat: add AIMOEnsemble strategy (voting + tree search fallback)"
 ```
@@ -1446,18 +1446,18 @@ class TestAIMOIntegration:
 
 **Step 2: Run integration test**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_aimo_integration.py -v`
+Run: `cd . && python -m pytest tests/test_aimo_integration.py -v`
 Expected: All 3 tests PASS
 
 **Step 3: Run full test suite**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/ -v`
+Run: `cd . && python -m pytest tests/ -v`
 Expected: All tests PASS
 
 **Step 4: Commit**
 
 ```bash
-cd /Users/yadkonrad/dev_dev/year26/feb26/chimera
+cd .
 git add tests/test_aimo_integration.py
 git commit -m "test: add AIMO3 end-to-end integration test"
 ```
@@ -1625,7 +1625,7 @@ provider = chimera.create_provider(
 **Step 3: Commit**
 
 ```bash
-cd /Users/yadkonrad/dev_dev/year26/feb26/chimera
+cd .
 git add chimera/notebooks/aimo3/notebook.py chimera/notebooks/aimo3/README.md
 git commit -m "feat: add AIMO3 Kaggle notebook template"
 ```

@@ -85,7 +85,7 @@ Empty files.
 
 **Step 4: Verify setup**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && pip install -e ".[dev]"`
+Run: `cd . && pip install -e ".[dev]"`
 Expected: Installs successfully
 
 Run: `python -c "import chimera; print(chimera.__version__)"`

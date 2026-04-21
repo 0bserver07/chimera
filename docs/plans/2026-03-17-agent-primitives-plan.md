@@ -8,7 +8,7 @@
 
 ## Method
 
-For each agent in `/Users/yadkonrad/dev_dev/year26/feb26/coding_agent_research/`:
+For each agent in `../coding_agent_research/`:
 
 1. **Decompose** — map the agent's architecture onto Chimera's 8 layers
 2. **Gap** — for each layer, what primitives are missing?

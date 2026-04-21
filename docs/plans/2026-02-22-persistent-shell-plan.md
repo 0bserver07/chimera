@@ -89,7 +89,7 @@ class TestSessionLifecycle:
 
 **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_env_session.py -v`
+Run: `cd . && python -m pytest tests/test_env_session.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'chimera.env.session'`
 
 **Step 3: Write minimal implementation**
@@ -164,13 +164,13 @@ class SessionMixin:
 
 **Step 4: Run tests to verify they pass**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_env_session.py -v`
+Run: `cd . && python -m pytest tests/test_env_session.py -v`
 Expected: 5 passed (or skipped if no tmux)
 
 **Step 5: Commit**
 
 ```bash
-cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && git add chimera/env/session.py tests/test_env_session.py && git commit -m "feat: add SessionMixin with tmux session lifecycle"
+cd . && git add chimera/env/session.py tests/test_env_session.py && git commit -m "feat: add SessionMixin with tmux session lifecycle"
 ```
 
 ---
@@ -223,7 +223,7 @@ class TestNamedShells:
 
 **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_env_session.py::TestNamedShells -v`
+Run: `cd . && python -m pytest tests/test_env_session.py::TestNamedShells -v`
 Expected: FAIL — `AttributeError: 'ConcreteSession' object has no attribute 'list_shells'`
 
 **Step 3: Write minimal implementation**
@@ -270,13 +270,13 @@ Add to `SessionMixin` in `chimera/env/session.py`:
 
 **Step 4: Run tests to verify they pass**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_env_session.py -v`
+Run: `cd . && python -m pytest tests/test_env_session.py -v`
 Expected: 9 passed
 
 **Step 5: Commit**
 
 ```bash
-cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && git add chimera/env/session.py tests/test_env_session.py && git commit -m "feat: add named shell management (create, list)"
+cd . && git add chimera/env/session.py tests/test_env_session.py && git commit -m "feat: add named shell management (create, list)"
 ```
 
 ---
@@ -382,7 +382,7 @@ class TestRunInSession:
 
 **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_env_session.py::TestRunInSession -v`
+Run: `cd . && python -m pytest tests/test_env_session.py::TestRunInSession -v`
 Expected: FAIL — `AttributeError: 'ConcreteSession' object has no attribute 'run_in_session'`
 
 **Step 3: Write minimal implementation**
@@ -511,13 +511,13 @@ Add to `SessionMixin` in `chimera/env/session.py` (add `import time` at the top)
 
 **Step 4: Run tests to verify they pass**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_env_session.py -v`
+Run: `cd . && python -m pytest tests/test_env_session.py -v`
 Expected: 17 passed
 
 **Step 5: Commit**
 
 ```bash
-cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && git add chimera/env/session.py tests/test_env_session.py && git commit -m "feat: add run_in_session with tmux output capture"
+cd . && git add chimera/env/session.py tests/test_env_session.py && git commit -m "feat: add run_in_session with tmux output capture"
 ```
 
 ---
@@ -544,7 +544,7 @@ def test_run_command_accepts_shell_name():
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_env.py::test_run_command_accepts_shell_name -v`
+Run: `cd . && python -m pytest tests/test_env.py::test_run_command_accepts_shell_name -v`
 Expected: FAIL — `AssertionError`
 
 **Step 3: Write minimal implementation**
@@ -584,13 +584,13 @@ And update `DockerEnvironment.run_command` in `chimera/env/docker.py` (line 109)
 
 **Step 4: Run tests to verify they pass**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_env.py tests/test_env_local.py tests/test_env_docker.py -v`
+Run: `cd . && python -m pytest tests/test_env.py tests/test_env_local.py tests/test_env_docker.py -v`
 Expected: All pass (backward compatible — default is "main")
 
 **Step 5: Commit**
 
 ```bash
-cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && git add chimera/env/base.py chimera/env/local.py chimera/env/docker.py tests/test_env.py && git commit -m "feat: add shell_name parameter to Environment.run_command"
+cd . && git add chimera/env/base.py chimera/env/local.py chimera/env/docker.py tests/test_env.py && git commit -m "feat: add shell_name parameter to Environment.run_command"
 ```
 
 ---
@@ -683,7 +683,7 @@ class TestLocalSessionIntegration:
 
 **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_env_session_integration.py -v`
+Run: `cd . && python -m pytest tests/test_env_session_integration.py -v`
 Expected: FAIL — `TypeError: LocalEnvironment.__init__() got an unexpected keyword argument 'session'`
 
 **Step 3: Write minimal implementation**
@@ -764,13 +764,13 @@ class LocalEnvironment(SessionMixin, Environment):
 
 **Step 4: Run tests to verify they pass**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_env_session_integration.py tests/test_env_local.py -v`
+Run: `cd . && python -m pytest tests/test_env_session_integration.py tests/test_env_local.py -v`
 Expected: All pass
 
 **Step 5: Commit**
 
 ```bash
-cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && git add chimera/env/local.py tests/test_env_session_integration.py && git commit -m "feat: integrate SessionMixin into LocalEnvironment"
+cd . && git add chimera/env/local.py tests/test_env_session_integration.py && git commit -m "feat: integrate SessionMixin into LocalEnvironment"
 ```
 
 ---
@@ -801,13 +801,13 @@ def test_git_env_has_session_attr():
 
 **Step 2: Run test to verify it passes (no implementation needed)**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_env_git.py -v`
+Run: `cd . && python -m pytest tests/test_env_git.py -v`
 Expected: All pass (including new test)
 
 **Step 3: Commit**
 
 ```bash
-cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && git add tests/test_env_git.py && git commit -m "test: verify GitEnvironment inherits session support"
+cd . && git add tests/test_env_git.py && git commit -m "test: verify GitEnvironment inherits session support"
 ```
 
 ---
@@ -833,7 +833,7 @@ def test_session_mixin_importable_from_chimera():
 
 **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_env.py::test_session_mixin_importable_from_package tests/test_env.py::test_session_mixin_importable_from_chimera -v`
+Run: `cd . && python -m pytest tests/test_env.py::test_session_mixin_importable_from_package tests/test_env.py::test_session_mixin_importable_from_chimera -v`
 Expected: FAIL — `ImportError`
 
 **Step 3: Write minimal implementation**
@@ -865,13 +865,13 @@ And add `"SessionMixin"` to the `__all__` list in the Environment section.
 
 **Step 4: Run tests to verify they pass**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_env.py -v`
+Run: `cd . && python -m pytest tests/test_env.py -v`
 Expected: All pass
 
 **Step 5: Commit**
 
 ```bash
-cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && git add chimera/env/__init__.py chimera/__init__.py tests/test_env.py && git commit -m "feat: export SessionMixin from env and chimera packages"
+cd . && git add chimera/env/__init__.py chimera/__init__.py tests/test_env.py && git commit -m "feat: export SessionMixin from env and chimera packages"
 ```
 
 ---
@@ -882,7 +882,7 @@ cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && git add chimera/env/__init__
 
 **Step 1: Run full test suite**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest -v --tb=short 2>&1 | tail -20`
+Run: `cd . && python -m pytest -v --tb=short 2>&1 | tail -20`
 Expected: 370+ passed (367 original + new session tests), 0 failed
 
 **Step 2: Commit if any fixes were needed**
@@ -924,5 +924,5 @@ Add Phase 14 section under Implementation Progress.
 **Step 3: Commit**
 
 ```bash
-cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && git add docs/task-status.md CONTEXT.md && git commit -m "docs: update progress for Phase 14 (persistent shell)"
+cd . && git add docs/task-status.md CONTEXT.md && git commit -m "docs: update progress for Phase 14 (persistent shell)"
 ```

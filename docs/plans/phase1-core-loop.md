@@ -69,7 +69,7 @@ def test_loop_result():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/core/test_loop_events.py -v`
+Run: `cd . && python -m pytest tests/core/test_loop_events.py -v`
 Expected: FAIL — module not found
 
 - [ ] **Step 3: Implement loop_events.py**
@@ -114,12 +114,12 @@ class LoopResult:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/core/test_loop_events.py -v`
+Run: `cd . && python -m pytest tests/core/test_loop_events.py -v`
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && git add chimera/core/loop_events.py tests/core/test_loop_events.py && git commit -m "feat(core): add LoopEvent protocol types"
+cd . && git add chimera/core/loop_events.py tests/core/test_loop_events.py && git commit -m "feat(core): add LoopEvent protocol types"
 ```
 
 ---
@@ -185,7 +185,7 @@ def test_abort_only_fires_once():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/core/test_abort.py -v`
+Run: `cd . && python -m pytest tests/core/test_abort.py -v`
 
 - [ ] **Step 3: Implement abort.py**
 
@@ -231,7 +231,7 @@ class AbortSignal:
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && git add chimera/core/abort.py tests/core/test_abort.py && git commit -m "feat(core): add AbortSignal with linked children"
+cd . && git add chimera/core/abort.py tests/core/test_abort.py && git commit -m "feat(core): add AbortSignal with linked children"
 ```
 
 ---
@@ -321,7 +321,7 @@ class LoopState:
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && git add chimera/core/loop_state.py tests/core/test_loop_state.py && git commit -m "feat(core): add LoopState and QuerySource"
+cd . && git add chimera/core/loop_state.py tests/core/test_loop_state.py && git commit -m "feat(core): add LoopState and QuerySource"
 ```
 
 ---
@@ -378,7 +378,7 @@ async def test_unknown_error_is_unrecoverable():
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && git add chimera/core/recovery.py tests/core/test_recovery.py && git commit -m "feat(core): add ErrorRecovery with multi-stage strategies"
+cd . && git add chimera/core/recovery.py tests/core/test_recovery.py && git commit -m "feat(core): add ErrorRecovery with multi-stage strategies"
 ```
 
 ---
@@ -439,12 +439,12 @@ Add to `chimera/core/tool.py` class `BaseTool`, after `requires_approval`:
 - [ ] **Step 4: Run test, verify pass**
 - [ ] **Step 5: Run full test suite to check nothing broke**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/ -x -q --timeout=30 2>&1 | tail -5`
+Run: `cd . && python -m pytest tests/ -x -q --timeout=30 2>&1 | tail -5`
 
 - [ ] **Step 6: Commit**
 
 ```bash
-cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && git add chimera/core/tool.py tests/core/test_tool_flags.py && git commit -m "feat(core): add concurrency and safety flags to BaseTool"
+cd . && git add chimera/core/tool.py tests/core/test_tool_flags.py && git commit -m "feat(core): add concurrency and safety flags to BaseTool"
 ```
 
 ---
@@ -519,7 +519,7 @@ async def test_discard_returns_error_results():
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && git add chimera/core/streaming_executor.py tests/core/test_streaming_executor.py && git commit -m "feat(core): add StreamingToolExecutor with concurrency control"
+cd . && git add chimera/core/streaming_executor.py tests/core/test_streaming_executor.py && git commit -m "feat(core): add StreamingToolExecutor with concurrency control"
 ```
 
 ---
@@ -549,7 +549,7 @@ def test_loop_deps_has_required_fields():
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && git add chimera/core/loop_deps.py tests/core/test_loop_deps.py && git commit -m "feat(core): add LoopDeps dependency injection"
+cd . && git add chimera/core/loop_deps.py tests/core/test_loop_deps.py && git commit -m "feat(core): add LoopDeps dependency injection"
 ```
 
 ---
@@ -653,7 +653,7 @@ async def test_max_turns_exit():
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && git add chimera/core/agent_loop.py tests/core/test_agent_loop.py && git commit -m "feat(core): add AgentLoop with AsyncGenerator protocol"
+cd . && git add chimera/core/agent_loop.py tests/core/test_agent_loop.py && git commit -m "feat(core): add AgentLoop with AsyncGenerator protocol"
 ```
 
 ---
@@ -691,13 +691,13 @@ Keep `ReAct.run()` and `ReAct.iter_steps()` working exactly as before. Add a new
 
 - [ ] **Step 3: Run full test suite**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/ -x -q --timeout=30 2>&1 | tail -10`
+Run: `cd . && python -m pytest tests/ -x -q --timeout=30 2>&1 | tail -10`
 Expected: All existing tests pass
 
 - [ ] **Step 4: Commit**
 
 ```bash
-cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && git add chimera/core/loop.py chimera/core/agent.py tests/core/test_react_compat.py && git commit -m "feat(core): wire ReAct to AgentLoop, backwards compatible"
+cd . && git add chimera/core/loop.py chimera/core/agent.py tests/core/test_react_compat.py && git commit -m "feat(core): wire ReAct to AgentLoop, backwards compatible"
 ```
 
 ---
@@ -765,5 +765,5 @@ async def test_abort_during_tool_execution():
 - [ ] **Step 4: Commit**
 
 ```bash
-cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && git add chimera/core/agent_loop.py tests/core/test_agent_loop_abort.py && git commit -m "feat(core): integrate AbortSignal into AgentLoop"
+cd . && git add chimera/core/agent_loop.py tests/core/test_agent_loop_abort.py && git commit -m "feat(core): integrate AbortSignal into AgentLoop"
 ```

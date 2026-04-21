@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.11+, zero required deps, optional extras (`anthropic`, `openai`, `google-generativeai`, `ollama`, `httpx`, `docker`). TDD throughout.
 
-**Reference codebase:** `/Users/yadkonrad/dev_dev/year26/feb26/UniClaudeProxy` — borrow converter patterns for providers.
+**Reference codebase:** `../UniClaudeProxy` — borrow converter patterns for providers.
 
 ---
 
@@ -95,7 +95,7 @@ class TestEditFileTool:
 
 **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_tools_edit.py -v`
+Run: `cd . && python -m pytest tests/test_tools_edit.py -v`
 Expected: FAIL (ImportError)
 
 **Step 3: Write minimal implementation**
@@ -156,7 +156,7 @@ edit_file = EditFileTool()
 
 **Step 5: Run tests to verify they pass**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_tools_edit.py -v`
+Run: `cd . && python -m pytest tests/test_tools_edit.py -v`
 Expected: 5 PASSED
 
 **Step 6: Commit**
@@ -236,7 +236,7 @@ class TestSearchTool:
 
 **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_tools_search.py -v`
+Run: `cd . && python -m pytest tests/test_tools_search.py -v`
 Expected: FAIL (ImportError)
 
 **Step 3: Write minimal implementation**
@@ -306,7 +306,7 @@ Add: `from chimera.tools.search import SearchTool`, `search = SearchTool()`, upd
 
 **Step 5: Run tests to verify they pass**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_tools_search.py -v`
+Run: `cd . && python -m pytest tests/test_tools_search.py -v`
 Expected: 5 PASSED
 
 **Step 6: Commit**
@@ -385,7 +385,7 @@ class TestListFilesTool:
 
 **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_tools_list_files.py -v`
+Run: `cd . && python -m pytest tests/test_tools_list_files.py -v`
 Expected: FAIL
 
 **Step 3: Write minimal implementation**
@@ -434,7 +434,7 @@ Add: `from chimera.tools.list_files import ListFilesTool`, `list_files = ListFil
 
 **Step 5: Run tests to verify they pass**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_tools_list_files.py -v`
+Run: `cd . && python -m pytest tests/test_tools_list_files.py -v`
 Expected: 5 PASSED
 
 **Step 6: Commit**
@@ -503,7 +503,7 @@ class TestTestTool:
 
 **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_tools_test.py -v`
+Run: `cd . && python -m pytest tests/test_tools_test.py -v`
 Expected: FAIL
 
 **Step 3: Write minimal implementation**
@@ -554,7 +554,7 @@ Add: `from chimera.tools.test import TestTool`, `test = TestTool()`, update `__a
 
 **Step 5: Run tests to verify they pass**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_tools_test.py -v`
+Run: `cd . && python -m pytest tests/test_tools_test.py -v`
 Expected: 4 PASSED
 
 **Step 6: Commit**
@@ -622,7 +622,7 @@ class TestWebFetchTool:
 
 **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_tools_web_fetch.py -v`
+Run: `cd . && python -m pytest tests/test_tools_web_fetch.py -v`
 Expected: FAIL
 
 **Step 3: Write minimal implementation**
@@ -680,7 +680,7 @@ Add: `from chimera.tools.web_fetch import WebFetchTool`, `web_fetch = WebFetchTo
 
 **Step 5: Run tests to verify they pass**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_tools_web_fetch.py -v`
+Run: `cd . && python -m pytest tests/test_tools_web_fetch.py -v`
 Expected: 4 PASSED
 
 **Step 6: Commit**
@@ -769,7 +769,7 @@ class TestGitTool:
 
 **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_tools_git.py -v`
+Run: `cd . && python -m pytest tests/test_tools_git.py -v`
 Expected: FAIL
 
 **Step 3: Write minimal implementation**
@@ -827,7 +827,7 @@ Add: `from chimera.tools.git import GitTool`, `git = GitTool()`, update `__all__
 
 **Step 5: Run tests to verify they pass**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_tools_git.py -v`
+Run: `cd . && python -m pytest tests/test_tools_git.py -v`
 Expected: 6 PASSED
 
 **Step 6: Commit**
@@ -921,7 +921,7 @@ class TestReplaceInFileTool:
 
 **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_tools_replace.py -v`
+Run: `cd . && python -m pytest tests/test_tools_replace.py -v`
 Expected: FAIL
 
 **Step 3: Write minimal implementation**
@@ -976,7 +976,7 @@ Add: `from chimera.tools.replace_in_file import ReplaceInFileTool`, `replace_in_
 
 **Step 5: Run tests to verify they pass**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_tools_replace.py -v`
+Run: `cd . && python -m pytest tests/test_tools_replace.py -v`
 Expected: 5 PASSED
 
 **Step 6: Commit**
@@ -1068,7 +1068,7 @@ class TestToolApprovalFlag:
 
 **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_approval.py -v`
+Run: `cd . && python -m pytest tests/test_approval.py -v`
 Expected: FAIL
 
 **Step 3: Write implementation**
@@ -1130,7 +1130,7 @@ Add: `from chimera.core.approval import ApprovalPolicy, AutoApprove, AlwaysDeny,
 
 **Step 6: Run tests to verify they pass**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_approval.py -v`
+Run: `cd . && python -m pytest tests/test_approval.py -v`
 Expected: 7 PASSED
 
 **Step 7: Commit**
@@ -1195,7 +1195,7 @@ class TestToolGroup:
 
 **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_tool_group.py -v`
+Run: `cd . && python -m pytest tests/test_tool_group.py -v`
 Expected: FAIL
 
 **Step 3: Write minimal implementation**
@@ -1249,7 +1249,7 @@ Add: `from chimera.core.tool_group import ToolGroup, DEFAULT_TOOLS`, update `__a
 
 **Step 5: Run tests to verify they pass**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_tool_group.py -v`
+Run: `cd . && python -m pytest tests/test_tool_group.py -v`
 Expected: 6 PASSED
 
 **Step 6: Commit**
@@ -1332,7 +1332,7 @@ class TestDelegateTool:
 
 **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_tools_delegate.py -v`
+Run: `cd . && python -m pytest tests/test_tools_delegate.py -v`
 Expected: FAIL
 
 **Step 3: Write minimal implementation**
@@ -1379,7 +1379,7 @@ Add: `from chimera.tools.delegate import DelegateTool`, update `__all__`.
 
 **Step 5: Run tests to verify they pass**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_tools_delegate.py -v`
+Run: `cd . && python -m pytest tests/test_tools_delegate.py -v`
 Expected: 3 PASSED
 
 **Step 6: Commit**
@@ -1453,7 +1453,7 @@ class TestLoopDetector:
 
 **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_loop_detection.py -v`
+Run: `cd . && python -m pytest tests/test_loop_detection.py -v`
 Expected: FAIL
 
 **Step 3: Write minimal implementation**
@@ -1530,7 +1530,7 @@ Add: `from chimera.core.loop_detection import LoopDetector`, update `__all__`.
 
 **Step 5: Run tests to verify they pass**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_loop_detection.py -v`
+Run: `cd . && python -m pytest tests/test_loop_detection.py -v`
 Expected: 6 PASSED
 
 **Step 6: Commit**
@@ -1600,7 +1600,7 @@ class TestContextCompressor:
 
 **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_compression.py -v`
+Run: `cd . && python -m pytest tests/test_compression.py -v`
 Expected: FAIL
 
 **Step 3: Write minimal implementation**
@@ -1674,7 +1674,7 @@ Add: `from chimera.core.compression import ContextCompressor`, update `__all__`.
 
 **Step 5: Run tests to verify they pass**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_compression.py -v`
+Run: `cd . && python -m pytest tests/test_compression.py -v`
 Expected: 5 PASSED
 
 **Step 6: Commit**
@@ -1748,7 +1748,7 @@ class TestStreamHandler:
 
 **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_streaming.py -v`
+Run: `cd . && python -m pytest tests/test_streaming.py -v`
 Expected: FAIL
 
 **Step 3: Write minimal implementation**
@@ -1844,7 +1844,7 @@ Add: `from chimera.core.streaming import StreamHandler, PrintStreamHandler, Coll
 
 **Step 5: Run tests to verify they pass**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_streaming.py -v`
+Run: `cd . && python -m pytest tests/test_streaming.py -v`
 Expected: 4 PASSED
 
 **Step 6: Commit**
@@ -1865,7 +1865,7 @@ git commit -m "feat: add streaming handlers (Print, Collect, base StreamHandler)
 - Modify: `chimera/providers/__init__.py`
 - Test: `tests/test_provider_openai.py`
 
-**Reference:** Borrow conversion patterns from UniClaudeProxy at `/Users/yadkonrad/dev_dev/year26/feb26/UniClaudeProxy/app/converters/`.
+**Reference:** Borrow conversion patterns from UniClaudeProxy at `../UniClaudeProxy/app/converters/`.
 
 **Step 1: Write the failing tests**
 
@@ -1967,7 +1967,7 @@ def test_model_name(provider):
 
 **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_provider_openai.py -v`
+Run: `cd . && python -m pytest tests/test_provider_openai.py -v`
 Expected: FAIL
 
 **Step 3: Write implementation**
@@ -2132,7 +2132,7 @@ Actually, follow same pattern as anthropic — just add the import. Users who do
 
 **Step 5: Run tests to verify they pass**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_provider_openai.py -v`
+Run: `cd . && python -m pytest tests/test_provider_openai.py -v`
 Expected: 5 PASSED
 
 **Step 6: Commit**
@@ -2236,7 +2236,7 @@ def test_model_name(provider):
 
 **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_provider_google.py -v`
+Run: `cd . && python -m pytest tests/test_provider_google.py -v`
 Expected: FAIL
 
 **Step 3: Write implementation**
@@ -2390,7 +2390,7 @@ class GoogleProvider(Provider):
 
 **Step 5: Run tests to verify they pass**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_provider_google.py -v`
+Run: `cd . && python -m pytest tests/test_provider_google.py -v`
 Expected: 4 PASSED
 
 **Step 6: Commit**
@@ -2483,7 +2483,7 @@ def test_model_name(provider):
 
 **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_provider_ollama.py -v`
+Run: `cd . && python -m pytest tests/test_provider_ollama.py -v`
 Expected: FAIL
 
 **Step 3: Write implementation**
@@ -2627,7 +2627,7 @@ class OllamaProvider(Provider):
 
 **Step 4: Run tests to verify they pass**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_provider_ollama.py -v`
+Run: `cd . && python -m pytest tests/test_provider_ollama.py -v`
 Expected: 4 PASSED
 
 **Step 5: Commit**
@@ -2739,7 +2739,7 @@ def test_model_name(provider):
 
 **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_provider_compatible.py -v`
+Run: `cd . && python -m pytest tests/test_provider_compatible.py -v`
 Expected: FAIL
 
 **Step 3: Write implementation**
@@ -2893,7 +2893,7 @@ class OpenAICompatibleProvider(Provider):
 
 **Step 4: Run tests to verify they pass**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_provider_compatible.py -v`
+Run: `cd . && python -m pytest tests/test_provider_compatible.py -v`
 Expected: 4 PASSED
 
 **Step 5: Commit**
@@ -2970,7 +2970,7 @@ def test_create_from_model_string():
 
 **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_provider_factory.py -v`
+Run: `cd . && python -m pytest tests/test_provider_factory.py -v`
 Expected: FAIL
 
 **Step 3: Write implementation**
@@ -3064,7 +3064,7 @@ Add: `from chimera.providers.factory import create_provider`, update `__all__`.
 
 **Step 5: Run tests to verify they pass**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_provider_factory.py -v`
+Run: `cd . && python -m pytest tests/test_provider_factory.py -v`
 Expected: 7 PASSED
 
 **Step 6: Commit**
@@ -3170,7 +3170,7 @@ class TestPipeline:
 
 **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_composition_pipeline.py -v`
+Run: `cd . && python -m pytest tests/test_composition_pipeline.py -v`
 Expected: FAIL
 
 **Step 3: Write implementation**
@@ -3230,7 +3230,7 @@ class Pipeline:
 
 **Step 4: Run tests to verify they pass**
 
-Run: `cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && python -m pytest tests/test_composition_pipeline.py -v`
+Run: `cd . && python -m pytest tests/test_composition_pipeline.py -v`
 Expected: 3 PASSED
 
 **Step 5: Commit**

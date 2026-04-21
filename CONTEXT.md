@@ -194,7 +194,7 @@ results = harness.run(agent=MyAgent())
 - [x] Exported from chimera and chimera.training.strategies packages
 - [x] 19 tests passing
 
-## Test Count: 448 passing (all 18 phases complete)
+## Test Count: 3953 passing (v0.3.0)
 
 ## Key Files
 
@@ -202,7 +202,6 @@ results = harness.run(agent=MyAgent())
 - Implementation plan (phases 1-8): `docs/plans/2026-02-20-chimera-implementation-plan.md`
 - Extension plan (phases 9-13): `docs/plans/2026-02-20-chimera-extension-plan.md`
 - Persistent shell plan (phase 14): `docs/plans/2026-02-22-persistent-shell-plan.md`
-- Task status: `docs/task-status.md`
 - This file: `CONTEXT.md`
 
 ## Ideas Ported From
@@ -219,10 +218,3 @@ results = harness.run(agent=MyAgent())
 | Framework design | Layer/Model/compile/fit paradigm, callbacks, zero-dep core |
 | ML theory | Anti-overfitting, codebase as trained model, spec as loss function |
 
-## Related Projects (same workspace)
-
-- `/Users/yadkonrad/dev_dev/year26/feb26/NovalisCode` -- AI coding assistant (existing)
-- `/Users/yadkonrad/dev_dev/year26/feb26/NovalisGraph` -- Graph framework (existing, was KayGraph)
-- `/Users/yadkonrad/dev_dev/year26/feb26/pi-projects` -- Pi coding agent (reference)
-- `/Users/yadkonrad/dev_dev/year26/feb26/opencode` -- OpenCode agent (reference)
-- `/Users/yadkonrad/dev_dev/year25/nov25/coding-agents` -- Collection of 30+ coding agents (reference)

@@ -309,5 +309,5 @@ async def test_full_stack_agent_run():
 - [ ] **Step 4: Final commit**
 
 ```bash
-cd /Users/yadkonrad/dev_dev/year26/feb26/chimera && git add -A && git commit -m "feat: Phase 8 complete — all Claude Code architecture layers implemented"
+cd . && git add -A && git commit -m "feat: Phase 8 complete — all Claude Code architecture layers implemented"
 ```
