@@ -121,6 +121,11 @@ def _infer_provider(model: str) -> str:
         return "openai"
     if model_lower.startswith("gemini"):
         return "google"
+    if model_lower.startswith("glm"):
+        # GLM (e.g. GLM-5 via api.z.ai) uses the Anthropic-compatible wire
+        # protocol. Users configure the endpoint via ANTHROPIC_BASE_URL /
+        # ANTHROPIC_AUTH_TOKEN, which AnthropicProvider honors automatically.
+        return "anthropic"
     if model_lower.startswith(("llama", "mistral", "qwen", "phi")):
         return "ollama"
 
