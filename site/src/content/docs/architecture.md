@@ -190,7 +190,7 @@ graph TD
 
 **Layer 7: Workflows** — Thin glue composing Agent.run() with domain-specific parsing and prompting. CIFixWorkflow parses CI logs and retries fixes. ReviewOrchestrator runs reviewer and author agent loop. Researcher does plan decomposition and synthesis. MigrationPlanner applies rule-based transforms with presets (python2-to-3, commonjs-to-esm). DocGenerator scans AST for documentation generation. TestGenerator creates test skeletons from source analysis.
 
-**Layer 8: CLI** — Command-line interface exposing 11 subcommands: synthesize, eval, bench, code (interactive REPL), review, ci-fix, research, docs, testgen, migrate, and plugins. The `code` subcommand provides an interactive REPL with 16 slash commands for agent interaction.
+**Layer 8: CLI** — Command-line interface exposing 11 subcommands: synthesize, eval, bench, code (interactive REPL), review, ci-fix, research, docs, testgen, migrate, and plugins. The `code` subcommand provides an interactive REPL with 19 slash commands for agent interaction.
 
 ### Using Each Layer
 

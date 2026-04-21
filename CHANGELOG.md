@@ -77,7 +77,7 @@
 - `LocalCompiler` → `TransformersBackend` chain exercised end-to-end
 
 ### Stats
-- Tests: 3574 → 3879 (+305)
+- Tests: 3574 → 3953 (+379)
 - 0 mypy errors, 0 ruff errors
 
 ## 0.2.0 (2026-04-16) — Function Synthesis Subsystem

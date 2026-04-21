@@ -3,7 +3,7 @@ title: "CLI & REPL"
 description: "CLI & REPL"
 ---
 
-Chimera's command-line interface provides 11 subcommands for code synthesis, evaluation, interactive coding, code review, CI fixing, and more. The `chimera code` subcommand launches an interactive REPL with 16 slash commands for session management, debugging, and agent control.
+Chimera's command-line interface provides 11 subcommands for code synthesis, evaluation, interactive coding, code review, CI fixing, and more. The `chimera code` subcommand launches an interactive REPL with 19 slash commands for session management, debugging, and agent control.
 
 ## Quick Start
 

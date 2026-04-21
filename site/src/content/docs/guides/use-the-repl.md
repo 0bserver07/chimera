@@ -94,6 +94,14 @@ All commands start with `/` and support tab completion.
 | `/session list` | Show session management options. |
 | `/session fork` | Fork the session (branch the conversation). |
 
+### Branching (SessionTree)
+
+| Command | Description |
+|---------|-------------|
+| `/tree` | Display the full session branch tree. |
+| `/branch [name]` | Create a new named branch from the current point. |
+| `/switch <name>` | Switch to an existing branch. |
+
 ### Checkpoints
 
 | Command | Description |
