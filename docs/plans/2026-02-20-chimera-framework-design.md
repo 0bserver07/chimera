@@ -469,7 +469,7 @@ chimera/
 
 ```toml
 [project]
-name = "chimera-ai"
+name = "chimera-run"
 dependencies = []  # Zero required deps
 
 [project.optional-dependencies]
@@ -477,7 +477,7 @@ anthropic = ["anthropic>=0.40"]
 openai = ["openai>=1.50"]
 google = ["google-genai>=1.0"]
 docker = ["docker>=7.0"]
-all = ["chimera-ai[anthropic,openai,google,docker]"]
+all = ["chimera-run[anthropic,openai,google,docker]"]
 ```
 
 ---

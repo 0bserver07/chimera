@@ -34,9 +34,9 @@ Chimera connects to Claude Code through four integration points:
 ### Step 1: Install Chimera
 
 ```bash
-pip install chimera-ai
+pip install chimera-run
 # or with uv
-uv pip install chimera-ai
+uv pip install chimera-run
 ```
 
 Verify the installation:

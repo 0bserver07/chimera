@@ -25,10 +25,10 @@ Chimera gives you two things:
 ## Install
 
 ```bash
-pip install chimera-ai[anthropic]   # Claude
-pip install chimera-ai[openai]      # GPT
-pip install chimera-ai[google]      # Gemini
-pip install chimera-ai[all]         # everything
+pip install chimera-run[anthropic]   # Claude
+pip install chimera-run[openai]      # GPT
+pip install chimera-run[google]      # Gemini
+pip install chimera-run[all]         # everything
 ```
 
 Requires Python 3.11+.

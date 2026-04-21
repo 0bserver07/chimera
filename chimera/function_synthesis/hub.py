@@ -207,7 +207,7 @@ class HubAdapter(ABC):
 
 _HF_HUB_INSTALL_HINT = (
     "HFHubAdapter requires huggingface_hub. "
-    "Install with: pip install 'chimera-ai[function_synthesis]'"
+    "Install with: pip install 'chimera-run[function_synthesis]'"
 )
 
 
@@ -327,7 +327,7 @@ class HFHubAdapter(HubAdapter):
 
 _S3_INSTALL_HINT = (
     "S3HubAdapter requires boto3. "
-    "Install with: pip install 'chimera-ai[function_synthesis_s3]'"
+    "Install with: pip install 'chimera-run[function_synthesis_s3]'"
 )
 
 

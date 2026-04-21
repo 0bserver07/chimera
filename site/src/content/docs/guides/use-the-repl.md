@@ -11,7 +11,7 @@ you a conversational agent with full tool access.
 ## Prerequisites
 
 ```bash
-pip install chimera-ai[anthropic]
+pip install chimera-run[anthropic]
 export ANTHROPIC_API_KEY="sk-ant-..."
 ```
 

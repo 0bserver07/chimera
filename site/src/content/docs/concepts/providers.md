@@ -99,11 +99,11 @@ If no prefix matches, it falls back to checking environment variables (`ANTHROPI
 
 | Provider | Class | Install extra | Model examples |
 |----------|-------|---------------|----------------|
-| Anthropic | `AnthropicProvider` | `chimera-ai[anthropic]` | `claude-opus-4`, `claude-sonnet-4`, `claude-haiku-3.5` |
-| OpenAI | `OpenAIProvider` | `chimera-ai[openai]` | `gpt-4o`, `gpt-4o-mini`, `o1`, `o3-mini` |
-| Google Gemini | `GoogleProvider` | `chimera-ai[google]` | `gemini-2.0-flash`, `gemini-1.5-pro` |
+| Anthropic | `AnthropicProvider` | `chimera-run[anthropic]` | `claude-opus-4`, `claude-sonnet-4`, `claude-haiku-3.5` |
+| OpenAI | `OpenAIProvider` | `chimera-run[openai]` | `gpt-4o`, `gpt-4o-mini`, `o1`, `o3-mini` |
+| Google Gemini | `GoogleProvider` | `chimera-run[google]` | `gemini-2.0-flash`, `gemini-1.5-pro` |
 | Ollama | `OllamaProvider` | (none) | `llama3.1`, `mistral`, `qwen2.5` |
-| Modal | `ModalProvider` | `chimera-ai[modal]` | Any model deployed on Modal |
+| Modal | `ModalProvider` | `chimera-run[modal]` | Any model deployed on Modal |
 | OpenAI-compatible | `OpenAICompatibleProvider` | (none) | Any model behind an OpenAI-compatible API |
 
 ## Environment Variable Configuration

@@ -10,7 +10,7 @@ description: "Connect External Agents via ACP"
 ## Prerequisites
 
 - An external agent that speaks JSON-RPC 2.0 over stdio (e.g. `npx -y claude-code-acp`)
-- Chimera installed (`pip install chimera-ai`)
+- Chimera installed (`pip install chimera-run`)
 
 ---
 

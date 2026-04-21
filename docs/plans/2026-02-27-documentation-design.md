@@ -100,7 +100,7 @@ New `docs` optional dependency group:
 - mkdocstrings[python]
 - mkdocs-mermaid2-plugin
 
-Install: `pip install chimera-ai[docs]`
+Install: `pip install chimera-run[docs]`
 
 ### CLAUDE.md
 - Project description and philosophy

@@ -60,7 +60,7 @@ results = harness.run(agent=MyAgent())
 ## Implementation Progress
 
 ### Phase 1: Project Scaffold + Core Types -- DONE
-- [x] pyproject.toml (chimera-ai, zero deps)
+- [x] pyproject.toml (chimera-run, zero deps)
 - [x] chimera/types.py (Message, ToolCall, ToolResult, CommandResult, TestResult, StepResult, AgentResult)
 - [x] 11 tests passing
 

@@ -159,7 +159,7 @@ graph LR
 ```
 
 **Setup section must include:**
-1. Prerequisites: `pip install chimera-ai` (or `uv pip install chimera-ai`)
+1. Prerequisites: `pip install chimera-run` (or `uv pip install chimera-run`)
 2. Plugin install (copy `chimera-plugin/` to `~/.claude/plugins/chimera/` or symlink)
 3. MCP server configuration — full `.mcp.json` with all 6 servers
 4. Hooks configuration — full `hooks.json` (or show how the plugin's hooks.json works)
@@ -685,7 +685,7 @@ Update the plugin.json to include proper metadata and point to the playbooks:
   "description": "Composable coding agent primitives — codebase search, code review, test generation, migration planning, context management, benchmarking",
   "author": "Chimera Contributors",
   "license": "MIT",
-  "homepage": "https://github.com/chimera-ai/chimera",
+  "homepage": "https://github.com/chimera-run/chimera",
   "keywords": ["coding-agent", "code-review", "test-generation", "search", "migration"]
 }
 ```

@@ -39,7 +39,7 @@ class OpenAIProvider(Provider):
         auth_manager: AuthManager | None = None,
     ) -> None:
         if openai is None:
-            raise ImportError("pip install chimera-ai[openai]")
+            raise ImportError("pip install chimera-run[openai]")
         self._model = model
 
         resolved_key = api_key

@@ -2009,7 +2009,7 @@ class OpenAIProvider(Provider):
         base_url: str | None = None,
     ) -> None:
         if openai is None:
-            raise ImportError("pip install chimera-ai[openai]")
+            raise ImportError("pip install chimera-run[openai]")
         self._model = model
         self._client = openai.OpenAI(
             api_key=api_key or os.environ.get("OPENAI_API_KEY"),
@@ -2269,7 +2269,7 @@ class GoogleProvider(Provider):
 
     def __init__(self, model: str, api_key: str | None = None) -> None:
         if genai is None:
-            raise ImportError("pip install chimera-ai[google]")
+            raise ImportError("pip install chimera-run[google]")
         genai.configure(api_key=api_key or os.environ.get("GOOGLE_API_KEY"))
         self._model_name = model
         self._model = genai.GenerativeModel(model)

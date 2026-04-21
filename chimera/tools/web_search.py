@@ -16,7 +16,7 @@ except ImportError:
 
 _DDG_URL = "https://html.duckduckgo.com/html/"
 _HEADERS = {
-    "User-Agent": "Mozilla/5.0 (compatible; Chimera/0.1; +https://github.com/chimera-ai)",
+    "User-Agent": "Mozilla/5.0 (compatible; Chimera/0.1; +https://github.com/chimera-run)",
 }
 
 

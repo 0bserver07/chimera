@@ -6,10 +6,10 @@ description: "Getting Started"
 ## Install
 
 ```bash
-pip install chimera-ai                  # core (zero dependencies)
-pip install chimera-ai[anthropic]       # + Claude support
-pip install chimera-ai[openai]          # + OpenAI support
-pip install chimera-ai[all]             # all providers
+pip install chimera-run                  # core (zero dependencies)
+pip install chimera-run[anthropic]       # + Claude support
+pip install chimera-run[openai]          # + OpenAI support
+pip install chimera-run[all]             # all providers
 ```
 
 Requires **Python 3.11+**.

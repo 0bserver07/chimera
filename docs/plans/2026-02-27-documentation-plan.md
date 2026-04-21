@@ -28,7 +28,7 @@ docs = [
 ]
 ```
 
-Also update the `all` line to: `all = ["chimera-ai[anthropic,openai]"]` (unchanged).
+Also update the `all` line to: `all = ["chimera-run[anthropic,openai]"]` (unchanged).
 
 **Step 2: Create mkdocs.yml**
 
@@ -335,10 +335,10 @@ Chimera is a Python framework that treats code synthesis as machine learning. Wr
 ## Install
 
 ```bash
-pip install chimera-ai                  # core (zero dependencies)
-pip install chimera-ai[anthropic]       # + Claude support
-pip install chimera-ai[openai]          # + OpenAI support
-pip install chimera-ai[all]             # all providers
+pip install chimera-run                  # core (zero dependencies)
+pip install chimera-run[anthropic]       # + Claude support
+pip install chimera-run[openai]          # + OpenAI support
+pip install chimera-run[all]             # all providers
 ```
 
 Requires Python 3.11+.

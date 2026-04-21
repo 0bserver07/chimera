@@ -11,7 +11,7 @@ description: "Automate CI Fixes"
 
 - A CI log file (pytest, jest, go test, or cargo test output)
 - An API key for your LLM provider (e.g. `ANTHROPIC_API_KEY`)
-- Chimera installed (`pip install chimera-ai`)
+- Chimera installed (`pip install chimera-run`)
 
 ---
 

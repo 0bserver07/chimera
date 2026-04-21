@@ -30,7 +30,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "chimera-ai"
+name = "chimera-run"
 dynamic = ["version"]
 description = "A composable coding agent framework. Synthesize codebases from specifications."
 readme = "README.md"
@@ -47,7 +47,7 @@ classifiers = [
 [project.optional-dependencies]
 anthropic = ["anthropic>=0.40"]
 openai = ["openai>=1.50"]
-all = ["chimera-ai[anthropic,openai]"]
+all = ["chimera-run[anthropic,openai]"]
 dev = ["pytest>=8.0", "ruff>=0.4", "mypy>=1.10"]
 
 [project.scripts]
@@ -928,7 +928,7 @@ class AnthropicProvider(Provider):
 
     def __init__(self, model: str, api_key: str | None = None) -> None:
         if anthropic is None:
-            raise ImportError("pip install chimera-ai[anthropic]")
+            raise ImportError("pip install chimera-run[anthropic]")
         self._model = model
         self._client = anthropic.Anthropic(api_key=api_key or os.environ.get("ANTHROPIC_API_KEY"))
 

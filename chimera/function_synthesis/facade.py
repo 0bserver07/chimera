@@ -309,7 +309,7 @@ def _build_transformers_backend(
         raise ImportError(
             "TransformersBackend requires the optional dependency group "
             "'function_synthesis_transformers'. Install with: "
-            "pip install 'chimera-ai[function_synthesis_transformers]' "
+            "pip install 'chimera-run[function_synthesis_transformers]' "
             "(or: pip install transformers peft torch safetensors)."
         ) from exc
     resolved = base_model or bundle.base_model
@@ -342,7 +342,7 @@ def _build_llama_cpp_backend(
     except ImportError as exc:
         raise ImportError(
             "LlamaCppBackend requires llama-cpp-python. "
-            "Install with: pip install 'chimera-ai[function_synthesis]' "
+            "Install with: pip install 'chimera-run[function_synthesis]' "
             "(or: pip install llama-cpp-python)."
         ) from exc
     resolved = (

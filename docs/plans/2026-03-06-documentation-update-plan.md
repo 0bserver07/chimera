@@ -500,7 +500,7 @@ Structure:
   | `/checkpoint` | Create/restore checkpoints |
   | `/agent` | Switch agent preset |
   | `/exit` | Exit REPL |
-- Quick start: `pip install chimera-ai[anthropic] && chimera code`
+- Quick start: `pip install chimera-run[anthropic] && chimera code`
 
 **Step 2: Write docs/reference/cli.md**
 
@@ -571,7 +571,7 @@ git commit -m "docs: add workflows section with 6 workflow pages"
 
 Sections:
 1. **Goal**: Get productive with `chimera code` interactive REPL
-2. **Prerequisites**: `pip install chimera-ai[anthropic]`, API key set
+2. **Prerequisites**: `pip install chimera-run[anthropic]`, API key set
 3. **Start the REPL**: `chimera code --model claude-sonnet-4 --workdir ./my-project`
 4. **Slash commands walkthrough**: /model, /cost, /tools, /context, /clear, /history, /debug
 5. **Session management**: /session save, /session load, resume conversations

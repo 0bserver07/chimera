@@ -37,7 +37,7 @@ class AnthropicProvider(Provider):
         auth_manager: AuthManager | None = None,
     ) -> None:
         if anthropic is None:
-            raise ImportError("pip install chimera-ai[anthropic]")
+            raise ImportError("pip install chimera-run[anthropic]")
         self._model = model
         self._enable_cache = enable_cache
         self._enable_thinking = enable_thinking

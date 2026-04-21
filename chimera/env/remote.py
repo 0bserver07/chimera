@@ -38,7 +38,7 @@ class RemoteEnvironment(Environment):
         if httpx is None:
             raise ImportError(
                 "httpx is required for RemoteEnvironment. Install it with: "
-                "pip install 'chimera-ai[remote]'"
+                "pip install 'chimera-run[remote]'"
             )
         self._host = host
         self._port = port

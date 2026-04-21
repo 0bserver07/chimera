@@ -33,7 +33,7 @@ class GoogleProvider(Provider):
         auth_manager: AuthManager | None = None,
     ) -> None:
         if genai is None:
-            raise ImportError("pip install chimera-ai[google]")
+            raise ImportError("pip install chimera-run[google]")
 
         resolved_key = api_key
         if resolved_key is None and auth_manager is not None:

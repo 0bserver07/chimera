@@ -48,7 +48,7 @@ class CloudEnvironment(RemoteEnvironment):
         if httpx is None:
             raise ImportError(
                 "httpx is required for CloudEnvironment. Install it with: "
-                "pip install 'chimera-ai[remote]'"
+                "pip install 'chimera-run[remote]'"
             )
         self._cloud_api_url = cloud_api_url.rstrip("/")
         self._cloud_api_key = cloud_api_key

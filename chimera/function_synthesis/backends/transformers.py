@@ -28,7 +28,7 @@ from chimera.function_synthesis.runtime import RuntimeBackend
 _MISSING_DEP_MSG = (
     "TransformersBackend requires the optional dependency group "
     "'function_synthesis_transformers'. Install with: "
-    "pip install 'chimera-ai[function_synthesis_transformers]' "
+    "pip install 'chimera-run[function_synthesis_transformers]' "
     "(or: pip install transformers peft torch safetensors)."
 )
 

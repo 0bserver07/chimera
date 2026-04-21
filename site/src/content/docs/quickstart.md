@@ -6,17 +6,17 @@ description: "Get Chimera running in 5 minutes"
 ## Install
 
 ```bash
-pip install chimera-ai
+pip install chimera-run
 # or with uv
-uv add chimera-ai
+uv add chimera-run
 ```
 
 For provider-specific extras:
 
 ```bash
-pip install chimera-ai[anthropic]  # Claude
-pip install chimera-ai[openai]     # GPT
-pip install chimera-ai[google]     # Gemini
+pip install chimera-run[anthropic]  # Claude
+pip install chimera-run[openai]     # GPT
+pip install chimera-run[google]     # Gemini
 ```
 
 ## Set up credentials

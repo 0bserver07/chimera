@@ -41,7 +41,7 @@ from chimera.function_synthesis.runtime import RuntimeBackend
 _MISSING_DEP_MSG = (
     "OnnxBackend requires the optional dependency group "
     "'function_synthesis_onnx'. Install with: "
-    "pip install 'chimera-ai[function_synthesis_onnx]' "
+    "pip install 'chimera-run[function_synthesis_onnx]' "
     "(or: pip install onnxruntime 'optimum[onnxruntime]' transformers)."
 )
 
@@ -138,7 +138,7 @@ class OnnxBackend(RuntimeBackend):
             raise ImportError(
                 "OnnxBackend.load(peft_bundle) additionally requires "
                 "transformers + peft + torch. Install with: "
-                "pip install 'chimera-ai[function_synthesis_onnx,"
+                "pip install 'chimera-run[function_synthesis_onnx,"
                 "function_synthesis_transformers]'."
             ) from exc
         return AutoModelForCausalLM, AutoTokenizer, PeftModel
