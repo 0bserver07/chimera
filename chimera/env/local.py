@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import subprocess
@@ -26,6 +27,35 @@ class LocalEnvironment(SessionMixin, Environment):
         self._checkpoint_dir: Path | None = None
         self._use_session = session
 
+    def _contain(self, path: str) -> Path:
+        """Resolve ``path`` relative to workdir and ensure it stays inside.
+
+        Blocks:
+          * absolute paths outside workdir (``/etc/passwd`` replaces the
+            left operand in ``Path(workdir) / "/etc/passwd"``),
+          * ``..`` traversal (``../../id_rsa``),
+          * symlinks pointing outside workdir (``resolve()`` follows them
+            so ``relative_to`` catches the escape).
+
+        Args:
+            path: Path supplied by the caller (user or LLM). Absolute paths
+                that resolve inside ``self.workdir`` are allowed.
+
+        Returns:
+            The resolved absolute ``Path`` guaranteed to live under
+            ``self.workdir``.
+
+        Raises:
+            PermissionError: If the resolved path escapes ``self.workdir``.
+        """
+        candidate = (self.workdir / path).resolve()
+        workdir_resolved = self.workdir.resolve()
+        try:
+            candidate.relative_to(workdir_resolved)
+        except ValueError as exc:
+            raise PermissionError(f"Path escapes workdir: {path}") from exc
+        return candidate
+
     def setup(self) -> None:
         self.workdir.mkdir(parents=True, exist_ok=True)
         self._checkpoint_dir = self.workdir / ".chimera_checkpoints"
@@ -38,13 +68,13 @@ class LocalEnvironment(SessionMixin, Environment):
             self.end_session()
 
     def read_file(self, path: str) -> str:
-        full = self.workdir / path
+        full = self._contain(path)
         if not full.exists():
             raise FileNotFoundError(f"File not found: {path}")
         return full.read_text()
 
     def write_file(self, path: str, content: str) -> None:
-        full = self.workdir / path
+        full = self._contain(path)
         full.parent.mkdir(parents=True, exist_ok=True)
         full.write_text(content)
 
@@ -101,6 +131,16 @@ class LocalEnvironment(SessionMixin, Environment):
         cp_dir = self._checkpoint_dir / checkpoint_id
         if not cp_dir.exists():
             raise ValueError(f"Checkpoint {checkpoint_id} not found")
+
+        # Refuse to wipe obviously-dangerous workdirs. ``restore`` issues
+        # ``shutil.rmtree`` against every top-level entry, so a misconfigured
+        # workdir at ``/`` or the user's home directory would be catastrophic.
+        resolved = self.workdir.resolve()
+        forbidden = {Path("/").resolve(), Path(os.path.expanduser("~")).resolve()}
+        if resolved in forbidden:
+            raise PermissionError(
+                f"Refusing to restore: workdir {resolved} is root or HOME"
+            )
 
         # Remove current files (except checkpoints)
         for item in self.workdir.iterdir():

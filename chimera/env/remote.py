@@ -21,9 +21,16 @@ class RemoteEnvironment(Environment):
         host: Hostname or IP of the remote workspace server.
         port: TCP port the server listens on.
         api_key: Optional bearer token sent in the ``Authorization`` header.
+            Must be used together with ``tls=True`` (the default); passing an
+            ``api_key`` with ``tls=False`` raises :class:`ValueError` to
+            prevent leaking the token over plaintext HTTP.
         working_dir: Working directory on the remote server.
         timeout: Default request timeout in seconds.
-        tls: When ``True`` use ``https`` instead of ``http``.
+        tls: When ``True`` (default) use ``https``; set to ``False`` only for
+            local development without an ``api_key``.
+
+    Raises:
+        ValueError: If ``api_key`` is provided while ``tls`` is ``False``.
     """
 
     def __init__(
@@ -33,12 +40,17 @@ class RemoteEnvironment(Environment):
         api_key: str | None = None,
         working_dir: str = "/workspace",
         timeout: int = 120,
-        tls: bool = False,
+        tls: bool = True,
     ) -> None:
         if httpx is None:
             raise ImportError(
                 "httpx is required for RemoteEnvironment. Install it with: "
                 "pip install 'chimera-run[remote]'"
+            )
+        if api_key is not None and not tls:
+            raise ValueError(
+                "Refusing to send Bearer token over plaintext HTTP. "
+                "Pass tls=True (default) or omit api_key."
             )
         self._host = host
         self._port = port

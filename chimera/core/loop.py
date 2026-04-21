@@ -37,6 +37,18 @@ class ReAct:
         config: LoopConfig | None = None,
     ) -> None:
         self.max_steps = max_steps
+        # Safety-by-default: when no LoopConfig is supplied we materialise
+        # one so that :class:`~chimera.permissions.presets.Interactive`
+        # permissions and :class:`~chimera.secrets.RedactionMiddleware`
+        # are active from the first tool call.  Callers who want the
+        # old zero-config posture can pass ``LoopConfig(yolo_mode=True)``
+        # or export ``CHIMERA_UNSAFE=1``.
+        #
+        # The lookup is cheap (one env-var read + one object allocation)
+        # and benchmark-negligible vs. the ~100ms of a provider request.
+        if config is None:
+            from chimera.core.loop_config import LoopConfig as _LC
+            config = _LC()
         self.config = config
 
     def iter_steps(

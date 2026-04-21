@@ -79,6 +79,10 @@ class _FailTool(BaseTool):
 
 class TestLoopConfigDefaults:
     def test_all_none_by_default(self):
+        # NB: the test suite's autouse fixture sets CHIMERA_UNSAFE=1,
+        # so the safety defaults are *not* installed here.  The
+        # pin-the-safety-behaviour tests live in
+        # ``test_loop_config_safety.py``.
         config = LoopConfig()
         assert config.permissions is None
         assert config.detector is None

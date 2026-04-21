@@ -12,9 +12,13 @@ def test_local_read_ops(tmp_path):
 
 
 def test_local_read_ops_absolute(tmp_path):
+    # Absolute paths are allowed only when they resolve inside ``cwd``.
+    # This is the post-containment behavior: an absolute path that sits
+    # under the sandbox root still works; an absolute path outside raises
+    # PermissionError (see tests/test_env_local_containment.py).
     f = tmp_path / "abs.txt"
     f.write_text("absolute")
-    ops = LocalReadOps(cwd="/tmp")
+    ops = LocalReadOps(cwd=str(tmp_path))
     assert ops.read_file(str(f)) == "absolute"
 
 

@@ -9,6 +9,36 @@ from typing import Protocol, runtime_checkable
 from chimera.types import CommandResult
 
 
+def _contain(cwd: str, path: str) -> Path:
+    """Resolve ``path`` against ``cwd`` and refuse to escape the sandbox.
+
+    Guards against the same three escape vectors as
+    :py:meth:`chimera.env.local.LocalEnvironment._contain`:
+
+    * absolute paths outside ``cwd`` (``/etc/passwd``),
+    * ``..`` traversal (``../../id_rsa``),
+    * symlink redirection outside ``cwd`` (``resolve()`` follows links so
+      ``relative_to`` detects the escape).
+
+    Args:
+        cwd: Sandbox root. Resolved with :py:meth:`Path.resolve`.
+        path: Caller-supplied path (absolute or relative).
+
+    Returns:
+        Absolute :class:`Path` guaranteed to live under ``cwd``.
+
+    Raises:
+        PermissionError: When the resolved path escapes ``cwd``.
+    """
+    cwd_resolved = Path(cwd).resolve()
+    candidate = (cwd_resolved / path).resolve()
+    try:
+        candidate.relative_to(cwd_resolved)
+    except ValueError as exc:
+        raise PermissionError(f"Path escapes sandbox cwd: {path}") from exc
+    return candidate
+
+
 @runtime_checkable
 class ReadOps(Protocol):
     """Backend for file reading."""
@@ -42,12 +72,15 @@ class LocalReadOps:
         self.cwd = cwd
 
     def read_file(self, path: str) -> str:
-        full = path if os.path.isabs(path) else os.path.join(self.cwd, path)
+        full = _contain(self.cwd, path)
         with open(full) as f:
             return f.read()
 
     def file_exists(self, path: str) -> bool:
-        full = path if os.path.isabs(path) else os.path.join(self.cwd, path)
+        try:
+            full = _contain(self.cwd, path)
+        except PermissionError:
+            return False
         return os.path.exists(full)
 
 
@@ -57,8 +90,8 @@ class LocalWriteOps:
         self.cwd = cwd
 
     def write_file(self, path: str, content: str) -> None:
-        full = path if os.path.isabs(path) else os.path.join(self.cwd, path)
-        Path(full).parent.mkdir(parents=True, exist_ok=True)
+        full = _contain(self.cwd, path)
+        full.parent.mkdir(parents=True, exist_ok=True)
         with open(full, "w") as f:
             f.write(content)
 
@@ -90,7 +123,7 @@ class LocalSearchOps:
         self.cwd = cwd
 
     def list_files(self, pattern: str = "**/*") -> list[str]:
-        base = Path(self.cwd)
+        base = Path(self.cwd).resolve()
         return [
             str(p.relative_to(base))
             for p in base.glob(pattern)
@@ -101,8 +134,9 @@ class LocalSearchOps:
         import re
         regex = re.compile(pattern)
         results: list[str] = []
-        search_dir = path if os.path.isabs(path) else os.path.join(self.cwd, path)
-        for filepath in Path(search_dir).rglob("*"):
+        search_dir = _contain(self.cwd, path)
+        base = Path(self.cwd).resolve()
+        for filepath in search_dir.rglob("*"):
             if not filepath.is_file():
                 continue
             try:
@@ -111,6 +145,12 @@ class LocalSearchOps:
                 continue
             for i, line in enumerate(content.splitlines(), 1):
                 if regex.search(line):
-                    rel = str(filepath.relative_to(self.cwd)) if not os.path.isabs(path) else str(filepath)
+                    try:
+                        rel = str(filepath.relative_to(base))
+                    except ValueError:
+                        # Should not happen — ``_contain`` confirms search_dir
+                        # sits under ``base``. Skip defensively instead of
+                        # leaking absolute paths.
+                        continue
                     results.append(f"{rel}:{i}: {line}")
         return results

@@ -36,6 +36,7 @@ def env(mock_httpx):
             api_key="secret-key",
             working_dir="/workspace",
             timeout=60,
+            tls=True,
         )
     # Replace internal client with our mock
     environment._client = mock_client_instance
@@ -230,6 +231,19 @@ class TestTLS:
         assert env._base_url == "https://secure.example.com:443"
 
     def test_http_url_construction(self, mock_httpx):
+        """Plaintext HTTP is allowed for local dev without an api_key."""
+        mock_module, mock_client_cls, mock_client_instance = mock_httpx
+        with patch.dict(sys.modules, {"httpx": mock_module}):
+            import importlib
+            import chimera.env.remote as remote_mod
+            importlib.reload(remote_mod)
+
+            env = remote_mod.RemoteEnvironment(host="example.com", tls=False)
+
+        assert env._base_url == "http://example.com:8080"
+
+    def test_default_scheme_is_https(self, mock_httpx):
+        """Default construction uses TLS to avoid accidental plaintext."""
         mock_module, mock_client_cls, mock_client_instance = mock_httpx
         with patch.dict(sys.modules, {"httpx": mock_module}):
             import importlib
@@ -238,7 +252,22 @@ class TestTLS:
 
             env = remote_mod.RemoteEnvironment(host="example.com")
 
-        assert env._base_url == "http://example.com:8080"
+        assert env._base_url == "https://example.com:8080"
+
+    def test_api_key_without_tls_raises(self, mock_httpx):
+        """api_key with tls=False must raise to prevent plaintext bearer leak."""
+        mock_module, mock_client_cls, mock_client_instance = mock_httpx
+        with patch.dict(sys.modules, {"httpx": mock_module}):
+            import importlib
+            import chimera.env.remote as remote_mod
+            importlib.reload(remote_mod)
+
+            with pytest.raises(ValueError, match="plaintext HTTP"):
+                remote_mod.RemoteEnvironment(
+                    host="example.com",
+                    api_key="secret",
+                    tls=False,
+                )
 
 
 class TestAPIKey:
