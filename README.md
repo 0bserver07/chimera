@@ -1,8 +1,8 @@
 # Chimera
 
-AI that reads, writes, and debugs code — tools like Claude Code and Codex do this. Chimera is a Python library for building these tools yourself, and a plugin that makes Claude Code better.
+AI that reads, writes, edits, and iterates on code with tests — tools like Claude Code and Codex do this. Chimera is a Python library for building these tools yourself, and a plugin that makes Claude Code better.
 
-**Status: Alpha** — 3953 tests. Benchmarked with GLM-5: HumanEval 90.9% pass@1 (164 problems), SWE-bench Lite 10% (2/20), Terminal-Bench 30%.
+**Status: Alpha** — 3922 passing tests. Reproducible benchmarks with GLM-5.1: HumanEval 66.5% pass@1 (109/164), SWE-bench Lite 10% (2/20, top-20 smallest patches). Raw results in `data/`.
 
 ## Who This Is For
 
@@ -24,22 +24,24 @@ Chimera gives you two things:
 
 ## Install
 
+Not yet on PyPI. Install from source:
+
 ```bash
-pip install chimera-run[anthropic]   # Claude
-pip install chimera-run[openai]      # GPT
-pip install chimera-run[google]      # Gemini
-pip install chimera-run[all]         # everything
+pip install "git+https://github.com/0bserver07/chimera.git#egg=chimera-run[anthropic]"   # Claude / GLM-5
+pip install "git+https://github.com/0bserver07/chimera.git#egg=chimera-run[openai]"      # GPT
+pip install "git+https://github.com/0bserver07/chimera.git#egg=chimera-run[all]"         # anthropic + openai + browser + remote
 ```
 
-Requires Python 3.11+.
+Requires Python 3.11+. A `chimera-run` PyPI release is planned post-alpha.
 
 ## Build Your Own Coding Agent
 
 ```python
 from chimera.assembly.coding_agent import CodingAgent
 
-# One line — full-featured coding agent with 20 tools
-agent = CodingAgent(model="claude-sonnet-4-20250514")
+# One line — full-featured coding agent with 24 tools.
+# Requires ANTHROPIC_BASE_URL=https://api.z.ai/api/anthropic and ANTHROPIC_AUTH_TOKEN in env.
+agent = CodingAgent(model="glm-5")
 
 # Run a task
 import asyncio
@@ -55,8 +57,8 @@ asyncio.run(main())
 
 | Preset | Tools | Features |
 |--------|-------|----------|
-| `claude_code` | 20 (bash, read, write, edit, search, git, test, agent, skill, ...) | Permissions, hooks, transcripts, compaction, streaming |
-| `codex` | 20 | Permissions, transcripts (no hooks) |
+| `claude_code` | 24 (bash, read, write, edit, search, git, test, agent, skill, ...) | Permissions, hooks, transcripts, compaction, streaming |
+| `codex` | 24 | Permissions, transcripts (no hooks) |
 | `minimal` | 4 (bash, read, write, edit) | No extras |
 | `explore` | 3 (read, search, list) | Read-only |
 
@@ -114,7 +116,7 @@ Install the plugin to get immediate improvements. No Python code to write.
 
 ## How It's Organized
 
-Chimera is an 8-layer stack. Each layer works independently — use just what you need.
+Chimera is an 8-layer stack. Each layer has a documented API boundary; swap any provider, tool, env, or strategy without touching the rest.
 
 ```
 What you run        CLI commands: chimera code / synthesize / eval / review / ci-fix / fs
@@ -130,7 +132,7 @@ Measuring quality   Run benchmarks (HumanEval, SWE-bench, AIMO, custom), collect
                     pass rates and costs, compare agent configurations
                     ─────────────────────────────────────────────────────────────────
 The agent itself    An LLM in a loop: think, call a tool, observe the result,
-                    repeat. 20 built-in tools (read, write, edit, bash, search,
+                    repeat. 24 built-in tools (read, write, edit, bash, search,
                     git, test, web fetch, etc). 4 loop strategies.
                     ─────────────────────────────────────────────────────────────────
 LLM providers       Anthropic, OpenAI, Google, Ollama, Modal, or any
@@ -145,13 +147,14 @@ Where code runs     Your filesystem, a Docker container, a git branch,
 
 ## Benchmarks
 
-| Benchmark | GLM-5 | GLM-5.1 |
-|-----------|-------|---------|
-| HumanEval (164 problems) | 90.9% pass@1 | 66.5% pass@1 |
-| SWE-bench Lite (20 instances) | 10% | 10% (2/20) |
-| Terminal-Bench (10 tasks) | 30% | — |
+Reproducible runs with raw data in `data/`:
 
-[Full transparency report](docs/benchmarks/README.md) with 13 tracked issues.
+| Benchmark | GLM-5.1 | Raw data |
+|-----------|---------|----------|
+| HumanEval (164 problems) | 66.5% pass@1 (109/164) | `data/humaneval-glm51-results.json` |
+| SWE-bench Lite (20 smallest patches) | 10% (2/20) | `data/swebench-lite-glm51-results.jsonl` |
+
+Earlier GLM-5 runs (HumanEval, Terminal-Bench) exist in our notes but the raw result files were not preserved; we won't publish unverifiable numbers. [Full transparency report](docs/benchmarks/README.md) — every benchmark has a status, methodology, and known gaps.
 
 ## When Chimera, When Claude Code?
 

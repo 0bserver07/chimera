@@ -18,7 +18,7 @@ Calling `configurations()` produces the full Cartesian product (grid search).
 
 ```python
 space = SearchSpace()
-space.choice("model", ["claude-sonnet-4-20250514", "glm-5"])
+space.choice("model", ["glm-5", "claude-sonnet-4-20250514"])
 space.choice("max_steps", [10, 25])
 # Produces 4 configurations
 ```
@@ -53,7 +53,7 @@ Key method: `search(space, max_trials, metric, callbacks) -> TunerResult`.
 from chimera.training.tuner import SynthesisTuner, SearchSpace
 
 space = SearchSpace()
-space.choice("model", ["claude-sonnet-4-20250514", "glm-5"])
+space.choice("model", ["glm-5", "claude-sonnet-4-20250514"])
 space.choice("max_iterations", [5, 10, 20])
 
 tuner = SynthesisTuner(

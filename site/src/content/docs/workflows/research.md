@@ -20,7 +20,7 @@ from chimera.research import Researcher, ResearchPlan
 from chimera.core.agent import Agent
 from chimera.providers.factory import create_provider
 
-agent = Agent(provider=create_provider(model="claude-sonnet-4-20250514"))
+agent = Agent(provider=create_provider(model="glm-5"))
 researcher = Researcher(max_sources=10)
 
 # Full agent-driven research

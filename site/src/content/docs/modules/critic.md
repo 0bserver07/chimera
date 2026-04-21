@@ -59,7 +59,7 @@ critic = LLMCritic(
         mode=CriticMode.FINISH_ONLY,
         success_threshold=0.7,
         max_refinement_iterations=2,
-        critic_model="claude-haiku-4-20250514",
+        critic_model="claude-haiku-4-5-20251001",
     ),
 )
 

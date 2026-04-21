@@ -10,9 +10,9 @@ Full transparency on what Chimera can and cannot reproduce. Every benchmark has 
 
 | # | Benchmark | What It Tests | Our Score | Reference Score | Status | Issue |
 |---|-----------|--------------|-----------|-----------------|--------|-------|
-| A1 | [SWE-bench Verified](https://www.swebench.com/) | Fix real GitHub issues (500 instances) | 10% (2/20) | GLM-5: 77.8% (OpenHands) | GAP | [Report](2026-03-30-swebench-lite-glm51.md) |
-| A2 | [SWE-bench Lite](https://www.swebench.com/) | Fix real GitHub issues (300 instances) | GLM-5: 10%, GLM-5.1: 10% | — | GAP | [Report](2026-03-30-swebench-lite-glm51.md) |
-| A3 | [Terminal-Bench 2.0](https://www.tbench.ai/) | CLI tasks (89 tasks) | 30% (3/10) | GLM-5: 56.2% | PARTIAL | [Report](2026-03-30-terminal-bench-glm5.md) |
+| A1 | [SWE-bench Lite](https://www.swebench.com/) | Fix real GitHub issues (top-20 smallest patches, cherry-picked) | GLM-5.1: 10% (2/20) | GLM-5 OpenHands ref: 77.8% | GAP | [Report](2026-03-30-swebench-lite-glm51.md) |
+| A2 | [SWE-bench Lite full](https://www.swebench.com/) | Full 300-instance run | NOT RUN | — | TODO | #14 |
+| A3 | [Terminal-Bench 2.0](https://www.tbench.ai/) | CLI tasks (10-task subset) | 30% (3/10) — **with TB's `terminus-1` agent, not Chimera** | GLM-5: 56.2% | UNVERIFIED | [Report](2026-03-30-terminal-bench-glm5.md) |
 | A4 | [FeatureBench](https://arxiv.org/abs/2602.10975) | Build full features (200 tasks) | NOT RUN | Opus 4.5: 11% | TODO | #3 |
 | A5 | [Cline Bench](https://github.com/cline/cline) | Repo-based development | NOT RUN | — | TODO | #4 |
 | A6 | [DPAI Arena](https://labs.scale.com/) | Multi-language dev tasks | NOT RUN | — | TODO | #5 |
@@ -25,7 +25,7 @@ Full transparency on what Chimera can and cannot reproduce. Every benchmark has 
 
 | # | Benchmark | What It Tests | Our Score | Reference | Status | Issue |
 |---|-----------|--------------|-----------|-----------|--------|-------|
-| L1 | [HumanEval](https://github.com/openai/human-eval) | Function generation (164) | GLM-5: 90.9%, GLM-5.1: 66.5% | GLM-5: ~92% claimed | DONE | [Report](2026-03-30-humaneval-glm51.md) |
+| L1 | [HumanEval](https://github.com/openai/human-eval) | Function generation (164) | GLM-5.1: 66.5% (raw data in `data/`). GLM-5: 90.9% unverifiable — raw data lost | GLM-5: ~92% claimed | PARTIAL | [Report](2026-03-30-humaneval-glm51.md) |
 | L2 | [HumanEval+](https://github.com/evalplus/evalplus) | Extended test cases | NOT RUN | — | TODO | #10 |
 | L3 | [MBPP](https://github.com/google-research/google-research/tree/master/mbpp) | Basic programming (974) | NOT RUN | — | TODO | #11 |
 | L4 | [LiveCodeBench](https://livecodebench.github.io/) | Contest problems | NOT RUN | — | TODO | #12 |

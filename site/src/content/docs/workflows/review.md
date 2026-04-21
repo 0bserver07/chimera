@@ -10,7 +10,7 @@ description: "Code Review Workflow"
 ## CLI
 
 ```bash
-chimera review --diff changes.patch --model claude-sonnet-4 --max-rounds 3
+chimera review --diff changes.patch --model glm-5 --max-rounds 3
 ```
 
 ## Python API
@@ -20,7 +20,7 @@ from chimera.review import ReviewOrchestrator, ReviewFeedback
 from chimera.core.agent import Agent
 from chimera.providers.factory import create_provider
 
-provider = create_provider(model="claude-sonnet-4-20250514")
+provider = create_provider(model="glm-5")
 reviewer = Agent(provider=provider)
 author = Agent(provider=provider)
 

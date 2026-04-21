@@ -11,7 +11,7 @@ Without Chimera, Claude Code operates with built-in tools only. It has no semant
 ```mermaid
 graph LR
     CC[Claude Code] -->|plugin| P[chimera-plugin]
-    P -->|skills| S[8 skills]
+    P -->|skills| S[14 skills]
     P -->|hooks| H[5 hooks]
     P -->|agents| A[3 agents]
     CC -->|MCP| M1[chimera-search]
@@ -135,36 +135,39 @@ Create or edit `.claude/hooks.json` in your project root:
     "PreToolUse": [
       {
         "matcher": "Write|Edit",
-        "command": "python3 -m chimera.hooks.validate_path",
-        "description": "Block edits to nonexistent files and suggest corrections"
+        "hooks": [
+          { "type": "command", "command": "python3 -m chimera.hooks.validate_path" }
+        ]
       },
       {
         "matcher": "Bash",
-        "command": "python3 -m chimera.hooks.security_scan",
-        "description": "Block dangerous bash commands (rm -rf /, credential exfiltration)"
+        "hooks": [
+          { "type": "command", "command": "python3 -m chimera.hooks.security_scan" }
+        ]
       }
     ],
     "PostToolUse": [
       {
         "matcher": "Write|Edit",
-        "command": "python3 -m chimera.hooks.auto_test",
-        "description": "Run related tests after file modifications"
-      },
-      {
-        "matcher": "Write|Edit",
-        "command": "python3 -m chimera.hooks.auto_lint",
-        "description": "Lint modified files and report issues"
+        "hooks": [
+          { "type": "command", "command": "python3 -m chimera.hooks.auto_test" },
+          { "type": "command", "command": "python3 -m chimera.hooks.auto_lint" }
+        ]
       }
     ],
     "Stop": [
       {
-        "command": "python3 -m chimera.hooks.verify_done",
-        "description": "Run full test suite before allowing agent to declare done"
+        "matcher": "",
+        "hooks": [
+          { "type": "command", "command": "python3 -m chimera.hooks.verify_done" }
+        ]
       }
     ]
   }
 }
 ```
+
+This matches Claude Code's plugin hook schema (each matcher has a `"hooks": [{"type": "command", ...}]` array). The flat `command` form some older docs show is NOT the current schema and will silently no-op.
 
 ### Step 5: Verify
 

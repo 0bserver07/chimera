@@ -153,7 +153,7 @@ Requires **Python 3.11+**.
 
     ---
 
-    11 subcommands and an interactive REPL with 16 slash commands for
+    11 subcommands and an interactive REPL with 19 slash commands for
     hands-on agent interaction.
 
     [:octicons-arrow-right-24: CLI & REPL](modules/cli.md)
