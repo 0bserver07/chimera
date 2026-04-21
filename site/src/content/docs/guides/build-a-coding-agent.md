@@ -14,7 +14,7 @@ multi-turn conversations, detects loops, and respects permission guardrails.
 Install chimera and export your API key:
 
 ```bash
-pip install chimera
+pip install chimera-ai[anthropic]
 export ANTHROPIC_API_KEY="sk-..."
 ```
 

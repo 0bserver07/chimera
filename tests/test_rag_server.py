@@ -24,7 +24,7 @@ def tmp_project(tmp_path: Path) -> Path:
     (docs_dir / "guide.md").write_text(
         "# Getting Started\n\n"
         "Chimera uses a provider-based architecture with 8 layers.\n"
-        "Install with `pip install chimera`.\n"
+        "Install with `pip install chimera-ai`.\n"
     )
     (docs_dir / "api.md").write_text(
         "# API Reference\n\n"

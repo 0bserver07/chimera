@@ -58,7 +58,9 @@ provider = chimera.create_provider(
     api_key="...",
 )
 ```
-:::### Supported Providers
+:::
+
+### Supported Providers
 
 | Provider | Model Prefixes | Auto-detected |
 |----------|---------------|---------------|
@@ -68,7 +70,6 @@ provider = chimera.create_provider(
 | Ollama | `llama-*`, `mistral-*`, `qwen-*`, `phi-*` | Yes |
 | Modal | -- | No (`provider_type="modal"`) |
 | Compatible | -- | No (`provider_type="compatible"`) |
-| Anthropic-compatible (e.g. GLM-5) | -- | Yes, via `ANTHROPIC_BASE_URL` env |
 
 ---
 
