@@ -27,9 +27,26 @@ Then:
   the agent scans the current directory and summarizes Python files. CLI flags:
   `--model`, `--task`, `--max-steps`, `--base-url`, `--auth-token`.
 
+- [`ollama_code_review.py`](ollama_code_review.py) — Pipe `git diff` (or
+  `--staged`, or a patch file) into a model and get a structured review with
+  VERDICT / SUMMARY / ISSUES by severity. Verified end-to-end against
+  `kimi-k2.6`.
+
+- [`ollama_commit_message.py`](ollama_commit_message.py) — Generate a
+  Conventional Commits message from your staged diff. Supports `--type`,
+  `--scope`, `--breaking`, `--copy` (pbcopy / wl-copy / xclip). Stdout is
+  pipeable into `git commit -F -`.
+
+- [`ollama_explain.py`](ollama_explain.py) — Hand a file to the model and get
+  a structured explanation (WHAT IT IS / PURPOSE / KEY PIECES / HOW IT FITS /
+  GOTCHAS). Supports `--symbol` to isolate one class or function, `--focus` to
+  steer the explanation, and `--depth overview|detailed|line-by-line`.
+
 Both scripts default to `kimi-k2.6:cloud` at `http://localhost:11434` with auth
 token `ollama`. Cloud models worth trying: `kimi-k2.6:cloud`, `glm-5.1:cloud`,
-`qwen3.5:cloud`, `minimax-m2.7:cloud`.
+`qwen3.5:cloud`, `minimax-m2.7:cloud`. For cloud usage, set
+`ANTHROPIC_BASE_URL=https://ollama.com` and use your Ollama API token as
+`ANTHROPIC_AUTH_TOKEN`.
 
 ## Generic quickstarts
 
