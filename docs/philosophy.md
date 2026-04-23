@@ -11,7 +11,7 @@ Program synthesis has been studying automated code generation from specification
 
 Agentic coding maps directly onto this. The spec (and its tests) is the loss function. Agent iterations are training steps. Each pass through the code, each test run, each edit moves toward convergence. The output is a synthesized codebase, an artifact you deploy without inspecting every line, the same way we deploy neural networks without reading individual weights.
 
- [asked publicly](https://x.com//status/) what the right set of high-level abstractions would be for steering codebase "training" with minimal cognitive overhead. Chimera is one attempt at an answer, grounded in program synthesis.
+The question is what the right set of high-level abstractions looks like for steering this process with minimal cognitive overhead. Chimera is one attempt at an answer, grounded in program synthesis.
 
 ## Classic ML Problems Apply
 
