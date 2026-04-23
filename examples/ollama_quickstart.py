@@ -39,6 +39,15 @@ DEFAULT_BASE_URL = "http://localhost:11434"
 DEFAULT_AUTH_TOKEN = "ollama"
 
 
+def _mask_token(tok: str) -> str:
+    """Mask a token for display. Shows first 4 and last 4 chars only."""
+    if not tok:
+        return "(empty)"
+    if len(tok) <= 10:
+        return "***"
+    return f"{tok[:4]}...{tok[-4:]}"
+
+
 def preflight(base_url: str) -> bool:
     """Ping Ollama. Return True if reachable, False otherwise."""
     parsed = urlparse(base_url)
@@ -191,7 +200,7 @@ def main() -> int:
 
     print(f"Model:    {args.model}")
     print(f"Base URL: {args.base_url}")
-    print(f"Auth:     {args.auth_token}")
+    print(f"Auth:     {_mask_token(args.auth_token)}")
     print()
 
     # --- Pre-flight ---
