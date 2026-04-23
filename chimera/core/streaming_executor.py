@@ -13,6 +13,7 @@ import asyncio
 
 from chimera.core.abort import AbortSignal
 from chimera.core.tool import BaseTool
+from chimera.env.base import Environment
 from chimera.types import ToolCall, ToolResult
 
 __all__ = ["StreamingToolExecutor"]
@@ -26,16 +27,36 @@ class StreamingToolExecutor:
         max_concurrent: Upper bound on simultaneous asyncio Tasks.
             Currently used as a capacity hint; enforcement is left to
             future semaphore work.
+        env: Environment passed to every ``tool.async_execute`` call. When
+            ``None``, a :class:`~chimera.env.local.LocalEnvironment` anchored
+            at the current working directory is built on first use. Most
+            built-in tools (``bash``, ``list_files``, ``search``, ``git``,
+            ``test``, ``web_fetch``) require an environment; passing
+            ``env=None`` previously left them with no backend and they
+            silently returned empty ``ToolResult`` objects.
     """
 
-    def __init__(self, tools: list[BaseTool], max_concurrent: int = 5) -> None:
+    def __init__(
+        self,
+        tools: list[BaseTool],
+        max_concurrent: int = 5,
+        env: Environment | None = None,
+    ) -> None:
         self.tool_map: dict[str, BaseTool] = {t.name: t for t in tools}
         self.max_concurrent = max_concurrent
+        self._env: Environment | None = env
 
         self._pending: list[asyncio.Task[None]] = []
         self._results: dict[str, ToolResult] = {}
         self._submitted_order: list[ToolCall] = []
         self._sibling_abort: AbortSignal = AbortSignal()
+
+    def _get_env(self) -> Environment:
+        """Return the effective environment, lazily building a local one."""
+        if self._env is None:
+            from chimera.env.local import LocalEnvironment
+            self._env = LocalEnvironment(".")
+        return self._env
 
     # ------------------------------------------------------------------
     # Public API
@@ -104,7 +125,7 @@ class StreamingToolExecutor:
     async def _execute(self, tool: BaseTool, call: ToolCall) -> None:
         """Execute *tool* with *call*'s arguments and store the result."""
         try:
-            result = await tool.async_execute(call.arguments, None)
+            result = await tool.async_execute(call.arguments, self._get_env())
         except asyncio.CancelledError:
             self._results[call.id] = ToolResult(output="", error="cancelled")
             raise
