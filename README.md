@@ -156,6 +156,18 @@ Reproducible runs with raw data in `data/`:
 
 Earlier GLM-5 runs (HumanEval, Terminal-Bench) exist in our notes but the raw result files were not preserved; we won't publish unverifiable numbers. [Full transparency report](docs/benchmarks/README.md) — every benchmark has a status, methodology, and known gaps.
 
+## Run It Free with Ollama
+
+Chimera speaks Ollama's Anthropic-compatible API out of the box. You can run the full agent against `kimi-k2.6:cloud`, `glm-5.1:cloud`, or any local Qwen/Llama with zero code changes:
+
+```bash
+export ANTHROPIC_BASE_URL=http://localhost:11434
+export ANTHROPIC_AUTH_TOKEN=ollama
+python examples/ollama_coding_agent.py --model kimi-k2.6:cloud
+```
+
+[Full Ollama setup guide](https://0bserver07.github.io/chimera/guides/use-with-ollama/) — prerequisites, recommended models, context window notes, troubleshooting.
+
 ## When Chimera, When Claude Code?
 
 **Use Claude Code** if you want a polished product that works today.
