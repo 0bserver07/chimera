@@ -71,8 +71,8 @@ python examples/humaneval_full.py --count 164
 # SWE-bench (Docker, proper eval)
 python examples/swe_bench_proper.py --count 10
 
-# SWE-bench v4 (anti-hesitation, 100 steps)
-python examples/swe_bench_v4.py --count 20 --max-steps 100
+# SWE-bench Lite (canonical, matches published 10% resolve rate)
+python examples/swe_bench_lite_run.py --count 20 --max-steps 50
 
 # Terminal-Bench (requires Docker)
 tb run --agent terminus --model anthropic/glm-5 --dataset terminal-bench-core==0.1.1 --n-tasks 10
