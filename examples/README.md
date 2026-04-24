@@ -86,37 +86,19 @@ token `ollama`. Cloud models worth trying: `kimi-k2.6:cloud`, `glm-5.1:cloud`,
 - [`function_synthesis_quickstart.py`](function_synthesis_quickstart.py),
   [`function_synthesis_full_demo.py`](function_synthesis_full_demo.py),
   [`function_synthesis_real_e2e.py`](function_synthesis_real_e2e.py),
-  [`cegis_synthesis.py`](cegis_synthesis.py),
+  [`function_synthesis_real_llamacpp.py`](function_synthesis_real_llamacpp.py) —
+  Compile specs into portable `.chi` bundles, backed by real runtimes.
+- [`cegis_synthesis.py`](cegis_synthesis.py),
   [`sketch_synthesis.py`](sketch_synthesis.py),
-  [`spec_inference_demo.py`](spec_inference_demo.py) — Synthesize code from
-  specs, examples, sketches, or a CEGIS loop.
-- [`oracle_demo.py`](oracle_demo.py),
-  [`mutation_testing_demo.py`](mutation_testing_demo.py),
-  [`validation_split.py`](validation_split.py) — Oracle / mutation /
-  validation flows for synthesized code.
+  [`validation_split.py`](validation_split.py) — CEGIS loop, sketch-based
+  synthesis, train/val split for overfit detection.
 
 ## Benchmarks
 
-- [`humaneval_full.py`](humaneval_full.py) — Run the full HumanEval suite.
-- [`swe_bench_lite_run.py`](swe_bench_lite_run.py),
-  [`swe_bench_proper.py`](swe_bench_proper.py),
-  [`swe_bench_docker.py`](swe_bench_docker.py) — SWE-bench Lite runs with
-  various isolation strategies.
-
-## Misc
-
-- [`think_and_ask.py`](think_and_ask.py) — `think` + `ask_user` tool usage.
-- [`flow_skills.py`](flow_skills.py) — Mermaid flowchart -> agent prompt.
-- [`wire_monitoring.py`](wire_monitoring.py) — Monitor a running agent over
-  Chimera's Wire channel.
-- [`dmail_context_rewind.py`](dmail_context_rewind.py) — DMail context
-  rollback for long runs.
-- [`impact_analysis_demo.py`](impact_analysis_demo.py),
-  [`fault_localization_demo.py`](fault_localization_demo.py),
-  [`incremental_demo.py`](incremental_demo.py),
-  [`tuner_demo.py`](tuner_demo.py),
-  [`synthesis_with_diagnostics.py`](synthesis_with_diagnostics.py) — Tooling
-  around synthesis and debugging.
-- [`workflow_verification.py`](workflow_verification.py) — End-to-end
-  verification of a workflow.
-- [`run_all.py`](run_all.py) — Batch runner for smoke-testing every example.
+- [`humaneval_full.py`](humaneval_full.py) — Full HumanEval suite.
+- [`swe_bench_lite_run.py`](swe_bench_lite_run.py) — Canonical SWE-bench Lite
+  runner (matches the published 10% resolve rate).
+- [`swe_bench_proper.py`](swe_bench_proper.py) — Official SWE-bench eval flow
+  (FAIL_TO_PASS / PASS_TO_PASS).
+- [`swe_bench_docker.py`](swe_bench_docker.py) — SWE-bench with per-instance
+  Docker isolation.
