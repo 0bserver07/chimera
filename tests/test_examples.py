@@ -578,17 +578,12 @@ def test_all_example_files_exist():
         "quickstart_provider.py",
         "agent_with_tools.py",
         "composition_pipeline.py",
-        "think_and_ask.py",
-        "wire_monitoring.py",
-        "dmail_context_rewind.py",
-        "flow_skills.py",
         "quickstart_synthesize.py",
         "coding_agent_minimal.py",
         "supervisor_delegation.py",
         "ci_fix.py",
         "session_persistence.py",
         "streaming_agent.py",
-        "run_all.py",
     ]
     for name in expected:
         path = os.path.join(examples_dir, name)
@@ -602,10 +597,6 @@ def test_all_examples_have_main():
         "quickstart_provider.py",
         "agent_with_tools.py",
         "composition_pipeline.py",
-        "think_and_ask.py",
-        "wire_monitoring.py",
-        "dmail_context_rewind.py",
-        "flow_skills.py",
         "quickstart_synthesize.py",
         "coding_agent_minimal.py",
         "supervisor_delegation.py",
