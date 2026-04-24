@@ -15,8 +15,8 @@ async for event in agent.run("Fix the bug in auth.py"):
 ```
 
 Presets: `claude_code`, `codex`, `minimal`, `explore`. See
-[`examples/build_claude_code_clone.py`](../../examples/build_claude_code_clone.py)
-and [`examples/build_codex_clone.py`](../../examples/build_codex_clone.py)
+[`examples/agent/build_claude_code_clone.py`](../../examples/agent/build_claude_code_clone.py)
+and [`examples/agent/build_codex_clone.py`](../../examples/agent/build_codex_clone.py)
 for runnable ~20-line scripts.
 
 **The rest of this playbook** covers the lower-level primitive layer (`Agent`,

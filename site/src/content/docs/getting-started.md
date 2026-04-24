@@ -204,10 +204,10 @@ Runnable scripts live in `examples/`:
 
 ```bash
 # Test provider connection (text, tool use, multi-turn)
-python examples/quickstart_provider.py --model glm-5
+python examples/provider/quickstart_provider.py --model glm-5
 
 # Synthesize a calculator from tests (end-to-end)
-python examples/quickstart_synthesize.py --model glm-5
+python examples/synthesis/quickstart_synthesize.py --model glm-5
 ```
 
 ---

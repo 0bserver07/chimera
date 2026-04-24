@@ -163,7 +163,7 @@ Chimera speaks Ollama's Anthropic-compatible API out of the box. You can run the
 ```bash
 export ANTHROPIC_BASE_URL=http://localhost:11434
 export ANTHROPIC_AUTH_TOKEN=ollama
-python examples/ollama_coding_agent.py --model kimi-k2.6:cloud
+python examples/agent/ollama_coding_agent.py --model kimi-k2.6:cloud
 ```
 
 [Full Ollama setup guide](https://0bserver07.github.io/chimera/guides/use-with-ollama/) — prerequisites, recommended models, context window notes, troubleshooting.
@@ -183,7 +183,7 @@ python examples/ollama_coding_agent.py --model kimi-k2.6:cloud
 - [Quick Start: Claude Code Plugin](docs/playbooks/00-quick-start.md) — hooks, MCP servers, skills
 - [Build Your Own Agent](docs/playbooks/08-building-agents.md) — full library guide
 - [All Playbooks](docs/playbooks/) — 13 guides covering every feature
-- [Examples](examples/) — 46 runnable scripts
+- [Examples](examples/) — 28 curated runnable scripts across 7 categories
 - [Function Synthesis](docs/function-synthesis.md) — compile specs into callable `.chi` bundles
   - 3 runtime backends (llama.cpp, transformers, ONNX), schema validation, streaming invoke
   - `LocalCompiler` for real PEFT fine-tuning; publish and fetch bundles via `chimera fs push | pull` (Hugging Face Hub + S3)

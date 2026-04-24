@@ -66,13 +66,13 @@ Our SWE-bench score (10%) vs GLM-5's claimed 77.8% with OpenHands:
 ```bash
 # HumanEval (full 164)
 source .env
-python examples/humaneval_full.py --count 164
+python examples/benchmarks/humaneval_full.py --count 164
 
 # SWE-bench (Docker, proper eval)
-python examples/swe_bench_proper.py --count 10
+python examples/benchmarks/swe_bench_proper.py --count 10
 
 # SWE-bench Lite (canonical, matches published 10% resolve rate)
-python examples/swe_bench_lite_run.py --count 20 --max-steps 50
+python examples/benchmarks/swe_bench_lite_run.py --count 20 --max-steps 50
 
 # Terminal-Bench (requires Docker)
 tb run --agent terminus --model anthropic/glm-5 --dataset terminal-bench-core==0.1.1 --n-tasks 10

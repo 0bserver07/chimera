@@ -367,7 +367,7 @@ def test_minimal_coding_agent_imports():
     """Verify the minimal coding agent imports and its main() is callable."""
     import importlib.util
     examples_dir = os.path.join(os.path.dirname(__file__), "..", "examples")
-    path = os.path.join(examples_dir, "coding_agent_minimal.py")
+    path = os.path.join(examples_dir, "agent", "coding_agent_minimal.py")
     spec = importlib.util.spec_from_file_location("coding_agent_minimal", path)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
@@ -572,41 +572,33 @@ def test_streaming_agent():
 # Meta: all examples exist and are importable
 # ---------------------------------------------------------------
 
+_SUBDIR_EXAMPLES = [
+    "provider/quickstart_provider.py",
+    "agent/agent_with_tools.py",
+    "composition/composition_pipeline.py",
+    "synthesis/quickstart_synthesize.py",
+    "agent/coding_agent_minimal.py",
+    "composition/supervisor_delegation.py",
+    "real_world/ci_fix.py",
+    "real_world/session_persistence.py",
+    "provider/streaming_agent.py",
+]
+
+
 def test_all_example_files_exist():
     examples_dir = os.path.join(os.path.dirname(__file__), "..", "examples")
-    expected = [
-        "quickstart_provider.py",
-        "agent_with_tools.py",
-        "composition_pipeline.py",
-        "quickstart_synthesize.py",
-        "coding_agent_minimal.py",
-        "supervisor_delegation.py",
-        "ci_fix.py",
-        "session_persistence.py",
-        "streaming_agent.py",
-    ]
-    for name in expected:
-        path = os.path.join(examples_dir, name)
-        assert os.path.isfile(path), f"Missing example: {name}"
+    for rel in _SUBDIR_EXAMPLES:
+        path = os.path.join(examples_dir, rel)
+        assert os.path.isfile(path), f"Missing example: {rel}"
 
 
 def test_all_examples_have_main():
     import importlib.util
     examples_dir = os.path.join(os.path.dirname(__file__), "..", "examples")
-    scripts = [
-        "quickstart_provider.py",
-        "agent_with_tools.py",
-        "composition_pipeline.py",
-        "quickstart_synthesize.py",
-        "coding_agent_minimal.py",
-        "supervisor_delegation.py",
-        "ci_fix.py",
-        "session_persistence.py",
-        "streaming_agent.py",
-    ]
-    for name in scripts:
-        path = os.path.join(examples_dir, name)
-        spec = importlib.util.spec_from_file_location(name.replace(".py", ""), path)
+    for rel in _SUBDIR_EXAMPLES:
+        path = os.path.join(examples_dir, rel)
+        mod_name = os.path.splitext(os.path.basename(rel))[0]
+        spec = importlib.util.spec_from_file_location(mod_name, path)
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
-        assert hasattr(mod, "main"), f"{name} missing main()"
+        assert hasattr(mod, "main"), f"{rel} missing main()"

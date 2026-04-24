@@ -62,4 +62,4 @@ print(f"Overfit gap: {val_result.overfit_gap:.0%}")
 
 - [Training concepts](/../concepts/training/) -- strategies and the synthesis loop
 - [Spec Inference](/spec-inference/) -- auto-generate tests from source
-- `examples/validation_split.py` -- runnable example
+- `examples/synthesis/validation_split.py` -- runnable example

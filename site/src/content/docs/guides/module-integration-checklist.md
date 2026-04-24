@@ -25,10 +25,9 @@ Every time a new module, tool, strategy, or feature is added to Chimera, go thro
 ## 3. Verification with real LLM
 
 - [ ] Write an example in `examples/` that exercises the feature end-to-end
-- [ ] Run the example with `source .env && uv run python examples/<example>.py`
+- [ ] Run the example with `source .env && uv run python examples/<category>/<example>.py`
 - [ ] Verify it produces correct output, not just "no errors"
 - [ ] Add test in `tests/test_examples.py` (real provider when available, mock fallback)
-- [ ] Update `examples/run_all.py` EXAMPLES list
 
 ## 4. Documentation
 

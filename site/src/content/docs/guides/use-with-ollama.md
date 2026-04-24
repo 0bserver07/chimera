@@ -90,8 +90,8 @@ asyncio.run(main())
 
 Two runnable scripts live in the repo:
 
-- `examples/ollama_quickstart.py` — minimal provider call
-- `examples/ollama_coding_agent.py` — full agent loop on a trivial task
+- `examples/provider/ollama_quickstart.py` — minimal provider call
+- `examples/agent/ollama_coding_agent.py` — full agent loop on a trivial task
 
 Set the env vars above, then run either script.
 

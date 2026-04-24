@@ -29,7 +29,7 @@ import urllib.error
 import urllib.request
 from urllib.parse import urlparse
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 DEFAULT_MODEL = "kimi-k2.6:cloud"
 DEFAULT_BASE_URL = "http://localhost:11434"
