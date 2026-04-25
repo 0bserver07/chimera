@@ -1,8 +1,8 @@
 """Experimental agent-team coordination (gated by CHIMERA_EXPERIMENTAL_AGENT_TEAMS=1).
 
-Mirrors Claude Code's agent-teams feature: a shared on-disk task list plus a
-per-teammate mailbox, with file-locked claim semantics so multiple teammates
-can race to claim the same task without duplicating work.
+Provides a shared on-disk task list plus a per-teammate mailbox, with
+file-locked claim semantics so multiple teammates can race to claim the
+same task without duplicating work.
 
 State layout (under ``~/.chimera/teams/<team-name>/``)::
 
