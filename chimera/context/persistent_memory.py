@@ -8,7 +8,7 @@ On compaction or after every *N* turns, conversation history is scanned
 for factual statements.  Extracted facts are stored in a JSON file and
 re-injected as context when the next session starts.
 
-Works with Claude Code's ``/compact`` and ``/clear`` commands via
+Integrates with the harness's ``/compact`` and ``/clear`` commands via
 EventBus integration (listens for ``compaction`` events).
 
 Example::

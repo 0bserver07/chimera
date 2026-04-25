@@ -16,7 +16,7 @@ Usage::
     # or
     python chimera/mcp_servers/migration_server.py
 
-Configure in ``.mcp.json`` for Claude Code::
+Configure in ``.mcp.json`` for any compatible MCP host::
 
     {
       "mcpServers": {

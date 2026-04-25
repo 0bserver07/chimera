@@ -70,6 +70,7 @@ class CompiledFunctionTool(BaseTool):
         if args is None:
             args = {}
         if user_input is None:
-            user_input = args.get("user_input", "")
+            user_input = args.get("user_input") or ""
+        assert user_input is not None
         output = self._function(user_input)
         return ToolResult(output=output)

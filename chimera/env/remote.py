@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from chimera.env.base import Environment
 from chimera.types import CommandResult, TestResult
 
@@ -65,7 +67,7 @@ class RemoteEnvironment(Environment):
         headers: dict[str, str] = {}
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
-        self._client: httpx.Client = httpx.Client(
+        self._client: Any = httpx.Client(
             base_url=self._base_url,
             headers=headers,
             timeout=timeout,

@@ -32,6 +32,12 @@ __all__ = [
     "AgentEndEvent",
     "SteeringEvent",
     "CancellationEvent",
+    "TodoWriteEvent",
+    "TeammateIdleEvent",
+    "TaskCreatedEvent",
+    "TaskCompletedEvent",
+    "TeammateMessageEvent",
+    "HookUpdatedInputEvent",
 ]
 
 
@@ -272,3 +278,93 @@ class CancellationEvent(Event):
 
     type: str = field(default="cancellation", init=False)
     at_step: int = 0
+
+
+@dataclass
+class TeammateIdleEvent(Event):
+    """A teammate has finished its task list and is idle."""
+
+    type: str = field(default="teammate_idle", init=False)
+    team: str = ""
+    agent_id: str = ""
+
+
+@dataclass
+class TaskCreatedEvent(Event):
+    """A new task was added to the team queue."""
+
+    type: str = field(default="task_created", init=False)
+    team: str = ""
+    task_id: str = ""
+    description: str = ""
+    created_by: str = ""
+
+
+@dataclass
+class TaskCompletedEvent(Event):
+    """A teammate completed a task."""
+
+    type: str = field(default="task_completed", init=False)
+    team: str = ""
+    task_id: str = ""
+    agent_id: str = ""
+    result: str = ""
+
+
+@dataclass
+class TeammateMessageEvent(Event):
+    """A teammate received a direct message."""
+
+    type: str = field(default="teammate_message", init=False)
+    team: str = ""
+    sender: str = ""
+    recipient: str = ""
+    content: str = ""
+
+
+@dataclass
+class TodoWriteEvent(Event):
+    """A durable record of every TodoTool mutation.
+
+    Emitted once per ``add`` / ``complete`` / ``set`` / ``remove`` call so
+    that an :class:`EventSourcedSession` can replay the log and
+    reconstitute the agent's task list across restarts and compaction.
+
+    Attributes:
+        todos: Snapshot of the full todo list after the mutation.  Each
+            entry is a JSON-safe dict with ``id``, ``task``, and ``done``
+            keys.
+        op: The mutation kind — one of ``"add"``, ``"complete"``,
+            ``"set"``, or ``"remove"``.  Replay uses ``"set"`` for full
+            state restore and the others for incremental application.
+        session_id: The session that produced the write, so multi-session
+            event logs can be filtered correctly during replay.
+    """
+
+    type: str = field(default="todo_write", init=False)
+    todos: list[dict[str, Any]] = field(default_factory=list)
+    op: str = "set"
+    session_id: str = ""
+
+
+@dataclass
+class HookUpdatedInputEvent(Event):
+    """A PreToolUse hook mutated a tool call's input arguments.
+
+    Emitted by the tool executor whenever a hook returns
+    ``hookSpecificOutput.updatedInput`` and the mutated arguments are
+    applied to the dispatched tool call.
+
+    Attributes:
+        tool_name: The tool that was about to be invoked.
+        call_id: The tool call identifier.
+        original: The original arguments dict the model produced.
+        updated: The merged arguments dict that was actually dispatched
+            (hook keys override originals; non-overridden keys preserved).
+    """
+
+    type: str = field(default="hook_updated_input", init=False)
+    tool_name: str = ""
+    call_id: str = ""
+    original: dict[str, Any] = field(default_factory=dict)
+    updated: dict[str, Any] = field(default_factory=dict)

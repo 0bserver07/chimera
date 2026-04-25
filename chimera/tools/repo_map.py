@@ -163,8 +163,9 @@ class RepoMapTool(BaseTool):
         path = args.get("path", ".")
         max_depth = args.get("max_depth")
         # Resolve relative to environment workdir
-        if hasattr(env, "workdir"):
-            base = Path(env.workdir) / path
+        workdir = getattr(env, "workdir", None)
+        if workdir is not None:
+            base = Path(workdir) / path
         else:
             base = Path(path)
         if not base.is_dir():

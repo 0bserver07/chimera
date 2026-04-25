@@ -12,10 +12,8 @@ from chimera.types import Message
 
 try:
     import aiofiles  # type: ignore[import-untyped]
-
-    _HAS_AIOFILES = True
 except ImportError:  # pragma: no cover
-    _HAS_AIOFILES = False
+    aiofiles = None  # type: ignore[assignment]
 
 
 def _dict_to_message(entry: dict[str, Any]) -> Message:
@@ -88,7 +86,7 @@ class TranscriptStorage:
     async def _append_line(self, path: Path, line: str) -> None:
         """Append a single line to a file."""
         path.parent.mkdir(parents=True, exist_ok=True)
-        if _HAS_AIOFILES:
+        if aiofiles is not None:
             async with aiofiles.open(path, "a") as f:
                 await f.write(line + "\n")
         else:
@@ -124,7 +122,7 @@ class TranscriptStorage:
         """Read all lines from a JSONL file."""
         if not path.exists():
             return []
-        if _HAS_AIOFILES:
+        if aiofiles is not None:
             async with aiofiles.open(path, "r") as f:
                 text = await f.read()
         else:

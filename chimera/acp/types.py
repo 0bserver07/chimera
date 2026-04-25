@@ -9,7 +9,7 @@ class ACPSessionConfig:
     """Configuration for an ACP subprocess session.
 
     Attributes:
-        command: Command to spawn the ACP server (e.g. ``["npx", "-y", "claude-code-acp"]``).
+        command: Command to spawn the ACP server (e.g. ``["npx", "-y", "<acp-bridge-pkg>"]``).
         args: Additional command-line arguments.
         env: Extra environment variables for the subprocess.
         working_dir: Working directory for the subprocess.

@@ -14,7 +14,9 @@ It wires together all 8 phases of the architecture:
 """
 from __future__ import annotations
 
+import sys
 import uuid
+import warnings
 from collections.abc import AsyncGenerator
 from pathlib import Path
 from typing import Any
@@ -22,6 +24,24 @@ from typing import Any
 from chimera.core.loop_events import LoopEvent, LoopEventType
 
 __all__ = ["CodingAgent"]
+
+
+def _warn_if_deprecated_preset(preset: str) -> None:
+    """Emit a one-line DeprecationWarning if `preset` is a deprecated alias.
+
+    Always raises a Python DeprecationWarning (so tests/pytest can capture it),
+    but only echoes a human-readable note to stderr when stderr is a TTY —
+    JSON pipelines and machine consumers stay silent.
+    """
+    from chimera.assembly.presets import DEPRECATED_PRESET_ALIASES
+
+    canonical = DEPRECATED_PRESET_ALIASES.get(preset)
+    if canonical is None:
+        return
+    msg = f"preset {preset!r} is deprecated; use {canonical!r} instead"
+    warnings.warn(msg, DeprecationWarning, stacklevel=2)
+    if sys.stderr.isatty():
+        print(f"DeprecationWarning: {msg}", file=sys.stderr)
 
 
 class CodingAgent:
@@ -42,7 +62,7 @@ class CodingAgent:
         self,
         model: str = "claude-sonnet-4-20250514",
         project_dir: str | Path | None = None,
-        preset: str = "claude_code",
+        preset: str = "coding_agent",
         *,
         provider: Any = None,
         permission_callback: Any = None,
@@ -62,8 +82,11 @@ class CodingAgent:
         from chimera.commands.registry import CommandRegistry
         from chimera.providers.factory import create_provider
 
+        # Surface a deprecation warning on legacy preset keys.
+        _warn_if_deprecated_preset(preset)
+
         # Load config
-        config = PRESETS.get(preset, PRESETS["claude_code"])
+        config = PRESETS.get(preset, PRESETS["coding_agent"])
         self._config = config
         self._project_dir = Path(project_dir or ".").resolve()
 
@@ -119,8 +142,9 @@ class CodingAgent:
 
         # Wire spawner into tools that need it
         for t in self.tools:
-            if hasattr(t, "_spawner") and t._spawner is None and self._spawner is not None:
-                t._spawner = self._spawner
+            t_spawner = getattr(t, "_spawner", "missing")
+            if t_spawner is None and self._spawner is not None:
+                t._spawner = self._spawner  # type: ignore[attr-defined]
 
         # Permissions (if enabled)
         self._permission_checker = None

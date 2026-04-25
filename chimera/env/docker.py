@@ -84,6 +84,7 @@ class DockerEnvironment(Environment):
         return kwargs
 
     def setup(self) -> None:
+        assert docker is not None, "docker package is required for DockerEnvironment"
         self._client = docker.from_env()
         container_kwargs = self._build_container_kwargs()
         self._container = self._client.containers.run(**container_kwargs)

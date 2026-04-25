@@ -5,6 +5,7 @@ import hashlib
 import json
 import secrets
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 import webbrowser

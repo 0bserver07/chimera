@@ -11,7 +11,7 @@ from chimera.core.tool import BaseTool
 
 
 def coding_tools(**kwargs: Any) -> list[BaseTool]:
-    """Full coding tool set -- equivalent to Claude Code's tool set."""
+    """Full coding tool set."""
     from chimera.tools.bash import BashTool
     from chimera.tools.cached_read import CachedReadTool
     from chimera.tools.write import WriteFileTool
@@ -56,7 +56,9 @@ def coding_tools(**kwargs: Any) -> list[BaseTool]:
         GitTool(),
         TestTool(),
         ThinkTool(),
-        TodoTool(),
+        # WHY: persist=True so /resume rehydrates todos in production
+        # CLI use; bare TodoTool() in tests stays ephemeral.
+        TodoTool(persist=True),
         WebFetchTool(),
         WebSearchTool(),
         AskUserTool(),

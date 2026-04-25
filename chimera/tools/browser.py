@@ -102,6 +102,7 @@ class BrowserTool(BaseTool):
         """Lazily start Playwright and open a browser."""
         if self._browser is not None:
             return
+        assert sync_playwright is not None  # checked in execute()
         self._playwright = sync_playwright().start()
         self._browser = self._playwright.chromium.launch(headless=self.headless)
         self._context = self._browser.new_context(

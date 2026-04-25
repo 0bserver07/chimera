@@ -14,7 +14,7 @@ Usage::
     # or
     python chimera/mcp_servers/testgen_server.py
 
-Configure in ``.mcp.json`` for Claude Code::
+Configure in ``.mcp.json`` for any compatible MCP host::
 
     {
       "mcpServers": {

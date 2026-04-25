@@ -83,6 +83,7 @@ class ModalProvider(Provider):
             "Content-Type": "application/json",
         }
 
+        assert httpx is not None  # checked in __init__
         resp = httpx.post(endpoint, json=payload, headers=headers, timeout=300)
         resp.raise_for_status()
         data = resp.json()

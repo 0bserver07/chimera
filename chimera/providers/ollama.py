@@ -3,9 +3,10 @@ from __future__ import annotations
 
 import json
 import uuid
+from collections.abc import AsyncIterator, Iterator
 from typing import Any
 
-from chimera.providers.base import Provider, Response, ToolSchema
+from chimera.providers.base import Provider, Response, StreamEvent, ToolSchema
 from chimera.types import Message, ToolCall
 
 try:
@@ -14,20 +15,96 @@ except ImportError:
     httpx = None  # type: ignore[assignment]
 
 
+_DEFAULT_NUM_CTX = 131_072
+_DEFAULT_KEEP_ALIVE = "60m"
+
+
 class OllamaProvider(Provider):
-    """Ollama local model provider. Uses the Ollama HTTP API directly via httpx."""
+    """Ollama local model provider.
+
+    Talks to the native Ollama HTTP API at ``/api/chat`` (NOT the
+    OpenAI-compatible ``/v1/chat/completions`` shim, which silently drops
+    ``tool_calls`` from streaming chunks).
+
+    Defaults are tuned for Kimi-K2-class tool-using models: large
+    ``num_ctx``, long ``keep_alive``, and ``think: true`` enabled
+    automatically when the model name starts with ``kimi``.
+    """
 
     def __init__(
         self,
         model: str,
         base_url: str = "http://localhost:11434",
-        context_length: int = 128_000,
+        context_length: int = _DEFAULT_NUM_CTX,
+        keep_alive: str = _DEFAULT_KEEP_ALIVE,
+        think: bool | None = None,
     ) -> None:
         if httpx is None:
             raise ImportError("pip install httpx")
         self._model = model
         self._base_url = base_url.rstrip("/")
         self._context_length = context_length
+        self._keep_alive = keep_alive
+        # When unspecified, enable thinking only for kimi* models since
+        # generic models reject the field.
+        self._think = think if think is not None else model.lower().startswith("kimi")
+
+    # ------------------------------------------------------------------
+    # Request / response helpers
+    # ------------------------------------------------------------------
+
+    def _build_payload(
+        self,
+        messages: list[Message],
+        tools: list[ToolSchema] | None,
+        temperature: float,
+        max_tokens: int | None,
+        stream: bool,
+        overrides: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Assemble the JSON body sent to ``/api/chat``.
+
+        Args:
+            messages: Conversation history.
+            tools: Tool schemas (Anthropic shape) to expose, or ``None``.
+            temperature: Sampling temperature.
+            max_tokens: Optional ``num_predict`` cap.
+            stream: Whether NDJSON streaming is requested.
+            overrides: Caller-supplied kwargs that may override
+                ``num_ctx``, ``keep_alive``, ``think``, or
+                ``tool_choice``.
+
+        Returns:
+            Dict ready to JSON-encode for the ``/api/chat`` endpoint.
+        """
+        options: dict[str, Any] = {
+            "temperature": temperature,
+            "num_ctx": overrides.get("num_ctx", self._context_length),
+        }
+        if max_tokens:
+            options["num_predict"] = max_tokens
+
+        payload: dict[str, Any] = {
+            "model": self._model,
+            "messages": self._convert_messages(messages),
+            "stream": stream,
+            "options": options,
+            "keep_alive": overrides.get("keep_alive", self._keep_alive),
+        }
+
+        think = overrides.get("think", self._think)
+        if think:
+            payload["think"] = True
+
+        if tools:
+            payload["tools"] = self._convert_tools(tools)
+            tool_choice = overrides.get("tool_choice")
+            # Server rejects tool_choice="required" alongside think:true,
+            # so silently drop it in that combination.
+            if tool_choice and not (think and tool_choice == "required"):
+                payload["tool_choice"] = tool_choice
+
+        return payload
 
     def complete(
         self,
@@ -36,21 +113,13 @@ class OllamaProvider(Provider):
         temperature: float = 0.0,
         max_tokens: int | None = None,
         thinking: Any = None,
+        **kwargs: Any,
     ) -> Response:
-        api_messages = self._convert_messages(messages)
+        payload = self._build_payload(
+            messages, tools, temperature, max_tokens, stream=False, overrides=kwargs,
+        )
 
-        payload: dict[str, Any] = {
-            "model": self._model,
-            "messages": api_messages,
-            "stream": False,
-            "options": {"temperature": temperature},
-        }
-        if max_tokens:
-            payload["options"]["num_predict"] = max_tokens
-        if tools:
-            payload["tools"] = self._convert_tools(tools)
-
-        resp = httpx.post(
+        resp = httpx.post(  # type: ignore[union-attr]
             f"{self._base_url}/api/chat",
             json=payload,
             timeout=300,
@@ -58,16 +127,18 @@ class OllamaProvider(Provider):
         resp.raise_for_status()
         data = resp.json()
 
-        # Parse response
         msg = data.get("message", {})
         content = msg.get("content", "")
-        tool_calls = []
+        tool_calls: list[ToolCall] = []
 
         for tc in msg.get("tool_calls", []):
             func = tc.get("function", {})
             args = func.get("arguments", {})
             if isinstance(args, str):
-                args = json.loads(args)
+                try:
+                    args = json.loads(args)
+                except json.JSONDecodeError:
+                    args = {}
             tool_calls.append(ToolCall(
                 id=f"call_{uuid.uuid4().hex[:12]}",
                 name=func.get("name", ""),
@@ -83,14 +154,185 @@ class OllamaProvider(Provider):
             },
         )
 
+    # ------------------------------------------------------------------
+    # Streaming
+    # ------------------------------------------------------------------
+
+    def stream(
+        self,
+        messages: list[Message],
+        tools: list[ToolSchema] | None = None,
+        temperature: float = 0.0,
+        max_tokens: int | None = None,
+        thinking: Any = None,
+        **kwargs: Any,
+    ) -> Iterator[StreamEvent]:
+        """Stream a response from Ollama via NDJSON over ``/api/chat``.
+
+        Bridges the native async generator into a sync iterator using a
+        background thread + queue so synchronous callers (the ReAct
+        loop's ``iter_steps``) keep working without an event loop.
+
+        Yields:
+            StreamEvent objects: ``text_delta`` for each content chunk;
+            ``tool_call_start`` / ``tool_call_complete`` for each tool
+            call (Ollama emits whole tool calls in one chunk, so no
+            ``tool_call_delta`` events are produced); a final ``done``
+            event carrying token usage.
+        """
+        import asyncio
+        import queue
+        import threading
+
+        out: queue.Queue[StreamEvent | None | BaseException] = queue.Queue()
+
+        def _run() -> None:
+            async def _drain() -> None:
+                try:
+                    async for event in self.async_stream(
+                        messages, tools=tools, temperature=temperature,
+                        max_tokens=max_tokens, thinking=thinking, **kwargs,
+                    ):
+                        out.put(event)
+                except BaseException as exc:  # noqa: BLE001
+                    out.put(exc)
+                finally:
+                    out.put(None)
+
+            asyncio.run(_drain())
+
+        threading.Thread(target=_run, daemon=True).start()
+
+        while True:
+            item = out.get()
+            if item is None:
+                return
+            if isinstance(item, BaseException):
+                raise item
+            yield item
+
+    async def async_stream(
+        self,
+        messages: list[Message],
+        tools: list[ToolSchema] | None = None,
+        temperature: float = 0.0,
+        max_tokens: int | None = None,
+        thinking: Any = None,
+        **kwargs: Any,
+    ) -> AsyncIterator[StreamEvent]:
+        """Native async NDJSON streamer for ``/api/chat``.
+
+        Args:
+            messages: Conversation history.
+            tools: Tool schemas, or ``None``.
+            temperature: Sampling temperature.
+            max_tokens: Optional ``num_predict`` cap.
+            thinking: Ignored (Ollama uses payload-level ``think``
+                derived from model name / kwargs instead).
+            **kwargs: Per-request overrides for ``num_ctx``,
+                ``keep_alive``, ``think``, ``tool_choice``.
+
+        Yields:
+            Stream of :class:`StreamEvent` objects matching the shapes
+            consumed by ``Loop._accumulate_stream``.
+
+        Raises:
+            httpx.HTTPStatusError: On non-2xx responses from Ollama.
+        """
+        payload = self._build_payload(
+            messages, tools, temperature, max_tokens, stream=True, overrides=kwargs,
+        )
+
+        emitted_starts: dict[str, str] = {}
+        usage: dict[str, int] = {"input_tokens": 0, "output_tokens": 0}
+
+        async with httpx.AsyncClient(timeout=None) as client:  # type: ignore[union-attr]
+            async with client.stream(
+                "POST", f"{self._base_url}/api/chat", json=payload,
+            ) as resp:
+                resp.raise_for_status()
+                async for line in resp.aiter_lines():
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        chunk = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+
+                    msg = chunk.get("message") or {}
+
+                    text = msg.get("content") or ""
+                    if text:
+                        yield StreamEvent(type="text_delta", content=text)
+
+                    for tc in msg.get("tool_calls") or []:
+                        func = tc.get("function") or {}
+                        name = func.get("name", "")
+                        args = func.get("arguments", {})
+                        if isinstance(args, str):
+                            try:
+                                args = json.loads(args)
+                            except json.JSONDecodeError:
+                                args = {}
+
+                        # Ollama's native tool_calls have no id; key on
+                        # (index, name) within this stream and synthesize
+                        # a UUID reused across start/complete.
+                        key = f"{len(emitted_starts)}:{name}"
+                        call_id = emitted_starts.get(key)
+                        if call_id is None:
+                            call_id = f"call_{uuid.uuid4().hex[:12]}"
+                            emitted_starts[key] = call_id
+                            yield StreamEvent(
+                                type="tool_call_start",
+                                tool_call=ToolCall(id=call_id, name=name, arguments={}),
+                            )
+
+                        yield StreamEvent(
+                            type="tool_call_complete",
+                            tool_call=ToolCall(id=call_id, name=name, arguments=args),
+                        )
+
+                    if chunk.get("done"):
+                        usage = {
+                            "input_tokens": chunk.get("prompt_eval_count", 0),
+                            "output_tokens": chunk.get("eval_count", 0),
+                        }
+                        break
+
+        yield StreamEvent(type="done", usage=usage)
+
+    # ------------------------------------------------------------------
+    # Message / tool conversion
+    # ------------------------------------------------------------------
+
     def _convert_messages(self, messages: list[Message]) -> list[dict[str, Any]]:
+        """Convert internal :class:`Message` objects to Ollama wire shape.
+
+        Tool-result messages carry ``tool_name`` (resolved by walking
+        back to the matching prior assistant ``tool_calls`` entry),
+        which Ollama requires in lieu of an OpenAI-style
+        ``tool_call_id``.
+        """
+        # Build id -> name map from preceding assistant tool_calls
+        # so tool results can be tagged with tool_name.
+        id_to_name: dict[str, str] = {}
+        for msg in messages:
+            if msg.role == "assistant" and msg.tool_calls:
+                for tc in msg.tool_calls:
+                    id_to_name[tc.id] = tc.name
+
         api_messages: list[dict[str, Any]] = []
         for msg in messages:
             if msg.role == "tool":
-                api_messages.append({
+                entry: dict[str, Any] = {
                     "role": "tool",
                     "content": msg.content,
-                })
+                }
+                if msg.call_id and msg.call_id in id_to_name:
+                    entry["tool_name"] = id_to_name[msg.call_id]
+                api_messages.append(entry)
             elif msg.role == "assistant" and msg.tool_calls:
                 tc_list = []
                 for tc in msg.tool_calls:

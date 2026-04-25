@@ -42,18 +42,115 @@ class MCPClient:
         """
         self._transports[name] = StdioTransport(command, args, env)
 
-    def add_http(self, name: str, url: str, auth: str | None = None) -> None:
+    def add_http(self, name: str, url: str, auth: str | None = None,
+                 headers: dict[str, str] | None = None) -> None:
         """Register an HTTP MCP server.
 
         Args:
             name: Unique server name.
             url: MCP endpoint URL.
             auth: Bearer token for authentication.
+            headers: Extra HTTP headers (merged after the bearer header).
         """
-        headers = {}
+        merged: dict[str, str] = {}
         if auth:
-            headers["Authorization"] = f"Bearer {auth}"
-        self._transports[name] = HTTPTransport(url, headers)
+            merged["Authorization"] = f"Bearer {auth}"
+        if headers:
+            merged.update(headers)
+        self._transports[name] = HTTPTransport(url, merged)
+
+    def add_sse(self, name: str, url: str, auth: str | None = None,
+                headers: dict[str, str] | None = None) -> None:
+        """Register an SSE (Server-Sent Events) MCP server.
+
+        Args:
+            name: Unique server name.
+            url: SSE endpoint URL.
+            auth: Bearer token; merged into the ``Authorization`` header.
+            headers: Extra HTTP headers.
+        """
+        from chimera.mcp.sse_transport import SSETransport
+        merged: dict[str, str] = {}
+        if auth:
+            merged["Authorization"] = f"Bearer {auth}"
+        if headers:
+            merged.update(headers)
+        self._transports[name] = SSETransport(url, merged)
+
+    def add_websocket(self, name: str, url: str, auth: str | None = None,
+                      headers: dict[str, str] | None = None) -> None:
+        """Register a WebSocket MCP server.
+
+        Requires the optional ``websockets`` dependency (install via the
+        ``mcp`` extra).
+
+        Args:
+            name: Unique server name.
+            url: ``ws://`` or ``wss://`` endpoint.
+            auth: Bearer token; merged into the ``Authorization`` header.
+            headers: Extra HTTP headers (sent during the upgrade handshake).
+        """
+        from chimera.mcp.ws_transport import WebSocketTransport
+        merged: dict[str, str] = {}
+        if auth:
+            merged["Authorization"] = f"Bearer {auth}"
+        if headers:
+            merged.update(headers)
+        self._transports[name] = WebSocketTransport(url, merged)
+
+    def add_from_spec(self, name: str, spec: dict[str, Any]) -> None:
+        """Register a server from a ``.mcp.json``-style spec.
+
+        Recognised keys:
+            * ``transport``: ``"stdio" | "http" | "sse" | "websocket"``
+              (auto-inferred when omitted, from the presence of ``command``,
+              ``url``, or the URL scheme).
+            * ``command`` / ``args`` / ``env`` for stdio.
+            * ``url`` / ``headers`` / ``auth`` for HTTP, SSE, WebSocket.
+            * ``oauth``: a dict shaped like the ``.mcp.json`` ``oauth`` block;
+              when present, an access token is fetched lazily and merged into
+              ``Authorization`` if one is already cached.
+
+        Args:
+            name: Unique server name.
+            spec: MCP server spec dict.
+        """
+        transport = spec.get("transport")
+        if transport is None:
+            if "command" in spec:
+                transport = "stdio"
+            elif "url" in spec:
+                url = str(spec["url"])
+                if url.startswith(("ws://", "wss://")):
+                    transport = "websocket"
+                else:
+                    transport = "http"
+            else:
+                raise ValueError(f"MCP spec needs 'command' or 'url': {spec!r}")
+
+        oauth_spec = spec.get("oauth")
+        bearer = spec.get("auth")
+        if oauth_spec and not bearer:
+            from chimera.mcp.oauth import OAuthClient, oauth_config_from_dict
+            oauth_client = OAuthClient(name, oauth_config_from_dict(oauth_spec))
+            try:
+                bearer = oauth_client.access_token()
+            except Exception:
+                bearer = None
+
+        headers = spec.get("headers")
+
+        if transport == "stdio":
+            self.add_stdio(name, spec["command"],
+                           args=spec.get("args"), env=spec.get("env"))
+        elif transport == "http":
+            self.add_http(name, spec["url"], auth=bearer, headers=headers)
+        elif transport == "sse":
+            self.add_sse(name, spec["url"], auth=bearer, headers=headers)
+        elif transport in ("websocket", "ws"):
+            self.add_websocket(name, spec["url"], auth=bearer, headers=headers)
+        else:
+            raise ValueError(f"Unknown MCP transport: {transport!r}")
 
     def add_transport(self, name: str, transport: MCPTransport) -> None:
         """Register a custom transport.

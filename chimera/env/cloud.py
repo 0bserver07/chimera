@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from typing import Any
 
 from chimera.env.remote import RemoteEnvironment
 
@@ -59,7 +60,8 @@ class CloudEnvironment(RemoteEnvironment):
         self._sandbox_id: str | None = sandbox_id
 
         # Build a temporary httpx client for the cloud provisioning API.
-        self._cloud_client: httpx.Client = httpx.Client(
+        # If httpx is missing this raises AttributeError at the .Client access.
+        self._cloud_client: Any = httpx.Client(  # type: ignore[union-attr]
             base_url=self._cloud_api_url,
             headers={"Authorization": f"Bearer {cloud_api_key}"},
             timeout=init_timeout,

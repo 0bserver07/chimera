@@ -1,9 +1,9 @@
 """Named presets for assembling different agent configurations."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
-__all__ = ["AssemblyConfig", "PRESETS"]
+__all__ = ["AssemblyConfig", "PRESETS", "DEPRECATED_PRESET_ALIASES"]
 
 
 @dataclass
@@ -24,10 +24,19 @@ class AssemblyConfig:
     model: str | None = None       # Override model
 
 
+# Map deprecated preset keys -> canonical replacement key.
+# Both keys remain in PRESETS for one release; consumers should migrate to
+# the canonical key. The CLI/runtime emits a DeprecationWarning when a
+# deprecated key is used.
+DEPRECATED_PRESET_ALIASES: dict[str, str] = {
+    "claude_code": "coding_agent",
+}
+
+
 PRESETS: dict[str, AssemblyConfig] = {
-    "claude_code": AssemblyConfig(
-        name="claude_code",
-        description="Full-featured coding agent (Claude Code style)",
+    "coding_agent": AssemblyConfig(
+        name="coding_agent",
+        description="Full-featured coding agent (canonical preset)",
         tool_set="coding",
         permissions=True,
         hooks=True,
@@ -86,3 +95,12 @@ PRESETS: dict[str, AssemblyConfig] = {
         max_turns=30,
     ),
 }
+
+# Register deprecated aliases pointing at the canonical preset's config.
+# WHY: callers using the legacy key get an identical Agent (same tools, same
+# prompt, same flags) — the alias is structural, not just textual. Keeping
+# `name` as the legacy key preserves prompt lookup behavior in
+# `system_prompts.PRESET_PROMPTS`, which still contains the legacy key.
+for _legacy_key, _canonical_key in DEPRECATED_PRESET_ALIASES.items():
+    if _legacy_key not in PRESETS and _canonical_key in PRESETS:
+        PRESETS[_legacy_key] = replace(PRESETS[_canonical_key], name=_legacy_key)

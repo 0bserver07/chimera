@@ -62,6 +62,7 @@ class OpenAICompatibleProvider(Provider):
             payload["tools"] = self._convert_tools(tools)
 
         endpoint = f"{self._base_url}/chat/completions"
+        assert httpx is not None  # checked in __init__
         resp = httpx.post(endpoint, json=payload, headers=self._headers, timeout=300)
         resp.raise_for_status()
         data = resp.json()
