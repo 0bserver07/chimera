@@ -1,0 +1,93 @@
+name: Mink Live
+
+# Opt-in lane that drives the walking-skeleton end-to-end against a real
+# Ollama daemon (small CPU model — cloud models need real auth).  Triggered
+# manually via workflow_dispatch or by labelling a PR ``live``; never runs
+# on every push.
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [labeled, synchronize, reopened]
+
+jobs:
+  mink-live:
+    # Skip on label events that aren't the ``live`` label.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      contains(github.event.pull_request.labels.*.name, 'live')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CHIMERA_MINK_LIVE: "1"
+      OLLAMA_HOST: "http://localhost:11434"
+      # WHY: kimi-k2.6:cloud requires Ollama Cloud credentials we don't
+      # surface in CI; the CPU-friendly llama3.2:3b proves the wiring.
+      CHIMERA_MINK_MODEL: "llama3.2:3b"
+      CHIMERA_MINK_LIVE_MODEL: "llama3.2:3b"
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --extra dev --extra anthropic
+
+      - name: Install Ollama
+        id: install_ollama
+        # WHY: the runner may be in a network/policy posture that blocks
+        # the upstream installer.  Don't fail the workflow — emit a
+        # WORKFLOW_DISABLED notice and skip the live test.
+        run: |
+          set +e
+          curl -fsSL https://ollama.ai/install.sh | sh
+          rc=$?
+          if [ "$rc" -ne 0 ]; then
+            echo "::notice title=WORKFLOW_DISABLED::Ollama installer failed (exit $rc); skipping live mink test."
+            echo "ollama_ok=0" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "ollama_ok=1" >> "$GITHUB_OUTPUT"
+
+      - name: Start Ollama daemon
+        if: steps.install_ollama.outputs.ollama_ok == '1'
+        id: start_ollama
+        run: |
+          set +e
+          nohup ollama serve > /tmp/ollama.log 2>&1 &
+          # Wait up to 30s for /api/tags to respond.
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:11434/api/tags > /dev/null 2>&1; then
+              echo "ollama_up=1" >> "$GITHUB_OUTPUT"
+              echo "ollama up after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::notice title=WORKFLOW_DISABLED::Ollama daemon never answered /api/tags; skipping live mink test."
+          echo "ollama_up=0" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Pull llama3.2:3b
+        if: steps.start_ollama.outputs.ollama_up == '1'
+        id: pull_model
+        run: |
+          set +e
+          ollama pull llama3.2:3b
+          rc=$?
+          if [ "$rc" -ne 0 ]; then
+            echo "::notice title=WORKFLOW_DISABLED::ollama pull llama3.2:3b failed (exit $rc); skipping live mink test."
+            echo "model_ok=0" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "model_ok=1" >> "$GITHUB_OUTPUT"
+
+      - name: Run live walking-skeleton test
+        if: steps.pull_model.outputs.model_ok == '1'
+        run: |
+          uv run pytest \
+            tests/integration/test_mink_capabilities.py::test_11_walking_skeleton_live_or_skip \
+            -v --tb=short
