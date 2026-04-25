@@ -1,7 +1,7 @@
 """Central permission checker implementing the step-by-step algorithm."""
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from chimera.permissions.context import PermissionContext
 from chimera.permissions.decisions import DecisionReason, PermissionDecision
@@ -12,7 +12,18 @@ from chimera.permissions.rules import (
     RuleSource,
 )
 
+if TYPE_CHECKING:
+    from chimera.security.analyzer import SecurityAnalyzer
+
 __all__ = ["PermissionChecker"]
+
+
+# Hook-output ``permissionDecision`` literals understood by the checker.
+# ``"defer"`` means "do not override; continue with the next phase".
+_HOOK_DECISION_ALLOW = "allow"
+_HOOK_DECISION_DENY = "deny"
+_HOOK_DECISION_ASK = "ask"
+_HOOK_DECISION_DEFER = "defer"
 
 
 class PermissionChecker:
@@ -23,7 +34,8 @@ class PermissionChecker:
 
     1a. Deny rules for tool -> deny
     1b. Ask rules for tool -> ask
-    1c. Call tool.check_permissions() if available
+    1c. SecurityAnalyzer (optional) — escalates risky calls to ASK/DENY
+    1c'.Tool-level ``check_permissions`` hook (optional)
     1d. If tool denied -> deny
     1e. If requires_user_interaction and result is ASK -> ask (bypass-immune)
     1g. If result is ASK with reason type "safety_check" -> ask (bypass-immune)
@@ -31,22 +43,68 @@ class PermissionChecker:
     2b. Allow rules -> allow
     3.  Default -> ask with suggestions
     4.  DONT_ASK post-processing: convert ASK -> DENY
+
+    A ``permission_decision`` argument (typically sourced from a PreToolUse
+    hook's ``hookSpecificOutput.permissionDecision``) overrides the resolver
+    when set to ``"allow"``, ``"deny"`` or ``"ask"``; the literal ``"defer"``
+    is treated as "no override".
+
+    Args:
+        security_analyzer: Optional :class:`SecurityAnalyzer` invoked at step
+            1c.  When it returns :class:`SecurityRisk.HIGH` (or ``UNKNOWN``,
+            which is treated as HIGH), the call is denied immediately.
     """
+
+    def __init__(
+        self,
+        security_analyzer: SecurityAnalyzer | None = None,
+    ) -> None:
+        """Construct a checker, optionally wiring a security analyzer.
+
+        Args:
+            security_analyzer: Optional analyzer evaluated at step 1c.
+        """
+        self._security_analyzer = security_analyzer
 
     async def check(
         self,
         tool: Any,
         input_args: dict[str, Any],
         context: PermissionContext,
+        *,
+        permission_decision: str | None = None,
     ) -> PermissionDecision:
-        """Run the permission algorithm and return a decision."""
+        """Run the permission algorithm and return a decision.
+
+        Args:
+            tool: Tool object (must expose ``name``).
+            input_args: Tool input dict.
+            context: Active :class:`PermissionContext`.
+            permission_decision: Override sourced from a PreToolUse hook's
+                ``hookSpecificOutput.permissionDecision``.  Recognised values
+                are ``"allow"``, ``"deny"``, ``"ask"`` and ``"defer"``.
+
+        Returns:
+            A :class:`PermissionDecision`.
+        """
         tool_name: str = tool.name
         content = self._get_content(tool, input_args)
 
-        # ---- Phase 1: early exits (deny / ask / tool-level) ---------------
+        # ---- Phase 0: hook override --------------------------------------
+        # If a PreToolUse hook explicitly set a permissionDecision (other than
+        # "defer"), honour it before consulting any rules.
+        hook_decision = self._decision_from_hook(
+            permission_decision, tool_name, content
+        )
+        if hook_decision is not None:
+            return hook_decision
+
+        # ---- Phase 1: early exits (deny / ask / security / tool-level) ----
 
         # 1a. Check deny rules
-        deny_match = self._find_rule(context.deny_rules, tool_name, content)
+        deny_match = self._find_rule(
+            context.deny_rules, tool_name, content, input_args
+        )
         if deny_match is not None:
             return PermissionDecision.deny(
                 message=f"Denied by rule: {deny_match}",
@@ -54,7 +112,9 @@ class PermissionChecker:
             )
 
         # 1b. Check ask rules
-        ask_match = self._find_rule(context.ask_rules, tool_name, content)
+        ask_match = self._find_rule(
+            context.ask_rules, tool_name, content, input_args
+        )
         if ask_match is not None:
             return PermissionDecision.ask(
                 message=f"Ask rule matched: {ask_match}",
@@ -62,7 +122,12 @@ class PermissionChecker:
                 suggestions=self._suggest_rules(tool_name, content),
             )
 
-        # 1c/1d. Tool-level check_permissions (optional hook)
+        # 1c. SecurityAnalyzer (optional) — denies HIGH-risk calls outright.
+        sec_decision = self._evaluate_security(tool_name, input_args)
+        if sec_decision is not None:
+            return sec_decision
+
+        # 1c'/1d. Tool-level check_permissions (optional hook)
         check_fn = getattr(tool, "check_permissions", None)
         tool_decision: PermissionDecision | None = None
         if check_fn is not None:
@@ -119,7 +184,9 @@ class PermissionChecker:
             )
 
         # 2b. Allow rules
-        allow_match = self._find_rule(context.allow_rules, tool_name, content)
+        allow_match = self._find_rule(
+            context.allow_rules, tool_name, content, input_args
+        )
         if allow_match is not None:
             return PermissionDecision.allow(
                 message=f"Allowed by rule: {allow_match}",
@@ -152,17 +219,114 @@ class PermissionChecker:
         rules: dict[RuleSource, list[str]],
         tool_name: str,
         content: str | None = None,
+        tool_input: dict[str, Any] | None = None,
     ) -> str | None:
-        """Search *rules* (across all sources) for the first match against
-        *tool_name* (and optionally *content*).  Returns the matched rule
-        string or ``None``."""
+        """Find the first rule across all sources that matches the call.
+
+        Args:
+            rules: Mapping of :class:`RuleSource` to list of rule strings.
+            tool_name: Tool name being matched.
+            content: Optional extracted content for legacy content match.
+            tool_input: Full tool input dict, used for ``arg_key``
+                matching (e.g. ``Bash(command:git push *)``).
+
+        Returns:
+            The matching rule string or ``None``.
+        """
         # Iterate sources in precedence order (highest first) so that
         # higher-precedence matches win.
         for source in sorted(rules, key=lambda s: s.value, reverse=True):
             for rule_str in rules[source]:
                 rv = PermissionRuleValue.from_string(rule_str)
-                if rv.matches(tool_name, input_content=content):
+                if rv.matches(
+                    tool_name,
+                    input_content=content,
+                    tool_input=tool_input,
+                ):
                     return rule_str
+        return None
+
+    def _evaluate_security(
+        self,
+        tool_name: str,
+        input_args: dict[str, Any],
+    ) -> PermissionDecision | None:
+        """Run the wired :class:`SecurityAnalyzer`, if any, at step 1c.
+
+        High-risk calls (or ``UNKNOWN``, treated as HIGH) are denied
+        outright with a ``security`` decision reason.  Lower-risk results
+        return ``None`` so the algorithm continues.
+
+        Args:
+            tool_name: Tool being invoked.
+            input_args: Tool input dict.
+
+        Returns:
+            A DENY :class:`PermissionDecision` for HIGH risk, otherwise None.
+        """
+        if self._security_analyzer is None:
+            return None
+
+        # Build a duck-typed ToolCall — the analyzer only reads ``name`` and
+        # ``arguments``, so we avoid importing chimera.types here.
+        from types import SimpleNamespace
+
+        from chimera.security.risk import SecurityRisk
+
+        tool_call = SimpleNamespace(name=tool_name, arguments=input_args)
+        try:
+            risk = self._security_analyzer.analyze(tool_call)  # type: ignore[arg-type]
+        except Exception:  # pragma: no cover - analyzer is best-effort
+            return None
+
+        if risk == SecurityRisk.HIGH or risk == SecurityRisk.UNKNOWN:
+            return PermissionDecision.deny(
+                message=f"Denied by security analyzer (risk={risk.name}).",
+                reason=DecisionReason(type="security", detail=risk.name),
+            )
+        return None
+
+    @staticmethod
+    def _decision_from_hook(
+        permission_decision: str | None,
+        tool_name: str,
+        content: str | None,
+    ) -> PermissionDecision | None:
+        """Translate a hook ``permissionDecision`` literal into a decision.
+
+        Args:
+            permission_decision: One of ``"allow"``, ``"deny"``, ``"ask"``,
+                ``"defer"``, or ``None``.
+            tool_name: Tool name (for human-readable messages).
+            content: Extracted content (for suggestion display).
+
+        Returns:
+            A :class:`PermissionDecision` for ``allow``/``deny``/``ask``,
+            or ``None`` for ``defer``/``None``/unknown.
+        """
+        if permission_decision is None:
+            return None
+        decision = permission_decision.lower()
+        if decision in (_HOOK_DECISION_DEFER, ""):
+            return None
+        reason = DecisionReason(type="hook", detail=decision)
+        if decision == _HOOK_DECISION_ALLOW:
+            return PermissionDecision.allow(
+                message=f"Allowed by PreToolUse hook for {tool_name}.",
+                reason=reason,
+            )
+        if decision == _HOOK_DECISION_DENY:
+            return PermissionDecision.deny(
+                message=f"Denied by PreToolUse hook for {tool_name}.",
+                reason=reason,
+            )
+        if decision == _HOOK_DECISION_ASK:
+            return PermissionDecision.ask(
+                message=f"PreToolUse hook requested confirmation for {tool_name}.",
+                reason=reason,
+                suggestions=[tool_name] + ([f"{tool_name}({content})"] if content else []),
+            )
+        # Unknown literal — defer to the resolver.
         return None
 
     def _suggest_rules(self, tool_name: str, content: str | None = None) -> list[str]:
