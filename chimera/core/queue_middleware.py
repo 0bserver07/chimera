@@ -21,24 +21,30 @@ from chimera.core.message_queue import MessageQueue
 
 if TYPE_CHECKING:
     from chimera.core.context import Context
+    from chimera.core.middleware import LoopMiddleware
     from chimera.core.tool import BaseTool
 
-# Try to import LoopMiddleware; if not available yet, define a stub
-try:
-    from chimera.core.middleware import LoopMiddleware
-except ImportError:
+# WHY (pyright): keep the typing-only import above so static analysis
+# always sees the canonical ``LoopMiddleware``. At runtime we fall back
+# to a minimal stub when ``chimera.core.middleware`` hasn't been imported
+# yet (e.g. during partial bootstrapping) — the stub implements the same
+# 3-method protocol so subclassing still works.
+if not TYPE_CHECKING:
+    try:
+        from chimera.core.middleware import LoopMiddleware
+    except ImportError:
 
-    class LoopMiddleware:  # type: ignore[no-redef]
-        """Minimal stub used when ``chimera.core.middleware`` is not yet available."""
+        class LoopMiddleware:  # type: ignore[no-redef]
+            """Minimal stub used when ``chimera.core.middleware`` is not yet available."""
 
-        def before_model(self, context: Context, tools: list[BaseTool]) -> Context:  # type: ignore[override]
-            return context
+            def before_model(self, context, tools):  # type: ignore[override,no-untyped-def]
+                return context
 
-        def after_model(self, response: object, context: Context) -> object:  # type: ignore[override]
-            return response
+            def after_model(self, response, context):  # type: ignore[override,no-untyped-def]
+                return response
 
-        def after_agent(self, result: object, env: object) -> object:  # type: ignore[override]
-            return result
+            def after_agent(self, result, env):  # type: ignore[override,no-untyped-def]
+                return result
 
 
 class MessageQueueMiddleware(LoopMiddleware):

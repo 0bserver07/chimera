@@ -80,7 +80,11 @@ class LlamaCppBackend(RuntimeBackend):
         else:
             self._adapter_tmp = None
 
-        self._llm = llama_cpp.Llama(**kwargs)
+        # WHY (pyright): ``llama_cpp`` is an optional dep without published
+        # type stubs, so pyright can't see the ``Llama`` class on the module.
+        # We've already raised ImportError above when the import fails, so
+        # the attribute access is safe at runtime.
+        self._llm = llama_cpp.Llama(**kwargs)  # pyright: ignore[reportAttributeAccessIssue]
         self._bundle = bundle
         self._state_api_ok = None  # re-probe on this fresh Llama instance.
 
