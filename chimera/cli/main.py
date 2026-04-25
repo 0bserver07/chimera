@@ -22,6 +22,17 @@ def build_parser() -> argparse.ArgumentParser:
         prog="chimera",
         description="Chimera: AI-powered code synthesis framework",
     )
+    # WHY (audit H-1): expose `chimera --version` so users (and packaging
+    # systems) can confirm what they have installed without importing.
+    try:
+        from chimera import __version__ as _chimera_version
+    except Exception:  # noqa: BLE001
+        _chimera_version = "unknown"
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"chimera {_chimera_version}",
+    )
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
     # ---- synthesize subcommand ----
@@ -131,8 +142,12 @@ def build_parser() -> argparse.ArgumentParser:
     code_parser.add_argument(
         "--preset",
         default=None,
-        choices=["claude_code", "codex", "minimal", "explore"],
-        help="Agent preset — uses the new CodingAgent stack (default: legacy stack)",
+        choices=["coding_agent", "claude_code", "codex", "minimal", "explore"],
+        help=(
+            "Agent preset — uses the CodingAgent stack (default: legacy stack). "
+            "'claude_code' is a deprecated alias for 'coding_agent' and will be "
+            "removed in a future release."
+        ),
     )
     code_parser.add_argument(
         "-p", "--print",
@@ -140,6 +155,23 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Non-interactive: run a single task and print the result",
     )
+
+    # ---- mink subcommand ----
+    mink_parser = subparsers.add_parser(
+        "mink",
+        help="Mink — a Chimera coding agent (Ollama Kimi K2.6 by default)",
+    )
+    from chimera.mink import cli as _mink_cli
+    _mink_cli.add_arguments(mink_parser)
+
+    # ---- cc alias (deprecated) ----
+    # WHY: keep the historical 'cc' subcommand working so existing scripts
+    # don't break overnight. Surfaces a deprecation warning when invoked.
+    cc_alias = subparsers.add_parser(
+        "cc",
+        help="DEPRECATED alias for 'mink'. Use 'chimera mink' instead.",
+    )
+    _mink_cli.add_arguments(cc_alias)
 
     # ---- review subcommand ----
     review_parser = subparsers.add_parser(
@@ -257,6 +289,10 @@ def build_parser() -> argparse.ArgumentParser:
     # ---- fs subcommand ----
     from chimera.cli import fs as _fs_cli
     _fs_cli.register(subparsers)
+
+    # ---- team subcommand (experimental, gated by CHIMERA_EXPERIMENTAL_AGENT_TEAMS) ----
+    from chimera.mink import team as _team_cli
+    _team_cli.register(subparsers)
 
     # ---- plugins subcommand ----
     plugins_parser = subparsers.add_parser(
@@ -741,6 +777,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     elif args.command == "code":
         from chimera.cli.code import run_code
         return run_code(args)
+    elif args.command == "mink":
+        from chimera.mink import cli as _mink_cli
+        return _mink_cli.run(args)
+    elif args.command == "cc":
+        # Deprecated alias — keep working but warn.
+        print(
+            "[deprecated] the legacy 'cc' subcommand has been renamed to "
+            "'mink'. Please update your scripts to use 'chimera mink'.",
+            file=sys.stderr,
+        )
+        from chimera.mink import cli as _mink_cli
+        return _mink_cli.run(args)
     elif args.command == "review":
         return run_review(args)
     elif args.command == "ci-fix":
@@ -758,6 +806,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     elif args.command == "fs":
         rc: int = args.func(args)
         return rc
+    elif args.command == "team":
+        rc2: int = args.func(args)
+        return rc2
     else:
         parser.print_help()
         return 1

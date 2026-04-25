@@ -34,7 +34,10 @@ anthropic = ["anthropic>=0.40"]
 openai = ["openai>=1.50"]
 browser = ["playwright>=1.40"]
 remote = ["httpx>=0.27"]
-all = ["chimera-run[anthropic,openai,browser,remote]"]
+mink = ["rich>=13.7", "pygments>=2.17"]
+notebook = ["nbformat>=5"]
+mcp = ["websockets>=12"]
+all = ["chimera-run[anthropic,openai,browser,remote,mink,notebook,mcp]"]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
@@ -83,6 +86,7 @@ dev-dependencies = [
 testpaths = ["tests"]
 markers = [
     "live: opt-in tests that hit real models/networks (run with `pytest -m live`)",
+    "integration: end-to-end integration tests (select with `pytest -m integration`)",
 ]
 
 [tool.ruff]
@@ -103,3 +107,10 @@ strict = true
 # between used/unused depending on whether the dep is installed in the
 # current venv. Don't flag that as a lint failure.
 warn_unused_ignores = false
+
+# Optional-extra deps without bundled stubs. Suppress the missing-stub error
+# at the import site so a bare `mypy chimera/` stays clean without forcing
+# the extras (mcp, notebook) to install in the dev env.
+[[tool.mypy.overrides]]
+module = ["chimera.mcp.ws_transport", "chimera.tools.notebook_edit"]
+disable_error_code = ["import-not-found"]
