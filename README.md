@@ -24,12 +24,14 @@ Chimera gives you two things:
 
 ## Install
 
+Latest release: **v0.3.0** ([release notes](https://github.com/0bserver07/chimera/releases/tag/v0.3.0)).
+
 Not yet on PyPI. Install from source:
 
 ```bash
-pip install "git+https://github.com/0bserver07/chimera.git#egg=chimera-run[anthropic]"   # GLM-5 / Anthropic-compatible
-pip install "git+https://github.com/0bserver07/chimera.git#egg=chimera-run[openai]"      # GPT
-pip install "git+https://github.com/0bserver07/chimera.git#egg=chimera-run[all]"         # anthropic + openai + browser + remote
+pip install "git+https://github.com/0bserver07/chimera.git@v0.3.0#egg=chimera-run[anthropic]"   # GLM-5 / Anthropic-compatible
+pip install "git+https://github.com/0bserver07/chimera.git@v0.3.0#egg=chimera-run[openai]"      # GPT
+pip install "git+https://github.com/0bserver07/chimera.git@v0.3.0#egg=chimera-run[all]"         # anthropic + openai + browser + remote
 ```
 
 Requires Python 3.11+. A `chimera-run` PyPI release is planned post-alpha.
@@ -100,9 +102,20 @@ See [Architecture](https://0bserver07.github.io/chimera/architecture/) for the f
 The Mink CLI ships a fully assembled coding agent with no extra setup:
 
 ```bash
-chimera mink           # interactive REPL on Ollama Kimi K2.6 by default
-chimera code           # legacy stack with slash commands and session save
+chimera mink                                    # interactive REPL on Ollama Kimi K2.6 by default
+chimera mink -p "summarize this repo"           # one-shot, prints to stdout
+chimera mink runs list                          # inspect every persisted run
+chimera mink agents list                        # show available agent presets
+chimera code                                    # legacy stack with slash commands and session save
 ```
+
+`chimera mink` is the v0.3.0 coding REPL: streaming tool calls, hooks,
+permissions from `.claude/settings.json`, MCP, subagents, and a rich
+TUI on a TTY (auto-disabled when piping; force off with `--no-color`).
+See the [Mink quickstart](docs/mink/quickstart.md) for the walking
+skeleton, env vars, and the runs/agents subcommand surface, and
+[`docs/mink/providers.md`](docs/mink/providers.md) for the full
+provider matrix (Ollama, Anthropic, OpenAI, Google, OpenAI-compat).
 
 **Hooks** run automatically on every edit:
 - Path validation — blocks edits to files that don't exist (no more hallucinated paths)
@@ -186,6 +199,8 @@ Use Chimera if you want to:
 ## Links
 
 - [Quick Start](docs/playbooks/00-quick-start.md) — hooks, MCP servers, skills
+- [Mink Quickstart](docs/mink/quickstart.md) — `chimera mink` REPL, runs/agents subcommands
+- [Mink Providers](docs/mink/providers.md) — backend matrix, env vars, troubleshooting
 - [Build Your Own Agent](docs/playbooks/08-building-agents.md) — full library guide
 - [All Playbooks](docs/playbooks/) — 13 guides covering every feature
 - [Examples](examples/) — 28 curated runnable scripts across 7 categories
