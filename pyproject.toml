@@ -114,7 +114,18 @@ warn_unused_ignores = false
 [[tool.mypy.overrides]]
 module = [
     "chimera.cli.render",
+    "chimera.eval.benchmarks.humaneval_plus",
     "chimera.mcp.ws_transport",
     "chimera.tools.notebook_edit",
 ]
 disable_error_code = ["import-not-found"]
+
+# WHY: benchmark grader functions cast subprocess/library outputs to bool
+# without an explicit narrowing. Acceptable since the value comes from a
+# trusted internal harness and Any-return only triggers when --strict.
+[[tool.mypy.overrides]]
+module = [
+    "chimera.eval.benchmarks.tau_bench",
+    "chimera.eval.benchmarks.cline_bench",
+]
+disable_error_code = ["no-any-return"]
