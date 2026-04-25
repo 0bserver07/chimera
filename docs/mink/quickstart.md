@@ -8,6 +8,8 @@
 
 Mink talks to LLMs through Chimera's standard provider stack: Ollama (local + cloud tags), Anthropic, OpenAI, Google, and any OpenAI- or Anthropic-compatible endpoint. The full matrix — auth env vars, latency notes, tool-call quirks, and known limits per backend — lives in [`providers.md`](providers.md).
 
+For evaluation, see [`benchmarks.md`](benchmarks.md): every adapter under `chimera/eval/benchmarks/` (SWE-bench, HumanEval, SWT-Bench, SWE-PolyBench, FeatureBench, Cline Bench, DPAI Arena, tau-bench, Context-Bench, HumanEval+, MBPP, LiveCodeBench, MATH-500/AIMO, Custom), its status, and how to drive it through the harness.
+
 Quick recommendation: Ollama with `glm-5.1:cloud` is the friendliest path (cheap, fast, good tool calling). The built-in mink default is `kimi-k2.6:cloud` for parity with the original walking skeleton; pass `--model` or set `CHIMERA_MINK_MODEL` to switch. Anthropic API works without extra setup too: `chimera mink --model claude-sonnet-4-6` after `export ANTHROPIC_API_KEY=...`.
 
 ## Model selection

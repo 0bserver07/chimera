@@ -209,6 +209,7 @@ Use Chimera if you want to:
   - `LocalCompiler` for real PEFT fine-tuning; publish and fetch bundles via `chimera fs push | pull` (Hugging Face Hub + S3)
   - 10 CLI sub-verbs: `compile`, `run`, `list`, `rm`, `info`, `push`, `pull`, `import-peft`, `login`, `rename`
 - [Benchmarks](docs/benchmarks/README.md) — transparency framework
+- [Benchmark adapters](docs/mink/benchmarks.md) — every adapter under `chimera/eval/benchmarks/`, status, and how to run
 - [Contributing](CONTRIBUTING.md) — setup, workflow, code style
 - [Changelog](CHANGELOG.md) — version history
 
