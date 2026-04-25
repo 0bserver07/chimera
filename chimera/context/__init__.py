@@ -1,3 +1,10 @@
+from chimera.context.agent_memory import (
+    discover_memory_files,
+    inject_memory,
+    load_memory,
+    parse_frontmatter,
+    resolve_imports,
+)
 from chimera.context.consolidation import ConsolidatedMemory, Fact, MemoryConsolidator
 from chimera.context.focus import ContextItem, FocusChain
 from chimera.context.history import (
@@ -22,4 +29,9 @@ __all__ = [
     "MemoryConsolidator",
     "PruneProcessor",
     "TruncateProcessor",
+    "discover_memory_files",
+    "inject_memory",
+    "load_memory",
+    "parse_frontmatter",
+    "resolve_imports",
 ]
