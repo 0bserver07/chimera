@@ -15,10 +15,6 @@ from typing import Any
 
 import pytest
 
-# WHY: chimera.mink.cli imports rich for the streaming render handler (mink
-# extra). Skip the whole module cleanly when the optional dep isn't installed.
-pytest.importorskip("rich")
-
 from chimera.mink import cli as mink_cli
 from chimera.providers.base import Provider, Response, ToolSchema
 from chimera.types import Message

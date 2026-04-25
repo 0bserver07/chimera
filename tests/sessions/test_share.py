@@ -167,7 +167,6 @@ def test_share_subcommand_writes_path(
     Drives ``_dispatch_runs`` directly with a synthetic Namespace so we
     don't need to invoke argparse end-to-end (covered separately).
     """
-    pytest.importorskip("rich")  # mink CLI imports rich at module import.
     from chimera.mink import cli as mink_cli
 
     home = tmp_path / "home"

@@ -14,9 +14,6 @@ from pathlib import Path
 
 import pytest
 
-
-# WHY: chimera.mink.cli imports rich (mink extra). Skip when not installed.
-pytest.importorskip("rich")
 from chimera.mink import cli as mink_cli
 from chimera.mink import runs as runs_mod
 

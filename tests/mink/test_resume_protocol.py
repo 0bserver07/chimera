@@ -15,9 +15,6 @@ from typing import Any
 
 import pytest
 
-# WHY: chimera.mink.cli imports rich (mink extra). Skip when not installed.
-pytest.importorskip("rich")
-
 
 def test_m17_session_resume_agent_protocol_is_exported() -> None:
     """The Protocol must be importable from ``chimera.sessions.session``.

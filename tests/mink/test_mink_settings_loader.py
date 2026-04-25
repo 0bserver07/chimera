@@ -8,9 +8,6 @@ from typing import Any
 
 import pytest
 
-
-# WHY: chimera.mink.cli imports rich (mink extra). Skip when not installed.
-pytest.importorskip("rich")
 from chimera.mink.settings import (
     MinkSettings,
     MinkSettingsError,

@@ -18,9 +18,6 @@ from pathlib import Path
 
 import pytest
 
-
-# WHY: chimera.mink.cli imports rich (mink extra). Skip when not installed.
-pytest.importorskip("rich")
 from chimera.mink.cli import _resolve_agent_spec
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

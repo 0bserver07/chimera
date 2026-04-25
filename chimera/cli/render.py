@@ -1,8 +1,10 @@
 """TUI rendering primitives for the `chimera mink` REPL (M1).
 
-Three classes: MarkdownStream, Spinner, ToolBlockRenderer. Requires the
-optional ``cc`` extra (``pip install chimera-run[cc]``) for ``rich`` and
-``pygments``.
+Three classes: MarkdownStream, Spinner, ToolBlockRenderer. The optional
+``mink`` extra (``pip install chimera-run[mink]``) brings in ``rich`` and
+``pygments`` for the polished view; when either dependency is missing
+this module still imports cleanly and every renderer falls back to plain
+text so callers never need to guard imports.
 """
 from __future__ import annotations
 
@@ -14,11 +16,22 @@ import sys
 from dataclasses import dataclass
 from typing import Any, TextIO
 
-from rich.console import Console
-from rich.markdown import Markdown
-
 from chimera.streaming.base import StreamHandler
 from chimera.streaming.handlers import ConsoleStreamHandler
+
+try:
+    from rich.console import Console
+    from rich.markdown import Markdown
+
+    _RICH_AVAILABLE = True
+except ImportError:  # pragma: no cover
+    # WHY (pyright): bind names to ``None`` in the failure branch so static
+    # analysis can see the symbols are always defined at module scope.
+    # Runtime guards on ``_RICH_AVAILABLE`` keep the None values from ever
+    # being called.
+    Console = None  # type: ignore[assignment,misc]
+    Markdown = None  # type: ignore[assignment,misc]
+    _RICH_AVAILABLE = False
 
 try:
     from pygments import highlight  # type: ignore[import-untyped]
@@ -91,7 +104,15 @@ class MarkdownStream:
                 name is unknown.
         """
         self._stream = stream or sys.stdout
-        self._console = Console(file=self._stream, force_terminal=True, width=width)
+        # WHY: when the ``mink`` extra (rich) is not installed we still need
+        # an importable, instantiable ``MarkdownStream`` so the rest of the
+        # module loads. ``_console`` stays ``None`` and ``_render`` falls
+        # back to writing plain text via ``self._stream.write``.
+        self._console = (
+            Console(file=self._stream, force_terminal=True, width=width)
+            if _RICH_AVAILABLE
+            else None
+        )
         self._state = _MarkdownStreamState()
         self._do_highlight = highlight_code and _PYGMENTS_AVAILABLE
 
@@ -174,6 +195,25 @@ class MarkdownStream:
             self._stream.write(text)
             self._stream.flush()
             return
+        # WHY: rich missing -> degrade to plain text + (optional) pygments
+        # highlighting. We still split fences so syntax highlighting kicks
+        # in for code blocks, but prose lines emit verbatim.
+        if self._console is None:
+            if self._do_highlight and ("```" in text or "~~~" in text):
+                for kind, body in self._split_fenced(text):
+                    if kind == "text":
+                        self._stream.write(body)
+                    else:
+                        self._stream.write(self._highlight_code(body, kind))
+            else:
+                self._stream.write(text)
+            self._stream.flush()
+            self._state.rendered_chars += len(text)
+            return
+        # WHY (pyright): the ``_RICH_AVAILABLE`` flag is what kept ``Markdown``
+        # from being ``None`` here, but we just confirmed ``self._console``
+        # is non-None which proves rich loaded. Assert to re-narrow.
+        assert Markdown is not None
         if self._do_highlight and ("```" in text or "~~~" in text):
             for kind, body in self._split_fenced(text):
                 if kind == "text":
@@ -587,6 +627,7 @@ def build_stream_handler(
 
     Plain-text :class:`ConsoleStreamHandler` is returned when:
 
+    * the optional ``mink`` extra (``rich``) is not installed, OR
     * ``no_color=True`` (the caller passed ``--no-color``), OR
     * the standard ``NO_COLOR`` env var is set, OR
     * ``stream`` (or ``sys.stdout`` when ``stream`` is None) is not a TTY.
@@ -599,11 +640,18 @@ def build_stream_handler(
         no_color: Force the plain-text handler regardless of TTY/env.
         force_rich: Skip TTY/env checks and always return a
             :class:`MinkStreamHandler`. Useful for tests and when the
-            caller knows it is writing to a terminal-like sink.
+            caller knows it is writing to a terminal-like sink. Still
+            falls back to :class:`ConsoleStreamHandler` when ``rich``
+            is not importable.
 
     Returns:
         A ready-to-use :class:`StreamHandler` instance.
     """
+    # WHY: the polished MinkStreamHandler requires ``rich``; without it the
+    # adapter still constructs but can't print Markdown, so route to the
+    # plain handler unconditionally.
+    if not _RICH_AVAILABLE:
+        return ConsoleStreamHandler()
     if force_rich:
         return MinkStreamHandler(stream=stream)
     if no_color or _no_color_env() or not _is_tty(stream):

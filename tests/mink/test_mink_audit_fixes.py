@@ -12,9 +12,6 @@ from pathlib import Path
 
 import pytest
 
-# WHY: chimera.mink.cli imports rich (mink extra). Skip when not installed.
-pytest.importorskip("rich")
-
 
 # --- B-3: stream-json must emit at least one JSON object on stdout ---
 

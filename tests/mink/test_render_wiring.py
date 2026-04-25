@@ -14,7 +14,11 @@ from typing import Any
 
 import pytest
 
-# WHY: chimera.cli.render imports rich (mink extra). Skip when not installed.
+# WHY: this file pins behavior that only holds when ``rich`` is installed —
+# without the mink extra ``build_stream_handler`` returns the plain
+# ConsoleStreamHandler in every branch (M3 fallback), so the assertions
+# that demand a MinkStreamHandler would fail. Skip cleanly so the file
+# stays opt-in alongside the extra.
 pytest.importorskip("rich")
 
 
