@@ -113,11 +113,9 @@ controls that don't apply to a CLI REPL.
 
 ## Plugin hooks (server-side)
 
-Upstream's `@opencode-ai/plugin` package defines a `Hooks` interface
-with sixteen extension points (see
-`packages/opencode/src/plugin/index.ts` + the SDK
-`packages/plugin/src/index.ts`). Otter maps each to existing Chimera
-primitives.
+The upstream's plugin SDK defines a `Hooks` interface with sixteen
+extension points (see the upstream's `plugin/index.ts` server module
+and SDK `index.ts`). Otter maps each to existing Chimera primitives.
 
 | Upstream hook                              | Otter status | Mapping                                                            |
 |--------------------------------------------|--------------|--------------------------------------------------------------------|

@@ -1,7 +1,7 @@
 """Otter — Chimera coding-agent CLI in the open-source agent tradition.
 
-Otter is to the open-source coding agent what mink is to Claude Code: a
-Chimera subcommand composed of existing primitives (`AgentLoop`,
+Otter is to the open-source coding agent what mink is to its own upstream:
+a Chimera subcommand composed of existing primitives (`AgentLoop`,
 `LoopConfig`, `EventSourcedSession`, `PermissionChecker`, MCP/LSP/ACP) that
 mirrors a server-plus-TUI ergonomic. Default backend: provider-agnostic
 via :func:`chimera.providers.factory.create_provider`; server mode

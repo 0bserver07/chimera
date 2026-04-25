@@ -49,11 +49,15 @@ PATTERN='OpenCode|opencode\.ai|opencode-ai'
 # Anything else flips the exit code.
 ALLOW='~/\.opencode|\.opencode/|\.opencode\b'
 
+# Skip the policy doc itself — it has to quote the regex + a sample
+# failure line to document the rule.  This is the canonical exception.
+SKIP_FILES='^docs/otter/trademark-policy\.md:'
+
 # `git grep` exits 1 when there are no matches; tolerate that.
 HITS="$(git grep -nE "${PATTERN}" -- "${PATHS[@]}" || true)"
 
-# Filter out the allowed filesystem-fact references.
-FILTERED="$(printf '%s\n' "${HITS}" | grep -vE "${ALLOW}" || true)"
+# Filter out the allowed filesystem-fact references AND the policy doc.
+FILTERED="$(printf '%s\n' "${HITS}" | grep -vE "${ALLOW}" | grep -vE "${SKIP_FILES}" || true)"
 
 # Drop empty lines so we can detect "no real hits" reliably.
 FILTERED="$(printf '%s\n' "${FILTERED}" | sed '/^$/d')"

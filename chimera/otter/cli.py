@@ -1,8 +1,8 @@
 """``chimera otter`` — Otter, a Chimera coding agent in the open-source agent tradition.
 
 Otter is the second Chimera coding-agent CLI, paralleling :mod:`chimera.mink`.
-Where mink mirrors Claude Code's TUI-first ergonomics, otter mirrors a
-server-first / multi-client open-source coding agent (TUI + HTTP + ACP).
+Where mink mirrors a TUI-first ergonomic, otter mirrors a server-first /
+multi-client open-source coding agent (TUI + HTTP + ACP).
 
 This module ships the **scaffold**: a working ``add_arguments`` / ``run``
 pair so ``chimera otter --version`` and ``chimera otter -p "..."`` route
