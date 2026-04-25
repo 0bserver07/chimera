@@ -2,7 +2,33 @@
 
 ## What this is
 
-`chimera mink` is a Claude-Code-equivalent REPL built on Chimera's existing `AgentLoop`, `LoopConfig`, tool registry, permissions, and session primitives. Its default backend is **Kimi K2.6** served by Ollama Cloud (`kimi-k2.6:cloud`). This page covers the M0 walking skeleton: a single-process script that drives a real ReAct loop end-to-end against Kimi via Ollama, with streamed text and tool calls. M1+ adds the `chimera mink` subcommand, the slash-command surface, `.claude/settings.json` parity, and the markdown TUI.
+`chimera mink` is a coding-agent REPL built on Chimera's existing `AgentLoop`, `LoopConfig`, tool registry, permissions, and session primitives. Its default backend is Ollama with `glm-5.1:cloud` (or `kimi-k2.6:cloud` for the walking-skeleton example). The runtime is a single-process script that drives a real ReAct loop end-to-end with streamed text + tool calls, the `chimera mink` subcommand and slash-command surface, drop-in `settings.json` ingest (permissions + hooks), and a rich markdown TUI.
+
+## Provider choice
+
+Mink talks to LLMs through Chimera's standard provider stack: Ollama (local + cloud tags), Anthropic, OpenAI, Google, and any OpenAI- or Anthropic-compatible endpoint. The full matrix — auth env vars, latency notes, tool-call quirks, and known limits per backend — lives in [`providers.md`](providers.md).
+
+Quick recommendation: Ollama with `glm-5.1:cloud` is the friendliest path (cheap, fast, good tool calling). The built-in mink default is `kimi-k2.6:cloud` for parity with the original walking skeleton; pass `--model` or set `CHIMERA_MINK_MODEL` to switch. Anthropic API works without extra setup too: `chimera mink --model claude-sonnet-4-6` after `export ANTHROPIC_API_KEY=...`.
+
+## Model selection
+
+A short reference of working tags per [`models.md`](models.md):
+
+| Backend | Tag | Notes |
+|---|---|---|
+| Ollama Cloud | `glm-5.1:cloud` | Recommended default; fast, cheap, native tool calls |
+| Ollama Cloud | `kimi-k2.6:cloud` | Built-in mink default; long context |
+| Ollama local | `qwen3:32b` | Local fallback; 131k context, runs on a 24 GB GPU |
+| Anthropic | `claude-sonnet-4-6` | Strongest tool calling; needs `ANTHROPIC_API_KEY` |
+| OpenAI | `gpt-4o` | Needs `OPENAI_API_KEY`; route via OpenAI-compat |
+
+`--model` always wins over `CHIMERA_MINK_MODEL`; `CHIMERA_MINK_MODEL` always wins over the built-in default. So a CI env can pin the tag once and ad-hoc invocations can still override:
+
+```bash
+export CHIMERA_MINK_MODEL=glm-5.1:cloud
+chimera mink -p "summarize this repo"                       # uses glm-5.1:cloud
+chimera mink --model claude-sonnet-4-6 -p "review diff"     # overrides to claude
+```
 
 ## Prerequisites
 
@@ -123,7 +149,7 @@ chimera mink -p "explain this repo" --no-save
 ```
 
 To inspect what was saved, list the eventlog directory or use the
-`runs` subcommand companion (when available):
+`runs` subcommand (see below):
 
 ```bash
 ls ~/.chimera/eventlog/
@@ -139,6 +165,92 @@ rm -rf ~/.chimera/eventlog/mink-*
 There is no remote telemetry, error reporting, or analytics in the
 mink CLI; the only network egress is the LLM provider call you
 explicitly configured (Ollama, Anthropic, OpenAI, …).
+
+## Inspecting your runs
+
+`chimera mink runs list` walks `~/.chimera/eventlog/` and renders a
+fixed-column table, newest first:
+
+```text
+$ chimera mink runs list
+RUN_ID                                DATE              MODEL              OK   STEPS  COST   PROMPT
+mink-20260424T051001-71032a5e         2026-04-24 05:10  glm-5.1:cloud      ✓    4      $0.00  list files then read README.md
+mink-20260423T191222-9f0ab412         2026-04-23 19:12  kimi-k2.6:cloud    ✓    3      $0.00  explain this repo
+mink-20260423T184005-2d11c7e0         2026-04-23 18:40  qwen3:32b          ✗    2      $0.00  generate tests for foo.py
+```
+
+Filter / cap the table:
+
+```bash
+chimera mink runs list --limit 5
+chimera mink runs list --runs-model glm-5.1:cloud
+chimera mink runs list --success-only
+chimera mink runs list --failed-only
+```
+
+`chimera mink runs show <id>` prints summary metadata plus the event
+transcript. Use `--no-events` for a one-pane summary, or `--full` to
+force the full transcript when piping through a pager:
+
+```bash
+chimera mink runs show mink-20260424T051001-71032a5e
+chimera mink runs show mink-20260424T051001-71032a5e --no-events
+```
+
+## Listing available agent presets
+
+Mink resolves `--agent <name>` through a project > user > built-in
+chain: `<cwd>/.claude/agents/*.md`, `~/.claude/agents/*.md`, and the
+built-in registry (`build`, `explore`, `general`, `plan`, `review`).
+
+```bash
+$ chimera mink agents list
+NAME       SOURCE   MODEL              TOOLS                              DESCRIPTION
+build      builtin  -                  read,write,edit,bash,test,...      Build features end-to-end
+explore    builtin  -                  read,search,list_files             Read-only exploration
+general    builtin  -                  (default)                          Default coding agent
+plan       builtin  -                  read,search                        Plan-only, no edits
+review     builtin  -                  read,search,bash                   Code review
+
+$ chimera mink agents show explore
+```
+
+## Pipe-friendly mode
+
+Mink auto-detects pipes — when stdout is not a TTY (e.g. you're piping
+into `tee`, `grep`, or a CI log) the rich Markdown handler turns off
+and you get plain text. Force it explicitly with `--no-color` (or its
+synonym `--no-rich`); `$NO_COLOR` is honored too.
+
+```bash
+chimera mink -p "summarize" --no-color | tee mink.log
+chimera mink -p "ship it" --output-format json
+chimera mink -p "ship it" --output-format stream-json   # one JSON line per LoopEvent
+```
+
+`--output-format json` emits a single result object on exit;
+`stream-json` emits one JSON line per `LoopEvent` for downstream
+pipelines.
+
+## Where things are persisted
+
+| Path | What |
+|---|---|
+| `~/.chimera/eventlog/mink-<id>/summary.json` | Per-run metadata (model, cost, steps, success, prompt) |
+| `~/.chimera/eventlog/mink-<id>/event-*.json` | Full event stream for `runs show` |
+| `~/.chimera/sessions/<workdir-hash>.jsonl` | Interactive REPL `SessionTree` log (used by `--resume`) |
+| `~/.chimera/mcp.json`, `<cwd>/.mcp.json` | MCP server declarations loaded by `_load_mcp_tools` |
+| `<cwd>/.claude/settings.json`, `~/.claude/settings.json` | Permissions + hooks (CC-format settings) |
+
+Everything is local-only and plaintext. No remote telemetry.
+
+## What to do if it doesn't work
+
+If `chimera mink` errors at startup or hangs on the first call, walk
+the troubleshooting section in [`providers.md`](providers.md) — it
+covers Ollama auth handshakes, missing tool capability, `num_ctx`
+defaults, the `/v1` vs `/api/chat` endpoint trap, and the equivalent
+Anthropic / OpenAI / Google paths.
 
 ## Troubleshooting
 
