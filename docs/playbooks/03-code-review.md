@@ -4,20 +4,20 @@
 
 ## What This Solves
 
-When Claude Code reviews its own changes, it tends to confirm its own reasoning rather than challenge it. It misses security vulnerabilities, untested edge cases, and architectural regressions because it wrote the code and assumes its own intent. Chimera provides two layers of review: a rule-based MCP server that catches common patterns across four categories (logic, security, tests, architecture), and a `ReviewOrchestrator` that runs a reviewer agent against an author agent in iterative fix cycles.
+When a coding agent reviews its own changes, it tends to confirm its own reasoning rather than challenge it. It misses security vulnerabilities, untested edge cases, and architectural regressions because it wrote the code and assumes its own intent. Chimera provides two layers of review: a rule-based MCP server that catches common patterns across four categories (logic, security, tests, architecture), and a `ReviewOrchestrator` that runs a reviewer agent against an author agent in iterative fix cycles.
 
 ## Architecture
 
 ```mermaid
 graph TD
-    CC[Claude Code] -->|MCP tool call| RS["chimera-review server"]
+    H0[Coding-agent harness] -->|MCP tool call| RS["chimera-review server"]
     RS -->|diff text| RD["review_diff()"]
     RD -->|logic patterns| LP["10 logic checks"]
     RD -->|security patterns| SP["10 security checks"]
     RD -->|architecture patterns| AP["5 architecture checks"]
     RD -->|test coverage| TC["test gap detection"]
     LP & SP & AP & TC -->|ReviewFinding| MR["Merge & Format"]
-    MR -->|structured report| CC
+    MR -->|structured report| H0
 
     CC2[Developer Code] -->|"ReviewOrchestrator.run()"| RO["ReviewOrchestrator"]
     RO -->|diff| REV["Reviewer Agent"]
@@ -31,7 +31,7 @@ Two paths to review:
 
 | Path | When to Use | Integration |
 |------|------------|-------------|
-| **MCP server** (`chimera-review`) | Quick review during a session | Claude Code calls `chimera_review_diff` as an MCP tool |
+| **MCP server** (`chimera-review`) | Quick review during a session | The harness calls `chimera_review_diff` as an MCP tool |
 | **ReviewOrchestrator** | Full review workflow | Developer code creates reviewer + author agents |
 
 ## Setup

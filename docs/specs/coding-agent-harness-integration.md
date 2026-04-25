@@ -1,15 +1,15 @@
-# Chimera × Claude Code Integration Spec
+# Chimera × Coding-Agent-Harness Integration Spec
 
-> Master reference for all integration points between Chimera and Claude Code.
+> Master reference for all integration points between Chimera and a coding-agent harness.
 > Each section maps to one or more GitHub issues.
 
 ## 1. Plugin & Skills Framework
 
-### 1a. Chimera as a Claude Code Plugin (#97)
+### 1a. Chimera as a Coding-Agent-Harness Plugin (#97)
 
-Package Chimera as an installable Claude Code plugin via `/plugin install`.
+Package Chimera as an installable harness plugin via `/plugin install`.
 
-**What it delivers:** Any Claude Code user can install Chimera and immediately get access to all its primitives — codebase search, code review, test generation, migration planning, benchmarking — without leaving Claude Code.
+**What it delivers:** Any harness user can install Chimera and immediately get access to all its primitives — codebase search, code review, test generation, migration planning, benchmarking — without leaving the harness.
 
 **Plugin structure:**
 ```
@@ -25,10 +25,10 @@ chimera-plugin/
     researcher.md                # codebase research subagent
     tester.md                    # test generation subagent
   skills/
-    retry-loop.md                # teach Claude retry strategies
-    plan-act.md                  # teach Claude plan-then-act
-    lint-feedback.md             # teach Claude lint-fix loops
-    context-management.md        # teach Claude smart compaction
+    retry-loop.md                # teach the agent retry strategies
+    plan-act.md                  # teach the agent plan-then-act
+    lint-feedback.md             # teach the agent lint-fix loops
+    context-management.md        # teach the agent smart compaction
   hooks/
     hooks.json                   # PreToolUse + PostToolUse hooks
     validate-paths.sh            # block edits to non-existent files
@@ -60,13 +60,13 @@ Convert Chimera's agent composition patterns into teachable skills.
 - `investigate-first.md` — "Before fixing, run a focused investigation subagent"
 - `test-convergence.md` — "Keep iterating until all tests pass, not just until code looks right"
 
-**Format:** Each skill is a markdown file with frontmatter (name, description, triggers) and instructions that Claude loads on-demand.
+**Format:** Each skill is a markdown file with frontmatter (name, description, triggers) and instructions that the agent loads on-demand.
 
 ---
 
 ### 1c. Custom Subagents via Chimera (#99)
 
-Create Claude Code subagents that delegate to Chimera-composed agents.
+Create harness subagents that delegate to Chimera-composed agents.
 
 **Subagents to create:**
 - `code-reviewer` — Spawns a RoleBasedTeam (reviewer + security auditor) in parallel
@@ -74,11 +74,11 @@ Create Claude Code subagents that delegate to Chimera-composed agents.
 - `bug-investigator` — Uses InvestigatorAgent to analyze before the main agent acts
 - `migration-advisor` — Uses MigrationPlanner to scan and plan transforms
 
-**How it works:** Each subagent is a markdown file in `agents/` that describes the specialization. Claude Code spawns it as an isolated context with restricted tools.
+**How it works:** Each subagent is a markdown file in `agents/` that describes the specialization. The harness spawns it as an isolated context with restricted tools.
 
 ---
 
-## 2. MCP Servers (Tools Claude Code Can Call)
+## 2. MCP Servers (Tools the Harness Can Call)
 
 ### 2a. Codebase Search MCP Server (#100)
 
@@ -89,7 +89,7 @@ Expose Chimera's CodebaseIndex as an MCP server.
 - `chimera_symbols` — find classes/functions/methods by name across the codebase
 - `chimera_dependencies` — trace imports and callers for a given function
 
-**Why it matters:** Claude Code's built-in Grep/Glob are text-based. This provides SEMANTIC search — "find the authentication logic" returns `auth.py:login()` even if the word "authentication" doesn't appear in the file.
+**Why it matters:** Built-in Grep/Glob in most harnesses are text-based. This provides SEMANTIC search — "find the authentication logic" returns `auth.py:login()` even if the word "authentication" doesn't appear in the file.
 
 **Implementation:**
 ```python
@@ -139,13 +139,13 @@ Ground responses in project-specific documentation.
 - `chimera_api_lookup` — find API signatures and docstrings
 - `chimera_grounded_answer` — search + fetch + cite from web sources
 
-**Why it matters:** Solves the #1 hallucination source — Claude generating code for APIs that don't exist or have changed. This fetches live, version-specific documentation.
+**Why it matters:** Solves the #1 hallucination source — agents generating code for APIs that don't exist or have changed. This fetches live, version-specific documentation.
 
 ---
 
 ### 2e. Benchmark MCP Server (#104)
 
-Run benchmarks from within Claude Code.
+Run benchmarks from within the harness.
 
 **Tools provided:**
 - `chimera_benchmark` — run HumanEval/MBPP-style problems
@@ -161,7 +161,7 @@ Block edits to files that don't exist in the codebase.
 
 **How:** Before any Write/Edit tool call, check if the path exists in the CodebaseIndex. If not, return exit code 2 with "File not found: {path}. Did you mean: {suggestions}?"
 
-**Solves:** Hallucinated file paths — the #1 user complaint about Claude Code.
+**Solves:** Hallucinated file paths — a frequent user complaint about coding-agent harnesses.
 
 ```json
 {
@@ -183,9 +183,9 @@ Block edits to files that don't exist in the codebase.
 
 Run relevant tests after every file edit.
 
-**How:** After Write/Edit, find test files related to the modified file (via import graph or naming convention), run them, feed failures back to Claude.
+**How:** After Write/Edit, find test files related to the modified file (via import graph or naming convention), run them, feed failures back to the agent.
 
-**Solves:** Claude declaring "done" when tests are actually broken.
+**Solves:** The agent declaring "done" when tests are actually broken.
 
 ---
 
@@ -193,7 +193,7 @@ Run relevant tests after every file edit.
 
 Run linter after every edit, fix issues automatically.
 
-**How:** After Write/Edit, run ruff/eslint on the modified file. If errors found, either auto-fix or feed back to Claude.
+**How:** After Write/Edit, run ruff/eslint on the modified file. If errors found, either auto-fix or feed back to the agent.
 
 ---
 
@@ -207,23 +207,23 @@ Scan bash commands for dangerous operations before execution.
 
 ### 3e. Stop: Verification Hook (#109)
 
-Before Claude declares "done", verify all tests pass.
+Before the agent declares "done", verify all tests pass.
 
-**How:** On Stop event, run the project's test suite. If any test fails, send feedback to Claude that it's not actually done.
+**How:** On Stop event, run the project's test suite. If any test fails, send feedback to the agent that it's not actually done.
 
 ---
 
-## 4. Solving Claude Code's Known Problems
+## 4. Solving Known Harness Problems
 
 ### 4a. Anti-Hallucination: Codebase Grounding (#110)
 
-Use CodebaseIndex to validate every file reference Claude makes.
+Use CodebaseIndex to validate every file reference the agent makes.
 
 **Components:**
 - PreToolUse hook for path validation
 - MCP server for semantic search
 - RAG server for doc grounding
-- Fact-checking: compare Claude's claims against actual codebase
+- Fact-checking: compare the agent's claims against actual codebase
 
 ---
 
@@ -237,7 +237,7 @@ Proactive context management to prevent degradation.
 - FocusChain: token budgeting for what gets included
 - MemoryConsolidation: extract and persist facts across compactions
 
-**Implementation as Claude Code skill:**
+**Implementation as a harness skill:**
 ```markdown
 ---
 name: context-management
@@ -256,7 +256,7 @@ Use the chimera_consolidate tool to extract facts before compacting.
 
 ### 4c. Loop Detection & Recovery (#112)
 
-Detect when Claude is stuck in a repetitive loop and force a different approach.
+Detect when the agent is stuck in a repetitive loop and force a different approach.
 
 **Components:**
 - ExactRepeatDetector: flag 3x repeated actions
@@ -309,7 +309,7 @@ Systematic prompt optimization using Chimera's modular architecture.
 - [ ] #106 Auto-test hook (Low effort, MEDIUM impact)
 
 ### Phase 2: Plugin (next week)
-- [ ] #97 Package as Claude Code plugin
+- [ ] #97 Package as a harness plugin
 - [ ] #98 Agent skills as SKILL.md
 - [ ] #107 Auto-lint hook
 

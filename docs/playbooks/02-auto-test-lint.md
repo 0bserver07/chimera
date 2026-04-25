@@ -4,22 +4,22 @@
 
 ## What This Solves
 
-Claude Code edits files freely but has no built-in feedback loop to tell it whether those edits broke tests or introduced style violations. Problems compound: a bad import in turn 3 causes a cascade of failures by turn 20, and the agent has long forgotten what it changed. Chimera's hook scripts wire automatic test runs and lint checks into every Write/Edit tool call, feeding results back to the agent immediately so it can fix issues while context is fresh.
+A coding-agent harness edits files freely but has no built-in feedback loop to tell it whether those edits broke tests or introduced style violations. Problems compound: a bad import in turn 3 causes a cascade of failures by turn 20, and the agent has long forgotten what it changed. Chimera's hook scripts wire automatic test runs and lint checks into every Write/Edit tool call, feeding results back to the agent immediately so it can fix issues while context is fresh.
 
 ## Architecture
 
 ```mermaid
 graph TD
-    CC[Claude Code] -->|"Write / Edit"| F[File Modified]
+    H0[Coding-agent harness] -->|"Write / Edit"| F[File Modified]
     F -->|PostToolUse| AT["auto_test.py"]
     F -->|PostToolUse| AL["auto_lint.py"]
-    CC -->|"Bash"| B[Command]
+    H0 -->|"Bash"| B[Command]
     B -->|PreToolUse| SS["security_scan.py"]
     AT -->|find related test| TF["tests/test_*.py"]
-    AT -->|"pytest --tb=short -q"| R1["Results -> Claude"]
-    AL -->|"ruff / eslint / clippy"| R2["Results -> Claude"]
+    AT -->|"pytest --tb=short -q"| R1["Results -> agent"]
+    AL -->|"ruff / eslint / clippy"| R2["Results -> agent"]
     SS -->|"18 danger patterns"| R3["Allow / Block"]
-    CC -->|Stop| VD["verify_done.py"]
+    H0 -->|Stop| VD["verify_done.py"]
     VD -->|full test suite| R4["Pass -> exit 0 / Fail -> exit 1"]
 ```
 
@@ -36,7 +36,7 @@ Four hooks form a quality gate around the agent's tool use:
 
 ### Hook Configuration
 
-Add all four hooks to your Claude Code hooks configuration. If you use the Chimera plugin, these are pre-configured in `chimera-plugin/hooks/hooks.json`:
+Add all four hooks to your harness's hook configuration. If you use the Chimera plugin, these are pre-configured in `chimera-plugin/hooks/hooks.json`:
 
 ```json
 {
@@ -74,7 +74,7 @@ Add all four hooks to your Claude Code hooks configuration. If you use the Chime
 |----------|---------|-------------|
 | `CHIMERA_TEST_CMD` | `python -m pytest --tb=short -q` | Test command for `verify_done.py`. Receives the full test suite. |
 | `CHIMERA_LINTER` | Auto-detected by extension | Custom linter command. Use `{file}` as placeholder for the file path. |
-| `TOOL_INPUT` | (set by Claude Code) | Fallback for hook input when stdin is not available. |
+| `TOOL_INPUT` | (set by the harness) | Fallback for hook input when stdin is not available. |
 
 Examples:
 
@@ -101,7 +101,7 @@ Receives tool input as JSON on stdin with the shape `{"tool_name": "Write", "too
 
 Only Python files (`.py`) trigger test discovery. If the modified file is itself a test file (`test_*.py`), it runs that file directly.
 
-Tests run via `pytest --tb=short -q` with a 120-second timeout. Output is printed to stdout, which Claude Code relays back to the agent.
+Tests run via `pytest --tb=short -q` with a 120-second timeout. Output is printed to stdout, which the harness relays back to the agent.
 
 **Exit code:** Always 0. PostToolUse hooks are informational -- they cannot block the tool call. The agent sees the test output and decides whether to fix failures.
 
@@ -164,13 +164,13 @@ When Chimera is installed, the hook also consults `chimera.permissions.risk.clas
 
 **Exit codes:**
 - **0:** Command is safe. Allow execution.
-- **2:** Command is blocked. Reason printed to stderr. (Exit code 2 signals "block" to Claude Code.)
+- **2:** Command is blocked. Reason printed to stderr. (Exit code 2 signals "block" to the harness.)
 
 ## Configuration Reference
 
 ### Hook Input Format (stdin JSON)
 
-All hooks receive JSON on stdin from Claude Code:
+All hooks receive JSON on stdin from the harness:
 
 ```json
 {
@@ -292,11 +292,11 @@ echo $?  # Should print 0
 
 ### Data Flow
 
-1. Claude Code calls Write/Edit tool
-2. Claude Code invokes PostToolUse hooks, piping `{"tool_name", "tool_input"}` as JSON to stdin
+1. The harness calls Write/Edit tool
+2. The harness invokes PostToolUse hooks, piping `{"tool_name", "tool_input"}` as JSON to stdin
 3. `auto_test.py` extracts `file_path`, discovers related tests, runs pytest, prints results
 4. `auto_lint.py` extracts `file_path`, selects linter by extension, runs it, prints results
-5. Claude sees test/lint output in the tool response and fixes issues
+5. The agent sees test/lint output in the tool response and fixes issues
 6. When the agent tries to stop, `verify_done.py` runs the full suite as a final gate
 7. Before any Bash call, `security_scan.py` checks the command and blocks dangerous patterns (exit 2)
 

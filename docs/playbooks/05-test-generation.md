@@ -1,6 +1,6 @@
 # Playbook: Test Generation
 
-> Writing tests is tedious. Claude often writes shallow tests or mocks too aggressively. Chimera generates comprehensive test skeletons from source analysis, then ranks multiple candidates to pick the best.
+> Writing tests is tedious. Coding agents often write shallow tests or mock too aggressively. Chimera generates comprehensive test skeletons from source analysis, then ranks multiple candidates to pick the best.
 
 ## What This Solves
 
@@ -10,7 +10,7 @@ Manual test writing is slow and produces uneven coverage. When an LLM writes tes
 
 ```mermaid
 graph TD
-    CC[Claude Code] -->|MCP tool call| TS[chimera-testgen server]
+    H0[Coding-agent harness] -->|MCP tool call| TS[chimera-testgen server]
     TS -->|chimera_testgen| TG[TestGenerator]
     TS -->|chimera_coverage_gaps| CG[Coverage Gap Finder]
     TG -->|ast.parse| S[Source File]
@@ -43,7 +43,7 @@ Add the testgen server to your `.mcp.json`:
 
 ### 2. Verify
 
-Restart Claude Code. You should see `chimera_testgen` and `chimera_coverage_gaps` in your available MCP tools.
+Restart your harness. You should see `chimera_testgen` and `chimera_coverage_gaps` in your available MCP tools.
 
 ## How It Works
 

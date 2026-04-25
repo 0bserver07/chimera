@@ -1,4 +1,4 @@
-# Build a Claude Code-Like Coding Agent in 50 Lines
+# Build Your Own Coding Agent in 50 Lines
 
 This tutorial walks you through building a working coding agent — one that reads files, edits code, runs tests, and uses bash — using Chimera. By the end you'll have a CLI tool you can point at any repo.
 

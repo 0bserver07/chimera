@@ -36,8 +36,9 @@ examples/
   possible coding loop, no bells or whistles.
 - [`ollama_coding_agent.py`](agent/ollama_coding_agent.py) — Full `CodingAgent`
   driven by an Ollama cloud model; pre-flight checks endpoint + context window.
-- [`build_claude_code_clone.py`](agent/build_claude_code_clone.py) — Assemble
-  a Claude-Code-style agent from Chimera primitives.
+- [`build_full_preset_agent.py`](agent/build_full_preset_agent.py) — Assemble
+  a full-featured coding agent from Chimera primitives via the `claude_code`
+  preset key on `CodingAgent.from_preset()`.
 - [`build_codex_clone.py`](agent/build_codex_clone.py) — Codex-style preset.
 
 ## real_world/

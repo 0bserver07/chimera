@@ -1,21 +1,21 @@
 # Playbook 01: Codebase Search
 
-Eliminate hallucinated file paths and give Claude Code real codebase awareness through TF-IDF search, symbol lookup, and path validation.
+Eliminate hallucinated file paths and give your coding-agent harness real codebase awareness through TF-IDF search, symbol lookup, and path validation.
 
 ## What This Solves
 
-Claude Code sometimes edits files that do not exist, searches for symbols it hallucinated, or refers to paths from a different project. This happens because the agent has no built-in codebase index -- it relies on Grep and Glob, which require knowing what to search for.
+Coding-agent harnesses sometimes edit files that do not exist, search for symbols they hallucinated, or refer to paths from a different project. This happens because the agent has no built-in codebase index -- it relies on Grep and Glob, which require knowing what to search for.
 
 Chimera's codebase search solves this in two ways:
 
 1. **Prevention:** The `validate_path` hook intercepts Write/Edit tool calls and blocks them if the target file does not exist, suggesting similar paths via fuzzy matching.
-2. **Discovery:** The `chimera-search` MCP server exposes TF-IDF ranked search and AST-based symbol lookup, so Claude Code can find files by concept (not just exact string) and locate definitions across languages.
+2. **Discovery:** The `chimera-search` MCP server exposes TF-IDF ranked search and AST-based symbol lookup, so the harness can find files by concept (not just exact string) and locate definitions across languages.
 
 ## Architecture
 
 ```mermaid
 graph TD
-    CC[Claude Code] -->|PreToolUse Write/Edit| VP[validate_path.py]
+    H0[Coding-agent harness] -->|PreToolUse Write/Edit| VP[validate_path.py]
     VP -->|file exists?| Y[Allow]
     VP -->|not found| B[Block + suggest similar]
     CC -->|MCP tool call| SS[chimera-search server]
@@ -25,7 +25,7 @@ graph TD
     DF -->|walk on demand| FS
 ```
 
-The two components are independent. You can use the hook without the MCP server and vice versa. Together they form a complete solution: the MCP server helps Claude find the right files, and the hook catches it if it still gets the path wrong.
+The two components are independent. You can use the hook without the MCP server and vice versa. Together they form a complete solution: the MCP server helps the agent find the right files, and the hook catches it if it still gets the path wrong.
 
 ## Setup
 
@@ -180,7 +180,7 @@ The hook intercepts Write and Edit tool calls before they execute.
 
 **Data flow:**
 
-1. Claude Code passes tool input as JSON on stdin: `{"tool_name": "Edit", "tool_input": {"file_path": "src/auth.py"}}`.
+1. The harness passes tool input as JSON on stdin: `{"tool_name": "Edit", "tool_input": {"file_path": "src/auth.py"}}`.
 2. Hook checks if `tool_name` is in `{"Write", "Edit", "write", "edit"}`. If not, exits 0 (pass through).
 3. Extracts `file_path` from tool_input. Resolves relative paths against cwd.
 4. If the file exists: exit 0 (allow).
@@ -220,7 +220,7 @@ The server wraps `CodebaseIndex` and `DefinitionFinder` as MCP tools:
 **Protocol:** MCP stdio (JSON-RPC 2.0, newline-delimited on stdin/stdout). Handles `initialize`, `tools/list`, `tools/call`, `ping`.
 
 **Lifecycle:**
-1. Claude Code spawns the server as a subprocess.
+1. The harness spawns the server as a subprocess.
 2. On `initialize`, the server indexes the workspace directory.
 3. Subsequent `tools/call` requests execute against the in-memory index.
 4. Server runs until stdin is closed.

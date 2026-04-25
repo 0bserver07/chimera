@@ -10,7 +10,7 @@ Without benchmarks, you are flying blind. You cannot tell whether a prompt chang
 
 ```mermaid
 graph TD
-    CC[Claude Code] -->|MCP tool call| BS[chimera-benchmark server]
+    H0[Coding-agent harness] -->|MCP tool call| BS[chimera-benchmark server]
     BS -->|chimera_eval| RE[run_eval]
     BS -->|chimera_humaneval| HE[HumanEval Problem Set]
     RE -->|subprocess| EX[Execute Code + Tests]
@@ -52,7 +52,7 @@ Add the benchmark server to your `.mcp.json`:
 
 ### 2. Verify
 
-Restart Claude Code. You should see `chimera_eval` and `chimera_humaneval` in your available MCP tools.
+Restart your harness. You should see `chimera_eval` and `chimera_humaneval` in your available MCP tools.
 
 ## How It Works
 

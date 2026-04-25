@@ -10,7 +10,7 @@ Migrating a codebase between language versions (Python 2 to 3) or module systems
 
 ```mermaid
 graph TD
-    CC[Claude Code] -->|MCP tool call| MS[chimera-migration server]
+    H0[Coding-agent harness] -->|MCP tool call| MS[chimera-migration server]
     MS -->|chimera_migration_scan| MP[MigrationPlanner]
     MS -->|chimera_migration_apply| MP
     MS -->|chimera_migration_presets| MP
@@ -42,7 +42,7 @@ Add the migration server to your `.mcp.json`:
 
 ### 2. Verify
 
-Restart Claude Code. You should see `chimera_migration_scan`, `chimera_migration_apply`, and `chimera_migration_presets` in your available MCP tools.
+Restart your harness. You should see `chimera_migration_scan`, `chimera_migration_apply`, and `chimera_migration_presets` in your available MCP tools.
 
 ## How It Works
 
