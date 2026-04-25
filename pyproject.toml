@@ -110,7 +110,11 @@ warn_unused_ignores = false
 
 # Optional-extra deps without bundled stubs. Suppress the missing-stub error
 # at the import site so a bare `mypy chimera/` stays clean without forcing
-# the extras (mcp, notebook) to install in the dev env.
+# the extras (mcp, mink, notebook) to install in the dev env.
 [[tool.mypy.overrides]]
-module = ["chimera.mcp.ws_transport", "chimera.tools.notebook_edit"]
+module = [
+    "chimera.cli.render",
+    "chimera.mcp.ws_transport",
+    "chimera.tools.notebook_edit",
+]
 disable_error_code = ["import-not-found"]
