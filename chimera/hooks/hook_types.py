@@ -39,7 +39,26 @@ class HookInput:
 
 @dataclass
 class HookOutput:
-    """Result returned by a hook execution."""
+    """Result returned by a hook execution.
+
+    Mirrors the harness hook stdout JSON contract used for ecosystem compat.
+
+    Attributes:
+        continue_execution: If False, halt the tool dispatch chain.
+        suppress_output: If True, suppress hook stdout/stderr from logs.
+        stop_reason: Reason for halting (informational).
+        decision: Legacy decision field ("allow"/"block").
+        reason: Legacy reason text.
+        system_message: Message to surface in the agent transcript.
+        additional_context: Extra text to append to the tool result.
+        updated_input: Mutated tool input (shallow-merged over original).
+        retry: Whether the loop should retry the action.
+        permission_decision: One of "allow" | "deny" | "ask" | "defer".
+            Maps from `hookSpecificOutput.permissionDecision`.
+        permission_decision_reason: Human-readable rationale for the
+            permission decision. Maps from
+            `hookSpecificOutput.permissionDecisionReason`.
+    """
 
     continue_execution: bool = True
     suppress_output: bool = False
@@ -50,6 +69,8 @@ class HookOutput:
     additional_context: str | None = None
     updated_input: dict[str, Any] | None = None
     retry: bool = False
+    permission_decision: str | None = None
+    permission_decision_reason: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -59,11 +80,22 @@ class HookOutput:
 
 @dataclass
 class CommandHook:
-    """A hook that executes a shell command."""
+    """A hook that executes a shell command.
+
+    Attributes:
+        command: Shell command line to execute.
+        timeout: Per-hook timeout in seconds (0 = unlimited).
+        cwd: Working directory for the subprocess. ``None`` defers to
+            the executor's default (typically project root).
+        extra_env: Additional environment variables merged on top of
+            ``os.environ`` (and the auto-injected ``HOOK_*`` vars).
+    """
 
     command: str
     type: str = field(default="command", init=False)
     timeout: int = 60
+    cwd: str | None = None
+    extra_env: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass

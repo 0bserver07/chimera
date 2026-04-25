@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 """PostToolUse hook: run related tests after file edits.
 
-Claude Code calls this script as a PostToolUse hook after Write or Edit
-tool calls.  It reads tool input as JSON on stdin (falling back to the
-``TOOL_INPUT`` environment variable), extracts the modified file path,
-finds related test files, and runs them with pytest.
+A compatible coding-agent harness invokes this script as a PostToolUse
+hook after Write or Edit tool calls.  It reads tool input as JSON on
+stdin (falling back to the ``TOOL_INPUT`` environment variable), extracts
+the modified file path, finds related test files, and runs them with
+pytest.
 
 Exit codes:
     0 — always (PostToolUse hooks inform only, they cannot block).
 
-Output on stdout is relayed to Claude so it can see test results.
+Output on stdout is relayed to the agent so it can see test results.
 """
 from __future__ import annotations
 

@@ -3,8 +3,41 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
+from typing import Any
 
-__all__ = ["SandboxConfig", "CommandResult", "SandboxAdapter"]
+__all__ = ["SandboxConfig", "CommandResult", "SandboxAdapter", "toggle"]
+
+
+def toggle(session: Any) -> bool:
+    """Toggle a sandbox flag on the supplied session.
+
+    Stores the boolean state on ``session._sandbox_enabled`` so the
+    interactive REPL's ``/sandbox`` command and downstream tools can
+    inspect it. The first call enables the sandbox; subsequent calls
+    flip the bit.
+
+    Args:
+        session: The active :class:`chimera.sessions.session.Session`-like
+            object. The function only reads/writes the
+            ``_sandbox_enabled`` attribute, so any object will do.
+
+    Returns:
+        The new sandbox state (``True`` = enabled, ``False`` = disabled).
+    """
+    # WHY (audit M-1): the slash command surface promised a sandbox
+    # toggle but no callable existed. We keep the implementation
+    # deliberately minimal — a flag the REPL can broadcast — so callers
+    # can wire deeper enforcement (path filtering, command analysis)
+    # incrementally without breaking the slash-command contract.
+    current = bool(getattr(session, "_sandbox_enabled", False))
+    new_state = not current
+    try:
+        setattr(session, "_sandbox_enabled", new_state)
+    except (AttributeError, TypeError):
+        # Read-only session-like (frozen dataclass / SimpleNamespace
+        # without dict): surface the requested state without mutating.
+        pass
+    return new_state
 
 
 @dataclass

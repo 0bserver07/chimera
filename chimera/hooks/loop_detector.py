@@ -3,7 +3,7 @@
 
 Integrates with Chimera's detection subsystem (ExactRepeatDetector,
 PatternCycleDetector) and exposes the detector as both a Python module
-and a Claude Code hook script.
+and a hook script invokable by a compatible coding-agent harness.
 
 When run as a hook, reads tool input from stdin (JSON) and tracks commands
 in a file-backed history.  When used as a module, the ``LoopDetectorHook``
@@ -12,7 +12,7 @@ class can be wired into an :class:`~chimera.events.base.EventBus`.
 Exit codes (hook mode):
     0 — no loop detected (or loop detected with steering message).
 
-Output on stdout is relayed to Claude so it receives the nudge.
+Output on stdout is relayed to the agent so it receives the nudge.
 """
 from __future__ import annotations
 
@@ -200,7 +200,7 @@ class LoopDetectorHook:
 
 
 # ---------------------------------------------------------------------------
-# Claude Code hook entry point
+# Hook entry point (invoked by a compatible coding-agent harness)
 # ---------------------------------------------------------------------------
 
 _STATE_FILE = os.path.expanduser("~/.chimera/loop_detector_state.json")
@@ -250,7 +250,7 @@ def handle(tool_input: dict[str, Any]) -> str:
     """Handle a PostToolUse event for loop detection.
 
     Args:
-        tool_input: Parsed tool input JSON from Claude Code.
+        tool_input: Parsed tool input JSON from the harness.
 
     Returns:
         Steering message if loop detected, empty string otherwise.

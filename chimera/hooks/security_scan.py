@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """PreToolUse hook: security scan for bash commands.
 
-Claude Code calls this script as a PreToolUse hook before Bash tool calls.
-It reads the tool input as JSON on stdin (falling back to the ``TOOL_INPUT``
-environment variable), extracts the bash command, and checks it against
-dangerous patterns using chimera's risk classifier.
+A compatible coding-agent harness invokes this script as a PreToolUse
+hook before Bash tool calls.  It reads the tool input as JSON on stdin
+(falling back to the ``TOOL_INPUT`` environment variable), extracts the
+bash command, and checks it against dangerous patterns using chimera's
+risk classifier.
 
 Exit codes:
     0 — allow the tool call.

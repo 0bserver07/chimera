@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Stop hook: verify all tests pass before Claude declares done.
+"""Stop hook: verify all tests pass before the agent declares done.
 
-Claude Code calls this script as a Stop hook when the agent is about to
-finish.  It runs the project's test suite and reports failures so Claude
-knows it is not actually done.
+A compatible coding-agent harness invokes this script as a Stop hook
+when the agent is about to finish.  It runs the project's test suite
+and reports failures so the agent knows it is not actually done.
 
 Exit codes:
-    0 — all tests pass, Claude may stop.
-    1 — tests failed, output shows failures (Claude should continue).
+    0 — all tests pass, the agent may stop.
+    1 — tests failed, output shows failures (the agent should continue).
 
 The test command can be configured via the ``CHIMERA_TEST_CMD`` environment
 variable.  Defaults to ``python -m pytest --tb=short -q``.

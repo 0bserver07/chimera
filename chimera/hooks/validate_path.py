@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """PreToolUse hook: validate file paths before Write/Edit.
 
-Claude Code calls this script as a PreToolUse hook before Write or Edit
-tool calls.  It reads tool input as JSON on stdin (falling back to the
-``TOOL_INPUT`` environment variable), extracts the ``file_path`` field,
-and checks whether the target file exists on disk.
+A compatible coding-agent harness invokes this script as a PreToolUse
+hook before Write or Edit tool calls.  It reads tool input as JSON on
+stdin (falling back to the ``TOOL_INPUT`` environment variable), extracts
+the ``file_path`` field, and checks whether the target file exists on
+disk.
 
 Exit codes:
     0 — allow the tool call (file exists or tool type is not checked).
@@ -152,7 +153,7 @@ def validate(tool_input: dict[str, Any]) -> tuple[bool, str]:
         return True, ""
 
     # Extract the file path from the tool input
-    # Claude Code puts tool params under "tool_input" or at top level
+    # The harness puts tool params under "tool_input" or at top level
     params = tool_input.get("tool_input", tool_input)
     file_path = params.get("file_path", "") or params.get("path", "")
 

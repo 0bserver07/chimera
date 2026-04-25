@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """PostToolUse hook: lint after file edits.
 
-Claude Code calls this script as a PostToolUse hook after Write or Edit
-tool calls.  It reads tool input as JSON on stdin (falling back to the
-``TOOL_INPUT`` environment variable), extracts the modified file path,
-and runs the configured linter on that file.
+A compatible coding-agent harness invokes this script as a PostToolUse
+hook after Write or Edit tool calls.  It reads tool input as JSON on
+stdin (falling back to the ``TOOL_INPUT`` environment variable), extracts
+the modified file path, and runs the configured linter on that file.
 
 Exit codes:
     0 — always (PostToolUse hooks inform only, they cannot block).
 
-Output on stdout is relayed to Claude so it can fix any issues.
+Output on stdout is relayed to the agent so it can fix any issues.
 """
 from __future__ import annotations
 

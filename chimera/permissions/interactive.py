@@ -3,8 +3,6 @@
 When a PermissionPolicy returns ASK, this module provides the actual
 user-facing prompt. In REPL mode: shows tool name, arguments, risk level,
 and prompts for y/n/always. In non-interactive mode: denies by default.
-
-Inspired by Claude Code's permission prompts.
 """
 from __future__ import annotations
 
