@@ -366,7 +366,7 @@ def test_synthesize_imports():
 def test_minimal_coding_agent_imports():
     """Verify the minimal coding agent imports and its main() is callable."""
     import importlib.util
-    examples_dir = os.path.join(os.path.dirname(__file__), "..", "examples")
+    examples_dir = os.path.join(os.path.dirname(__file__), "..", "..", "examples")
     path = os.path.join(examples_dir, "agent", "coding_agent_minimal.py")
     spec = importlib.util.spec_from_file_location("coding_agent_minimal", path)
     mod = importlib.util.module_from_spec(spec)
@@ -586,7 +586,7 @@ _SUBDIR_EXAMPLES = [
 
 
 def test_all_example_files_exist():
-    examples_dir = os.path.join(os.path.dirname(__file__), "..", "examples")
+    examples_dir = os.path.join(os.path.dirname(__file__), "..", "..", "examples")
     for rel in _SUBDIR_EXAMPLES:
         path = os.path.join(examples_dir, rel)
         assert os.path.isfile(path), f"Missing example: {rel}"
@@ -594,7 +594,7 @@ def test_all_example_files_exist():
 
 def test_all_examples_have_main():
     import importlib.util
-    examples_dir = os.path.join(os.path.dirname(__file__), "..", "examples")
+    examples_dir = os.path.join(os.path.dirname(__file__), "..", "..", "examples")
     for rel in _SUBDIR_EXAMPLES:
         path = os.path.join(examples_dir, rel)
         mod_name = os.path.splitext(os.path.basename(rel))[0]
