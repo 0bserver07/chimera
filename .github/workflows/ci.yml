@@ -41,6 +41,19 @@ jobs:
         # workflow_dispatch or PRs labelled ``live``.
         run: uv run pytest tests/ --ignore=tests/benchmarks -m "not live" --tb=line -q
 
+  otter-trademark-scrub:
+    # WHY: enforce the otter trademark policy
+    # (docs/otter/trademark-policy.md).  Runs the same script developers
+    # run locally; fast, no-deps job that exits 1 on a branded mention in
+    # live otter source/docs.  Filesystem-fact paths like
+    # ``~/.opencode/config.json`` are allowed.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Run otter trademark scrub
+        run: bash scripts/otter_trademark_scrub.sh
+
   docs:
     runs-on: ubuntu-latest
     needs: test
