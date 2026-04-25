@@ -23,7 +23,7 @@ class TokenCounter:
     def __init__(self, model: str = "cl100k_base") -> None:
         self._model = model
         self._encoding: object | None = None
-        if _HAS_TIKTOKEN:
+        if tiktoken is not None:
             self._encoding = tiktoken.get_encoding(model)
 
     def count(self, text: str) -> int:

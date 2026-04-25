@@ -2,8 +2,6 @@
 
 Unlike whole-context compaction, this strategy keeps the last K messages
 verbatim while summarizing everything before that into a condensed block.
-
-Inspired by Claude Code's conversation compaction.
 """
 from __future__ import annotations
 

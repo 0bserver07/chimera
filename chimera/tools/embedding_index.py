@@ -20,10 +20,8 @@ from chimera.tools.codebase_index import CodebaseIndex, SearchResult
 
 try:
     import numpy as np  # type: ignore[import-not-found]
-    _HAS_NUMPY = True
 except ImportError:
     np = None  # type: ignore[assignment]
-    _HAS_NUMPY = False
 
 # Type for an embedding function: text → float vector
 EmbedFn = Callable[[str], list[float]]
@@ -41,7 +39,7 @@ def _cosine_similarity_python(a: list[float], b: list[float]) -> float:
 
 def _cosine_similarity(a: list[float], b: list[float]) -> float:
     """Cosine similarity, using numpy if available."""
-    if _HAS_NUMPY:
+    if np is not None:
         va = np.array(a)
         vb = np.array(b)
         dot = np.dot(va, vb)

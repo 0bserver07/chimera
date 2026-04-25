@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""MCP server for RAG / doc retrieval — grounds Claude's responses in project docs.
+"""MCP server for RAG / doc retrieval — grounds the agent's responses in project docs.
 
 Indexes all ``.md``, ``.rst``, ``.txt`` files **and** Python docstrings in the
 project, then exposes three MCP tools:
@@ -20,7 +20,7 @@ Usage::
     # or
     python chimera/mcp_servers/rag_server.py
 
-Configure in ``.mcp.json`` for Claude Code::
+Configure in ``.mcp.json`` for any compatible MCP host::
 
     {
       "mcpServers": {

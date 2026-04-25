@@ -212,14 +212,17 @@ class SessionTree:
             "parent_id": entry.parent_id, "timestamp": entry.timestamp,
         }
         if isinstance(entry, MessageEntry) and entry.message:
-            d["message"] = {"role": entry.message.role, "content": entry.message.content}
+            msg_dict: dict[str, Any] = {
+                "role": entry.message.role, "content": entry.message.content,
+            }
             if entry.message.tool_calls:
-                d["message"]["tool_calls"] = [
+                msg_dict["tool_calls"] = [
                     {"id": tc.id, "name": tc.name, "arguments": tc.arguments}
                     for tc in entry.message.tool_calls
                 ]
             if entry.message.call_id:
-                d["message"]["call_id"] = entry.message.call_id
+                msg_dict["call_id"] = entry.message.call_id
+            d["message"] = msg_dict
         elif isinstance(entry, CompactionEntry):
             d["summary"] = entry.summary
             d["first_kept_entry_id"] = entry.first_kept_entry_id

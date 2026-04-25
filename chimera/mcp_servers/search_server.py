@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""MCP server exposing Chimera's CodebaseIndex as tools for Claude Code.
+"""MCP server exposing Chimera's CodebaseIndex as tools to any MCP host.
 
 Implements the MCP stdio protocol (JSON-RPC 2.0 over stdin/stdout) and
 exposes two tools:
@@ -15,7 +15,7 @@ Usage::
     # or
     python chimera/mcp_servers/search_server.py
 
-Configure in ``.mcp.json`` for Claude Code::
+Configure in ``.mcp.json`` for any compatible MCP host::
 
     {
       "mcpServers": {

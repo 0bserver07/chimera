@@ -6,7 +6,7 @@ import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from chimera.events.base import Event
+from chimera.events.base import Event, EventBus
 from chimera.sessions.base import SessionID, Storage
 from chimera.sessions.eventlog.log import EventLog
 from chimera.sessions.session import Session
@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from chimera.compaction.base import CompactionStrategy
     from chimera.core.agent import Agent
     from chimera.env.base import Environment
+    from chimera.tools.todo import TodoTool
 
 __all__ = ["EventSourcedSession"]
 
@@ -62,6 +63,13 @@ class EventSourcedSession(Session):
         )
         self._log_dir = Path(log_dir)
         self._event_log = EventLog(self._log_dir / self._session_id)
+        # Wire any TodoTool the agent owns to a bus that forwards
+        # TodoWriteEvent into our durable log. Keeping the bus
+        # session-local avoids coupling to LoopConfig.event_bus, which may
+        # not be configured.
+        self._todo_bus: EventBus = EventBus()
+        self._todo_bus.subscribe("todo_write", self._on_todo_write)
+        self._todo_tools: list[TodoTool] = self._discover_and_attach_todo_tools()
 
     # ------------------------------------------------------------------
     # Overrides
@@ -200,8 +208,10 @@ class EventSourcedSession(Session):
     def _replay_events(self, events: list[Event]) -> None:
         """Replay a sequence of events into the session context.
 
-        Only ``user_message`` and ``agent_result`` event types are
-        replayed.  Other event types are silently skipped.
+        ``user_message`` and ``agent_result`` events rebuild the
+        conversation history; ``todo_write`` events are reapplied to every
+        TodoTool the agent owns so the task list survives /resume,
+        /compact, and /undo.  Unknown event types are silently skipped.
 
         Args:
             events: Ordered list of events to replay.
@@ -213,3 +223,49 @@ class EventSourcedSession(Session):
             elif event.type == "agent_result":
                 output = event.metadata.get("output", "")
                 self._context.add(Message.assistant(output))
+            elif event.type == "todo_write":
+                for tool in self._todo_tools:
+                    tool.apply_event(event)
+
+    # ------------------------------------------------------------------
+    # TodoTool wiring
+    # ------------------------------------------------------------------
+
+    def _discover_and_attach_todo_tools(self) -> list[TodoTool]:
+        """Find every TodoTool the agent owns and wire it to our bus.
+
+        TodoTool instances are looked up by ``name == "todo"`` so this
+        works for both subclassed tools and bare instances.  Persistence
+        is left untouched — M3-C handles the file mirror.
+
+        Returns:
+            The list of attached TodoTool instances (possibly empty).
+        """
+        from chimera.tools.todo import TodoTool
+
+        attached: list[TodoTool] = []
+        for tool in getattr(self._agent, "tools", []) or []:
+            if isinstance(tool, TodoTool):
+                tool.attach_event_bus(self._todo_bus, session_id=self._session_id)
+                attached.append(tool)
+        return attached
+
+    def _on_todo_write(self, event: Event) -> None:
+        """Forward an in-process ``TodoWriteEvent`` into the EventLog.
+
+        Subscribed once during __init__; called synchronously by the
+        TodoTool whenever its state mutates.  We re-publish as a base
+        :class:`Event` so the on-disk JSON form is forward-compatible
+        with future replay code that has no dataclass to deserialize
+        into.
+
+        Args:
+            event: The ``TodoWriteEvent`` raised by a TodoTool.
+        """
+        # Normalize to a base Event so EventLog.serialize/deserialize
+        # round-trips cleanly without a custom registry.
+        metadata = dict(event.metadata)
+        metadata.setdefault("todos", getattr(event, "todos", []))
+        metadata.setdefault("op", getattr(event, "op", "set"))
+        metadata.setdefault("session_id", getattr(event, "session_id", self._session_id))
+        self._event_log.append(Event(type="todo_write", metadata=metadata))

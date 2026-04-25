@@ -149,8 +149,9 @@ class RepoMapMiddleware:
         # Inject as a system message at the start of context
         from chimera.types import Message
 
-        if hasattr(context, "messages") and self._map:
-            context.messages.insert(0, Message.system(self._map))
+        messages = getattr(context, "messages", None)
+        if messages is not None and self._map:
+            messages.insert(0, Message.system(self._map))
             self._injected = True
 
         return context

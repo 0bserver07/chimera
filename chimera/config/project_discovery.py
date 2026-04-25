@@ -3,8 +3,6 @@
 Walks up the directory tree to find config files. Parses markdown with YAML
 frontmatter for: model preferences, tool permissions, custom instructions,
 environment settings.
-
-Inspired by Claude Code's CLAUDE.md auto-loading.
 """
 from __future__ import annotations
 

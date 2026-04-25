@@ -1,14 +1,13 @@
 """System prompts for agent presets.
 
-Each prompt is derived from studying 6 production coding agents
-(Claude Code, OpenCode, Codex, Kimi CLI, Pi-mono, Claw Code)
-and extracting the patterns that make agents actually edit code
-instead of just describing solutions.
+Each prompt is derived from studying several production coding agents
+and extracting the patterns that make agents actually edit code instead
+of just describing solutions.
 """
 from __future__ import annotations
 
 # ---------------------------------------------------------------------------
-# Claude Code style — full-featured, careful, read-before-write
+# Full-featured style — careful, read-before-write
 # ---------------------------------------------------------------------------
 
 CODING_AGENT_PROMPT = """\
@@ -225,7 +224,8 @@ with the exact text from the file.
 # ---------------------------------------------------------------------------
 
 PRESET_PROMPTS = {
-    "claude_code": CODING_AGENT_PROMPT,
+    "coding_agent": CODING_AGENT_PROMPT,
+    "claude_code": CODING_AGENT_PROMPT,  # deprecated alias — see DEPRECATED_PRESET_ALIASES
     "codex": CODEX_PROMPT,
     "minimal": MINIMAL_PROMPT,
     "explore": EXPLORE_PROMPT,

@@ -218,8 +218,9 @@ class ImportGraphTool(BaseTool):
 
         root = args.get("root")
         if root is None:
-            if env is not None and hasattr(env, "workdir"):
-                root = str(env.workdir)
+            workdir = getattr(env, "workdir", None) if env is not None else None
+            if workdir is not None:
+                root = str(workdir)
             else:
                 root = "."
         root_path = Path(root)

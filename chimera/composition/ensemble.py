@@ -111,8 +111,9 @@ class Ensemble:
         finally:
             for clone in clones:
                 try:
-                    if hasattr(clone, 'workdir'):
-                        shutil.rmtree(str(clone.workdir), ignore_errors=True)
+                    workdir = getattr(clone, 'workdir', None)
+                    if workdir is not None:
+                        shutil.rmtree(str(workdir), ignore_errors=True)
                     clone.cleanup()
                 except Exception:
                     pass
@@ -178,9 +179,10 @@ class Ensemble:
             if use_clones:
                 for clone in clones:
                     try:
-                        if clone is not None and hasattr(clone, 'workdir'):
-                            shutil.rmtree(str(clone.workdir), ignore_errors=True)
                         if clone is not None:
+                            workdir = getattr(clone, 'workdir', None)
+                            if workdir is not None:
+                                shutil.rmtree(str(workdir), ignore_errors=True)
                             clone.cleanup()
                     except Exception:
                         pass

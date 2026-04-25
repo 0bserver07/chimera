@@ -1,6 +1,7 @@
 """MCP tool wrappers -- wraps MCP tools as Chimera BaseTool instances."""
 from __future__ import annotations
 
+import re
 from typing import Any, TYPE_CHECKING
 
 from chimera.core.tool import BaseTool
@@ -13,12 +14,56 @@ if TYPE_CHECKING:
 
 _ACTIVE_CLIENTS: list[Any] = []  # Hold references to prevent GC
 
+# CC-compatible naming: mcp__<server>__<tool>. Anything not [A-Za-z0-9_-]
+# becomes an underscore so model-emitted names round-trip cleanly in JSON.
+_NAME_NORMALIZE_RE = re.compile(r"[^A-Za-z0-9_-]")
+
+
+def mcp_normalize(part: str) -> str:
+    """Normalize a server or tool name fragment for the ``mcp__`` namespace.
+
+    Args:
+        part: Raw server or tool identifier.
+
+    Returns:
+        Lowercased identifier with non-(alnum/underscore/hyphen) chars
+        replaced by underscores.
+    """
+    return _NAME_NORMALIZE_RE.sub("_", part.lower())
+
+
+def mcp_prefix(server: str, tool: str) -> str:
+    """Build the canonical ``mcp__<server>__<tool>`` namespaced tool name."""
+    return f"mcp__{mcp_normalize(server)}__{mcp_normalize(tool)}"
+
+
+def mcp_unprefix(name: str) -> tuple[str, str]:
+    """Split a namespaced name back into ``(server, tool)``.
+
+    Args:
+        name: A name produced by :func:`mcp_prefix`.
+
+    Returns:
+        ``(server, tool)`` tuple. If *name* lacks the ``mcp__`` prefix the
+        whole thing is returned as the tool with an empty server (callers
+        can use this to detect non-MCP names without raising).
+    """
+    if not name.startswith("mcp__"):
+        return ("", name)
+    body = name[len("mcp__"):]
+    if "__" not in body:
+        return ("", body)
+    server, _, tool = body.partition("__")
+    return (server, tool)
+
 
 class MCPTool(BaseTool):
     """Wraps an MCP tool definition as a Chimera BaseTool.
 
     Created automatically by MCPClient.tools -- not typically
-    instantiated directly.
+    instantiated directly.  The exposed ``name`` is the CC-compatible
+    ``mcp__<server>__<tool>`` form; ``original_name`` preserves the raw
+    upstream name so dispatch back to the server still routes correctly.
     """
 
     def __init__(
@@ -28,7 +73,11 @@ class MCPTool(BaseTool):
         server_name: str,
         client: MCPClient,
     ) -> None:
-        self.name = tool_def.get("name", "unknown")
+        raw_name = tool_def.get("name", "unknown")
+        # Preserve the upstream name verbatim — required when we send
+        # tools/call back to the server, which only knows the original.
+        self.original_name = raw_name
+        self.name = mcp_prefix(server_name, raw_name)
         self.description = tool_def.get("description", "")
         self.parameters = tool_def.get("inputSchema", {
             "type": "object", "properties": {},
@@ -48,7 +97,7 @@ class MCPTool(BaseTool):
             ToolResult with the server's response.
         """
         try:
-            result = self._client.call_tool(self._transport, self.name, args)
+            result = self._client.call_tool(self._transport, self.original_name, args)
         except Exception as e:
             return ToolResult(output="", error=f"MCP tool error: {e}")
 

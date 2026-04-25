@@ -188,8 +188,9 @@ class ValidationSplit:
         Tries the ``workdir`` attribute first (LocalEnvironment), then
         falls back to running ``pwd`` in the environment.
         """
-        if hasattr(env, "workdir"):
-            return str(env.workdir)
+        workdir = getattr(env, "workdir", None)
+        if workdir is not None:
+            return str(workdir)
         result = env.run_command("pwd")
         return result.stdout.strip()
 
