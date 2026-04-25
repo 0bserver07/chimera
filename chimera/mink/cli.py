@@ -85,10 +85,13 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         "returns an error result (the agent can react) instead of crashing "
         "the run. Default: no timeout.",
     )
+    # WHY: env-var precedence is --model > $CHIMERA_MINK_MODEL > _DEFAULT_MODEL.
+    # Lets CI / shell sessions pin a tag once while keeping ad-hoc --model
+    # overrides cheap. Mirrors the existing $CHIMERA_MINK_FALLBACK pattern.
     parser.add_argument(
         "--model",
-        default=_DEFAULT_MODEL,
-        help=f"Ollama model tag (default: {_DEFAULT_MODEL}). "
+        default=os.environ.get("CHIMERA_MINK_MODEL") or _DEFAULT_MODEL,
+        help=f"Ollama model tag (default: $CHIMERA_MINK_MODEL or {_DEFAULT_MODEL}). "
         f"Falls back to $CHIMERA_MINK_FALLBACK (default {_DEFAULT_FALLBACK}) "
         "if the primary model is unreachable.",
     )
@@ -793,7 +796,11 @@ def _run_print_mode(args: argparse.Namespace) -> int:
             )
             return 2
 
-    user_passed_model = args.model != _DEFAULT_MODEL
+    # WHY: distinguish "user explicitly chose" (CLI flag or env var) from
+    # "fell through to built-in default" so an agent preset's model can win
+    # only against the latter. $CHIMERA_MINK_MODEL counts as user choice.
+    env_model = os.environ.get("CHIMERA_MINK_MODEL")
+    user_passed_model = args.model != _DEFAULT_MODEL or bool(env_model)
     effective_model = (
         args.model
         if user_passed_model or agent_spec is None or not agent_spec.model
