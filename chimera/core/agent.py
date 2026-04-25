@@ -158,8 +158,9 @@ class Agent:
         from chimera.core.system_prompt import SystemPromptBuilder
 
         # Build system prompt using new infrastructure
+        env_cwd = getattr(env, "cwd", None) if env is not None else None
         assembler = ContextAssembler(
-            project_dir=Path(env.cwd if env and hasattr(env, "cwd") else "."),
+            project_dir=Path(env_cwd if env_cwd is not None else "."),
             tools=self.tools,
             model=self.provider.model_name,
         )
@@ -177,7 +178,7 @@ class Agent:
         # Load persistent memory
         from chimera.core.memory import PersistentMemory
 
-        project_dir = Path(env.cwd if env and hasattr(env, "cwd") else ".")
+        project_dir = Path(env_cwd if env_cwd is not None else ".")
         memory = PersistentMemory(project_dir)
         memory_content = memory.load()
         if memory_content:

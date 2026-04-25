@@ -12,6 +12,7 @@ from chimera.types import Message, PendingApproval, ToolCall, ToolResult
 
 if TYPE_CHECKING:
     from chimera.core.loop_config import LoopConfig
+    from chimera.hooks.hook_types import HookOutput
 
 __all__ = [
     "execute_tool_calls",
@@ -23,6 +24,105 @@ __all__ = [
 # Tools that modify files on disk — used for ghost commit snapshots.
 _FILE_MODIFYING_TOOLS = frozenset({"write_file", "edit_file", "replace_in_file"})
 _FILE_READING_TOOLS = frozenset({"read_file"})
+
+
+def _fire_pre_tool_use_hook(
+    tc: ToolCall, config: LoopConfig | None,
+) -> HookOutput | None:
+    """Fire the PreToolUse hook chain for *tc* synchronously.
+
+    Returns the merged :class:`HookOutput`, or ``None`` if no emitter is
+    configured. Safely runs the async emitter even when called from a
+    running event loop by spinning a one-shot worker thread.
+    """
+    if config is None or config.hook_emitter is None:
+        return None
+    if not getattr(config.hook_emitter, "active", True):
+        return None
+
+    from collections.abc import Coroutine
+    from typing import Any as _Any
+
+    from chimera.hooks.events import HookEvent
+
+    emitter = config.hook_emitter
+
+    def coro_factory() -> Coroutine[_Any, _Any, "HookOutput | None"]:
+        return emitter.emit(
+            HookEvent.PRE_TOOL_USE,
+            tool_name=tc.name,
+            tool_input=dict(tc.arguments),
+        )
+
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop is None:
+        # No running loop — safe to use asyncio.run.
+        return asyncio.run(coro_factory())
+
+    # Already inside a loop. Run the coroutine on a worker thread with a
+    # fresh event loop so we don't deadlock the caller's loop.
+    import threading
+
+    result_box: dict[str, HookOutput | None] = {"out": None}
+
+    def _runner() -> None:
+        new_loop = asyncio.new_event_loop()
+        try:
+            result_box["out"] = new_loop.run_until_complete(coro_factory())
+        finally:
+            new_loop.close()
+
+    th = threading.Thread(target=_runner, daemon=True)
+    th.start()
+    th.join()
+    return result_box["out"]
+
+
+def _apply_pre_tool_use_hook(
+    tc: ToolCall, config: LoopConfig | None,
+) -> tuple[ToolCall, HookOutput | None, str | None]:
+    """Run PreToolUse hooks and return (effective_tc, hook_output, denial).
+
+    - ``effective_tc`` has merged ``updated_input`` if the hook supplied any.
+    - ``denial`` is non-None when the hook denies the call. Caller should
+      handle it (raise PermissionDenied or record a denial result).
+    - ``hook_output.permission_decision == "allow"`` overrides a default
+      DENY at the caller's discretion (caller must inspect).
+    """
+    out = _fire_pre_tool_use_hook(tc, config)
+    if out is None:
+        return tc, None, None
+
+    effective_tc = tc
+    if out.updated_input is not None:
+        merged = dict(tc.arguments)
+        merged.update(out.updated_input)  # hook keys override originals
+        effective_tc = ToolCall(id=tc.id, name=tc.name, arguments=merged)
+        if config is not None and config.event_bus is not None:
+            from chimera.events.types import HookUpdatedInputEvent
+
+            config.event_bus.publish(
+                HookUpdatedInputEvent(
+                    tool_name=tc.name,
+                    call_id=tc.id,
+                    original=dict(tc.arguments),
+                    updated=merged,
+                ),
+            )
+
+    denial: str | None = None
+    if out.permission_decision == "deny" or not out.continue_execution:
+        denial = (
+            out.permission_decision_reason
+            or out.reason
+            or out.stop_reason
+            or "Blocked by hook"
+        )
+    return effective_tc, out, denial
 
 
 class PermissionDenied(Exception):
@@ -69,8 +169,14 @@ def execute_tool_calls(
         if config and config.cancellation:
             config.cancellation.check()
 
-        # -- Permission check --
-        if config and config.permissions:
+        # -- PreToolUse hook (may mutate input, deny, or override perms) --
+        tc, hook_out, hook_denial = _apply_pre_tool_use_hook(tc, config)
+        if hook_denial is not None:
+            raise PermissionDenied(tc.name)
+
+        # -- Permission check (skipped iff hook returned permissionDecision) --
+        hook_decision = hook_out.permission_decision if hook_out else None
+        if config and config.permissions and hook_decision not in {"allow", "deny"}:
             from chimera.permissions.base import PermissionAction
 
             action = config.permissions.evaluate(tc.name, tc.arguments)
@@ -87,7 +193,7 @@ def execute_tool_calls(
             if action == PermissionAction.DENY:
                 context.add(Message.tool(tc.id, f"Permission denied for {tc.name}"))
                 continue
-            if action == PermissionAction.ASK:
+            if action == PermissionAction.ASK and hook_decision != "allow":
                 raise PermissionAsk(tc.name)
 
         # -- Discipline guards --
@@ -437,8 +543,19 @@ async def async_execute_tool_calls_incremental(
         if config and config.cancellation:
             config.cancellation.check()
 
-        # -- Permission check --
-        if config and config.permissions:
+        # -- PreToolUse hook (W5 finishing-touch: mirror sync executor) --
+        # Without this, .claude/settings.json hooks declared via the mink CLI
+        # parse + thread into LoopConfig but never fire, because mink runs
+        # go through this async executor.
+        tc, hook_out, hook_denial = _apply_pre_tool_use_hook(tc, config)
+        if hook_denial is not None:
+            context.add(Message.tool(tc.id, f"Blocked by hook: {hook_denial}"))
+            ordered_results[i] = ToolResult(output="", error=f"Blocked by hook: {hook_denial}")
+            continue
+        hook_decision = hook_out.permission_decision if hook_out else None
+
+        # -- Permission check (skipped iff hook returned permissionDecision) --
+        if config and config.permissions and hook_decision not in {"allow", "deny"}:
             from chimera.permissions.base import PermissionAction
 
             action = config.permissions.evaluate(tc.name, tc.arguments)
@@ -519,10 +636,27 @@ async def async_execute_tool_calls_incremental(
                 result.results.append(r)
         return result
 
-    # Phase 2: execute all approved tools concurrently
+    # Phase 2: execute all approved tools concurrently.
+    # Audit H-4: when ``config.tool_timeout_s`` is set, wrap each dispatch
+    # in ``asyncio.wait_for`` so a runaway tool returns a synthetic error
+    # result rather than blocking the whole turn. The error message is
+    # discoverable by the agent's next reasoning step so it can react
+    # (e.g. retry with smaller input) instead of crashing the run.
+    timeout_s = config.tool_timeout_s if config is not None else None
+
     async def _run(tc: ToolCall, t: BaseTool) -> ToolResult:
         try:
+            if timeout_s is not None:
+                return await asyncio.wait_for(
+                    t.async_execute(tc.arguments, env),
+                    timeout=timeout_s,
+                )
             return await t.async_execute(tc.arguments, env)
+        except asyncio.TimeoutError:
+            return ToolResult(
+                output="",
+                error=f"Tool {tc.name} exceeded {timeout_s}s timeout",
+            )
         except Exception as exc:
             return ToolResult(output="", error=str(exc))
 

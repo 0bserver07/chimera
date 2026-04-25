@@ -1,6 +1,7 @@
 # chimera/core/tool_group.py
 from __future__ import annotations
 
+import functools
 from typing import Any, Iterator
 
 from chimera.core.tool import BaseTool
@@ -31,7 +32,24 @@ class ToolGroup:
         return len(self.tools)
 
 
-# Predefined groups
+# WHY (W2 circular-import bug): the previous module-level
+# ``DEFAULT_TOOLS = _make_default_tools()`` and
+# ``AGENT_TOOLS = _make_agent_tools()`` calls ran at import time.  Any module
+# that imported ``chimera.core`` (or transitively pulled it in via
+# ``chimera.tools.__init__`` re-exports) would trigger a fresh import of
+# ``chimera.tools.read``, ``...write``, etc.  When the very first symbol
+# requested was inside ``chimera.tools`` itself (e.g. ``from
+# chimera.tools.task_tool import TaskTool``) the loader entered
+# ``chimera.tools.__init__`` -> ``chimera.tools.read`` -> ``chimera.core``
+# -> ``chimera.core.tool_group`` -> ``_make_default_tools`` ->
+# ``chimera.tools.read`` again, which was still partially initialised, raising
+# ``ImportError: cannot import name 'ReadFileTool'``.  Wrapping the factories
+# in ``functools.cache`` and exposing the constants through ``__getattr__``
+# defers concrete instantiation until the first attribute access, by which
+# point both submodule trees are fully populated.
+
+
+@functools.cache
 def _make_default_tools() -> ToolGroup:
     from chimera.tools.read import ReadFileTool
     from chimera.tools.write import WriteFileTool
@@ -40,9 +58,7 @@ def _make_default_tools() -> ToolGroup:
     return ToolGroup("default", [ReadFileTool(), WriteFileTool(), BashTool(), ImageReadTool()])
 
 
-DEFAULT_TOOLS = _make_default_tools()
-
-
+@functools.cache
 def _make_agent_tools() -> ToolGroup:
     """Extended tool set for interactive agent sessions."""
     from chimera.tools.read import ReadFileTool
@@ -65,12 +81,33 @@ def _make_agent_tools() -> ToolGroup:
         BashTool(), SearchTool(), ListFilesTool(),
         TestTool(), GitTool(), ReplaceInFileTool(),
         ImageReadTool(), RepoMapTool(),
-        ThinkTool(), TodoTool(),
+        ThinkTool(),
+        # WHY: persist=True for CC-parity /resume; tests construct bare
+        # TodoTool() which keeps the default persist=False.
+        TodoTool(persist=True),
         VerifyTool(), WebSearchTool(),
     ])
 
 
-AGENT_TOOLS = _make_agent_tools()
+# Public lazy attributes.  ``DEFAULT_TOOLS`` / ``AGENT_TOOLS`` keep their
+# constant-import look-and-feel for callers; the underlying ``ToolGroup`` is
+# built on first access (via ``__getattr__`` below) and cached for the
+# process lifetime.  ``noqa: F822`` because ruff can't see module-level
+# ``__getattr__``-provided names.
+__all__ = [  # noqa: F822
+    "ToolGroup",
+    "DEFAULT_TOOLS",
+    "AGENT_TOOLS",
+    "create_default_tools",
+]
+
+
+def __getattr__(name: str) -> Any:
+    if name == "DEFAULT_TOOLS":
+        return _make_default_tools()
+    if name == "AGENT_TOOLS":
+        return _make_agent_tools()
+    raise AttributeError(f"module 'chimera.core.tool_group' has no attribute {name!r}")
 
 
 def create_default_tools(

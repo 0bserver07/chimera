@@ -4,7 +4,7 @@ Provides a ProposedEdit system where the agent generates changes that are
 staged (not applied) until reviewed. Users can accept all, reject all,
 or accept/reject individual edits.
 
-Inspired by Cursor's "Apply" pattern and Claude Code's proposed changes.
+Implements a stage-then-review apply pattern for tool-driven edits.
 """
 from __future__ import annotations
 
