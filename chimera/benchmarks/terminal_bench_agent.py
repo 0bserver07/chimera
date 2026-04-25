@@ -10,16 +10,49 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+# WHY (pyright): the typing-only imports below give pyright real classes
+# to validate the ``perform_task`` signature against, while the runtime
+# try/except below populates concrete values (or ``None``) for actual
+# execution. ``__init__`` raises before any annotated method body runs
+# when terminal-bench is missing, so the runtime ``None``s are unreachable.
+if TYPE_CHECKING:  # pragma: no cover
+    from terminal_bench.agents.base_agent import (  # type: ignore[import-not-found]
+        AgentResult as AgentResult,  # noqa: PLC0414
+    )
+    from terminal_bench.agents.base_agent import (  # type: ignore[import-not-found]
+        BaseAgent as BaseAgent,  # noqa: PLC0414
+    )
+    from terminal_bench.agents.failure_mode import (  # type: ignore[import-not-found]
+        FailureMode as FailureMode,  # noqa: PLC0414
+    )
+    from terminal_bench.terminal import (  # type: ignore[import-not-found]
+        TmuxSession as TmuxSession,  # noqa: PLC0414  # pyright: ignore[reportAttributeAccessIssue]
+    )
 
 try:
-    from terminal_bench.agents.base_agent import AgentResult, BaseAgent  # type: ignore[import-not-found]
-    from terminal_bench.agents.failure_mode import FailureMode  # type: ignore[import-not-found]
-    from terminal_bench.terminal import TmuxSession  # type: ignore[import-not-found]
+    from terminal_bench.agents.base_agent import (  # type: ignore[import-not-found]
+        AgentResult as _RT_AgentResult,
+    )
+    from terminal_bench.agents.base_agent import (  # type: ignore[import-not-found]
+        BaseAgent as _RT_BaseAgent,
+    )
+    from terminal_bench.agents.failure_mode import (  # type: ignore[import-not-found]
+        FailureMode as _RT_FailureMode,
+    )
+
+    _AgentResultRT: Any = _RT_AgentResult
+    _FailureModeRT: Any = _RT_FailureMode
+    if not TYPE_CHECKING:
+        BaseAgent = _RT_BaseAgent  # type: ignore[assignment,misc,no-redef]
     _HAS_TB = True
 except ImportError:
+    _AgentResultRT = None
+    _FailureModeRT = None
     _HAS_TB = False
-    BaseAgent = object  # type: ignore[misc,assignment]
+    if not TYPE_CHECKING:
+        BaseAgent = object  # type: ignore[misc,assignment,no-redef]
 
 from chimera.providers.factory import create_provider
 from chimera.types import Message
@@ -51,9 +84,9 @@ class ChimeraAgent(BaseAgent):  # type: ignore[misc]  # BaseAgent stubbed to Any
     def perform_task(
         self,
         instruction: str,
-        session: TmuxSession,
+        session: "TmuxSession",
         logging_dir: Path | None = None,
-    ) -> AgentResult:
+    ) -> "AgentResult":
         """Execute the Terminal-Bench task using a ReAct-style loop.
 
         Instead of using Chimera's built-in tools (which operate on files),
@@ -123,9 +156,12 @@ class ChimeraAgent(BaseAgent):  # type: ignore[misc]  # BaseAgent stubbed to Any
                 "What command should I run next? (or DONE if task is complete)"
             ))
 
-        return AgentResult(
+        # WHY (pyright): use the typed-as-Any runtime shadows so static
+        # analysis doesn't try to narrow Optional class-vars at the call
+        # site. ``__init__`` already enforced ``_HAS_TB`` before we got here.
+        return _AgentResultRT(
             total_input_tokens=total_input,
             total_output_tokens=total_output,
-            failure_mode=FailureMode.NONE,
+            failure_mode=_FailureModeRT.NONE,
             timestamped_markers=markers,
         )
