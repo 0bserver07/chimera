@@ -188,6 +188,7 @@ def execute_tool_calls(
                         tool_name=tc.name,
                         action=action.value,
                         granted=action != PermissionAction.DENY,
+                        call_id=tc.id,
                     )
                 )
             if action == PermissionAction.DENY:
@@ -257,7 +258,7 @@ def execute_tool_calls(
 
         # -- Event: tool result --
         if config and config.event_bus:
-            from chimera.events.types import ToolResultEvent
+            from chimera.events.types import ErrorEvent, ToolResultEvent
 
             config.event_bus.publish(
                 ToolResultEvent(
@@ -267,6 +268,15 @@ def execute_tool_calls(
                     tool_metadata=result.metadata,
                 )
             )
+            if not result.success:
+                # Additive error.occurred emission for the event-sourcing
+                # subsystem; classic subscribers ignore unknown events.
+                config.event_bus.publish(
+                    ErrorEvent(
+                        error=str(result.error or "tool failed"),
+                        recoverable=True,
+                    ),
+                )
 
         # -- Feedback tracker: learn from errors --
         if config and config.feedback_tracker:
@@ -363,6 +373,7 @@ def execute_tool_calls_incremental(
                         tool_name=tc.name,
                         action=action.value,
                         granted=action != PermissionAction.DENY,
+                        call_id=tc.id,
                     )
                 )
             if action == PermissionAction.DENY:
@@ -454,7 +465,7 @@ def execute_tool_calls_incremental(
 
         # -- Event: tool result --
         if config and config.event_bus:
-            from chimera.events.types import ToolResultEvent
+            from chimera.events.types import ErrorEvent, ToolResultEvent
 
             config.event_bus.publish(
                 ToolResultEvent(
@@ -464,6 +475,13 @@ def execute_tool_calls_incremental(
                     tool_metadata=tr.metadata,
                 )
             )
+            if not tr.success:
+                config.event_bus.publish(
+                    ErrorEvent(
+                        error=str(tr.error or "tool failed"),
+                        recoverable=True,
+                    ),
+                )
 
         # -- Feedback tracker: learn from errors --
         if config and config.feedback_tracker:
@@ -567,6 +585,7 @@ async def async_execute_tool_calls_incremental(
                         tool_name=tc.name,
                         action=action.value,
                         granted=action != PermissionAction.DENY,
+                        call_id=tc.id,
                     )
                 )
             if action == PermissionAction.DENY:
@@ -714,7 +733,7 @@ async def async_execute_tool_calls_incremental(
 
         # -- Event: tool result --
         if config and config.event_bus:
-            from chimera.events.types import ToolResultEvent
+            from chimera.events.types import ErrorEvent, ToolResultEvent
 
             config.event_bus.publish(
                 ToolResultEvent(
@@ -724,6 +743,13 @@ async def async_execute_tool_calls_incremental(
                     tool_metadata=tr.metadata,
                 )
             )
+            if not tr.success:
+                config.event_bus.publish(
+                    ErrorEvent(
+                        error=str(tr.error or "tool failed"),
+                        recoverable=True,
+                    ),
+                )
 
         # -- Feedback tracker: learn from errors --
         if config and config.feedback_tracker:

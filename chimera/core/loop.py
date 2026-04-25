@@ -369,6 +369,11 @@ class ReAct:
                 handler.on_step_end(steps)
 
         # Max steps
+        if self.config and self.config.event_bus:
+            from chimera.events.types import ErrorEvent
+            self.config.event_bus.publish(
+                ErrorEvent(error="max steps reached", recoverable=False),
+            )
         if handler:
             handler.on_done()
         if wire:

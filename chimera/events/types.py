@@ -113,6 +113,7 @@ class PermissionEvent(Event):
     tool_name: str = ""
     action: str = ""
     granted: bool = False
+    call_id: str = ""
 
 
 @dataclass
