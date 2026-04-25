@@ -6,10 +6,8 @@ from pathlib import Path
 
 try:
     import aiofiles  # type: ignore[import-untyped]
-
-    _HAS_AIOFILES = True
 except ImportError:  # pragma: no cover
-    _HAS_AIOFILES = False
+    aiofiles = None  # type: ignore[assignment]
 
 import asyncio
 
@@ -28,7 +26,7 @@ class ToolResultPersister:
     async def persist(self, tool_use_id: str, result: str) -> tuple[str, str]:
         """Write *result* to disk and return ``(path, preview)``."""
         path = self._dir / f"{tool_use_id}.json"
-        if _HAS_AIOFILES:
+        if aiofiles is not None:
             async with aiofiles.open(path, "w") as f:
                 await f.write(result)
         else:
@@ -41,7 +39,7 @@ class ToolResultPersister:
         path = self._dir / f"{tool_use_id}.json"
         if not path.exists():
             return None
-        if _HAS_AIOFILES:
+        if aiofiles is not None:
             async with aiofiles.open(path, "r") as f:
                 content: str = await f.read()
                 return content

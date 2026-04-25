@@ -17,7 +17,21 @@ from chimera.core.loop_detection import LoopDetector
 from chimera.core.prompt import Prompt
 from chimera.core.streaming import StreamHandler, PrintStreamHandler, CollectStreamHandler
 from chimera.core.tool import BaseTool, ContextAwareTool, tool
-from chimera.core.tool_group import ToolGroup, DEFAULT_TOOLS, AGENT_TOOLS
+from chimera.core.tool_group import ToolGroup
+
+# WHY (W2 circular-import bug): DEFAULT_TOOLS / AGENT_TOOLS are exposed via
+# ``__getattr__`` rather than imported eagerly. Eager ``from
+# chimera.core.tool_group import DEFAULT_TOOLS`` would invoke that module's
+# ``__getattr__`` at ``chimera.core`` import time, instantiating tool classes
+# while ``chimera.tools.*`` is still being initialised. Lazy attribute lookup
+# defers the build to first real consumer access.
+
+
+def __getattr__(name: str):  # type: ignore[no-untyped-def]
+    if name in {"DEFAULT_TOOLS", "AGENT_TOOLS"}:
+        from chimera.core import tool_group as _tg
+        return getattr(_tg, name)
+    raise AttributeError(f"module 'chimera.core' has no attribute {name!r}")
 
 __all__ = [
     "AGENT_TOOLS", "Agent", "ApprovalPolicy", "AutoApprove", "AlwaysDeny", "AllowList",

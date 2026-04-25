@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from chimera.discipline.anchor import InstructionAnchor
     from chimera.discipline.guard import DisciplineGuard
     from chimera.events.base import EventBus
+    from chimera.hooks.emitter import HookEmitter
     from chimera.learning.feedback import FeedbackTracker
     from chimera.learning.injector import LearningInjector
     from chimera.learning.store import LearningStore
@@ -99,6 +100,16 @@ class LoopConfig:
     learning: LearningStore | None = None
     feedback_tracker: FeedbackTracker | None = None
     learning_injector: LearningInjector | None = None
+    # Hook emitter — when set, PreToolUse hooks fire from tool_executor and
+    # may mutate args (updatedInput) or override permissions
+    # (permissionDecision = allow|deny|ask).
+    hook_emitter: HookEmitter | None = None
+    # Per-tool-call timeout (seconds). When set, each tool dispatch in the
+    # async executor is wrapped in ``asyncio.wait_for(...)``; on timeout the
+    # tool returns a synthetic error result so the loop can continue rather
+    # than crashing the whole run. ``None`` (default) disables the wrap.
+    # Audit H-4. See chimera/core/tool_executor.py:async_execute_tool_calls_incremental.
+    tool_timeout_s: float | None = None
 
     # -- Safety-default controls (opt-out) --
     yolo_mode: bool = False
