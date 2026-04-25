@@ -11,12 +11,23 @@ Run live tests:
 """
 from __future__ import annotations
 
+import importlib.util
 import os
 
 import pytest
 
 from chimera.assembly.coding_agent import CodingAgent
 from chimera.core.loop_events import LoopEventType
+
+# The `openai` SDK is an optional extra (`pip install chimera-run[openai]`).
+# Tests that exercise OpenAIProvider construction or factory-routing to it
+# must skip cleanly when the SDK isn't installed instead of failing with
+# a hard ImportError.
+_HAS_OPENAI = importlib.util.find_spec("openai") is not None
+_NEEDS_OPENAI = pytest.mark.skipif(
+    not _HAS_OPENAI,
+    reason="needs `openai` extra (pip install chimera-run[openai])",
+)
 
 
 # ---------------------------------------------------------------------------
@@ -32,6 +43,7 @@ class TestProviderStructure:
         p = AnthropicProvider(model="claude-sonnet-4-20250514", api_key="test")
         assert p.model_name == "claude-sonnet-4-20250514"
 
+    @_NEEDS_OPENAI
     def test_openai_provider_constructs(self):
         from chimera.providers.openai import OpenAIProvider
         p = OpenAIProvider(model="gpt-4o", api_key="test")
@@ -51,6 +63,7 @@ class TestProviderStructure:
         p = OllamaProvider(model="llama3.2")
         assert p.model_name == "llama3.2"
 
+    @_NEEDS_OPENAI
     def test_coding_agent_accepts_injected_provider(self):
         from chimera.providers.openai import OpenAIProvider
         p = OpenAIProvider(model="gpt-4o-mini", api_key="test")
@@ -73,6 +86,7 @@ class TestProviderStructure:
         p = create_provider(model="claude-sonnet-4-20250514", api_key="test")
         assert "claude" in p.model_name
 
+    @_NEEDS_OPENAI
     def test_factory_infers_openai(self):
         from chimera.providers.factory import create_provider
         p = create_provider(model="gpt-4o", api_key="test")
