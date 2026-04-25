@@ -38,7 +38,7 @@ class StreamHandler(ABC):
 
 
 class PrintStreamHandler(StreamHandler):
-    """Prints streaming output to stdout (Claude Code-like experience)."""
+    """Prints streaming output to stdout (live token rendering)."""
 
     def on_text(self, text: str) -> None:
         sys.stdout.write(text)
