@@ -282,13 +282,68 @@ def test_cleanup_is_noop() -> None:
     assert env.cleanup() is None
 
 
-def test_checkpoint_and_restore_not_implemented() -> None:
-    """Scaffold leaves checkpoint/restore for the follow-up issue."""
-    env = SSHEnvironment(host="h")
+def test_checkpoint_requires_explicit_workdir() -> None:
+    """checkpoint() needs a real workdir so the snapshot has a defined scope."""
+    env = SSHEnvironment(host="h")  # default workdir="."
     with pytest.raises(NotImplementedError):
         env.checkpoint()
-    with pytest.raises(NotImplementedError):
-        env.restore("0")
+
+
+def test_checkpoint_creates_remote_tarball() -> None:
+    """checkpoint() shells out to a `tar -czf` and returns a hex token."""
+    env = SSHEnvironment(host="h", workdir="/srv/app")
+    with mock.patch(
+        "chimera.env.ssh.subprocess.run",
+        return_value=_completed(returncode=0),
+    ) as mocked:
+        cid = env.checkpoint()
+    assert isinstance(cid, str) and len(cid) == 16
+    argv = mocked.call_args[0][0]
+    assert "tar -czf" in argv[-1]
+
+
+def test_checkpoint_raises_on_tar_failure() -> None:
+    """A non-zero tar exit must surface as OSError."""
+    env = SSHEnvironment(host="h", workdir="/srv/app")
+    with mock.patch(
+        "chimera.env.ssh.subprocess.run",
+        return_value=_completed(returncode=2, stderr="disk full"),
+    ):
+        with pytest.raises(OSError, match="disk full"):
+            env.checkpoint()
+
+
+def test_restore_rejects_path_traversal() -> None:
+    """`/` or `..` in a checkpoint id must be rejected before any remote call."""
+    env = SSHEnvironment(host="h", workdir="/srv/app")
+    with pytest.raises(ValueError):
+        env.restore("../etc/passwd")
+    with pytest.raises(ValueError):
+        env.restore("a/b")
+
+
+def test_restore_calls_remote_tar() -> None:
+    """Happy path: restore issues a `tar -xzf` against the configured workdir."""
+    env = SSHEnvironment(host="h", workdir="/srv/app")
+    with mock.patch(
+        "chimera.env.ssh.subprocess.run",
+        return_value=_completed(returncode=0),
+    ) as mocked:
+        env.restore("deadbeefcafebabe")
+    argv = mocked.call_args[0][0]
+    assert "tar -xzf" in argv[-1]
+    assert "deadbeefcafebabe" in argv[-1]
+
+
+def test_restore_missing_checkpoint_raises_filenotfound() -> None:
+    """A `test -f` guard returns exit 1 when the checkpoint is gone."""
+    env = SSHEnvironment(host="h", workdir="/srv/app")
+    with mock.patch(
+        "chimera.env.ssh.subprocess.run",
+        return_value=_completed(returncode=1),
+    ):
+        with pytest.raises(FileNotFoundError):
+            env.restore("0123456789abcdef")
 
 
 def test_dirname_helper() -> None:
