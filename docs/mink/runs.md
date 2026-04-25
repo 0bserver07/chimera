@@ -60,3 +60,53 @@ The export format is a gzip-compressed tar archive of the run's
 eventlog directory (`summary.json` + every `event-*.json` file). It is
 self-describing and stable across chimera versions as long as the
 eventlog schema does not change.
+
+## Cost
+
+Aggregate spend across persisted runs. Walks the same
+`~/.chimera/eventlog/mink-*/summary.json` corpus the rest of the `runs`
+subcommand uses, so cost rollups are always consistent with what
+`runs list` shows.
+
+```
+chimera mink runs cost [--since 7d|24h|<ISO>] [--runs-model NAME|all]
+                       [--format text|json|csv] [--limit N]
+```
+
+Default output is a human-readable table (rich when installed, plain
+ASCII otherwise) with totals, p50 / p95, and a per-model breakdown:
+
+```
+mink runs cost
+========================================
+  runs:                  37
+  success / fail:        34 / 3
+  total cost:            $1.2345
+  avg cost / run:        $0.0334
+  p50 cost:              $0.0210
+  p95 cost:              $0.1520
+  total tokens:          412305
+  input/output/cache:    312000 / 88000 / 12305
+
+by model:
+  MODEL                       RUNS        COST      TOKENS
+  GLM-5                         22     $0.9100      280000
+  kimi-k2.6:cloud               15     $0.3245      132305
+```
+
+Flags:
+
+* `--since 7d` — accepts `Nd`, `Nh`, `Nm` shorthand or any ISO-8601
+  date (`2026-04-20`, `2026-04-20T12:00:00Z`). Drops runs whose
+  `started_at` is older than the cutoff.
+* `--runs-model NAME` — case-insensitive substring match against the
+  run's `model` field. Use `all` (or omit) to include every model.
+  This is the same flag `runs list` uses.
+* `--format text|json|csv` — `json` returns a machine-readable summary
+  (`totals` + `by_model` + per-run `rows`); `csv` emits per-run rows
+  for spreadsheet ingest.
+* `--limit N` — cap to the N most-recent runs after `--since` /
+  `--runs-model` have been applied. `0` (default) means no cap.
+
+Stdlib only — no extra deps required even when the `mink` extra is not
+installed.

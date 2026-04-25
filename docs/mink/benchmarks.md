@@ -28,7 +28,8 @@ Status below was reconstructed from `research/mink/A{9,10,11,14,17}-REPORT.md`
 
 | Benchmark              | Issue | Status      | File                                                  | Baseline / Notes                                  |
 |------------------------|-------|-------------|-------------------------------------------------------|---------------------------------------------------|
-| SWE-bench Verified     | #84   | scaffolded  | `chimera/eval/benchmarks/swe_bench.py`                | 10% on Lite (GLM-5.1, 20 smallest patches)        |
+| SWE-bench Lite         | #84   | scaffolded  | `chimera/eval/benchmarks/swe_bench.py`                | 10% (2/20) GLM-5.1, 20 smallest patches           |
+| SWE-bench Verified     | #84   | scaffolded  | `chimera/eval/benchmarks/swe_bench_verified.py`       | adapter + 500-step / IPython / condense plumbing  |
 | Terminal-Bench 2.0     | #85   | validated   | `chimera/benchmarks/terminal_bench_agent.py`          | 30% (3/10) GLM-5; follow-up #139                  |
 | FeatureBench           | #86   | scaffolded  | `chimera/eval/benchmarks/feature_bench.py`            | needs HF dataset + Docker images                  |
 | Cline Bench            | #87   | scaffolded  | `chimera/eval/benchmarks/cline_bench.py`              | needs RL container images                         |
@@ -62,6 +63,55 @@ in the supplied environment, then running `env.run_tests()`.
 - Run: `chimera eval --benchmark swe-bench --dataset path/to/instances.jsonl`
 - Full run example: `examples/benchmarks/swe_bench_proper.py`,
   `examples/benchmarks/swe_bench_docker.py`.
+
+### SWE-bench Verified (#84, dedicated adapter)
+
+The Verified split is a 500-task human-validated subset of SWE-bench
+Full with cleaner problem statements and deterministic test
+specifications. The dataset schema is identical to Lite (so the loader
+inherits from `SWEBench`); the differences live in the *agent
+configuration* the adapter recommends.
+
+- File: `chimera/eval/benchmarks/swe_bench_verified.py`
+- Tests: `tests/eval/benchmarks/test_swe_bench_verified.py` (24 unit
+  tests covering variant config, max-step plumbing, IPython tool
+  surface, condensation trigger).
+- Baseline: not yet run live. Lite baseline (10%) is the reference
+  point; Verified live run is open follow-up under issue #84.
+- Configuration knobs (with their defaults):
+    - `max_steps=500` — Verified default. Lite default is 100. The
+      step budget is exposed as `bench.max_steps` and as
+      `bench.config.max_steps` for callers to plug into a `LoopConfig`.
+    - `ipython=True` — when set, `bench.build_ipython_tool()` returns
+      a `chimera.tools.ipython.IPythonTool` instance. The tool wraps a
+      stateful `ipython --no-banner` (or `python -i -u` fallback)
+      subprocess so variables, imports, and instrumentation persist
+      across tool calls. Each session is single-threaded; supply a
+      fresh tool per task for clean state.
+    - `condense_every_n_steps=25` — every N steps the agent loop
+      should call `bench.should_condense(step)`; when it returns
+      `True`, run `bench.build_condensation(provider=...)` to get a
+      `SummaryCompaction` and apply it to the message log. `0`
+      disables condensation entirely (matching Lite behavior).
+- Helpers: `SWEBenchConfig.for_lite(...)` and
+  `SWEBenchConfig.for_verified(...)` build the recommended runtime
+  config for callers that don't want to subclass.
+- Run (loader only — Docker still required for live eval):
+  ```python
+  from chimera.eval.benchmarks import SWEBenchVerified
+
+  bench = SWEBenchVerified(
+      dataset_path="path/to/swe-bench-verified.jsonl",
+      max_steps=500,
+      ipython=True,
+      condense_every_n_steps=25,
+  )
+  for task in bench.tasks():
+      ...  # drive the agent; max_steps/IPython/condense via bench.config
+  ```
+- Status: scaffolded only — adapter, config, IPython tool, and the
+  `should_condense` trigger are wired and unit-tested. A live run on
+  the Verified Docker harness is the next milestone.
 
 ### Terminal-Bench 2.0 (#85)
 
@@ -128,8 +178,69 @@ airline / retail / telecom / banking domains. Stateful: end-state
 DB is compared against the annotated goal; reliability is `pass^k`.
 
 - File: `chimera/eval/benchmarks/tau_bench.py`
-- Status: scaffolded only; full execution requires the upstream
-  `tau2-bench` package for simulated environments and user simulator.
+- Tests: `tests/eval/benchmarks/test_tau_bench.py` (39 tests, dataset-absent
+  skip path + scoring logic).
+- Status: wired. Full simulated-environment execution still requires
+  the upstream `tau-bench` / `tau2-bench` package — we do **not**
+  vendor or pip-install upstream. The adapter loads task definitions
+  from a local directory, normalises them, and scores in-process via
+  terminal-action match (with a `goal_state` fallback when present).
+  When an upstream `env` exposing `evaluate_task(task, output)` is
+  passed in, the adapter delegates to it.
+
+#### Setup
+
+```bash
+# 1. Clone upstream tasks (read-only — we never pip install it):
+git clone https://github.com/sierra-research/tau-bench /tmp/tau-bench
+
+# 2. Stage the JSON task dumps under the default dataset dir:
+mkdir -p ~/.chimera/datasets/tau-bench
+cp /tmp/tau-bench/tau_bench/envs/retail/tasks_train.json \
+   ~/.chimera/datasets/tau-bench/retail_train.json
+cp /tmp/tau-bench/tau_bench/envs/airline/tasks.json \
+   ~/.chimera/datasets/tau-bench/airline.json
+
+# 3. Smoke-run the adapter:
+uv run python -m chimera.eval.benchmarks.tau_bench --limit 3 --domain airline
+```
+
+Override the dataset directory with `CHIMERA_TAU_BENCH_PATH=/path/to/dir`.
+
+#### CLI flags
+
+| Flag         | Default       | Description                                              |
+|--------------|---------------|----------------------------------------------------------|
+| `--domain`   | `airline`     | One of `airline`, `retail`, `telecom`, `banking`, `mock`.|
+| `--limit`    | `3`           | Maximum tasks to run.                                    |
+| `--model`    | `glm-5`       | Provider model id passed to `create_provider()`.         |
+| `--dataset`  | env / default | Override the dataset path (file or directory).          |
+| `--no-color` | off           | Disable ANSI colour in the results table.                |
+
+When the dataset is absent the CLI prints a friendly setup hint and
+exits with status 2 — safe to wire into CI smoke gates.
+
+#### Scoring
+
+The in-process evaluator matches the agent's **terminal action**
+(name + arguments) against the annotated `actions[-1]` from the task
+JSON. This mirrors the upstream tau-bench convention: only the final
+mutating call needs to match, since that's the call that drives the
+database into the goal state. Two acceptable agent output shapes:
+
+```json
+{"actions": [{"name": "cancel_reservation", "arguments": {"id": "r1"}}]}
+```
+
+or, when the task carries a `goal_state` field:
+
+```json
+{"final_state": {"reservations": []}}
+```
+
+Plain-text outputs are scored leniently against the terminal action
+name (substring match) — useful for early scaffold runs before the
+agent reliably emits structured tool-call traces.
 
 ### Context-Bench (#91)
 

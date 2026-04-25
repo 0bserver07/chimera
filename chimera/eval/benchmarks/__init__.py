@@ -6,6 +6,10 @@ from chimera.eval.benchmarks.custom import CustomBenchmark
 from chimera.eval.benchmarks.feature_bench import FeatureBench, FeatureBenchTask
 from chimera.eval.benchmarks.human_eval import HumanEval
 from chimera.eval.benchmarks.swe_bench import SWEBench
+from chimera.eval.benchmarks.swe_bench_verified import (
+    SWEBenchConfig,
+    SWEBenchVerified,
+)
 from chimera.eval.benchmarks.swe_polybench import SWEPolyBench, SWEPolyBenchInstance
 from chimera.eval.benchmarks.swt_bench import SWTBench, SWTBenchInstance
 
@@ -18,6 +22,8 @@ __all__ = [
     "FeatureBenchTask",
     "HumanEval",
     "SWEBench",
+    "SWEBenchConfig",
+    "SWEBenchVerified",
     "SWEPolyBench",
     "SWEPolyBenchInstance",
     "SWTBench",

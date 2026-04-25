@@ -250,10 +250,11 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         "runs_action",
         nargs="?",
         default=None,
-        choices=[None, "list", "show", "share"],
+        choices=[None, "list", "show", "share", "cost"],
         metavar="ACTION",
         help="With 'runs' or 'agents': 'list' (table), 'show <name|id>' (detail), "
-        "or 'share <run-id>' (export tarball; runs only).",
+        "'share <run-id>' (export tarball; runs only), "
+        "or 'cost' (aggregate cost across persisted runs; runs only).",
     )
     parser.add_argument(
         "runs_target",
@@ -322,6 +323,24 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         choices=["gist", "file", "base64"],
         default="file",
         help="With 'runs share': export backend (default: file).",
+    )
+    # WHY (M4): ``runs cost`` flags. ``--since`` / ``--format`` are unique
+    # to ``cost`` so they get their own dest names; ``--runs-model``
+    # already exists for ``runs list`` and is reused here as the model
+    # filter so users only learn one flag.
+    parser.add_argument(
+        "--since",
+        dest="runs_cost_since",
+        default=None,
+        help="With 'runs cost': window to aggregate over. Accepts shorthand "
+        "(e.g. '7d', '24h', '30m') or an ISO-8601 date.",
+    )
+    parser.add_argument(
+        "--format",
+        dest="runs_cost_format",
+        choices=["text", "json", "csv"],
+        default="text",
+        help="With 'runs cost': output format (default: text).",
     )
 
 
@@ -1782,6 +1801,48 @@ def _run_runs_show(
     return 0
 
 
+def _run_runs_cost(
+    *,
+    since: str | None,
+    model: str | None,
+    fmt: str,
+    limit: int,
+    no_color: bool = False,
+) -> int:
+    """Implement ``chimera mink runs cost``.
+
+    Delegates aggregation + formatting to :mod:`chimera.mink.cost` so the
+    on-disk schema stays in one place. ``--limit <= 0`` means "no cap".
+
+    Args:
+        since: Raw ``--since`` value (shorthand or ISO-8601 date).
+        model: ``--runs-model`` filter; ``None`` / ``"all"`` keeps every model.
+        fmt: ``"text"``, ``"json"``, or ``"csv"`` (validated by
+            :func:`chimera.mink.cost.run_cost`).
+        limit: ``--limit`` row cap. ``<=0`` is forwarded as ``None``.
+        no_color: When True, suppress rich formatting and emit the plain
+            ASCII table (driven by ``--no-color`` / ``--no-rich``).
+
+    Returns:
+        Exit code: ``0`` on success, ``2`` for usage errors (bad ``--since``
+        or unknown ``--format``).
+    """
+    from chimera.mink.cost import run_cost
+
+    rc, output = run_cost(
+        since=since,
+        model=model,
+        fmt=fmt,
+        limit=limit if limit and limit > 0 else None,
+        use_rich=not no_color,
+    )
+    if rc == 0:
+        print(output)
+    else:
+        print(output, file=sys.stderr)
+    return rc
+
+
 # ---------------------------------------------------------------------------
 # `runs share <id>` (issue #129) — package an eventlog dir into a sharable URL.
 # ---------------------------------------------------------------------------
@@ -1952,9 +2013,17 @@ def _dispatch_runs(args: argparse.Namespace) -> int | None:
             getattr(args, "runs_target", None),
             sink=str(getattr(args, "runs_share_sink", "file") or "file"),
         )
+    if action == "cost":
+        return _run_runs_cost(
+            since=getattr(args, "runs_cost_since", None),
+            model=getattr(args, "runs_filter_model", None),
+            fmt=str(getattr(args, "runs_cost_format", "text") or "text"),
+            limit=int(getattr(args, "runs_limit", 0) or 0),
+            no_color=no_color,
+        )
     print(
         f"error: unknown 'runs' action: {action!r} "
-        "(supported: list, show, share)",
+        "(supported: list, show, share, cost)",
         file=sys.stderr,
     )
     return 2
