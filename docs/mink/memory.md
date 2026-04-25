@@ -42,7 +42,7 @@ Each file is wrapped with a `<!-- source: <abs-path> -->` header so the
 model can cite where a piece of guidance came from.
 
 Block-level HTML comments inside source files (`<!-- ... -->`) are stripped
-before injection (CC parity).
+before injection (ecosystem parity).
 
 ## `@import` Syntax
 
@@ -131,13 +131,13 @@ msgs = inject_memory(msgs, Path.cwd())
 # msgs[1] is now the memory user message.
 ```
 
-## Divergences from Claude Code
+## Divergences from the reference implementation
 
 - **Managed CLAUDE.md** (e.g. `/Library/Application Support/ClaudeCode/CLAUDE.md`)
   is not loaded. Org-policy memory is out of scope for the OSS harness.
 - **`claudeMdExcludes`** glob exclusions from `settings.json` are not yet
   honored. Exclude unwanted files by path or by removing them.
-- **Lazy subdirectory loading** (CC re-reads CLAUDE.md when the model reads a
+- **Lazy subdirectory loading** (re-reading CLAUDE.md when the model reads a
   file in a sibling tree) is not implemented; one walk per session at startup.
 - **First-time external-import approval dialog** is skipped — Chimera does
   not gate `@import` behind a confirmation prompt.

@@ -99,15 +99,15 @@ handler = select_handler("text")            # ConsoleStreamHandler
 
 Unknown values raise `ValueError`.
 
-## Divergences from Claude Code
+## Divergences from the reference implementation
 
-- CC's `--output-format=json` historically nested `result.text`. Chimera's
-  `result` block currently exposes only `success` and `steps`; the model's
-  final assistant message can be reconstructed by concatenating the
-  `text_delta` events. We may revisit if downstream tools demand parity.
-- CC emits a one-line summary on `text` output at session end ("…tokens
-  used, $X cost"); Chimera emits the equivalent via the `agent_end` event,
-  which the `text` handler already prints.
+- The reference `--output-format=json` historically nested `result.text`.
+  Chimera's `result` block currently exposes only `success` and `steps`;
+  the model's final assistant message can be reconstructed by concatenating
+  the `text_delta` events. We may revisit if downstream tools demand parity.
+- The reference implementation emits a one-line summary on `text` output at
+  session end ("…tokens used, $X cost"); Chimera emits the equivalent via
+  the `agent_end` event, which the `text` handler already prints.
 
 ## Tests
 

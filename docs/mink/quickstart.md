@@ -101,6 +101,10 @@ Streaming text appears as it arrives. Tool calls render as `▶ <Tool>(<args>)` 
 | `CHIMERA_MINK_MODEL` | `kimi-k2.6:cloud` | Primary model tag passed to Ollama. Any tool-capable Ollama tag works. |
 | `CHIMERA_MINK_FALLBACK` | `qwen3:32b` | Used if the primary model errors at provider construction (auth, missing tag, network). |
 | `OLLAMA_HOST` | `http://localhost:11434` | Ollama daemon URL. Set when the daemon runs on another host. |
+| `CHIMERA_MINK_SETTINGS_PATH` | (unset) | Override `.claude/settings.json` discovery (see [`parity-matrix.md`](parity-matrix.md) "How to use"). |
+| `CHIMERA_RICH_TUI` | (unset) | When `=1`, opt the `chimera code` REPL into the rich `MinkStreamHandler` too. |
+| `NO_COLOR` | (unset) | When set to any value, force the plain handler (synonym for `--no-color`). |
+| `CHIMERA_SSH_TEST_HOST` | (unset) | Live-test target for `--remote`; needed only by the SSH integration tests. |
 
 ## What works in M0
 
@@ -117,6 +121,10 @@ Streaming text appears as it arrives. Tool calls render as `▶ <Tool>(<args>)` 
 
 ## What does NOT work yet (M1+)
 
+> NOTE (M7, 2026-04-25): every bullet in this section shipped in v0.3.0 or
+> v0.4.0. Kept as a historical milestone log; see [`parity-matrix.md`](parity-matrix.md)
+> for the current shipped surface (subsystems 1–20).
+
 - The `chimera mink` subcommand — M0 ships only the example script
 - Rich TUI (markdown rendering, spinner, collapsed thinking blocks, tool-block expand/collapse) — M1
 - Slash commands beyond `Ctrl-D` / process exit — M1 adds `/status`, `/doctor`, `/permissions`, `/hooks`, `/mcp`, `/resume`, `/cost`, `/compact`, `/sandbox`, `/subagent`, `/plugin`, `/review`, `/config`
@@ -125,6 +133,23 @@ Streaming text appears as it arrives. Tool calls render as `▶ <Tool>(<args>)` 
 - MCP servers and `mcp__server__tool` namespacing — M3
 - Subagents via `Task` tool and `.claude/agents/*.md` — M3
 - `/resume <session_id>` and `/compact` as in-CLI commands — M4
+
+## v0.4.0 surface added since the M0 milestone
+
+The flag matrix exposed by `chimera mink --help` today (additive to the
+M0/M1 set above):
+
+| Flag / subcommand                   | Meaning                                                                         |
+|-------------------------------------|---------------------------------------------------------------------------------|
+| `--remote ssh://user@host[:port][/path]` | Route file/bash tools through `SSHEnvironment` (scaffold; see [`remote.md`](remote.md)). |
+| `--allowed-tools Bash,Read,...`     | Comma-separated allowlist. Unknown name → exit 2 with valid set on stderr.      |
+| `--tool-timeout SECONDS`            | Per-tool-call `asyncio.wait_for` ceiling.                                       |
+| `--no-rich` / `--no-color`          | Force the plain handler; auto-disabled when stdout is not a TTY or `NO_COLOR` is set. |
+| `--no-save`                         | Skip persistence to `~/.chimera/eventlog/mink-<id>/`.                            |
+| `--run-id <id>`                     | Override the auto-generated run id (reproducible test fixtures).                 |
+| `--version`                         | Print `chimera mink <version>` and exit.                                         |
+| `mink runs list / show / share`     | Inspect persisted runs; `share --sink {file,gist,base64}` exports a tarball ([#129](https://github.com/0bserver07/chimera/issues/129)). |
+| `mink agents list / show <name>`    | List or describe agents reachable from the project > user > built-in chain.      |
 
 ## Known limits of Kimi K2.6 `:cloud`
 

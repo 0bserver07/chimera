@@ -1,6 +1,6 @@
 # Subagents — the `Task` tool
 
-Chimera mink reproduces Claude Code's subagent model: a parent agent can
+Chimera mink reproduces the ecosystem subagent model: a parent agent can
 invoke a `Task` tool that spawns a child agent loop with an isolated
 context. The child runs to completion and returns its final output, or
 runs in the background and writes its result to a file.
@@ -32,7 +32,7 @@ overrides per name:
 2. **User**    (`~/.claude/agents/*.md`)
 3. **Project** (`./.claude/agents/*.md`)
 
-This matches Claude Code 1:1 so an existing CC user's `.claude/agents`
+This matches the ecosystem layout 1:1 so an existing user's `.claude/agents`
 directory works without changes.
 
 ### Frontmatter fields
@@ -83,7 +83,7 @@ Each child is constructed with a fresh `CancellationToken`. When the
 parent loop has its own token, `_create_child_context` registers a
 callback that calls `child_token.cancel()` whenever the parent token
 trips. The reverse never happens — cancelling the child does **not**
-cancel the parent. This matches Claude Code's `abort_signal` semantics.
+cancel the parent. This matches the ecosystem's `abort_signal` semantics.
 
 The child loop checks its token between every step and during stream
 accumulation, so cooperative shutdown is sub-second under typical
@@ -152,9 +152,9 @@ The output file shape:
 All four operate on a shared `TaskManager`. Pass the same manager
 instance into `TaskTool` and the companion tools to keep them in sync.
 
-## Parity matrix vs. Claude Code
+## Parity matrix vs. the reference implementation
 
-| Capability                             | Claude Code | Chimera Task tool |
+| Capability                             | Reference   | Chimera Task tool |
 |----------------------------------------|-------------|-------------------|
 | `.claude/agents/*.md` discovery        | yes         | yes (3-source)    |
 | Project > user > built-in priority     | yes         | yes               |

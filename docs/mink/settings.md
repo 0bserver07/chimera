@@ -1,10 +1,11 @@
-# settings.json — Claude-Code-compatible loader
+# settings.json — ecosystem-compatible loader
 
 `chimera/mink/settings.py` reads the same `.claude/settings.json` files
-that Claude Code does, plus a `.chimera/settings.json` escape hatch, and
-returns a unified `MinkSettings` dataclass. Use `load_mink_settings()` to
-fetch it; use `MinkSettings.to_chimera_loop_config()` to drop the result
-into `AgentLoop`. (The legacy `chimera.config.cc_settings` /
+that the reference ecosystem reads, plus a `.chimera/settings.json` escape
+hatch, and returns a unified `MinkSettings` dataclass. Use
+`load_mink_settings()` to fetch it; use
+`MinkSettings.to_chimera_loop_config()` to drop the result into
+`AgentLoop`. (The legacy `chimera.config.cc_settings` /
 `load_cc_settings` / `CCSettings` import path remains as a deprecated
 alias for one release cycle.)
 
@@ -57,9 +58,9 @@ Higher layers **override scalars** and **deep-merge dicts**. See
 }
 ```
 
-`camelCase` and `snake_case` are both accepted on input (CC writes camelCase;
-Chimera-native edits often use snake_case). The dataclass fields use
-`snake_case`.
+`camelCase` and `snake_case` are both accepted on input (the ecosystem
+schema writes camelCase; Chimera-native edits often use snake_case). The
+dataclass fields use `snake_case`.
 
 ## Permission pattern grammar
 
@@ -76,7 +77,7 @@ The extended `Tool(arg_key:pattern)` form is M2's grammar extension. Legacy
 
 ## Deep-additive divergence (intentional)
 
-Claude Code's reference implementation **silently replaces** arrays under
+The ecosystem reference implementation **silently replaces** arrays under
 `permissions/*`, `hooks/*`, and `mcp.servers` when a higher layer redefines
 them, breaking team-policy stacks. See
 [research/mink/12-cc-config.md](../../research/mink/12-cc-config.md)
@@ -89,7 +90,7 @@ Chimera's loader **diverges** here on purpose:
 * Arrays under any `hooks.<EventName>` are concatenated.
 * Dicts under `mcp.servers` are merged key-wise; if a user models
   `mcp.servers` as a list, lists are also concatenated.
-* All other arrays are last-write-wins (CC parity).
+* All other arrays are last-write-wins (ecosystem parity).
 * All dicts are merged recursively.
 * All scalars are last-write-wins.
 

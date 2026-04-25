@@ -1,9 +1,10 @@
 # Permissions
 
-Chimera's permission system is a drop-in target for Claude Code's
-`settings.json`. The same `permissions.allow / ask / deny` arrays, the
-same rule grammar, the same four modes, the same hook overrides. This
-page is the authoritative reference for the CC-compatible surface.
+Chimera's permission system is a drop-in target for the ecosystem
+`settings.json` schema. The same `permissions.allow / ask / deny` arrays,
+the same rule grammar, the same four modes, the same hook overrides.
+This page is the authoritative reference for the ecosystem-compatible
+surface.
 
 Implementation entry points:
 

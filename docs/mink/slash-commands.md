@@ -2,7 +2,7 @@
 
 The `chimera mink` REPL ships with 30 built-in slash commands (registered in
 `chimera/cli/slash_commands.py`). Nineteen are ported one-to-one from the
-existing `chimera code` REPL; eleven are new in M1 to reach Claude Code
+existing `chimera code` REPL; eleven are new in M1 to reach ecosystem
 parity. The dispatcher is `chimera.cli.slash_commands.dispatch(line,
 session, env, out)`; tab completion uses `COMMAND_NAMES`.
 
@@ -105,7 +105,7 @@ calls share state. `enable` and `disable` are aliases for
 Runs `git diff HEAD` in the cwd, hands the diff to
 `ReviewOrchestrator(provider=session.provider).run(diff)`, and prints
 the (truncated) result. Bails early on empty diffs or missing `git`
-binary. Useful as a parity surface for Claude Code's `/review`.
+binary. Useful as a parity surface for the ecosystem `/review`.
 
 ### /config
 Prefers `chimera.mink.settings.load_mink_settings()` (added in M2).
