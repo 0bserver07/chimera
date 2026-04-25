@@ -26,13 +26,50 @@ import os
 import sys
 import uuid
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 # WHY: only stdlib + chimera at import time so `from chimera.cli import cc`
 # stays cheap; httpx is pulled in lazily inside ``_build_provider``.
 
 _DEFAULT_MODEL = "kimi-k2.6:cloud"
 _DEFAULT_FALLBACK = "qwen3:32b"
+
+
+# WHY (audit M-17): Session.resume / EventSourcedSession.resume only need
+# ``agent.prompt.render()`` + ``agent.tools`` to seed Context, then we throw
+# the resumed session away after extracting messages. This single Protocol-
+# conforming shim replaces the four nested _StubAgent / _StubPrompt classes
+# the file used to define + cast through ``Agent``.
+
+
+class _ResumeAgentPromptShim:
+    """Render-only Prompt stand-in used by ``_apply_launch_resume``.
+
+    Matches the structural ``_PromptLike`` Protocol declared in
+    :mod:`chimera.sessions.session`: a single ``render`` method whose
+    return value is immediately overwritten by replayed Context.
+    """
+
+    def render(self, tools: list[str] | None = None) -> str:
+        return ""
+
+
+class _ResumeAgentShim:
+    """Minimal :class:`SessionResumeAgent` impl for the mink resume flow.
+
+    ``Session.__init__`` (called by both ``Session.resume`` and
+    ``EventSourcedSession.resume``) reads ``self.prompt.render(tools=[...])``
+    and iterates ``self.tools`` to derive tool names for that render call.
+    Empty ``tools`` is fine — the resumed Context is overlaid with saved
+    state immediately afterwards.
+    """
+
+    def __init__(self) -> None:
+        # WHY: annotate as ``Any`` so mypy uses structural matching against
+        # the SessionResumeAgent Protocol (which expects ``_PromptLike``)
+        # rather than rejecting the concrete subtype name.
+        self.prompt: Any = _ResumeAgentPromptShim()
+        self.tools: list[Any] = []
 
 
 def _resolve_version() -> str:
@@ -123,6 +160,19 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         default=None,
         help="Working directory (default: current directory).",
     )
+    # WHY (issue #127): when set, route file/bash tools through a remote
+    # SSHEnvironment instead of LocalEnvironment. Format mirrors git/scp:
+    #   ssh://user@host[:port][/abs/path]
+    # Authentication piggybacks on ~/.ssh/config + ssh-agent (no password
+    # prompts in the scaffold). Live testing requires CHIMERA_SSH_TEST_HOST.
+    parser.add_argument(
+        "--remote",
+        default=None,
+        metavar="SSH_URL",
+        help="Run tools on a remote host over SSH. Format: "
+        "ssh://user@host[:port][/path]. Uses ~/.ssh/config + agent for "
+        "auth. Default: run locally.",
+    )
     parser.add_argument(
         "-p",
         "--print",
@@ -200,9 +250,10 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         "runs_action",
         nargs="?",
         default=None,
-        choices=[None, "list", "show"],
+        choices=[None, "list", "show", "share"],
         metavar="ACTION",
-        help="With 'runs' or 'agents': 'list' (table) or 'show <name|id>' (detail).",
+        help="With 'runs' or 'agents': 'list' (table), 'show <name|id>' (detail), "
+        "or 'share <run-id>' (export tarball; runs only).",
     )
     parser.add_argument(
         "runs_target",
@@ -261,6 +312,90 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         action="store_false",
         help="With 'runs show': suppress the event transcript.",
     )
+    # WHY (issue #129): ``--sink`` selects the share backend for
+    # ``runs share <id>``. Default is ``file`` so the command works
+    # offline; ``gist`` requires ``gh auth``; ``base64`` returns a
+    # data URI suitable for inline pastes.
+    parser.add_argument(
+        "--sink",
+        dest="runs_share_sink",
+        choices=["gist", "file", "base64"],
+        default="file",
+        help="With 'runs share': export backend (default: file).",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Remote (SSH) environment helpers — issue #127
+# ---------------------------------------------------------------------------
+
+
+def _parse_remote_url(url: str) -> dict[str, Any]:
+    """Parse ``ssh://user@host[:port][/path]`` into kwargs for SSHEnvironment.
+
+    Args:
+        url: A URL string starting with ``ssh://``. Bare ``user@host`` (no
+            scheme) is also accepted as a convenience and treated as
+            ``ssh://user@host``.
+
+    Returns:
+        Dict with keys ``host`` (always ``user@host`` when a username was
+        supplied, else ``host``), ``port`` (int, default 22), and
+        ``workdir`` (str, default ``"."``). Suitable for ``**``-splat
+        into :class:`SSHEnvironment`.
+
+    Raises:
+        ValueError: When the URL has no host component.
+    """
+    from urllib.parse import urlparse
+
+    raw = url if "://" in url else f"ssh://{url}"
+    parsed = urlparse(raw)
+    if not parsed.hostname:
+        raise ValueError(f"--remote URL missing hostname: {url!r}")
+    host = (
+        f"{parsed.username}@{parsed.hostname}"
+        if parsed.username
+        else parsed.hostname
+    )
+    workdir = parsed.path.lstrip("/") or "."
+    # ``/abs/path`` should stay absolute on the remote side; ``urlparse``
+    # strips the leading slash above, so re-add it when the original had one.
+    if parsed.path.startswith("//") or (
+        parsed.path.startswith("/") and parsed.path != "/"
+    ):
+        workdir = parsed.path
+    return {
+        "host": host,
+        "port": parsed.port or 22,
+        "workdir": workdir,
+    }
+
+
+def _build_environment(args: argparse.Namespace, cwd: str) -> Any:
+    """Instantiate :class:`SSHEnvironment` or :class:`LocalEnvironment`.
+
+    Centralized so ``_run_print_mode`` and any future entry points pick
+    the same backend from the same flag set. ``setup()`` is called by
+    the caller, not here, so cleanup ordering stays explicit.
+
+    Args:
+        args: Parsed CLI namespace; reads ``args.remote``.
+        cwd: Local working directory (used when ``--remote`` is unset).
+
+    Returns:
+        A live :class:`~chimera.env.base.Environment` ready for
+        ``setup()``.
+    """
+    remote = getattr(args, "remote", None)
+    if remote:
+        from chimera.env.ssh import SSHEnvironment
+
+        kwargs = _parse_remote_url(remote)
+        return SSHEnvironment(**kwargs)
+    from chimera.env.local import LocalEnvironment
+
+    return LocalEnvironment(workdir=cwd)
 
 
 # ---------------------------------------------------------------------------
@@ -392,8 +527,8 @@ def _resolve_agent_spec(name: str, cwd: Path) -> _ResolvedAgentSpec | None:
 
     Searches in this priority order (first match wins):
 
-    1. ``<cwd>/.claude/agents/<name>.md`` (project scope, CC parity)
-    2. ``~/.claude/agents/<name>.md`` (user scope, CC parity)
+    1. ``<cwd>/.claude/agents/<name>.md`` (project scope, ecosystem parity)
+    2. ``~/.claude/agents/<name>.md`` (user scope, ecosystem parity)
     3. :class:`AgentLoader` (which itself walks ``.chimera/agents/``,
        ``~/.chimera/agents/``, and the built-in registry).
     4. Built-in :class:`AgentRegistry` presets (``build``, ``explore``,
@@ -775,7 +910,6 @@ def _run_print_mode(args: argparse.Namespace) -> int:
     from chimera.core.message_queue import MessageQueues
     from chimera.core.prompt import Prompt
     from chimera.core.tool_group import AGENT_TOOLS
-    from chimera.env.local import LocalEnvironment
 
     cwd = os.path.abspath(args.cwd or os.getcwd())
 
@@ -807,7 +941,10 @@ def _run_print_mode(args: argparse.Namespace) -> int:
         else agent_spec.model
     )
     provider = _build_provider(effective_model)
-    env = LocalEnvironment(workdir=cwd)
+    # WHY (issue #127): when --remote is set, route file/bash tools through
+    # SSHEnvironment instead of the local filesystem. setup() runs the
+    # remote reachability probe here so we fail fast before the agent loop.
+    env = _build_environment(args, cwd)
     env.setup()
 
     cancel = CancellationToken()
@@ -921,22 +1058,20 @@ def _run_print_mode(args: argparse.Namespace) -> int:
         if kept_agent:
             tools = kept_agent
 
-    # WHY (H-5): honor --allowed-tools when provided. Comma-separated
-    # tool names; empty = all. Unknown names are warned about but not
-    # fatal so the user can detect a typo without losing the run.
+    # WHY (audit M-22): honor --allowed-tools when provided. Comma-separated
+    # tool names, case-insensitive (so ``Bash`` matches ``bash``). Empty
+    # string = no filter. An unknown name is fatal — exit 2 with the valid
+    # tool list on stderr so users see a typo immediately. Pre-fix the flag
+    # was parsed but the previous H-5 patch only warned, contradicting the
+    # ecosystem-parity contract the help text advertises.
     allowed = (getattr(args, "allowed_tools", "") or "").strip()
     if allowed:
-        wanted = {n.strip() for n in allowed.split(",") if n.strip()}
-        kept = [t for t in tools if t.name in wanted]
-        unknown = wanted - {t.name for t in tools}
-        if unknown:
-            print(
-                f"[mink] warning: --allowed-tools includes unknown tool(s): "
-                f"{', '.join(sorted(unknown))}",
-                file=sys.stderr,
-            )
-        if kept:
-            tools = kept
+        try:
+            tools = _filter_allowed_tools(tools, allowed)
+        except _UnknownAllowedTool as exc:
+            print(str(exc), file=sys.stderr)
+            env.cleanup()
+            return 2
 
     # WHY (B-6): if a project ``.mcp.json`` or user ``~/.chimera/mcp.json``
     # exists and declares servers, load + connect them and add their tools
@@ -1038,6 +1173,127 @@ class _EmptyResult:
     error: str | None = "aborted"
 
 
+# WHY (audit M-22): --allowed-tools must filter AGENT_TOOLS deterministically.
+# Extracting the filter + the unknown-tool error keeps both the production
+# flow in ``_run_print_mode`` and the regression tests in
+# ``tests/mink/test_allowed_tools_flag.py`` calling the same code path.
+
+
+class _UnknownAllowedTool(ValueError):
+    """Raised when --allowed-tools names a tool that doesn't exist.
+
+    Carrying the formatted error message on the exception keeps callers
+    free of presentation logic — they ``print(exc)`` and exit 2.
+    """
+
+
+def _filter_allowed_tools(tools: list[Any], allowed: str) -> list[Any]:
+    """Return *tools* filtered to the comma-separated names in *allowed*.
+
+    Matching is case-insensitive so frontmatter-style ``Bash,Read`` matches
+    the canonical lower-case ``BashTool.name``. An unknown name raises
+    :class:`_UnknownAllowedTool` carrying the formatted error message
+    callers should print before exiting 2.
+
+    Args:
+        tools: Source tool list (typically a list view of ``AGENT_TOOLS``
+            after agent-spec narrowing).
+        allowed: Raw comma-separated string from ``--allowed-tools``.
+            Empty / whitespace-only entries are ignored.
+
+    Returns:
+        A new list containing the entries from *tools* whose ``.name``
+        appears (case-insensitively) in *allowed*. Empty allowed string
+        returns *tools* unchanged.
+
+    Raises:
+        _UnknownAllowedTool: When *allowed* names a tool not in *tools*.
+    """
+    cleaned = (allowed or "").strip()
+    if not cleaned:
+        return list(tools)
+    wanted = {n.strip().lower() for n in cleaned.split(",") if n.strip()}
+    if not wanted:
+        return list(tools)
+    name_index = {t.name.lower(): t for t in tools}
+    unknown = sorted(wanted - set(name_index.keys()))
+    if unknown:
+        valid = ", ".join(sorted(name_index.keys()))
+        raise _UnknownAllowedTool(
+            f"error: unknown tool '{unknown[0]}'. Valid tools: {valid}"
+        )
+    return [t for name, t in name_index.items() if name in wanted]
+
+
+def _build_stream_redaction() -> Any:
+    """Build a :class:`RedactionMiddleware` for the stream-json output flow.
+
+    Wires the live :class:`SecretRegistry` (seeded from the ambient env vars
+    that hold provider API keys) plus a pattern :class:`SecretDetector` so
+    both registered secrets *and* high-confidence pattern hits get scrubbed
+    before any line lands on stdout.
+
+    Returns:
+        A configured :class:`RedactionMiddleware` instance.
+    """
+    # WHY (audit M-10): the previous _run_stream_json wrote raw json.dumps
+    # straight to stdout, so any tool-call payload containing a secret leaked
+    # verbatim. Centralising the middleware build here lets callers (incl.
+    # tests) inject extra registered secrets through a thin closure if
+    # needed without touching the redaction internals.
+    from chimera.secrets.detector import SecretDetector
+    from chimera.secrets.redactor import RedactionMiddleware
+    from chimera.secrets.registry import SecretRegistry
+
+    registry = SecretRegistry()
+    registry.register_from_env(
+        "ANTHROPIC_API_KEY",
+        "OPENAI_API_KEY",
+        "GEMINI_API_KEY",
+        "GOOGLE_API_KEY",
+    )
+    return RedactionMiddleware(
+        registry=registry,
+        detector=SecretDetector(),
+        detect_unknown=True,
+    )
+
+
+def _redact_stream_line(line: dict[str, Any], middleware: Any) -> dict[str, Any]:
+    """Apply *middleware* to *line* and return the redacted dict.
+
+    The mink stream-json schema is ``{"type", "turn", "data"}`` — bespoke,
+    not a real :class:`Event` subclass. We synthesize a temporary
+    :class:`Event` whose ``metadata`` carries ``data`` so the existing
+    middleware (which walks ``metadata`` recursively) can scrub it without
+    needing a new code path. The wrapper is discarded after extraction so
+    the on-wire schema is unchanged.
+
+    Args:
+        line: The raw stream-json dict about to be written.
+        middleware: A :class:`RedactionMiddleware` instance.
+
+    Returns:
+        A new dict with the same shape as *line* but with secrets in
+        ``data`` (and any nested strings) replaced by the placeholder.
+    """
+    from chimera.events.base import Event
+
+    data = line.get("data")
+    # WHY: only the ``data`` payload is user-influenced; the ``type`` /
+    # ``turn`` keys are static enums controlled by the loop. Wrapping data
+    # in metadata keeps the middleware's recursive container walk applicable
+    # without re-implementing it here.
+    wrapper = Event(type="_mink_stream_line", metadata={"data": data})
+    redacted_holder: dict[str, Any] = {}
+
+    def _capture(evt: Event) -> None:
+        redacted_holder["data"] = evt.metadata.get("data")
+
+    middleware.process(wrapper, _capture)
+    return {**line, "data": redacted_holder.get("data", data)}
+
+
 def _run_stream_json(
     agent: Any,
     env: Any,
@@ -1051,6 +1307,7 @@ def _run_stream_json(
     model: str = "",
     cwd: str = "",
     permission_mode: str = "default",
+    redaction: Any = None,
 ) -> int:
     """Stream one JSON line per ``LoopEvent`` to stdout.
 
@@ -1061,8 +1318,27 @@ def _run_stream_json(
     The optional ``log``/``run_id``/``run_dir`` arguments turn this into
     a persisting run: the prompt is already journaled by the caller, and
     we journal the final ``AgentResult`` plus a ``summary.json`` here.
+
+    Args:
+        redaction: Optional pre-built :class:`RedactionMiddleware`. When
+            ``None`` (the default) the standard registry+detector pair is
+            built lazily so secrets in tool call/result payloads never
+            land on stdout. Tests inject a custom middleware to register
+            extra fake secrets without touching the env.
     """
     import asyncio
+
+    # WHY (audit M-10): wire RedactionMiddleware into every emitted line so
+    # tool-call payloads containing API keys / bearer tokens / etc. are
+    # scrubbed before stdout. Building it once amortises the regex compile
+    # across all events in the run.
+    if redaction is None:
+        redaction = _build_stream_redaction()
+
+    def _emit(line: dict[str, Any]) -> None:
+        scrubbed = _redact_stream_line(line, redaction)
+        sys.stdout.write(json.dumps(scrubbed) + "\n")
+        sys.stdout.flush()
 
     last_result_holder: dict[str, Any] = {"value": None}
 
@@ -1084,8 +1360,7 @@ def _run_stream_json(
                             "turn": getattr(event, "turn", 0),
                             "data": _safe_event_data(event.data),
                         }
-                        sys.stdout.write(json.dumps(line) + "\n")
-                        sys.stdout.flush()
+                        _emit(line)
                         if line["type"] == "result":
                             last_success = bool(
                                 getattr(event.data, "reason", "") != "error"
@@ -1100,7 +1375,7 @@ def _run_stream_json(
                 # one-line contract via async_run + synthetic result event.
                 result = await agent.async_run(prompt, env=env)
                 last_result_holder["value"] = result
-                sys.stdout.write(json.dumps({
+                _emit({
                     "type": "result",
                     "turn": getattr(result, "steps", 0),
                     "data": {
@@ -1108,8 +1383,7 @@ def _run_stream_json(
                         "cost": getattr(result, "cost", 0.0),
                         "success": getattr(result, "success", False),
                     },
-                }) + "\n")
-                sys.stdout.flush()
+                })
                 last_success = bool(getattr(result, "success", False))
         except KeyboardInterrupt:
             cancel.cancel()
@@ -1118,12 +1392,11 @@ def _run_stream_json(
             # WHY (audit B-3): surface unexpected failures to the user
             # instead of silently exiting 0 with no stdout. The audit's
             # original repro showed the CLI eating async_run's exception.
-            sys.stdout.write(json.dumps({
+            _emit({
                 "type": "error",
                 "turn": 0,
                 "data": {"message": str(exc), "exception": type(exc).__name__},
-            }) + "\n")
-            sys.stdout.flush()
+            })
             return 1
         return 0 if last_success else 1
 
@@ -1254,6 +1527,11 @@ def _apply_launch_resume(args: argparse.Namespace) -> int:
         return 0
     sid = args.resume
 
+    # WHY (audit M-17): Session.resume + EventSourcedSession.resume now both
+    # accept ``SessionResumeAgent`` (a Protocol over ``prompt.render`` and
+    # ``tools``). One minimal stub satisfies both paths without any cast.
+    stub_agent = _ResumeAgentShim()
+
     # Try Session.resume against FileStorage first — this is the path
     # ``/resume`` inside the REPL also uses, keeping the surface uniform.
     try:
@@ -1261,24 +1539,9 @@ def _apply_launch_resume(args: argparse.Namespace) -> int:
         from chimera.sessions.storage.file import FileStorage
 
         storage = FileStorage()
-        # Build a stub agent shim sufficient for Session.resume signature;
-        # Session.resume only uses agent.prompt / agent.tools to seed the
-        # initial Context, which we throw away after calling _replay.
-        class _StubPrompt:
-            def render(self, tools: list[str] | None = None) -> str:
-                return ""
-
-        class _StubAgent:
-            def __init__(self) -> None:
-                self.prompt = _StubPrompt()
-                self.tools: list[Any] = []
-
-        # Session.resume() only touches agent.prompt / agent.tools to
-        # rebuild the initial Context; the structural duck-type is enough.
-        from chimera.core.agent import Agent as _Agent
         restored = Session.resume(
             session_id=sid,
-            agent=cast("_Agent", _StubAgent()),
+            agent=stub_agent,
             storage=storage,
         )
         messages = list(restored.messages)
@@ -1291,20 +1554,10 @@ def _apply_launch_resume(args: argparse.Namespace) -> int:
         try:
             from chimera.sessions.eventlog.session import EventSourcedSession
 
-            class _StubPrompt2:
-                def render(self, tools: list[str] | None = None) -> str:
-                    return ""
-
-            class _StubAgent2:
-                def __init__(self) -> None:
-                    self.prompt = _StubPrompt2()
-                    self.tools: list[Any] = []
-
-            from chimera.core.agent import Agent as _Agent2
             restored_es = EventSourcedSession.resume(
                 log_dir=eventlog_root,
                 session_id=sid,
-                agent=cast("_Agent2", _StubAgent2()),
+                agent=stub_agent,
             )
             messages = list(restored_es.messages)
         except Exception as exc:  # noqa: BLE001
@@ -1530,6 +1783,56 @@ def _run_runs_show(
 
 
 # ---------------------------------------------------------------------------
+# `runs share <id>` (issue #129) — package an eventlog dir into a sharable URL.
+# ---------------------------------------------------------------------------
+
+
+def _run_runs_share(
+    run_id: str | None,
+    *,
+    sink: str = "file",
+) -> int:
+    """Implement ``chimera mink runs share <id> [--sink ...]``.
+
+    Delegates packaging to :func:`chimera.sessions.share.export_to_url`,
+    then prints the resulting URL/path/data-URI to stdout. Errors land
+    on stderr with a non-zero exit so shell pipelines fail loudly.
+
+    Args:
+        run_id: Directory name under ``~/.chimera/eventlog`` to share.
+            ``None`` returns exit 2 with a usage hint.
+        sink: One of ``"gist"``, ``"file"``, ``"base64"``. Validated by
+            ``export_to_url``; we surface ``ValueError`` as exit 2.
+
+    Returns:
+        Exit code: ``0`` on success, ``2`` for usage / not-found errors,
+        ``1`` for runtime failures (e.g. missing ``gh`` CLI).
+    """
+    from chimera.sessions.share import export_to_url
+
+    if not run_id:
+        print(
+            "error: 'mink runs share' requires a RUN_ID argument "
+            "(see 'mink runs list' for available ids).",
+            file=sys.stderr,
+        )
+        return 2
+    try:
+        token = export_to_url(run_id, sink=sink)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    except FileNotFoundError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    except RuntimeError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(token)
+    return 0
+
+
+# ---------------------------------------------------------------------------
 # `agents list` / `agents show <name>` (audit H-3-adjacent)
 # ---------------------------------------------------------------------------
 
@@ -1644,9 +1947,14 @@ def _dispatch_runs(args: argparse.Namespace) -> int | None:
             show_events=bool(getattr(args, "runs_show_events", True)),
             no_color=no_color,
         )
+    if action == "share":
+        return _run_runs_share(
+            getattr(args, "runs_target", None),
+            sink=str(getattr(args, "runs_share_sink", "file") or "file"),
+        )
     print(
         f"error: unknown 'runs' action: {action!r} "
-        "(supported: list, show)",
+        "(supported: list, show, share)",
         file=sys.stderr,
     )
     return 2
