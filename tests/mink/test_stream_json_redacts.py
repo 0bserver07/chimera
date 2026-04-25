@@ -14,6 +14,9 @@ from typing import Any
 
 import pytest
 
+# WHY: chimera.mink.cli imports rich (mink extra). Skip when not installed.
+pytest.importorskip("rich")
+
 
 _FAKE_SECRET = "sk-ant-fake-leak-DEADBEEF"
 

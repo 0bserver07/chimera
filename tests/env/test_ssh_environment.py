@@ -16,6 +16,11 @@ from unittest import mock
 
 import pytest
 
+# WHY: parts of this file import chimera.mink.cli (which transitively
+# imports rich, the mink extra). Skip the whole file cleanly when rich
+# isn't installed rather than crashing later in the suite.
+pytest.importorskip("rich")
+
 from chimera.env.ssh import SSHEnvironment, _dirname
 
 LIVE_HOST = os.environ.get("CHIMERA_SSH_TEST_HOST")
