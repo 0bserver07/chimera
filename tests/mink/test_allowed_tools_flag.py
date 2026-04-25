@@ -14,6 +14,12 @@ from pathlib import Path
 
 import pytest
 
+# WHY: chimera.mink.cli (transitively) imports chimera.cli.render which
+# imports rich (mink extra). The subprocess CLI test below would fail
+# in environments without the extra installed; skip the whole file
+# cleanly when rich is missing.
+pytest.importorskip("rich")
+
 
 def test_m22_filter_keeps_only_named_tools_case_insensitive() -> None:
     """``--allowed-tools=Bash`` → only the Bash tool survives."""
