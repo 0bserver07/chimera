@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 from chimera.events.base import Event, EventBus
 from chimera.sessions.base import SessionID, Storage
 from chimera.sessions.eventlog.log import EventLog
-from chimera.sessions.session import Session
+from chimera.sessions.session import Session, SessionResumeAgent
 from chimera.types import AgentResult, Message
 
 if TYPE_CHECKING:
@@ -108,7 +108,7 @@ class EventSourcedSession(Session):
         cls,
         log_dir: str | Path,
         session_id: SessionID,
-        agent: Agent,
+        agent: SessionResumeAgent,
         storage: Storage | None = None,
         **kwargs: object,
     ) -> EventSourcedSession:
@@ -117,7 +117,9 @@ class EventSourcedSession(Session):
         Args:
             log_dir: Root directory containing event logs.
             session_id: The session to resume.
-            agent: Agent instance for the session.
+            agent: Anything that satisfies :class:`SessionResumeAgent` —
+                a real :class:`Agent` or a lightweight shim. Resume only
+                touches ``agent.prompt`` / ``agent.tools`` to seed Context.
             storage: Optional storage backend.
             **kwargs: Additional keyword arguments forwarded to the
                 constructor.
@@ -128,12 +130,17 @@ class EventSourcedSession(Session):
         Raises:
             ValueError: If the event log directory does not exist.
         """
+        # WHY (audit M-17): mirror Session.resume's Protocol acceptance so
+        # CLI front-ends can stage history with a one-class shim instead of
+        # the previous four-class stub-cast pattern.
+        from typing import cast as _cast
+
         log_path = Path(log_dir) / session_id
         if not log_path.exists():
             raise ValueError(f"No event log found for session {session_id}")
 
         session = cls(
-            agent=agent,
+            agent=_cast("Agent", agent),
             log_dir=log_dir,
             storage=storage,
             session_id=session_id,
@@ -150,7 +157,7 @@ class EventSourcedSession(Session):
         cls,
         log_dir: str | Path,
         session_id: SessionID,
-        agent: Agent,
+        agent: SessionResumeAgent,
         up_to_index: int,
         storage: Storage | None = None,
         **kwargs: object,
@@ -172,12 +179,17 @@ class EventSourcedSession(Session):
         Raises:
             ValueError: If the event log directory does not exist.
         """
+        # WHY (audit M-17): same Protocol-cast bridge as resume() — accept the
+        # narrow SessionResumeAgent in the public surface, cast at the
+        # constructor boundary so __init__ keeps its full Agent typing.
+        from typing import cast as _cast
+
         log_path = Path(log_dir) / session_id
         if not log_path.exists():
             raise ValueError(f"No event log found for session {session_id}")
 
         session = cls(
-            agent=agent,
+            agent=_cast("Agent", agent),
             log_dir=log_dir,
             storage=storage,
             session_id=session_id,

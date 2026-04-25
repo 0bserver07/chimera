@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import copy
 import uuid
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from chimera.core.context import Context
 from chimera.sessions.base import SessionData, SessionID, Storage
@@ -17,7 +17,55 @@ if TYPE_CHECKING:
     from chimera.env.base import Environment
     from chimera.sessions.tree import SessionTree
 
-__all__ = ["Session"]
+__all__ = ["Session", "SessionResumeAgent"]
+
+
+# WHY (audit M-17): ``Session.resume`` only ever touches ``agent.prompt`` and
+# ``agent.tools`` to seed the initial Context — it doesn't need a full Agent.
+# Callsites (notably mink's --resume path) used to define four nested
+# ``_StubAgent`` / ``_StubPrompt`` classes and ``cast`` them to ``Agent`` to
+# satisfy the type checker. Exposing the minimal structural interface lets
+# those callsites pass a single tiny implementation through a typed parameter
+# instead of relying on a structural-typing escape hatch.
+
+
+# WHY: keep the structural protocols loose enough that the real
+# `chimera.core.agent.Agent` (with `prompt: Prompt` and `tools: list[BaseTool]`)
+# satisfies them without explicit inheritance — invariant `list[Protocol]` was
+# rejecting the concrete `list[BaseTool]`. We only ever read `.name`, so a
+# Sequence of objects-with-name is enough.
+class _PromptLike(Protocol):
+    """Minimal Prompt interface :meth:`Session.resume` needs.
+
+    ``Session.__init__`` calls ``agent.prompt.render(tools=[...])`` exactly
+    once to build the system prompt. Resume immediately overwrites the
+    resulting context with the saved state, so any string return is fine.
+    """
+
+    def render(self, *args: Any, **kwargs: Any) -> str: ...
+
+
+@runtime_checkable
+class SessionResumeAgent(Protocol):
+    """Structural interface :meth:`Session.resume` requires of ``agent``.
+
+    ``Session.__init__`` reads ``agent.prompt.render(tools=[t.name for t in
+    agent.tools])`` to build the initial system prompt; the resumed state is
+    then overlaid on top. Implementations only need these two attributes —
+    no provider, loop, or env required.
+
+    Implementing this Protocol (no inheritance needed; structural matching)
+    lets call sites that need to *resume but not run* — e.g. CLI front-ends
+    rebuilding a transcript before delegating to a different runtime — avoid
+    pulling in the full :class:`~chimera.core.agent.Agent` constructor.
+    """
+
+    # WHY: bare `Any` rather than narrower types — Protocol attribute
+    # invariance was rejecting concrete `list[BaseTool]` for `tools` and
+    # `Prompt` for `prompt`, even though both are read-only at the resume
+    # site. Any keeps the mypy/pyright check happy without a runtime guard.
+    prompt: Any
+    tools: Any
 
 
 class Session:
@@ -164,21 +212,41 @@ class Session:
     def resume(
         cls,
         session_id: SessionID,
-        agent: Agent,
+        agent: SessionResumeAgent,
         storage: Storage,
         **kwargs: object,
     ) -> Session:
         """Resume a previously saved session.
 
-        Raises :class:`ValueError` if the session is not found in
-        *storage*.
+        Args:
+            session_id: Identifier of the saved session to load.
+            agent: Any object that satisfies :class:`SessionResumeAgent`
+                (i.e. exposes ``prompt.render`` and a ``tools`` list with
+                named entries). Real :class:`~chimera.core.agent.Agent`
+                instances satisfy this structurally, so existing callers
+                pass through unchanged. Front-ends that *only* need to
+                rebuild the message history (e.g. ``chimera mink --resume``
+                staging into SessionTree) can pass a tiny shim instead of
+                constructing a full Agent.
+            storage: Backend the session was saved to.
+            **kwargs: Forwarded to :class:`Session.__init__`.
+
+        Raises:
+            ValueError: If the session is not found in *storage*.
         """
+        # WHY (audit M-17): Session.__init__ is typed against full Agent
+        # because chat()/iter_chat() need provider+loop+tools. resume()
+        # only seeds Context, so we accept the wider Protocol publicly and
+        # cast at the constructor boundary. Single cast here replaces four
+        # at the previous mink-cli stub call sites.
+        from typing import cast as _cast
+
         data = storage.load(session_id)
         if data is None:
             raise ValueError(f"Session {session_id} not found")
 
         session = cls(
-            agent=agent,
+            agent=_cast("Agent", agent),
             storage=storage,
             session_id=session_id,
             **kwargs,  # type: ignore[arg-type]
