@@ -1,6 +1,6 @@
 # Module Index
 
-All 78 source modules added in the `feat/claude-code-architecture` branch, organized by package.
+All 78 source modules in the architecture, organized by package.
 
 ## chimera/assembly/ -- Assembly Layer
 

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Recreate Claude Code in ~20 lines using `CodingAgent.from_preset()`.
+"""Build a full-featured coding agent in ~20 lines via `CodingAgent.from_preset()`.
 
 This is the canonical "how do I build my own coding agent" example. It uses
-the `claude_code` preset — 24 tools, permissions, hooks, transcripts,
-compaction, streaming — everything Claude Code has.
+the `claude_code` preset key — 24 tools, permissions, hooks, transcripts,
+compaction, streaming — wired together as one `CodingAgent`.
 
 Usage:
     export ANTHROPIC_API_KEY='sk-ant-...'
@@ -12,8 +12,8 @@ Usage:
     #   export ANTHROPIC_AUTH_TOKEN='your-token'
     #   export ANTHROPIC_MODEL='glm-5'
 
-    python examples/build_claude_code_clone.py "Fix the bug in auth.py"
-    python examples/build_claude_code_clone.py --workdir /tmp/myproject "Add tests"
+    python examples/agent/build_full_preset_agent.py "Fix the bug in auth.py"
+    python examples/agent/build_full_preset_agent.py --workdir /tmp/myproject "Add tests"
 """
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ from chimera.core.loop_events import LoopEventType
 
 
 async def run(task: str, workdir: str, model: str) -> None:
-    # One line: a fully-assembled Claude Code clone.
+    # One line: a fully-assembled coding agent from the full-featured preset.
     agent = CodingAgent.from_preset("claude_code", model=model, project_dir=workdir)
 
     print(f"Agent: {agent.provider.model_name} | {len(agent.tools)} tools | {workdir}")
@@ -49,7 +49,7 @@ async def run(task: str, workdir: str, model: str) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Recreate Claude Code using CodingAgent.from_preset('claude_code')")
+    parser = argparse.ArgumentParser(description="Build a full-featured coding agent via CodingAgent.from_preset('claude_code')")
     parser.add_argument("task", help="Task for the agent")
     parser.add_argument("--workdir", default=".", help="Working directory")
     parser.add_argument(

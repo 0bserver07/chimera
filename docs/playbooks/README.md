@@ -1,8 +1,8 @@
 # Chimera Playbooks
 
-Recipes for integrating Chimera with Claude Code. Each playbook solves a specific pain point, includes setup instructions, and contains a machine-readable recipe that an AI coding agent can follow to build the feature from scratch.
+Recipes for integrating Chimera with a coding-agent harness. Each playbook solves a specific pain point, includes setup instructions, and contains a machine-readable recipe that an AI coding agent can follow to build the feature from scratch.
 
-## For Claude Code Users
+## For Coding-Agent Harness Users
 
 Install the Chimera plugin and get immediate improvements:
 

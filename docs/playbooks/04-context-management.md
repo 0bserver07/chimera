@@ -4,7 +4,7 @@
 
 ## What This Solves
 
-Claude Code operates within a finite context window. In long sessions (50+ turns), older messages get pushed out or the agent loses track of what it learned earlier. This manifests as repeated file reads, contradictory decisions, and gradual loss of task coherence. Chimera provides five composable strategies to manage context: SmartCompaction (summarize old messages), ThoughtStripCompaction (strip thinking blocks), MemoryConsolidation (extract and persist facts), PersistentMemory (survive session resets), and FocusChain (budget-aware context selection).
+A coding agent operates within a finite context window. In long sessions (50+ turns), older messages get pushed out or the agent loses track of what it learned earlier. This manifests as repeated file reads, contradictory decisions, and gradual loss of task coherence. Chimera provides five composable strategies to manage context: SmartCompaction (summarize old messages), ThoughtStripCompaction (strip thinking blocks), MemoryConsolidation (extract and persist facts), PersistentMemory (survive session resets), and FocusChain (budget-aware context selection).
 
 ## Architecture
 

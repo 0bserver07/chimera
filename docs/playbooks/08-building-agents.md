@@ -1,10 +1,10 @@
 # Playbook: Building a Coding Agent on Chimera
 
-> You want to build your own Claude Code-like tool using Chimera as a library.
+> You want to build your own coding agent using Chimera as a library.
 
 ## Fast path: `CodingAgent.from_preset()`
 
-If you just want a Claude Code clone in 20 lines, use the assembled product:
+If you just want a full-featured coding agent in 20 lines, use the assembled product:
 
 ```python
 from chimera.assembly.coding_agent import CodingAgent
@@ -15,7 +15,7 @@ async for event in agent.run("Fix the bug in auth.py"):
 ```
 
 Presets: `claude_code`, `codex`, `minimal`, `explore`. See
-[`examples/agent/build_claude_code_clone.py`](../../examples/agent/build_claude_code_clone.py)
+[`examples/agent/build_full_preset_agent.py`](../../examples/agent/build_full_preset_agent.py)
 and [`examples/agent/build_codex_clone.py`](../../examples/agent/build_codex_clone.py)
 for runnable ~20-line scripts.
 

@@ -26,7 +26,7 @@ Chimera's synthesis layer is designed with these problems in mind. Constraints c
 
 ## The Monolith Problem
 
-Every major coding agent today is a monolith. Claude Code is closed-source. Codex is Rust, tightly coupled to OpenAI. Aider is 50,000+ lines organized around one workflow. If you want to understand how any of them work, you reverse-engineer them. If you want to build your own, you start from scratch.
+Every major coding agent today is a monolith. Some are closed-source. Codex is Rust, tightly coupled to OpenAI. Aider is 50,000+ lines organized around one workflow. If you want to understand how any of them work, you reverse-engineer them. If you want to build your own, you start from scratch.
 
 This is what every field looks like before decomposition happens. Custom stacks everywhere. No shared vocabulary. Results you can't reproduce because the infrastructure isn't shared.
 

@@ -1,33 +1,33 @@
 # Playbook 00: Quick Start
 
-Set up all Chimera integrations with Claude Code in one go: MCP servers, hooks, skills, agents, and commands.
+Set up all Chimera integrations with a coding-agent harness in one go: MCP servers, hooks, skills, agents, and commands.
 
 ## What This Solves
 
-Without Chimera, Claude Code operates with built-in tools only. It has no semantic codebase search, no automatic test/lint feedback, no path validation, and no security scanning of bash commands. This playbook installs every Chimera integration in one pass so you get all of those capabilities immediately.
+Without Chimera, a stock harness operates with built-in tools only. It has no semantic codebase search, no automatic test/lint feedback, no path validation, and no security scanning of bash commands. This playbook installs every Chimera integration in one pass so you get all of those capabilities immediately.
 
 ## Architecture
 
 ```mermaid
 graph LR
-    CC[Claude Code] -->|plugin| P[chimera-plugin]
+    H0[Coding-agent harness] -->|plugin| P[chimera-plugin]
     P -->|skills| S[14 skills]
     P -->|hooks| H[5 hooks]
     P -->|agents| A[3 agents]
-    CC -->|MCP| M1[chimera-search]
-    CC -->|MCP| M2[chimera-review]
-    CC -->|MCP| M3[chimera-testgen]
-    CC -->|MCP| M4[chimera-migration]
-    CC -->|MCP| M5[chimera-rag]
-    CC -->|MCP| M6[chimera-benchmark]
+    H0 -->|MCP| M1[chimera-search]
+    H0 -->|MCP| M2[chimera-review]
+    H0 -->|MCP| M3[chimera-testgen]
+    H0 -->|MCP| M4[chimera-migration]
+    H0 -->|MCP| M5[chimera-rag]
+    H0 -->|MCP| M6[chimera-benchmark]
 ```
 
-Chimera connects to Claude Code through four integration points:
+Chimera connects to a coding-agent harness through four integration points:
 
-- **MCP servers** expose Chimera's Python modules as tools Claude Code can call (JSON-RPC 2.0 over stdio).
+- **MCP servers** expose Chimera's Python modules as tools the harness can call (JSON-RPC 2.0 over stdio).
 - **Hooks** are scripts that run before or after tool calls. PreToolUse hooks can block dangerous operations. PostToolUse hooks provide feedback. Stop hooks run before the agent finishes.
-- **Skills** are markdown files with YAML frontmatter that teach Claude Code behavioral patterns (retry protocols, context management, investigation strategies).
-- **Agents** are preset configurations (reviewer, investigator, tester) that Claude Code can delegate to.
+- **Skills** are markdown files with YAML frontmatter that teach the harness behavioral patterns (retry protocols, context management, investigation strategies).
+- **Agents** are preset configurations (reviewer, investigator, tester) that the harness can delegate to.
 
 ## Setup
 
@@ -47,7 +47,7 @@ python3 -c "import chimera; print(chimera.__version__)"
 
 ### Step 2: Install the Plugin
 
-Copy or symlink the `chimera-plugin/` directory into your Claude Code plugins directory:
+Copy or symlink the `chimera-plugin/` directory into your harness plugins directory (e.g. `~/.claude/plugins/`):
 
 ```bash
 # Option A: symlink (recommended for development)
@@ -167,7 +167,7 @@ Create or edit `.claude/hooks.json` in your project root:
 }
 ```
 
-This matches Claude Code's plugin hook schema (each matcher has a `"hooks": [{"type": "command", ...}]` array). The flat `command` form some older docs show is NOT the current schema and will silently no-op.
+This matches the harness plugin hook schema (each matcher has a `"hooks": [{"type": "command", ...}]` array). The flat `command` form some older docs show is NOT the current schema and will silently no-op.
 
 ### Step 5: Verify
 
@@ -211,7 +211,7 @@ All MCP servers accept configuration through environment variables in the `env` 
 
 ## Recipe
 
-This section is a complete component inventory. An AI agent reading this section can recreate the entire Chimera-to-Claude-Code integration layer.
+This section is a complete component inventory. An AI agent reading this section can recreate the entire Chimera-to-harness integration layer.
 
 ### Component Inventory
 
@@ -263,7 +263,7 @@ All hooks follow the same protocol:
 | `test-convergence.md` | test, converge, iterate | Converge on passing tests through iteration |
 | `context-management.md` | context, long conversation, forgot | Manage context window efficiently |
 
-Skill format: YAML frontmatter with `name`, `description`, `triggers` fields, followed by markdown body with actionable instructions. Claude Code matches skills by trigger keywords in user messages.
+Skill format: YAML frontmatter with `name`, `description`, `triggers` fields, followed by markdown body with actionable instructions. The harness matches skills by trigger keywords in user messages.
 
 **3 Agents** (all in `chimera-plugin/agents/`):
 

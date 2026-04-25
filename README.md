@@ -1,24 +1,24 @@
 # Chimera
 
-AI that reads, writes, edits, and iterates on code with tests — tools like Claude Code and Codex do this. Chimera is a Python library for building these tools yourself, and a plugin that makes Claude Code better.
+AI that reads, writes, edits, and iterates on code with tests. Chimera is a Python library for building these tools yourself, plus a ready-to-run coding agent on top of it.
 
 **Status: Alpha** — 3922 passing tests. Reproducible benchmarks with GLM-5.1: HumanEval 66.5% pass@1 (109/164), SWE-bench Lite 10% (2/20, top-20 smallest patches). Raw results in `data/`.
 
 ## Who This Is For
 
 **You build with CLI coding agents.**
-You use Claude Code, Codex, OpenCode, Amp, or Mono daily. You know what it feels like when an agent reads your codebase, edits files, and runs tests from your terminal. You want to build your own — with your model, your tools, your rules — or take apart how these agents work to understand why they behave differently.
+You use terminal-native AI tools daily and you know what it feels like when an agent reads your codebase, edits files, and runs tests from your shell. You want to build your own — with your model, your tools, your rules — or take apart how these agents work to understand why they behave differently.
 
 **You're curious about coding agents.**
 You've seen demos of AI writing entire apps. You want to understand what's actually happening — what the pieces are, how the loop works, why some agents are better at certain tasks. Chimera breaks it all down into parts you can inspect, modify, and run yourself.
 
 ## What It Does
 
-A coding agent is an LLM connected to your filesystem. It reads code, decides what to change, edits files, runs tests, and repeats until the task is done. Claude Code and Codex are coding agents.
+A coding agent is an LLM connected to your filesystem. It reads code, decides what to change, edits files, runs tests, and repeats until the task is done.
 
 Chimera gives you two things:
 
-1. **A plugin for Claude Code** that adds codebase search, auto-testing, code review, and context management — capabilities Claude Code doesn't have out of the box.
+1. **A coding-agent harness with a plugin system** — codebase search, auto-testing, code review, and context management, exposed as hooks, MCP servers, and skills you can wire into any compatible host.
 
 2. **A Python library** for building your own coding agents from modular pieces — pick your LLM, pick your tools, pick your strategy, wire them together.
 
@@ -27,7 +27,7 @@ Chimera gives you two things:
 Not yet on PyPI. Install from source:
 
 ```bash
-pip install "git+https://github.com/0bserver07/chimera.git#egg=chimera-run[anthropic]"   # Claude / GLM-5
+pip install "git+https://github.com/0bserver07/chimera.git#egg=chimera-run[anthropic]"   # GLM-5 / Anthropic-compatible
 pip install "git+https://github.com/0bserver07/chimera.git#egg=chimera-run[openai]"      # GPT
 pip install "git+https://github.com/0bserver07/chimera.git#egg=chimera-run[all]"         # anthropic + openai + browser + remote
 ```
@@ -57,7 +57,7 @@ asyncio.run(main())
 
 | Preset | Tools | Features |
 |--------|-------|----------|
-| `claude_code` | 24 (bash, read, write, edit, search, git, test, agent, skill, ...) | Permissions, hooks, transcripts, compaction, streaming |
+| `coding_agent` | 24 (bash, read, write, edit, search, git, test, agent, skill, ...) | Permissions, hooks, transcripts, compaction, streaming |
 | `codex` | 24 | Permissions, transcripts (no hooks) |
 | `minimal` | 4 (bash, read, write, edit) | No extras |
 | `explore` | 3 (read, search, list) | Read-only |
@@ -95,22 +95,29 @@ CodingAgent
 
 See [Architecture](https://0bserver07.github.io/chimera/architecture/) for the full module map.
 
-## Use It With Claude Code
+## Run It Standalone
 
-Install the plugin to get immediate improvements. No Python code to write.
+The Mink CLI ships a fully assembled coding agent with no extra setup:
+
+```bash
+chimera mink           # interactive REPL on Ollama Kimi K2.6 by default
+chimera code           # legacy stack with slash commands and session save
+```
 
 **Hooks** run automatically on every edit:
 - Path validation — blocks edits to files that don't exist (no more hallucinated paths)
 - Auto-test — finds and runs related tests after every file change
 - Auto-lint — runs your linter after every edit
 - Security scan — blocks dangerous bash commands
-- Verify done — runs the full test suite before Claude can declare "done"
+- Verify done — runs the full test suite before the agent can declare "done"
 
-**MCP servers** give Claude new tools to call:
+**MCP servers** give the agent new tools to call:
 - `chimera-search` — semantic codebase search + symbol lookup
 - `chimera-review` — multi-perspective code review (logic, security, tests, architecture, and 4 more)
 - `chimera-testgen` — generate test skeletons from source analysis
 - `chimera-migration` — scan for and apply code migrations (Python 2 to 3, CJS to ESM)
+
+The plugin honors a `settings.json` schema for ecosystem interop, so the same hooks/MCP/skills also drop into any host that follows that convention.
 
 [Setup guide](docs/playbooks/00-quick-start.md) — install in 2 minutes.
 
@@ -168,19 +175,17 @@ python examples/agent/ollama_coding_agent.py --model kimi-k2.6:cloud
 
 [Full Ollama setup guide](https://0bserver07.github.io/chimera/guides/use-with-ollama/) — prerequisites, recommended models, context window notes, troubleshooting.
 
-## When Chimera, When Claude Code?
+## When to Reach for Chimera
 
-**Use Claude Code** if you want a polished product that works today.
-
-**Use Chimera** if you want to:
-- Make Claude Code better — add search, auto-test, review, context management via the plugin
+Use Chimera if you want to:
+- Run a coding agent on your own model (local Ollama, GLM, GPT, Anthropic-compatible) with hooks, MCP, and skills wired in
 - Build your own coding agent — different LLM, different tools, different strategy
 - Understand how coding agents work — every major architecture decomposed into swappable pieces
 - Research and benchmark — compare agent architectures with controlled experiments
 
 ## Links
 
-- [Quick Start: Claude Code Plugin](docs/playbooks/00-quick-start.md) — hooks, MCP servers, skills
+- [Quick Start](docs/playbooks/00-quick-start.md) — hooks, MCP servers, skills
 - [Build Your Own Agent](docs/playbooks/08-building-agents.md) — full library guide
 - [All Playbooks](docs/playbooks/) — 13 guides covering every feature
 - [Examples](examples/) — 28 curated runnable scripts across 7 categories

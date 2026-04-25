@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""A real coding agent — like a mini Claude Code / Codex / OpenCode.
+"""A real coding agent — read code, write code, run tests, fix bugs.
 
 Give it a task and a directory. It reads code, writes code, runs tests,
 fixes bugs. Works with any Anthropic-compatible API (Claude, GLM-5, etc).
