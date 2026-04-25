@@ -380,23 +380,28 @@ _COMMANDS: dict[str, CommandHandler] = {
 def _dispatch_command(
     line: str, session: Any, env: Any, out: PrintFn,
 ) -> bool:
-    """Dispatch a slash command. Returns True if handled."""
-    if not line.startswith("/"):
-        return False
-    parts = line[1:].split(maxsplit=1)
-    cmd_name = parts[0] if parts else ""
-    args = parts[1] if len(parts) > 1 else ""
+    """Dispatch a slash command via :mod:`chimera.cli.slash_commands`.
 
-    handler = _COMMANDS.get(cmd_name)
-    if handler is None:
-        out(f"Unknown command: /{cmd_name}. Type /help for available commands.")
-        return False
+    Kept as a thin wrapper for backwards compatibility with callers that
+    imported this name directly. Returns True if handled.
+    """
+    from chimera.cli.slash_commands import dispatch as _shared_dispatch
 
-    handler(session, env, args, out)
-    return True
+    return _shared_dispatch(line, session, env, out)
 
 
 # -- Tab Completion --
+
+
+def _command_names() -> list[str]:
+    """Return tab-completion candidates from the shared registry (and legacy dict)."""
+    legacy = {f"/{name}" for name in _COMMANDS}
+    try:
+        from chimera.cli.slash_commands import COMMAND_NAMES
+        return sorted(set(COMMAND_NAMES) | legacy)
+    except ImportError:
+        return sorted(legacy)
+
 
 _COMMAND_NAMES = sorted(f"/{name}" for name in _COMMANDS)
 
@@ -514,41 +519,93 @@ def run_code(args: Any) -> int:
     env.setup()
 
     # Best-effort MCP tool loading
+    # WHY (audit B-6): previously the MCP tools were loaded then
+    # discarded with `# noqa: F841`. Now we surface them through a local
+    # variable consumed when building the tool list a few dozen lines down.
+    mcp_extra_tools: list[Any] = []
     try:
         mcp_config_path = Path.home() / ".chimera" / "mcp.json"
-        if mcp_config_path.exists():
-            import json
-            mcp_config = json.loads(mcp_config_path.read_text())
+        project_mcp_path = Path(workdir) / ".mcp.json"
+        merged_config: dict[str, Any] = {"servers": {}}
+        for cand in (mcp_config_path, project_mcp_path):
+            if not cand.exists():
+                continue
+            import json as _json
+            try:
+                data = _json.loads(cand.read_text())
+            except Exception as exc:  # noqa: BLE001
+                print(f"[mcp] could not parse {cand}: {exc}")
+                continue
+            servers = data.get("servers") or data.get("mcpServers") or {}
+            if isinstance(servers, dict):
+                merged_config["servers"].update(servers)
+        if merged_config["servers"]:
             from chimera.mcp.tools import MCPToolSource
-            mcp_tools = MCPToolSource.from_config(mcp_config)  # noqa: F841
-    except Exception:
-        pass
+            _mcp_client, _loaded_tools = MCPToolSource.from_config(merged_config)
+            mcp_extra_tools = list(_loaded_tools)
+    except Exception as exc:  # noqa: BLE001
+        # Non-fatal; user sees nothing if their MCP config is broken,
+        # so log it (but don't crash the REPL).
+        print(f"[mcp] load failed: {exc}")
 
     # Auto-discover project context
+    # WHY (audit M-19): bare ``except: pass`` previously swallowed every
+    # error here, so a malformed ``.chimera.toml`` left the user with no
+    # signal at all. Surface the error on stderr; discovery stays
+    # best-effort (we still continue with the default system prompt).
     system = _DEFAULT_SYSTEM
     try:
         from chimera.config.loader import ProjectConfig
         project = ProjectConfig.from_directory(workdir)
         if project and project.rules_text:
             system += "\n\n# Project Context\n" + project.rules_text
-    except Exception:
-        pass  # Config discovery is best-effort
+    except Exception as exc:  # noqa: BLE001
+        print(f"[project-config] discovery failed: {exc}", file=sys.stderr)
 
     # Auto-discover skills
+    # WHY (audit M-19): same pattern as above — log instead of swallow so a
+    # broken SKILL.md surfaces visibly without crashing the REPL.
     try:
         from chimera.skills.discovery import discover_skills, default_search_paths, format_skills_for_prompt
         skills = discover_skills(default_search_paths(workdir))
         skills_section = format_skills_for_prompt(skills)
         if skills_section:
             system += "\n\n" + skills_section
-    except Exception:
-        pass
+    except Exception as exc:  # noqa: BLE001
+        print(f"[skills] discovery failed: {exc}", file=sys.stderr)
 
     # --- Wire all pi-mono features ---
-    handler = ConsoleStreamHandler()
+    # WHY (audit B-2): the polished MinkStreamHandler (Markdown stream +
+    # spinner + collapsed tool blocks + diffs) is opt-in for ``chimera code``
+    # via ``CHIMERA_RICH_TUI=1``. ``chimera mink`` flips this on by default
+    # via its own wiring. Plain ConsoleStreamHandler stays the default here
+    # so existing ``code`` workflows do not regress. Pipes / NO_COLOR /
+    # non-TTY stdout still fall back to plain text inside ``build_stream_handler``.
+    if os.environ.get("CHIMERA_RICH_TUI", "").strip().lower() in {"1", "true", "yes", "on"}:
+        from chimera.cli.render import build_stream_handler as _build_handler
+
+        handler = _build_handler()
+    else:
+        handler = ConsoleStreamHandler()
     cost_tracker = CostTracker()
     file_tracker = FileTracker()
     queues = MessageQueues()
+
+    # WHY (audit B-4 second half): mirror the mink CLI hook wiring so the
+    # interactive REPL also honors ``.claude/settings.json`` hooks. This is
+    # additive — when the user ALSO has ``.chimera/settings.json`` hooks
+    # (loaded via ``HookLoader`` elsewhere), both fire. When neither is
+    # configured, ``hook_emitter`` stays None and nothing changes.
+    hook_emitter: Any = None
+    try:
+        from chimera.mink.cli import _build_hook_emitter
+        from chimera.mink.settings import load_mink_settings
+
+        _settings = load_mink_settings(cwd=Path(workdir))
+        hook_emitter = _build_hook_emitter(dict(_settings.hooks or {}))
+    except Exception as exc:  # noqa: BLE001
+        # Non-fatal: malformed settings.json shouldn't kill the REPL.
+        print(f"[hooks] settings.json hooks load failed: {exc}")
 
     max_steps = getattr(args, "max_steps", 50) or 50
     config = LoopConfig(
@@ -556,6 +613,7 @@ def run_code(args: Any) -> int:
         cost_tracker=cost_tracker,
         file_tracker=file_tracker,
         message_queues=queues,
+        hook_emitter=hook_emitter,
     )
     loop = ReAct(max_steps=max_steps, config=config)
 
@@ -575,7 +633,7 @@ def run_code(args: Any) -> int:
             return input("Your answer: ").strip()
 
     ask_tool = AskUserTool(callback=_repl_ask_callback)
-    tools = list(AGENT_TOOLS) + [ask_tool]
+    tools = list(AGENT_TOOLS) + [ask_tool] + mcp_extra_tools
 
     # Session with auto-persisting tree + auto-compaction
     from chimera.compaction.summary import SummaryCompaction

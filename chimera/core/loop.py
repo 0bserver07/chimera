@@ -490,6 +490,10 @@ class ReAct:
         total_tool_calls = 0
         total_cost = 0.0
         event_bus = self.config.event_bus if self.config else None
+        # WHY (W5 finishing-touch): mirror the sync iter_steps handler dispatch
+        # so MinkStreamHandler emits the ▶ tool markers for `chimera mink -p`
+        # (which goes through async_run → async_iter_steps, not iter_steps).
+        handler: StreamHandler | None = self.config.handler if self.config else None
 
         for _ in range(self.max_steps):
             # -- Cancellation check --
@@ -587,6 +591,16 @@ class ReAct:
                 return
 
             total_tool_calls += exec_result.executed
+
+            # WHY (W5 finishing-touch): emit tool start/end to the handler so
+            # the rich TUI renders the ▶ collapsed tool block on async runs.
+            if handler:
+                for tc_idx, tc in enumerate(response.tool_calls):
+                    handler.on_tool_start(tc.name, tc.id)
+                    if tc_idx < len(exec_result.results):
+                        tr = exec_result.results[tc_idx]
+                        content = tr.output if tr.success else f"Error: {tr.error}\n{tr.output}"
+                        handler.on_tool_end(tc.id, content[:500])
 
             if exec_result.pending is not None:
                 step = StepResult(
@@ -736,8 +750,9 @@ async def async_drain_steps(
     """
     owner: ReAct | None = None
     # Access the underlying ReAct instance from the generator
-    if hasattr(gen, "ag_frame") and gen.ag_frame is not None:
-        local_vars = gen.ag_frame.f_locals
+    ag_frame = getattr(gen, "ag_frame", None)
+    if ag_frame is not None:
+        local_vars = ag_frame.f_locals
         owner = local_vars.get("self")
 
     async for step in gen:
