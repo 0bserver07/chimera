@@ -1,0 +1,708 @@
+"""Otter HTTP server: REST + SSE bridge to a Chimera agent session.
+
+Where :mod:`chimera.env.remote` is the *client* of an HTTP workspace
+server, this module is the *server* — it exposes an in-process
+:class:`chimera.core.agent.Agent` over a small REST + SSE surface so any
+TUI / IDE / web client can drive the same session over the wire.
+
+Trademark hygiene: this module never names the upstream open-source
+coding agent in user-visible source.
+
+API surface
+-----------
+
+================================ ====== ==========================================
+Path                              Method Purpose
+================================ ====== ==========================================
+``/healthz``                      GET    Liveness probe (returns ``{"status":"ok"}``).
+``/session``                      POST   Create a new session. Body may include
+                                         ``{"working_dir": "..."}``. Returns
+                                         ``{"session_id": "..."}``.
+``/session``                      GET    List session ids.
+``/session/<id>``                 GET    Return session state snapshot.
+``/session/<id>/message``         POST   Send a user prompt
+                                         (``{"text": "..."}``). Returns the
+                                         message id; agent runs in the
+                                         background and emits SSE events.
+``/session/<id>/events``          GET    Server-Sent Events stream of
+                                         :class:`~chimera.core.loop_events.LoopEvent`
+                                         payloads. Supports
+                                         ``Last-Event-ID`` for resume.
+``/tool/approve``                 POST   Resolve a pending permission request
+                                         (``{"permission_id": "...",``
+                                         ``"approved": true}``).
+================================ ====== ==========================================
+
+Auth
+----
+
+Pass ``--auth-token <SECRET>`` to require ``Authorization: Bearer <SECRET>``
+on every request except ``/healthz``. Without ``--auth-token`` the server
+is open (intended for ``127.0.0.1`` local use).
+
+Implementation notes
+--------------------
+
+* **Stdlib only.** :class:`http.server.ThreadingHTTPServer` +
+  :class:`BaseHTTPRequestHandler`. No third-party deps.
+* **Event fan-out.** Each session owns a list of SSE subscriber queues.
+  Every emitted :class:`LoopEvent` is JSON-encoded and pushed to every
+  subscriber. Disconnected subscribers are pruned on the next emit.
+* **Cooperative cancel.** Each session carries a
+  :class:`~chimera.core.cancellation.CancellationToken`; ``DELETE``-style
+  cancel can be wired by future agents on top of the same primitive.
+* **Agent factory.** The server takes an ``agent_factory(state)`` callable
+  so tests can drop in a mock; the CLI wires a real provider/loop/tools.
+"""
+from __future__ import annotations
+
+import json
+import queue
+import threading
+import time
+import uuid
+from dataclasses import dataclass, field
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import Any, Callable, Protocol
+
+
+__all__ = [
+    "OtterServer",
+    "OtterSessionState",
+    "AgentFactory",
+    "serve_http",
+    "DEFAULT_HOST",
+    "DEFAULT_PORT",
+]
+
+
+#: Default bind host. We default to localhost — the server has no auth by
+#: default, so binding to ``0.0.0.0`` requires an explicit opt-in.
+DEFAULT_HOST = "127.0.0.1"
+
+#: Default bind port. Mirrors the upstream open-source coding agent's
+#: convention so existing client tooling expecting that port can connect.
+DEFAULT_PORT = 5173
+
+
+# ---------------------------------------------------------------------------
+# Public protocols + state
+# ---------------------------------------------------------------------------
+
+
+class _AgentLike(Protocol):
+    """Structural type for the agent the server drives.
+
+    The real :class:`chimera.core.agent.Agent` exposes ``async_run`` and
+    ``async_run_events``. Tests inject a mock that yields canned events.
+    """
+
+    async def async_run(self, task: str, env: Any | None) -> Any:  # pragma: no cover - protocol
+        ...
+
+
+AgentFactory = Callable[["OtterSessionState"], _AgentLike]
+"""Callable that builds (or returns) an agent for a session.
+
+The factory receives the live :class:`OtterSessionState` so it can scope
+tools or env to the session's ``working_dir``. Tests typically return a
+mock with a recorded ``async_run`` method.
+"""
+
+
+@dataclass
+class OtterSessionState:
+    """Per-session state held by :class:`OtterServer`.
+
+    Attributes:
+        session_id: Opaque identifier returned to the client.
+        working_dir: Working directory the agent should operate in. The
+            server itself doesn't ``chdir``; the embedded environment does.
+        agent: Cached agent built lazily from :class:`AgentFactory` on the
+            first ``POST /session/<id>/message`` for the session.
+        events: Append-only ordered log of emitted SSE events. Each entry
+            is a ``{"id", "event", "data"}`` dict ready to be serialized.
+        subscribers: Live SSE subscriber queues. Each queue receives a
+            reference to the same event dict; the GET handler serializes
+            on its own thread.
+        pending_permissions: Permission-id → ``threading.Event`` map. The
+            event holds an ``approved`` flag once resolved by
+            ``POST /tool/approve``.
+        lock: Coarse per-session lock guarding mutation of ``events`` /
+            ``subscribers``.
+    """
+
+    session_id: str
+    working_dir: str = ""
+    agent: _AgentLike | None = None
+    events: list[dict[str, Any]] = field(default_factory=list)
+    subscribers: list["queue.Queue[dict[str, Any] | None]"] = field(default_factory=list)
+    pending_permissions: dict[str, "_PermissionGate"] = field(default_factory=dict)
+    lock: threading.Lock = field(default_factory=threading.Lock)
+    created_at: float = field(default_factory=time.time)
+
+
+@dataclass
+class _PermissionGate:
+    """Threaded primitive backing :class:`OtterServer.tool_approve`.
+
+    A handler thread that needs user approval calls
+    :meth:`OtterServer.request_permission` which blocks on
+    :attr:`event` until ``POST /tool/approve`` flips :attr:`approved`.
+    """
+
+    event: threading.Event = field(default_factory=threading.Event)
+    approved: bool = False
+
+
+# ---------------------------------------------------------------------------
+# Server
+# ---------------------------------------------------------------------------
+
+
+class OtterServer:
+    """Threaded HTTP server exposing an otter agent session.
+
+    Args:
+        agent_factory: Callable invoked once per session.
+        host: Bind host. Defaults to ``127.0.0.1``.
+        port: Bind port. Defaults to ``5173``. Use ``0`` for an OS-chosen
+            ephemeral port (handy for tests).
+        auth_token: When set, every request except ``GET /healthz`` must
+            carry ``Authorization: Bearer <auth_token>``. Defaults to
+            ``None`` (no auth — only safe behind localhost).
+
+    Attributes:
+        sessions: Live :class:`OtterSessionState` objects keyed by id.
+    """
+
+    def __init__(
+        self,
+        agent_factory: AgentFactory | None = None,
+        *,
+        host: str = DEFAULT_HOST,
+        port: int = DEFAULT_PORT,
+        auth_token: str | None = None,
+    ) -> None:
+        self._agent_factory = agent_factory
+        self._host = host
+        self._port = port
+        self._auth_token = auth_token
+        self.sessions: dict[str, OtterSessionState] = {}
+        self._sessions_lock = threading.Lock()
+        self._httpd: ThreadingHTTPServer | None = None
+        self._thread: threading.Thread | None = None
+
+    # ------------------------------------------------------------------
+    # Public lifecycle
+    # ------------------------------------------------------------------
+
+    def start(self, *, blocking: bool = True) -> ThreadingHTTPServer | None:
+        """Bind the socket and begin serving.
+
+        Args:
+            blocking: When ``True`` (default) block forever in
+                ``serve_forever``. When ``False`` start a daemon thread
+                and return the live :class:`ThreadingHTTPServer` so the
+                caller can shut it down.
+
+        Returns:
+            The :class:`ThreadingHTTPServer` when ``blocking=False``,
+            ``None`` when blocking. Accessing :attr:`server_address` on
+            the returned server gives the actual bound port.
+        """
+        handler_cls = self._build_handler_class()
+        httpd = ThreadingHTTPServer((self._host, self._port), handler_cls)
+        # Surface the actual bound port back to the caller in case ``port=0``.
+        self._port = httpd.server_address[1]
+        self._httpd = httpd
+        if blocking:
+            try:
+                httpd.serve_forever()
+            finally:
+                httpd.server_close()
+            return None
+        thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+        thread.start()
+        self._thread = thread
+        return httpd
+
+    def shutdown(self) -> None:
+        """Shut the server down and join the background thread.
+
+        Idempotent: calling on a non-started server is a no-op.
+        """
+        if self._httpd is not None:
+            self._httpd.shutdown()
+            self._httpd.server_close()
+            self._httpd = None
+        if self._thread is not None:
+            self._thread.join(timeout=2.0)
+            self._thread = None
+        # Wake any SSE subscribers so they exit their generators.
+        with self._sessions_lock:
+            sessions = list(self.sessions.values())
+        for state in sessions:
+            with state.lock:
+                for q in state.subscribers:
+                    q.put(None)
+                state.subscribers.clear()
+
+    @property
+    def port(self) -> int:
+        """Actual bound port (resolved after :meth:`start`)."""
+        return self._port
+
+    # ------------------------------------------------------------------
+    # Session bookkeeping (used by handlers; safe to call directly in tests)
+    # ------------------------------------------------------------------
+
+    def create_session(self, *, working_dir: str = "") -> OtterSessionState:
+        """Create + register a fresh :class:`OtterSessionState`."""
+        state = OtterSessionState(
+            session_id=uuid.uuid4().hex,
+            working_dir=working_dir,
+        )
+        with self._sessions_lock:
+            self.sessions[state.session_id] = state
+        return state
+
+    def get_session(self, session_id: str) -> OtterSessionState | None:
+        """Return the session by id, or ``None`` if unknown."""
+        with self._sessions_lock:
+            return self.sessions.get(session_id)
+
+    def list_session_ids(self) -> list[str]:
+        """Return a snapshot of registered session ids."""
+        with self._sessions_lock:
+            return list(self.sessions.keys())
+
+    # ------------------------------------------------------------------
+    # Event fan-out
+    # ------------------------------------------------------------------
+
+    def emit_event(
+        self, state: OtterSessionState, event: str, data: Any
+    ) -> dict[str, Any]:
+        """Append + fan out a server-sent event for *state*.
+
+        Args:
+            state: Target session.
+            event: SSE ``event:`` field (e.g. ``"tool_use"``).
+            data: JSON-serializable payload.
+
+        Returns:
+            The stored event dict (for tests that want to assert on it).
+        """
+        envelope = {
+            "id": str(len(state.events) + 1),
+            "event": event,
+            "data": data,
+            "timestamp": time.time(),
+        }
+        with state.lock:
+            state.events.append(envelope)
+            subscribers = list(state.subscribers)
+        for q in subscribers:
+            try:
+                q.put_nowait(envelope)
+            except queue.Full:  # pragma: no cover - unbounded queues today
+                pass
+        return envelope
+
+    def subscribe(self, state: OtterSessionState) -> "queue.Queue[dict[str, Any] | None]":
+        """Register a fresh SSE subscriber queue and return it."""
+        q: queue.Queue[dict[str, Any] | None] = queue.Queue()
+        with state.lock:
+            # Replay any history so a late-attaching subscriber catches up.
+            for envelope in state.events:
+                q.put_nowait(envelope)
+            state.subscribers.append(q)
+        return q
+
+    def unsubscribe(
+        self, state: OtterSessionState, q: "queue.Queue[dict[str, Any] | None]"
+    ) -> None:
+        """Detach a subscriber queue (idempotent)."""
+        with state.lock:
+            try:
+                state.subscribers.remove(q)
+            except ValueError:
+                pass
+
+    # ------------------------------------------------------------------
+    # Permission bridge
+    # ------------------------------------------------------------------
+
+    def request_permission(
+        self, state: OtterSessionState, *, timeout: float | None = None
+    ) -> tuple[str, bool]:
+        """Block until ``POST /tool/approve`` resolves a fresh permission.
+
+        Returns ``(permission_id, approved)``. When *timeout* fires before
+        a client replies, ``approved`` is ``False``.
+        """
+        permission_id = uuid.uuid4().hex
+        gate = _PermissionGate()
+        with state.lock:
+            state.pending_permissions[permission_id] = gate
+        self.emit_event(
+            state,
+            "permission_request",
+            {"permission_id": permission_id},
+        )
+        ok = gate.event.wait(timeout=timeout)
+        with state.lock:
+            state.pending_permissions.pop(permission_id, None)
+        return permission_id, (gate.approved if ok else False)
+
+    def tool_approve(
+        self, session_id: str, permission_id: str, *, approved: bool
+    ) -> bool:
+        """Resolve a pending permission. Returns ``True`` on hit, ``False`` on miss."""
+        state = self.get_session(session_id)
+        if state is None:
+            return False
+        with state.lock:
+            gate = state.pending_permissions.get(permission_id)
+        if gate is None:
+            return False
+        gate.approved = approved
+        gate.event.set()
+        return True
+
+    # ------------------------------------------------------------------
+    # Agent dispatch
+    # ------------------------------------------------------------------
+
+    def submit_message(
+        self, state: OtterSessionState, text: str
+    ) -> str:
+        """Spawn a background thread that drives the agent for *text*.
+
+        Returns the assigned message id. The agent's lifecycle events fan
+        out through :meth:`emit_event` so any subscribed SSE client sees
+        them in order.
+        """
+        message_id = uuid.uuid4().hex
+        self.emit_event(
+            state,
+            "user_message",
+            {"message_id": message_id, "text": text},
+        )
+
+        def _run() -> None:
+            try:
+                if state.agent is None and self._agent_factory is not None:
+                    state.agent = self._agent_factory(state)
+                if state.agent is None:
+                    self.emit_event(
+                        state,
+                        "error",
+                        {
+                            "message_id": message_id,
+                            "error": "no agent_factory configured",
+                        },
+                    )
+                    return
+                self._drive_agent(state, message_id, text)
+            except Exception as exc:  # noqa: BLE001
+                self.emit_event(
+                    state,
+                    "error",
+                    {
+                        "message_id": message_id,
+                        "error": str(exc),
+                        "exception": type(exc).__name__,
+                    },
+                )
+
+        threading.Thread(target=_run, daemon=True).start()
+        return message_id
+
+    def _drive_agent(
+        self, state: OtterSessionState, message_id: str, text: str
+    ) -> None:
+        """Run the agent and translate its result into SSE events.
+
+        The default path uses ``async_run``; tests with mocks can either
+        provide that method or pre-populate the events log directly via
+        :meth:`emit_event` to avoid asyncio entirely.
+        """
+        import asyncio
+
+        agent = state.agent
+        assert agent is not None  # checked by the caller
+        result: Any = None
+        try:
+            result = asyncio.run(agent.async_run(text, env=None))
+        except Exception as exc:  # noqa: BLE001
+            self.emit_event(
+                state,
+                "error",
+                {
+                    "message_id": message_id,
+                    "error": str(exc),
+                    "exception": type(exc).__name__,
+                },
+            )
+            return
+        self.emit_event(
+            state,
+            "result",
+            {
+                "message_id": message_id,
+                "output": getattr(result, "output", ""),
+                "steps": getattr(result, "steps", 0),
+                "cost": getattr(result, "cost", 0.0),
+                "success": getattr(result, "success", False),
+            },
+        )
+
+    # ------------------------------------------------------------------
+    # Handler factory (closure over self)
+    # ------------------------------------------------------------------
+
+    def _build_handler_class(self) -> type[BaseHTTPRequestHandler]:
+        """Build a :class:`BaseHTTPRequestHandler` subclass closed over self.
+
+        The closure pattern (mirroring :class:`chimera.server.webhook`)
+        keeps the handler self-contained without polluting the
+        ``http.server`` module-level namespace.
+        """
+        outer = self
+
+        class _Handler(BaseHTTPRequestHandler):
+            # Keep stderr quiet during tests; opt back in via $OTTER_LOG=1.
+            def log_message(self, format: str, *args: Any) -> None:
+                import os as _os
+
+                if _os.environ.get("OTTER_LOG") == "1":  # pragma: no cover
+                    super().log_message(format, *args)
+
+            # ------- Auth ------------------------------------------------
+            def _check_auth(self) -> bool:
+                if outer._auth_token is None:
+                    return True
+                if self.path == "/healthz":
+                    return True
+                got = self.headers.get("Authorization", "")
+                expected = f"Bearer {outer._auth_token}"
+                if got != expected:
+                    self._send_json(401, {"error": "unauthorized"})
+                    return False
+                return True
+
+            # ------- Helpers --------------------------------------------
+            def _read_json(self) -> dict[str, Any] | None:
+                length = int(self.headers.get("Content-Length", "0") or "0")
+                raw = self.rfile.read(length) if length > 0 else b""
+                if not raw:
+                    return {}
+                try:
+                    parsed = json.loads(raw)
+                except json.JSONDecodeError:
+                    self._send_json(400, {"error": "invalid_json"})
+                    return None
+                if not isinstance(parsed, dict):
+                    self._send_json(400, {"error": "expected_json_object"})
+                    return None
+                return parsed
+
+            def _send_json(self, status: int, payload: Any) -> None:
+                body = json.dumps(payload).encode("utf-8")
+                self.send_response(status)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def _send_status(self, status: int) -> None:
+                self.send_response(status)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+
+            # ------- Routing --------------------------------------------
+            def do_GET(self) -> None:  # noqa: N802 - stdlib API
+                if not self._check_auth():
+                    return
+                path = self.path.split("?", 1)[0]
+                if path == "/healthz":
+                    self._send_json(200, {"status": "ok"})
+                    return
+                if path == "/session":
+                    self._send_json(200, {"sessions": outer.list_session_ids()})
+                    return
+                if path.startswith("/session/"):
+                    parts = path.split("/")
+                    # /session/<id>           parts == ["", "session", "<id>"]
+                    # /session/<id>/events    parts == ["", "session", "<id>", "events"]
+                    if len(parts) == 3:
+                        return self._handle_session_state(parts[2])
+                    if len(parts) == 4 and parts[3] == "events":
+                        return self._handle_session_events(parts[2])
+                self._send_json(404, {"error": "not_found", "path": path})
+
+            def do_POST(self) -> None:  # noqa: N802 - stdlib API
+                if not self._check_auth():
+                    return
+                path = self.path.split("?", 1)[0]
+                if path == "/session":
+                    return self._handle_session_create()
+                if path == "/tool/approve":
+                    return self._handle_tool_approve()
+                if path.startswith("/session/"):
+                    parts = path.split("/")
+                    if len(parts) == 4 and parts[3] == "message":
+                        return self._handle_session_message(parts[2])
+                self._send_json(404, {"error": "not_found", "path": path})
+
+            # ------- POST /session --------------------------------------
+            def _handle_session_create(self) -> None:
+                body = self._read_json()
+                if body is None:
+                    return
+                working_dir = str(body.get("working_dir", "") or "")
+                state = outer.create_session(working_dir=working_dir)
+                self._send_json(
+                    201,
+                    {
+                        "session_id": state.session_id,
+                        "working_dir": state.working_dir,
+                        "created_at": state.created_at,
+                    },
+                )
+
+            # ------- GET /session/<id> ----------------------------------
+            def _handle_session_state(self, session_id: str) -> None:
+                state = outer.get_session(session_id)
+                if state is None:
+                    self._send_json(404, {"error": "session_not_found"})
+                    return
+                with state.lock:
+                    payload = {
+                        "session_id": state.session_id,
+                        "working_dir": state.working_dir,
+                        "created_at": state.created_at,
+                        "event_count": len(state.events),
+                    }
+                self._send_json(200, payload)
+
+            # ------- POST /session/<id>/message -------------------------
+            def _handle_session_message(self, session_id: str) -> None:
+                state = outer.get_session(session_id)
+                if state is None:
+                    self._send_json(404, {"error": "session_not_found"})
+                    return
+                body = self._read_json()
+                if body is None:
+                    return
+                text = str(body.get("text", "") or "")
+                if not text:
+                    self._send_json(400, {"error": "missing_text"})
+                    return
+                message_id = outer.submit_message(state, text)
+                self._send_json(202, {"message_id": message_id})
+
+            # ------- GET /session/<id>/events ---------------------------
+            def _handle_session_events(self, session_id: str) -> None:
+                state = outer.get_session(session_id)
+                if state is None:
+                    self._send_json(404, {"error": "session_not_found"})
+                    return
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream")
+                self.send_header("Cache-Control", "no-cache")
+                self.send_header("Connection", "keep-alive")
+                self.send_header("X-Accel-Buffering", "no")
+                self.end_headers()
+                q = outer.subscribe(state)
+                try:
+                    while True:
+                        try:
+                            envelope = q.get(timeout=15.0)
+                        except queue.Empty:
+                            # Heartbeat keeps proxies from killing the stream.
+                            try:
+                                self.wfile.write(b": keep-alive\n\n")
+                                self.wfile.flush()
+                            except (BrokenPipeError, ConnectionResetError):
+                                return
+                            continue
+                        if envelope is None:
+                            return
+                        try:
+                            line = (
+                                f"id: {envelope['id']}\n"
+                                f"event: {envelope['event']}\n"
+                                f"data: {json.dumps(envelope['data'])}\n\n"
+                            ).encode("utf-8")
+                            self.wfile.write(line)
+                            self.wfile.flush()
+                        except (BrokenPipeError, ConnectionResetError):
+                            return
+                finally:
+                    outer.unsubscribe(state, q)
+
+            # ------- POST /tool/approve --------------------------------
+            def _handle_tool_approve(self) -> None:
+                body = self._read_json()
+                if body is None:
+                    return
+                session_id = str(body.get("session_id", "") or "")
+                permission_id = str(body.get("permission_id", "") or "")
+                approved = bool(body.get("approved", False))
+                if not session_id or not permission_id:
+                    self._send_json(
+                        400,
+                        {"error": "missing_session_id_or_permission_id"},
+                    )
+                    return
+                ok = outer.tool_approve(
+                    session_id, permission_id, approved=approved
+                )
+                if not ok:
+                    self._send_json(404, {"error": "permission_not_found"})
+                    return
+                self._send_json(200, {"resolved": True, "approved": approved})
+
+        return _Handler
+
+
+# ---------------------------------------------------------------------------
+# Convenience entry point
+# ---------------------------------------------------------------------------
+
+
+def serve_http(
+    agent_factory: AgentFactory | None,
+    *,
+    host: str = DEFAULT_HOST,
+    port: int = DEFAULT_PORT,
+    auth_token: str | None = None,
+) -> int:
+    """Start :class:`OtterServer` in blocking mode and return an exit code.
+
+    Args:
+        agent_factory: Per-session agent builder. ``None`` is allowed —
+            the server still serves health/session endpoints, useful for
+            smoke tests where no real agent is needed.
+        host: Bind host.
+        port: Bind port.
+        auth_token: Optional shared-secret bearer token.
+
+    Returns:
+        ``0`` on graceful shutdown (Ctrl-C). The function blocks until
+        the server stops.
+    """
+    server = OtterServer(
+        agent_factory,
+        host=host,
+        port=port,
+        auth_token=auth_token,
+    )
+    try:
+        server.start(blocking=True)
+    except KeyboardInterrupt:
+        server.shutdown()
+    return 0

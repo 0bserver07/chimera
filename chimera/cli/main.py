@@ -173,6 +173,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _mink_cli.add_arguments(cc_alias)
 
+    # ---- otter subcommand ----
+    # WHY: otter is the second Chimera coding-agent CLI, paralleling mink.
+    # Trademark hygiene: the help text never names the upstream brand.
+    otter_parser = subparsers.add_parser(
+        "otter",
+        help="Otter — a Chimera coding agent in the open-source agent tradition",
+    )
+    from chimera.otter import cli as _otter_cli
+    _otter_cli.add_arguments(otter_parser)
+
     # ---- review subcommand ----
     review_parser = subparsers.add_parser(
         "review",
@@ -789,6 +799,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         from chimera.mink import cli as _mink_cli
         return _mink_cli.run(args)
+    elif args.command == "otter":
+        from chimera.otter import cli as _otter_cli
+        return _otter_cli.run(args)
     elif args.command == "review":
         return run_review(args)
     elif args.command == "ci-fix":
