@@ -54,6 +54,21 @@ jobs:
       - name: Run otter trademark scrub
         run: bash scripts/otter_trademark_scrub.sh
 
+  mink-trademark-scrub:
+    # WHY: enforce the mink trademark policy (HANDOFF Pitfall #5 in
+    # research/mink/HANDOFF.md).  Runs the same script developers run
+    # locally; fast, no-deps job that exits 1 on a branded mention in
+    # live mink source/docs.  Filesystem-fact paths like
+    # ``~/.claude/settings.json`` are allowed; ``docs/benchmarks/``,
+    # ``docs/plans/``, and ``docs/superpowers/`` are intentionally
+    # out-of-scope (factual integration history).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Run mink trademark scrub
+        run: bash scripts/mink_trademark_scrub.sh
+
   docs:
     runs-on: ubuntu-latest
     needs: test

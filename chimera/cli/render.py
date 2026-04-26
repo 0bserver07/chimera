@@ -14,16 +14,29 @@ import os
 import re
 import sys
 from dataclasses import dataclass
-from typing import Any, TextIO
+from typing import TYPE_CHECKING, Any, TextIO
 
 from chimera.streaming.base import StreamHandler
 from chimera.streaming.handlers import ConsoleStreamHandler
+
+if TYPE_CHECKING:
+    # WHY (pyright/mypy): expose the real ``Console`` symbol to the type
+    # checker so annotations like ``_RichConsole | None`` resolve to the
+    # actual class regardless of whether ``rich`` is installed at runtime.
+    # The ``try``/``except`` block below owns runtime binding (and may set
+    # ``Console`` to ``None``); this import never executes.
+    from rich.console import Console as _RichConsole
 
 try:
     from rich.console import Console
     from rich.markdown import Markdown
 
     _RICH_AVAILABLE = True
+    # WHY: a separately-typed reference to the ``Console`` *class* (or None
+    # when rich is missing). Pyright can narrow ``_ConsoleClass is not None``
+    # at the call site, which the original ternary on the runtime ``Console``
+    # name could not satisfy (reportOptionalCall on line 112).
+    _ConsoleClass: type[_RichConsole] | None = Console
 except ImportError:  # pragma: no cover
     # WHY (pyright): bind names to ``None`` in the failure branch so static
     # analysis can see the symbols are always defined at module scope.
@@ -32,6 +45,7 @@ except ImportError:  # pragma: no cover
     Console = None  # type: ignore[assignment,misc]
     Markdown = None  # type: ignore[assignment,misc]
     _RICH_AVAILABLE = False
+    _ConsoleClass = None
 
 try:
     from pygments import highlight  # type: ignore[import-untyped]
@@ -108,11 +122,15 @@ class MarkdownStream:
         # an importable, instantiable ``MarkdownStream`` so the rest of the
         # module loads. ``_console`` stays ``None`` and ``_render`` falls
         # back to writing plain text via ``self._stream.write``.
-        self._console = (
-            Console(file=self._stream, force_terminal=True, width=width)
-            if _RICH_AVAILABLE
-            else None
-        )
+        # WHY (pyright): use the typed ``_ConsoleClass`` alias rather than
+        # the runtime ``Console`` name. ``_ConsoleClass`` is declared as
+        # ``type[Console] | None`` so the ``is not None`` narrowing here
+        # eliminates ``reportOptionalCall`` on the constructor call below.
+        self._console: _RichConsole | None
+        if _ConsoleClass is not None:
+            self._console = _ConsoleClass(file=self._stream, force_terminal=True, width=width)
+        else:
+            self._console = None
         self._state = _MarkdownStreamState()
         self._do_highlight = highlight_code and _PYGMENTS_AVAILABLE
 
@@ -570,10 +588,15 @@ class RichStreamHandler(StreamHandler):
 
     def on_step_start(self, step: int) -> None:
         """Start the spinner with a generic ``thinking`` label."""
+        # WHY: ``step`` is required by the StreamHandler interface but the
+        # spinner only needs a generic label here; ``del`` documents the
+        # intentional discard and silences ARG002 / unused-parameter warnings.
+        del step
         self._spinner.start("thinking")
 
     def on_step_end(self, step: int) -> None:
         """Stop the spinner; the next on_text/on_tool_start handles the rest."""
+        del step
         self._spinner.stop(success=True)
 
     def on_done(self) -> None:
