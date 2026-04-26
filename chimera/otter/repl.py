@@ -38,6 +38,7 @@ from typing import Any
 
 __all__ = [
     "build_otter_agent",
+    "load_otter_custom_commands",
     "make_run_id",
     "open_otter_run_log",
     "otter_eventlog_root",
@@ -167,6 +168,50 @@ def _resolve_slash_registry() -> dict[str, Any] | None:
 
 
 # ---------------------------------------------------------------------------
+# Custom command loading (.opencode/command/*.md -> slash registry)
+# ---------------------------------------------------------------------------
+
+def load_otter_custom_commands(
+    project_root: Path | str | None = None,
+) -> list[Any]:
+    """Load custom slash commands from user + project ``.opencode/command/``.
+
+    Wraps :func:`chimera.otter.commands.load_custom_commands` so callers
+    in this module (and tests) can pull the project-aware merged set
+    without re-implementing the precedence walk. Returns an empty list
+    when the commands module isn't importable yet so the REPL stays
+    usable during partial-install scenarios.
+
+    Args:
+        project_root: Project root path. Defaults to ``os.getcwd()`` when
+            ``None`` so callers don't need to pre-resolve the cwd.
+
+    Returns:
+        A list of :class:`~chimera.otter.commands.CustomCommand`
+        instances ordered by name. Empty when no files exist or the
+        commands module isn't present.
+    """
+    try:
+        from chimera.otter import commands as _otter_commands  # type: ignore[attr-defined]
+    except ImportError:
+        return []
+
+    loader = getattr(_otter_commands, "load_custom_commands", None)
+    if loader is None:
+        return []
+    root = Path(project_root) if project_root is not None else Path(os.getcwd())
+    try:
+        merged = loader(root)
+    except Exception as exc:  # noqa: BLE001 -- never crash REPL
+        print(
+            f"[otter] custom-command load failed: {exc}",
+            file=sys.stderr,
+        )
+        return []
+    return [merged[name] for name in sorted(merged)]
+
+
+# ---------------------------------------------------------------------------
 # Argument shimming for chimera.cli.code.run_code
 # ---------------------------------------------------------------------------
 
@@ -223,19 +268,54 @@ def build_otter_agent(args: argparse.Namespace, *, provider: Any | None = None) 
     from chimera.core.loop_config import LoopConfig
     from chimera.core.prompt import Prompt
     from chimera.core.tool_group import AGENT_TOOLS
+    from chimera.otter.cli import (
+        _attach_lsp_tools,
+        _attach_mcp_tools,
+        _attach_plugin_extensions,
+        _compose_prompt,
+    )
 
     resolved_provider = provider if provider is not None else _build_otter_provider(args)
     max_steps = int(getattr(args, "max_steps", 50) or 50)
     config = LoopConfig()
     loop = ReAct(max_steps=max_steps, config=config)
-    prompt = Prompt.from_string(
+    cwd = os.path.abspath(
+        getattr(args, "cwd", None) or getattr(args, "workdir", None) or os.getcwd(),
+    )
+    composed = _compose_prompt(
         "You are an interactive coding assistant in the otter REPL. Use "
         "the available tools to read, edit, search, and run code. Be "
         "concise and direct.",
+        project_root=Path(cwd),
+        no_rules=bool(getattr(args, "no_rules", False)),
+    )
+    prompt = Prompt.from_string(composed)
+    tools = _attach_lsp_tools(
+        list(AGENT_TOOLS),
+        no_lsp=bool(getattr(args, "no_lsp", False)),
+        project_root=Path(cwd),
+    )
+    # WHY: wire MCP server discovery into the REPL agent factory. Symmetric
+    # with the ``-p`` / ``serve`` paths in :mod:`chimera.otter.cli` — MCP is
+    # on by default; ``--no-mcp`` opts out.
+    if not bool(getattr(args, "no_mcp", False)):
+        tools = _attach_mcp_tools(tools, project_root=Path(cwd))
+    # WHY (W2): plugin contributions are wired at the same call site as
+    # MCP/LSP. Hooks accumulate locally — they will be wired to the
+    # LoopConfig hook_emitter once W3 closes the matcher conversion.
+    plugin_hooks: list[Any] = []
+    plugin_mcp_servers: list[Any] = []
+    _attach_plugin_extensions(
+        tools,
+        plugin_hooks,
+        agent_registry=None,
+        project_root=Path(cwd),
+        mcp_servers=plugin_mcp_servers,
+        enabled=not bool(getattr(args, "no_plugins", False)),
     )
     return Agent(
         provider=resolved_provider,
-        tools=list(AGENT_TOOLS),
+        tools=tools,
         loop=loop,
         prompt=prompt,
     )
@@ -297,6 +377,78 @@ def run_otter_repl(args: argparse.Namespace) -> int:
                         registry[name] = handler
         except Exception as exc:  # noqa: BLE001
             print(f"[otter] slash overrides failed: {exc}", file=sys.stderr)
+
+    # 2b. Load user-defined slash commands from .opencode/command/*.md and
+    #     register them on the shared slash registry so the REPL picks
+    #     them up via the same dispatch path as the built-in palette.
+    #     ``--no-custom-commands`` opts out for locked-down environments.
+    if not getattr(args, "no_custom_commands", False):
+        try:
+            from chimera.cli import slash_commands as _shared_slash
+            from chimera.otter.slash import register_custom_commands
+
+            cwd = (
+                getattr(args, "cwd", None)
+                or getattr(args, "workdir", None)
+                or os.getcwd()
+            )
+            customs = load_otter_custom_commands(cwd)
+            if customs:
+                installed = register_custom_commands(_shared_slash, customs)
+                if installed and not getattr(args, "_quiet_run_dir", False):
+                    print(
+                        f"[otter] loaded {installed} custom command(s) "
+                        "from .opencode/command/"
+                    )
+        except Exception as exc:  # noqa: BLE001
+            print(
+                f"[otter] custom commands not registered: {exc}",
+                file=sys.stderr,
+            )
+
+    # 2c. Wire directory plugins (W2). Plugin agents land on the otter
+    #     AgentRegistry so ``--agent <name>`` (and the ``/agents`` slash)
+    #     resolve them; plugin slash commands install on the shared
+    #     registry; plugin hooks/MCP descriptors are recorded for the
+    #     downstream factory call (build_otter_agent).
+    if not bool(getattr(args, "no_plugins", False)):
+        try:
+            from chimera.otter.cli import _attach_plugin_extensions
+
+            project_root = Path(
+                getattr(args, "cwd", None)
+                or getattr(args, "workdir", None)
+                or os.getcwd()
+            )
+            agent_registry: Any | None = None
+            try:
+                from chimera.agents.loader import create_default_registry
+
+                agent_registry = create_default_registry()
+            except Exception:  # noqa: BLE001  (registry optional)
+                agent_registry = None
+
+            tools_sink: list[Any] = []
+            hooks_sink: list[Any] = []
+            mcp_sink: list[Any] = []
+            plugins_loaded = _attach_plugin_extensions(
+                tools_sink,
+                hooks_sink,
+                agent_registry=agent_registry,
+                project_root=project_root,
+                mcp_servers=mcp_sink,
+                enabled=True,
+            )
+            if plugins_loaded and not getattr(args, "_quiet_run_dir", False):
+                print(
+                    f"[otter] loaded {len(plugins_loaded)} plugin(s) from "
+                    "~/.opencode/plugin/ + .opencode/plugin/"
+                )
+        except Exception as exc:  # noqa: BLE001
+            print(
+                f"[otter] plugins not registered: {exc}",
+                file=sys.stderr,
+            )
 
     # 3. Resolve the provider eagerly (matches mink's contract). This
     #    surfaces a missing API key with a clean error before we drop

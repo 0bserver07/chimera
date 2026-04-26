@@ -45,7 +45,11 @@ Trademark hygiene: this module deliberately uses neutral phrasing
 """
 from __future__ import annotations
 
-from typing import Any, Callable
+import shlex
+from typing import TYPE_CHECKING, Any, Callable
+
+if TYPE_CHECKING:
+    from chimera.otter.commands import CustomCommand
 
 __all__ = [
     "COMMANDS",
@@ -53,6 +57,8 @@ __all__ = [
     "OTTER_SLASH_HELP",
     "PrintFn",
     "SlashHandler",
+    "build_custom_command_handler",
+    "register_custom_commands",
     "register_otter_slash",
 ]
 
@@ -347,7 +353,55 @@ OTTER_SLASH_HELP: dict[str, str] = {
 # Installer
 # ---------------------------------------------------------------------------
 
-def register_otter_slash(repl_state: Any) -> int:
+def _install_one(
+    repl_state: Any, name: str, handler: SlashHandler, help_text: str,
+) -> bool:
+    """Install a single ``(name, handler, help_text)`` triple onto *repl_state*.
+
+    Centralises the three-flavor compatibility shim used by both
+    :func:`register_otter_slash` and :func:`register_custom_commands` so
+    they stay in lockstep with the shared registry contract.
+
+    Args:
+        repl_state: Target REPL state. May expose ``register(...)``, a
+            ``commands``/``slash_commands`` mapping, or neither.
+        name: Slash-command name (without leading slash).
+        handler: Callable with the ``(session, env, args, out)`` shape.
+        help_text: One-line description for ``/help`` rendering.
+
+    Returns:
+        ``True`` if the command landed on the state, ``False`` otherwise.
+    """
+    register = getattr(repl_state, "register", None)
+    if callable(register):
+        try:
+            register(name, handler, help_text)
+            return True
+        except TypeError:
+            try:
+                register(name, handler)
+                return True
+            except Exception:  # noqa: BLE001 -- best-effort install
+                return False
+
+    for attr in ("commands", "slash_commands"):
+        bag = getattr(repl_state, attr, None)
+        if isinstance(bag, dict):
+            bag[name] = handler
+            return True
+
+    try:
+        setattr(repl_state, name, handler)
+        return True
+    except (AttributeError, TypeError):
+        return False
+
+
+def register_otter_slash(
+    repl_state: Any,
+    *,
+    custom_commands: list["CustomCommand"] | None = None,
+) -> int:
     """Install every otter slash command onto ``repl_state``.
 
     This composes with three flavors of REPL state, in priority order:
@@ -364,40 +418,170 @@ def register_otter_slash(repl_state: Any) -> int:
 
     Args:
         repl_state: Target onto which the otter palette is installed.
+        custom_commands: Optional list of user-defined
+            :class:`~chimera.otter.commands.CustomCommand` instances loaded
+            from ``.opencode/command/*.md``. Each is converted into a
+            slash handler that renders the body template and pushes the
+            result to the active session as a follow-up user message.
+            Customs land **after** the built-in palette so a same-named
+            user command wins (matching the upstream's last-wins
+            precedence on conflicts).
 
     Returns:
-        The count of commands successfully installed.
+        The count of commands successfully installed (built-ins +
+        customs).
     """
-    register = getattr(repl_state, "register", None)
-    if callable(register):
-        installed = 0
-        for name, handler in OTTER_SLASH_COMMANDS.items():
-            help_text = OTTER_SLASH_HELP.get(name, "")
-            try:
-                register(name, handler, help_text)
-            except TypeError:
-                # Older signatures may not accept ``help_text`` -- retry
-                # with the handler-only form so we still install.
-                try:
-                    register(name, handler)
-                except Exception:  # noqa: BLE001 -- best-effort install
-                    continue
-            installed += 1
-        return installed
-
-    # ``commands`` / ``slash_commands`` dict-style states
-    for attr in ("commands", "slash_commands"):
-        bag = getattr(repl_state, attr, None)
-        if isinstance(bag, dict):
-            for name, handler in OTTER_SLASH_COMMANDS.items():
-                bag[name] = handler
-            return len(OTTER_SLASH_COMMANDS)
-
-    # Last resort: write each command on as an attribute so callers can
-    # find them by name even on a bare object.
+    installed = 0
     for name, handler in OTTER_SLASH_COMMANDS.items():
+        help_text = OTTER_SLASH_HELP.get(name, "")
+        if _install_one(repl_state, name, handler, help_text):
+            installed += 1
+
+    if custom_commands:
+        installed += register_custom_commands(repl_state, custom_commands)
+    return installed
+
+
+# ---------------------------------------------------------------------------
+# Custom-command bridge (.opencode/command/*.md -> slash handler)
+# ---------------------------------------------------------------------------
+
+
+def _split_custom_args(raw: str) -> tuple[list[str], dict[str, str]]:
+    """Split a slash-command argument line into positional + named pieces.
+
+    Supported forms (matching the upstream's permissive parser):
+
+    * ``foo bar baz`` — three positional arguments.
+    * ``foo target=src/main.py`` — one positional plus a named ``target``.
+    * ``"quoted phrase" key="value with space"`` — shell-style quoting
+      via :mod:`shlex`.
+
+    Returns:
+        ``(positional, named)`` — both empty when *raw* is empty.
+    """
+    cleaned = (raw or "").strip()
+    if not cleaned:
+        return [], {}
+    try:
+        tokens = shlex.split(cleaned, posix=True)
+    except ValueError:
+        # Unbalanced quotes — fall back to whitespace split so the user
+        # still sees their intent reflected (the upstream degrades the
+        # same way rather than refusing to dispatch).
+        tokens = cleaned.split()
+
+    positional: list[str] = []
+    named: dict[str, str] = {}
+    for tok in tokens:
+        if "=" in tok:
+            key, _, value = tok.partition("=")
+            key = key.strip()
+            if key and not key.startswith("="):
+                named[key] = value
+                continue
+        positional.append(tok)
+    return positional, named
+
+
+def build_custom_command_handler(cmd: "CustomCommand") -> SlashHandler:
+    """Wrap a :class:`CustomCommand` as a slash-registry handler.
+
+    The returned callable matches the canonical
+    ``(session, env, args, out)`` signature. On invocation it:
+
+    1. Parses the raw argument string into positional + ``key=value``
+       named pieces via :func:`_split_custom_args`.
+    2. Renders the template via :meth:`CustomCommand.render`.
+    3. Sends the rendered prompt to the active turn:
+
+       * ``session.queue(rendered)`` when available — queues a
+         follow-up user message for the next turn.
+       * ``session.steer(rendered)`` when ``queue`` is missing but
+         ``steer`` exists — interrupts the running turn.
+       * Otherwise, prints the rendered text via *out* so the user at
+         least sees what would have been sent.
+
+    Errors raised by ``render`` or by the session never propagate — the
+    handler prints a one-line diagnostic and returns. Crashing the REPL
+    over a bad template would be hostile.
+
+    Args:
+        cmd: The user-defined command to wrap.
+
+    Returns:
+        A :data:`SlashHandler` ready to install on the slash registry.
+    """
+
+    def _handler(session: Any, _env: Any, args: str, out: PrintFn) -> None:
+        positional, named = _split_custom_args(args)
         try:
-            setattr(repl_state, name, handler)
-        except (AttributeError, TypeError):
-            continue
-    return len(OTTER_SLASH_COMMANDS)
+            rendered = cmd.render(*positional, **named)
+        except Exception as exc:  # noqa: BLE001 -- never crash REPL
+            out(f"/{cmd.name} render failed: {exc}")
+            return
+
+        # Prefer queue() so the rendered prompt is treated as a normal
+        # follow-up user turn. Steer is the next-best (interrupts the
+        # current turn). Final fallback is just printing.
+        queue = getattr(session, "queue", None)
+        if callable(queue):
+            try:
+                queue(rendered)
+                out(f"/{cmd.name} queued ({len(rendered)} chars)")
+                return
+            except Exception as exc:  # noqa: BLE001
+                out(f"/{cmd.name} queue failed: {exc}")
+                # Fall through to steer/print.
+
+        steer = getattr(session, "steer", None)
+        if callable(steer):
+            try:
+                steer(rendered)
+                out(f"/{cmd.name} steered ({len(rendered)} chars)")
+                return
+            except Exception as exc:  # noqa: BLE001
+                out(f"/{cmd.name} steer failed: {exc}")
+
+        out(rendered)
+
+    _handler.__name__ = f"cmd_custom_{cmd.name}"
+    _handler.__doc__ = (
+        f"User-defined command from {cmd.source or '<memory>'}: "
+        f"{cmd.description or cmd.name}"
+    )
+    return _handler
+
+
+def register_custom_commands(
+    repl_state: Any, commands: list["CustomCommand"],
+) -> int:
+    """Install user-defined commands onto a slash registry.
+
+    Each :class:`~chimera.otter.commands.CustomCommand` becomes a
+    runnable slash handler via :func:`build_custom_command_handler`. The
+    same three-flavor compatibility shim used by
+    :func:`register_otter_slash` is reused so this composes with the
+    shared registry, dict-style fakes, and bare attribute objects.
+
+    Same-named entries clobber prior ones — the caller's ordering
+    decides precedence. The standard otter wiring registers built-ins
+    first, then customs, so user files override built-ins on conflict
+    (matching the upstream's last-wins ladder).
+
+    Args:
+        repl_state: Target slash registry / REPL state.
+        commands: Custom commands to install. Empty list is a no-op.
+
+    Returns:
+        Count of commands successfully installed.
+    """
+    if not commands:
+        return 0
+    installed = 0
+    for cmd in commands:
+        handler = build_custom_command_handler(cmd)
+        help_text = cmd.description or f"user command: /{cmd.name}"
+        if _install_one(repl_state, cmd.name, handler, help_text):
+            installed += 1
+    return installed
