@@ -58,6 +58,54 @@ class _FakeAgent:
         return _FakeAgentResult(output=f"echo: {task}")
 
 
+@dataclasses.dataclass
+class _FakeLoopEvent:
+    """Minimal stand-in for :class:`chimera.core.loop_events.LoopEvent`."""
+
+    type: str
+    data: Any
+    turn: int = 0
+    timestamp: float = 0.0
+
+
+class _StreamingFakeAgent:
+    """Yields a canned sequence of :class:`_FakeLoopEvent`s.
+
+    Mirrors :meth:`chimera.core.agent.Agent.async_run_events` shape: an
+    async iterator of ``LoopEvent``-like records. Used to exercise the
+    per-step SSE emission path.
+    """
+
+    def __init__(
+        self,
+        events: list[_FakeLoopEvent] | None = None,
+        *,
+        per_event_delay: float = 0.0,
+    ) -> None:
+        self.events = events or [
+            _FakeLoopEvent(type="assistant_chunk", data={"text": "hello"}),
+            _FakeLoopEvent(type="tool_use", data={"name": "bash"}),
+            _FakeLoopEvent(type="assistant", data={"text": "world"}),
+        ]
+        self.per_event_delay = per_event_delay
+        self.prompts: list[str] = []
+
+    async def async_run_events(self, task: str, env: Any | None = None) -> Any:
+        import asyncio as _asyncio
+
+        self.prompts.append(task)
+        for ev in self.events:
+            if self.per_event_delay > 0:
+                await _asyncio.sleep(self.per_event_delay)
+            yield ev
+
+    async def async_run(self, task: str, env: Any | None) -> _FakeAgentResult:
+        # Present so a hypothetical caller that ignores ``async_run_events``
+        # still has a fallback. The server prefers the streaming method.
+        self.prompts.append(task)
+        return _FakeAgentResult(output="streamed")
+
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -479,3 +527,220 @@ def test_module_exports() -> None:
     assert "OtterSessionState" in otter_server.__all__
     assert "serve_http" in otter_server.__all__
     assert OtterSessionState.__name__ == "OtterSessionState"
+
+
+# ---------------------------------------------------------------------------
+# Cancellation + per-step SSE streaming (W6)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def streaming_agent() -> _StreamingFakeAgent:
+    """Default :class:`_StreamingFakeAgent` for streaming-path tests."""
+    return _StreamingFakeAgent()
+
+
+@pytest.fixture()
+def streaming_server(
+    streaming_agent: _StreamingFakeAgent,
+) -> Iterator[OtterServer]:
+    """:class:`OtterServer` wired with a streaming fake agent."""
+    srv = OtterServer(
+        agent_factory=lambda _state: streaming_agent,
+        host="127.0.0.1",
+        port=0,
+    )
+    srv.start(blocking=False)
+    try:
+        yield srv
+    finally:
+        srv.shutdown()
+
+
+def test_session_has_cancel_token() -> None:
+    """Every fresh session ships a default :class:`CancellationToken`."""
+    from chimera.core.cancellation import CancellationToken
+
+    srv = OtterServer(agent_factory=None, host="127.0.0.1", port=0)
+    state = srv.create_session(working_dir="/x")
+    assert isinstance(state.cancel, CancellationToken)
+    assert state.cancel.is_cancelled is False
+
+
+def test_post_session_cancel_returns_204_and_flips_token(
+    server: OtterServer,
+) -> None:
+    """``POST /session/<id>/cancel`` returns 204 and sets the cancel flag."""
+    _, created = _http_json("POST", f"{_base_url(server)}/session", body={})
+    sid = created["session_id"]
+    state = server.get_session(sid)
+    assert state is not None
+    assert state.cancel.is_cancelled is False
+
+    req = urllib.request.Request(
+        f"{_base_url(server)}/session/{sid}/cancel",
+        data=b"",
+        method="POST",
+    )
+    resp = urllib.request.urlopen(req, timeout=3.0)
+    assert resp.status == 204
+    body = resp.read()
+    # 204 must not carry a body.
+    assert body == b""
+
+    assert state.cancel.is_cancelled is True
+
+
+def test_post_session_cancel_unknown_returns_404(server: OtterServer) -> None:
+    status, body = _http_json(
+        "POST", f"{_base_url(server)}/session/missing/cancel", body=None
+    )
+    assert status == 404
+    assert body == {"error": "session_not_found"}
+
+
+def test_streaming_run_emits_per_step_events(
+    streaming_server: OtterServer, streaming_agent: _StreamingFakeAgent
+) -> None:
+    """Streaming agent yields >1 SSE frame; terminal ``result`` still last."""
+    _, created = _http_json(
+        "POST", f"{_base_url(streaming_server)}/session", body={}
+    )
+    sid = created["session_id"]
+    _http_json(
+        "POST",
+        f"{_base_url(streaming_server)}/session/{sid}/message",
+        body={"text": "ping"},
+    )
+
+    deadline = time.time() + 5.0
+    while time.time() < deadline:
+        state = streaming_server.get_session(sid)
+        assert state is not None
+        if any(ev["event"] == "result" for ev in state.events):
+            break
+        time.sleep(0.02)
+
+    state = streaming_server.get_session(sid)
+    assert state is not None
+    kinds = [ev["event"] for ev in state.events]
+    # 1x user_message + 3x loop_event + 1x result
+    assert kinds.count("loop_event") == 3
+    assert kinds[-1] == "result"
+    assert "ping" in streaming_agent.prompts
+
+    # Every emitted loop_event payload must carry a recognizable LoopEvent
+    # shape ({type, data, turn, timestamp, message_id}) and JSON-encode.
+    for ev in state.events:
+        if ev["event"] != "loop_event":
+            continue
+        payload = ev["data"]
+        assert {"type", "data", "turn", "timestamp", "message_id"} <= payload.keys()
+        json.dumps(payload)
+
+    # Terminal result frame summarizes the run.
+    result = next(ev for ev in state.events if ev["event"] == "result")
+    assert result["data"]["steps"] == 3
+    assert result["data"]["cancelled"] is False
+    assert result["data"]["success"] is True
+
+
+def test_streaming_run_sse_pushes_multiple_frames(
+    streaming_server: OtterServer,
+) -> None:
+    """SSE socket reader sees >1 ``data:`` line for a streaming run."""
+    _, created = _http_json(
+        "POST", f"{_base_url(streaming_server)}/session", body={}
+    )
+    sid = created["session_id"]
+
+    received: list[bytes] = []
+
+    def _consume() -> None:
+        # Pull a generous number of bytes; we expect at least 5 SSE frames.
+        received.append(_read_sse_chunk(streaming_server, sid, max_bytes=8192))
+
+    consumer = threading.Thread(target=_consume, daemon=True)
+    consumer.start()
+    time.sleep(0.1)
+    _http_json(
+        "POST",
+        f"{_base_url(streaming_server)}/session/{sid}/message",
+        body={"text": "ping"},
+    )
+    consumer.join(timeout=5.0)
+    assert received, "consumer thread didn't return"
+    raw = received[0].decode("utf-8", "replace")
+    # The chunk reader stops after >=2 SSE blocks; we just need to
+    # confirm streaming actually emits more than the single legacy frame.
+    assert raw.count("\ndata: ") >= 2 or raw.count("data: ") >= 2
+
+
+def test_cancel_mid_run_stops_subsequent_sse_frames() -> None:
+    """Cancelling mid-run halts loop_event emission; final result reports it."""
+    # Slow streaming agent: 6 events at 80ms apart so we have ~480ms total
+    # to fire a cancel after the first event lands.
+    slow_events = [
+        _FakeLoopEvent(type="assistant_chunk", data={"text": f"chunk-{i}"})
+        for i in range(6)
+    ]
+    agent = _StreamingFakeAgent(events=slow_events, per_event_delay=0.08)
+    srv = OtterServer(
+        agent_factory=lambda _state: agent,
+        host="127.0.0.1",
+        port=0,
+    )
+    srv.start(blocking=False)
+    try:
+        _, created = _http_json("POST", f"{_base_url(srv)}/session", body={})
+        sid = created["session_id"]
+
+        _http_json(
+            "POST",
+            f"{_base_url(srv)}/session/{sid}/message",
+            body={"text": "go"},
+        )
+        # Wait for the run to actually start emitting before we cancel.
+        deadline = time.time() + 2.0
+        state = srv.get_session(sid)
+        assert state is not None
+        while time.time() < deadline:
+            if sum(1 for ev in state.events if ev["event"] == "loop_event") >= 1:
+                break
+            time.sleep(0.01)
+        # Fire cancel.
+        req = urllib.request.Request(
+            f"{_base_url(srv)}/session/{sid}/cancel",
+            data=b"",
+            method="POST",
+        )
+        resp = urllib.request.urlopen(req, timeout=3.0)
+        assert resp.status == 204
+
+        # Wait for the run to wind down (terminal result lands).
+        deadline = time.time() + 3.0
+        while time.time() < deadline:
+            if any(ev["event"] == "result" for ev in state.events):
+                break
+            time.sleep(0.02)
+
+        assert state.cancel.is_cancelled is True
+        loop_event_count = sum(
+            1 for ev in state.events if ev["event"] == "loop_event"
+        )
+        # We must have stopped before draining all 6 events.
+        assert 1 <= loop_event_count < 6, (
+            f"expected mid-run cancel; saw {loop_event_count}/6 loop_events"
+        )
+
+        # And no further loop_events should land after the result frame.
+        kinds = [ev["event"] for ev in state.events]
+        result_idx = kinds.index("result")
+        assert "loop_event" not in kinds[result_idx + 1 :]
+
+        # Terminal result reports the cancel.
+        result = next(ev for ev in state.events if ev["event"] == "result")
+        assert result["data"]["cancelled"] is True
+        assert result["data"]["success"] is False
+    finally:
+        srv.shutdown()

@@ -28,6 +28,9 @@ Path                              Method Purpose
                                          :class:`~chimera.core.loop_events.LoopEvent`
                                          payloads. Supports
                                          ``Last-Event-ID`` for resume.
+``/session/<id>/cancel``          POST   Cooperatively cancel an in-flight
+                                         agent run for that session. Returns
+                                         ``204 No Content``.
 ``/tool/approve``                 POST   Resolve a pending permission request
                                          (``{"permission_id": "...",``
                                          ``"approved": true}``).
@@ -63,7 +66,9 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Any, Callable, Protocol
+from typing import Any, AsyncIterator, Callable, Protocol
+
+from chimera.core.cancellation import CancellationToken
 
 
 __all__ = [
@@ -94,7 +99,9 @@ class _AgentLike(Protocol):
     """Structural type for the agent the server drives.
 
     The real :class:`chimera.core.agent.Agent` exposes ``async_run`` and
-    ``async_run_events``. Tests inject a mock that yields canned events.
+    ``async_run_events``. Tests inject a mock that yields canned events
+    (or a fake that only implements ``async_run`` for the back-compat
+    terminal-result path).
     """
 
     async def async_run(self, task: str, env: Any | None) -> Any:  # pragma: no cover - protocol
@@ -130,6 +137,9 @@ class OtterSessionState:
             ``POST /tool/approve``.
         lock: Coarse per-session lock guarding mutation of ``events`` /
             ``subscribers``.
+        cancel: Cooperative cancellation token. ``POST /session/<id>/cancel``
+            flips this token; the agent driver checks it between SSE
+            frames and stops emitting once it's set.
     """
 
     session_id: str
@@ -140,6 +150,47 @@ class OtterSessionState:
     pending_permissions: dict[str, "_PermissionGate"] = field(default_factory=dict)
     lock: threading.Lock = field(default_factory=threading.Lock)
     created_at: float = field(default_factory=time.time)
+    cancel: CancellationToken = field(default_factory=CancellationToken)
+
+
+def _loop_event_to_payload(ev: Any, message_id: str) -> dict[str, Any]:
+    """Best-effort JSON-friendly view of a :class:`LoopEvent`.
+
+    Real :class:`chimera.core.loop_events.LoopEvent` instances expose
+    ``type``, ``data``, ``turn``, and ``timestamp``. Tests sometimes
+    yield plain dicts or simple namespaces; we accept either.
+
+    The returned dict is JSON-serializable provided ``ev.data`` is.
+    """
+    raw_type = getattr(ev, "type", None)
+    if raw_type is None and isinstance(ev, dict):
+        raw_type = ev.get("type")
+    type_name: str
+    enum_value = getattr(raw_type, "value", None)
+    if enum_value is not None:
+        type_name = str(enum_value)
+    else:
+        type_name = str(raw_type) if raw_type is not None else "unknown"
+
+    data = getattr(ev, "data", None)
+    if data is None and isinstance(ev, dict):
+        data = ev.get("data")
+
+    turn = getattr(ev, "turn", None)
+    if turn is None and isinstance(ev, dict):
+        turn = ev.get("turn")
+
+    timestamp = getattr(ev, "timestamp", None)
+    if timestamp is None and isinstance(ev, dict):
+        timestamp = ev.get("timestamp")
+
+    return {
+        "message_id": message_id,
+        "type": type_name,
+        "data": data,
+        "turn": turn,
+        "timestamp": timestamp,
+    }
 
 
 @dataclass
@@ -420,19 +471,51 @@ class OtterServer:
         threading.Thread(target=_run, daemon=True).start()
         return message_id
 
+    def cancel_session(self, session_id: str) -> bool:
+        """Mark *session_id*'s cancellation token as cancelled.
+
+        Args:
+            session_id: Target session.
+
+        Returns:
+            ``True`` if the session existed and was signalled, ``False``
+            on miss. Idempotent: calling against an already-cancelled
+            session still returns ``True``.
+        """
+        state = self.get_session(session_id)
+        if state is None:
+            return False
+        state.cancel.cancel()
+        return True
+
     def _drive_agent(
         self, state: OtterSessionState, message_id: str, text: str
     ) -> None:
-        """Run the agent and translate its result into SSE events.
+        """Run the agent and translate its progress into SSE events.
 
-        The default path uses ``async_run``; tests with mocks can either
-        provide that method or pre-populate the events log directly via
-        :meth:`emit_event` to avoid asyncio entirely.
+        Preferred path: when the agent exposes ``async_run_events`` we
+        stream each :class:`~chimera.core.loop_events.LoopEvent` as its
+        own SSE frame, then emit a final terminal ``result`` frame for
+        back-compat. The per-step loop checks ``state.cancel`` between
+        yields so a ``POST /session/<id>/cancel`` stops fan-out promptly.
+
+        Fallback path: if the agent only exposes ``async_run`` (the
+        legacy mock interface used by older tests), we ``await`` it and
+        emit a single terminal ``result`` event — same behaviour as
+        before this change.
         """
         import asyncio
 
         agent = state.agent
         assert agent is not None  # checked by the caller
+
+        stream_factory = getattr(agent, "async_run_events", None)
+
+        if stream_factory is not None:
+            self._drive_agent_streaming(state, message_id, text, stream_factory)
+            return
+
+        # Legacy back-compat path — single terminal ``result`` event.
         result: Any = None
         try:
             result = asyncio.run(agent.async_run(text, env=None))
@@ -456,6 +539,94 @@ class OtterServer:
                 "steps": getattr(result, "steps", 0),
                 "cost": getattr(result, "cost", 0.0),
                 "success": getattr(result, "success", False),
+            },
+        )
+
+    def _drive_agent_streaming(
+        self,
+        state: OtterSessionState,
+        message_id: str,
+        text: str,
+        stream_factory: Callable[..., AsyncIterator[Any]],
+    ) -> None:
+        """Stream per-step :class:`LoopEvent`s through SSE.
+
+        Each event becomes one SSE frame via :meth:`emit_event` under the
+        SSE ``event:`` field ``"loop_event"`` (data carries the LoopEvent's
+        ``type``, ``data``, ``turn``, and ``timestamp``). A terminal
+        ``result`` frame is always emitted last so existing clients that
+        only watch for ``result`` keep working.
+
+        Cancellation: between yields we check ``state.cancel.is_cancelled``
+        and break out of the loop. The terminal ``result`` frame still
+        fires — clients see ``"cancelled": true`` on it.
+        """
+        import asyncio
+
+        steps = 0
+        cost = 0.0
+        last_text = ""
+        cancelled = False
+        success = True
+
+        async def _consume() -> None:
+            nonlocal steps, cost, last_text, cancelled
+            agen = stream_factory(text, env=None)
+            try:
+                async for ev in agen:
+                    if state.cancel.is_cancelled:
+                        cancelled = True
+                        # Try to release the underlying generator promptly.
+                        aclose = getattr(agen, "aclose", None)
+                        if aclose is not None:
+                            try:
+                                await aclose()
+                            except Exception:  # noqa: BLE001 - best-effort
+                                pass
+                        break
+                    payload = _loop_event_to_payload(ev, message_id)
+                    self.emit_event(state, "loop_event", payload)
+                    steps += 1
+                    # Best-effort tracking of free-form fields the agent
+                    # may attach to its events.
+                    inner = payload.get("data")
+                    if isinstance(inner, dict):
+                        if isinstance(inner.get("text"), str):
+                            last_text = inner["text"]
+                        if isinstance(inner.get("cost_usd"), (int, float)):
+                            cost = float(inner["cost_usd"])
+            finally:
+                aclose = getattr(agen, "aclose", None)
+                if aclose is not None:
+                    try:
+                        await aclose()
+                    except Exception:  # noqa: BLE001 - best-effort
+                        pass
+
+        try:
+            asyncio.run(_consume())
+        except Exception as exc:  # noqa: BLE001
+            success = False
+            self.emit_event(
+                state,
+                "error",
+                {
+                    "message_id": message_id,
+                    "error": str(exc),
+                    "exception": type(exc).__name__,
+                },
+            )
+
+        self.emit_event(
+            state,
+            "result",
+            {
+                "message_id": message_id,
+                "output": last_text,
+                "steps": steps,
+                "cost": cost,
+                "success": success and not cancelled,
+                "cancelled": cancelled,
             },
         )
 
@@ -555,6 +726,8 @@ class OtterServer:
                     parts = path.split("/")
                     if len(parts) == 4 and parts[3] == "message":
                         return self._handle_session_message(parts[2])
+                    if len(parts) == 4 and parts[3] == "cancel":
+                        return self._handle_session_cancel(parts[2])
                 self._send_json(404, {"error": "not_found", "path": path})
 
             # ------- POST /session --------------------------------------
@@ -603,6 +776,18 @@ class OtterServer:
                     return
                 message_id = outer.submit_message(state, text)
                 self._send_json(202, {"message_id": message_id})
+
+            # ------- POST /session/<id>/cancel --------------------------
+            def _handle_session_cancel(self, session_id: str) -> None:
+                # Drain (and discard) any body so urllib clients don't
+                # sit blocked waiting for it to be consumed.
+                length = int(self.headers.get("Content-Length", "0") or "0")
+                if length > 0:
+                    self.rfile.read(length)
+                if not outer.cancel_session(session_id):
+                    self._send_json(404, {"error": "session_not_found"})
+                    return
+                self._send_status(204)
 
             # ------- GET /session/<id>/events ---------------------------
             def _handle_session_events(self, session_id: str) -> None:
