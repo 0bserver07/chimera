@@ -67,6 +67,44 @@ export default defineConfig({
 					collapsed: true,
 					autogenerate: { directory: 'reference' },
 				},
+				{
+					label: 'Otter',
+					collapsed: true,
+					items: [
+						{
+							label: 'Core',
+							items: [
+								{ label: 'Quickstart', slug: 'otter/quickstart' },
+								{ label: 'Providers', slug: 'otter/providers' },
+								{ label: 'Models', slug: 'otter/models' },
+								{ label: 'Sessions', slug: 'otter/sessions' },
+								{ label: 'Share', slug: 'otter/share' },
+								{ label: 'Server', slug: 'otter/server' },
+							],
+						},
+						{
+							label: 'Per-Area',
+							items: [
+								{ label: 'Parity Matrix', slug: 'otter/parity-matrix' },
+								{ label: 'Agents', slug: 'otter/agents' },
+								{ label: 'Commands', slug: 'otter/commands' },
+								{ label: 'Rules', slug: 'otter/rules' },
+								{ label: 'Slash Commands', slug: 'otter/slash-commands' },
+								{ label: 'MCP', slug: 'otter/mcp' },
+								{ label: 'LSP', slug: 'otter/lsp' },
+								{ label: 'ACP', slug: 'otter/acp' },
+								{ label: 'Plugins', slug: 'otter/plugins' },
+							],
+						},
+						{
+							label: 'Policy',
+							items: [
+								{ label: 'Security and Trademarks', slug: 'otter/security-and-trademarks' },
+								{ label: 'Trademark Policy', slug: 'otter/trademark-policy' },
+							],
+						},
+					],
+				},
 			],
 		}),
 	],
