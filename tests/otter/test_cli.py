@@ -192,11 +192,20 @@ def test_run_dispatches_serve_subcommand(monkeypatch) -> None:
 
 
 def test_run_dispatches_sessions_subcommand(capsys) -> None:
+    """``otter sessions list`` is wired to O3's handler.
+
+    The handler returns 0 on an empty result set (no eventlog dirs in
+    the test environment) and prints a friendly "no sessions found"
+    line to stdout. The wave-1 scaffold returned 2 with stderr text;
+    this test now tracks the real-handler contract.
+    """
     rc = otter_cli.run(_ns(subcommand="sessions", sub_action="list"))
-    assert rc == 2
+    assert rc == 0
     captured = capsys.readouterr()
-    assert "otter sessions" in captured.err
-    assert "list" in captured.err
+    # Either an empty-set message or a table header — both are acceptable
+    # signals that the real handler ran.
+    output = captured.out + captured.err
+    assert output  # something was printed
 
 
 def test_run_dispatches_share_subcommand(capsys) -> None:

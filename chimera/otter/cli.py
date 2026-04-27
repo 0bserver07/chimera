@@ -875,21 +875,25 @@ class _EmptyResult:
 
 
 def _build_provider(model: str) -> Any:
-    """Construct a Provider for *model* via the chimera factory.
+    """Construct a Provider for *model* via the otter resolver.
 
-    Lazy import of :func:`chimera.providers.factory.create_provider` keeps
-    SDK imports out of the ``--help`` / ``--version`` path.
+    Delegates to :func:`chimera.otter.providers.build_provider` so the
+    one-shot path, REPL, HTTP serve, and ACP serve all share one
+    routing logic (Ollama-tag detection, OpenRouter routing, factory
+    fallback). Lazy-imported to keep SDK imports out of the
+    ``--help`` / ``--version`` path.
 
     Args:
-        model: Model identifier (e.g. ``claude-sonnet-4-6`` / ``gpt-4o`` /
-            ``gemini-2.0-flash``). Provider type is auto-detected.
+        model: Model identifier (e.g. ``claude-sonnet-4-6``,
+            ``glm-5.1:cloud``, ``deepseek-v4-pro:cloud``,
+            ``anthropic/claude-sonnet-4`` for OpenRouter).
 
     Returns:
         A live :class:`~chimera.providers.base.Provider` instance.
     """
-    from chimera.providers.factory import create_provider
+    from chimera.otter.providers import build_provider as _bp
 
-    return create_provider(model=model)
+    return _bp(argparse.Namespace(model=model))
 
 
 # ---------------------------------------------------------------------------
@@ -1347,19 +1351,37 @@ def _dispatch_serve_acp(args: argparse.Namespace) -> int:
 
 
 def _dispatch_sessions(args: argparse.Namespace) -> int:
-    """Stub for ``chimera otter sessions [list|show <id>]``.
+    """Wire ``chimera otter sessions [list|show <id>]`` to O3's handler.
 
-    Agent O3 owns sessions; the scaffold acknowledges the action so the
-    CLI surface stays predictable.
+    The wave-1 scaffold parser puts the sessions sub-action under
+    ``args.sub_action`` and the optional id under ``args.sub_target``.
+    O3's :func:`chimera.otter.sessions.dispatch_sessions` expects
+    ``args.sessions_command="sessions"`` plus per-action filter dests
+    (``sessions_since``, ``sessions_limit``, ``sessions_model``,
+    ``sessions_json``, ``sessions_full``). Read raw attributes off the
+    namespace, fall back to sensible defaults, and forward.
+
+    Falls back to the old scaffold message if the sessions module fails
+    to import for any reason.
     """
-    action = getattr(args, "sub_action", None)
-    target = getattr(args, "sub_target", None)
-    print(
-        f"otter sessions: action={action!r} target={target!r} "
-        "(scaffold; see research/otter/SPEC.md, agent O3).",
-        file=sys.stderr,
-    )
-    return 2
+    try:
+        from chimera.otter.sessions import dispatch_sessions
+    except Exception as exc:  # noqa: BLE001
+        print(
+            f"otter sessions: handler unavailable ({exc})", file=sys.stderr,
+        )
+        return 2
+
+    args.sessions_command = "sessions"
+    args.sessions_action = getattr(args, "sub_action", None) or "list"
+    args.sessions_id = getattr(args, "sub_target", None)
+    args.sessions_since = getattr(args, "sessions_since", None)
+    args.sessions_model = getattr(args, "sessions_model", None)
+    args.sessions_limit = getattr(args, "sessions_limit", 50)
+    args.sessions_json = getattr(args, "sessions_json", False)
+    args.sessions_full = getattr(args, "sessions_full", False)
+    rc = dispatch_sessions(args)
+    return rc if rc is not None else 0
 
 
 def _dispatch_share(args: argparse.Namespace) -> int:

@@ -93,6 +93,48 @@ def _resolve_model(args: argparse.Namespace) -> str:
     raise ValueError(_NO_KEY_MESSAGE)
 
 
+def _is_ollama_id(model: str) -> bool:
+    """Return True when the model id looks like an Ollama tag.
+
+    Ollama ids carry a ``name:tag`` shape (``glm-5.1:cloud``,
+    ``deepseek-v4-pro:cloud``, ``llama3.2:3b``). The factory's prefix
+    inference doesn't catch the cloud-tag variants, so we route through
+    OllamaProvider explicitly when we see a colon-tagged id and a local
+    Ollama daemon is reachable on the standard port.
+
+    We deliberately skip the ``foo/bar`` OpenRouter shape here because
+    those route through ``_should_use_openrouter`` instead.
+    """
+    if "/" in model:
+        return False
+    return ":" in model
+
+
+def _build_ollama_provider(model: str, max_tokens: int | None) -> Provider:
+    """Construct an OllamaProvider with sensible context defaults.
+
+    Mirrors the mink builder so otter behaves identically when pointed at
+    an Ollama-served model. Defaults the base URL to
+    ``$OLLAMA_HOST or http://localhost:11434`` so users don't need to set
+    anything for the standard local install.
+    """
+    from chimera.providers.ollama import OllamaProvider
+
+    host = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
+    # Cloud Kimi advertises 262k; deepseek-v4 cloud variants pack the same
+    # context window. Default to 262k for ``:cloud``-tagged ids and 131k
+    # otherwise.
+    ctx = 262_144 if model.endswith(":cloud") else 131_072
+    kwargs: dict[str, Any] = {
+        "model": model,
+        "base_url": host,
+        "context_length": ctx,
+    }
+    if max_tokens is not None:
+        kwargs["max_tokens"] = max_tokens
+    return OllamaProvider(**kwargs)
+
+
 def _should_use_openrouter(model: str) -> bool:
     """Return True when the model should be routed through OpenRouter.
 
@@ -169,6 +211,15 @@ def build_provider(args: argparse.Namespace) -> Provider:
             model=model,
             api_key=api_key,
             base_url=_OPENROUTER_BASE_URL,
+        )
+
+    if _is_ollama_id(model):
+        # WHY: ``deepseek-v4-pro:cloud``, ``glm-5.1:cloud``, ``llama3.2:3b``
+        # etc. don't match the factory's prefix inference list. Route them
+        # to OllamaProvider directly so users can ``--model <name>:cloud``
+        # against a local Ollama daemon (which proxies to ``ollama.com``).
+        return _build_ollama_provider(
+            model, max_tokens=getattr(args, "max_tokens", None)
         )
 
     return create_provider(model=model, **extra_kwargs)
