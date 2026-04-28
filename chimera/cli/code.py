@@ -407,8 +407,20 @@ _COMMAND_NAMES = sorted(f"/{name}" for name in _COMMANDS)
 
 
 def _complete_command(text: str, state: int) -> str | None:
-    """Readline completer for slash commands."""
-    matches = [c for c in _COMMAND_NAMES if c.startswith(text)]
+    """Readline completer for slash commands.
+
+    Pulls the live name list via :func:`_command_names` so commands
+    registered after readline was set up — notably the user-defined
+    custom commands loaded by :mod:`chimera.otter.repl` from
+    ``.opencode/command/*.md`` — surface in tab completion. Falling
+    back to the static :data:`_COMMAND_NAMES` keeps this safe if the
+    shared registry import ever fails.
+    """
+    try:
+        candidates = _command_names()
+    except Exception:  # noqa: BLE001 -- never crash the readline thread
+        candidates = _COMMAND_NAMES
+    matches = [c for c in candidates if c.startswith(text)]
     if state < len(matches):
         return matches[state]
     return None

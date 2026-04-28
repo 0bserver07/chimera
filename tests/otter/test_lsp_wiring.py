@@ -356,7 +356,12 @@ def test_dispatch_serve_http_factory_attaches_lsp(
     captured_factory: dict[str, Any] = {}
 
     def _fake_serve_http(
-        agent_factory: Any, *, host: str, port: int, auth_token: Any,
+        agent_factory: Any,
+        *,
+        host: str,
+        port: int,
+        auth_token: Any,
+        **_kwargs: Any,
     ) -> int:
         captured_factory["fn"] = agent_factory
         return 0
@@ -391,7 +396,12 @@ def test_dispatch_serve_http_factory_honors_no_lsp(
     captured_factory: dict[str, Any] = {}
 
     def _fake_serve_http(
-        agent_factory: Any, *, host: str, port: int, auth_token: Any,
+        agent_factory: Any,
+        *,
+        host: str,
+        port: int,
+        auth_token: Any,
+        **_kwargs: Any,
     ) -> int:
         captured_factory["fn"] = agent_factory
         return 0

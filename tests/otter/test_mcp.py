@@ -353,6 +353,119 @@ def test_to_client_spec_http() -> None:
 
 
 # ---------------------------------------------------------------------------
+# OAuth round-trip (dataclass field + to_client_spec passthrough)
+# ---------------------------------------------------------------------------
+
+
+def test_oauth_block_round_trips_through_config_and_spec(
+    fake_home: Path, project: Path
+) -> None:
+    """An ``oauth`` block in ``~/.opencode/config.json`` must survive the
+    full pipeline: JSON -> ``MCPServerConfig.oauth`` -> ``to_client_spec``."""
+    oauth_block = {
+        "client_id": "cid-123",
+        "auth_server_metadata_url": "https://issuer.example/.well-known/oauth",
+        "redirect_uri": "http://127.0.0.1:7777/callback",
+        "scopes": ["read", "write"],
+    }
+    _write_user_config(
+        fake_home,
+        {
+            "mcp": {
+                "secured": {
+                    "type": "remote",
+                    "url": "https://example.com/mcp",
+                    "oauth": oauth_block,
+                },
+            },
+        },
+    )
+    cfgs = load_mcp_servers(project)
+    assert len(cfgs) == 1
+    cfg = cfgs[0]
+    assert cfg.transport == "http"
+    assert cfg.oauth == oauth_block
+    # Round-trip into the dict shape MCPClient.add_from_spec consumes.
+    spec = cfg.to_client_spec()
+    assert spec == {
+        "transport": "http",
+        "url": "https://example.com/mcp",
+        "oauth": oauth_block,
+    }
+
+
+def test_oauth_block_with_headers_in_spec() -> None:
+    """Both ``headers`` and ``oauth`` should appear in the spec when set."""
+    cfg = MCPServerConfig(
+        name="secured",
+        transport="http",
+        url="https://example.com/mcp",
+        headers={"X-Trace": "1"},
+        oauth={
+            "client_id": "cid-456",
+            "token_endpoint": "https://issuer.example/token",
+            "authorization_endpoint": "https://issuer.example/authorize",
+        },
+    )
+    spec = cfg.to_client_spec()
+    assert spec == {
+        "transport": "http",
+        "url": "https://example.com/mcp",
+        "headers": {"X-Trace": "1"},
+        "oauth": {
+            "client_id": "cid-456",
+            "token_endpoint": "https://issuer.example/token",
+            "authorization_endpoint": "https://issuer.example/authorize",
+        },
+    }
+
+
+def test_oauth_omitted_when_absent() -> None:
+    """Default ``oauth=None`` must NOT add an ``oauth`` key to the spec."""
+    cfg = MCPServerConfig(
+        name="plain",
+        transport="http",
+        url="https://x/mcp",
+    )
+    spec = cfg.to_client_spec()
+    assert "oauth" not in spec
+    assert spec == {"transport": "http", "url": "https://x/mcp"}
+
+
+def test_oauth_ignored_for_stdio_spec() -> None:
+    """``oauth`` is meaningful only for http; stdio specs must drop it."""
+    cfg = MCPServerConfig(
+        name="fs",
+        transport="stdio",
+        command=["fs-server"],
+        oauth={"client_id": "ignored"},
+    )
+    spec = cfg.to_client_spec()
+    assert "oauth" not in spec
+
+
+def test_oauth_non_dict_in_config_is_ignored(
+    fake_home: Path, project: Path
+) -> None:
+    """A malformed ``oauth`` value (not a dict) must be dropped, not raise."""
+    _write_user_config(
+        fake_home,
+        {
+            "mcp": {
+                "r": {
+                    "type": "remote",
+                    "url": "https://x/mcp",
+                    "oauth": "not-a-dict",
+                },
+            },
+        },
+    )
+    cfgs = load_mcp_servers(project)
+    assert len(cfgs) == 1
+    assert cfgs[0].oauth is None
+
+
+# ---------------------------------------------------------------------------
 # explicit ``home=`` test seam
 # ---------------------------------------------------------------------------
 

@@ -272,6 +272,7 @@ def build_otter_agent(args: argparse.Namespace, *, provider: Any | None = None) 
         _attach_lsp_tools,
         _attach_mcp_tools,
         _attach_plugin_extensions,
+        _build_plugin_hook_emitter,
         _compose_prompt,
     )
 
@@ -300,9 +301,11 @@ def build_otter_agent(args: argparse.Namespace, *, provider: Any | None = None) 
     # on by default; ``--no-mcp`` opts out.
     if not bool(getattr(args, "no_mcp", False)):
         tools = _attach_mcp_tools(tools, project_root=Path(cwd))
-    # WHY (W2): plugin contributions are wired at the same call site as
-    # MCP/LSP. Hooks accumulate locally — they will be wired to the
-    # LoopConfig hook_emitter once W3 closes the matcher conversion.
+    # WHY (W2/W3 — F3): plugin contributions are wired at the same call
+    # site as MCP/LSP. Hooks accumulate locally and then convert into a
+    # :class:`HookEmitter` wired onto ``config.hook_emitter`` so
+    # PreToolUse hooks fire through :mod:`chimera.core.tool_executor`
+    # the same way mink's settings hooks do.
     plugin_hooks: list[Any] = []
     plugin_mcp_servers: list[Any] = []
     _attach_plugin_extensions(
@@ -313,6 +316,9 @@ def build_otter_agent(args: argparse.Namespace, *, provider: Any | None = None) 
         mcp_servers=plugin_mcp_servers,
         enabled=not bool(getattr(args, "no_plugins", False)),
     )
+    plugin_emitter = _build_plugin_hook_emitter(plugin_hooks)
+    if plugin_emitter is not None and config.hook_emitter is None:
+        config.hook_emitter = plugin_emitter
     return Agent(
         provider=resolved_provider,
         tools=tools,

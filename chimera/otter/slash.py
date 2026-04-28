@@ -45,10 +45,13 @@ Trademark hygiene: this module deliberately uses neutral phrasing
 """
 from __future__ import annotations
 
+import copy
 import shlex
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable
 
 if TYPE_CHECKING:
+    from chimera.checkpoints import CheckpointInfo, CheckpointManager
     from chimera.otter.commands import CustomCommand
 
 __all__ = [
@@ -58,8 +61,15 @@ __all__ = [
     "PrintFn",
     "SlashHandler",
     "build_custom_command_handler",
+    "clear_undo_state",
+    "cmd_help",
+    "get_command_origin",
+    "get_undo_state",
+    "mark_origin",
     "register_custom_commands",
     "register_otter_slash",
+    "register_plugin_commands",
+    "snapshot_after_turn",
 ]
 
 
@@ -181,19 +191,251 @@ def cmd_new(session: Any, env: Any, args: str, out: PrintFn) -> None:
     _cmd_clear(session, env, args, out)
 
 
-def cmd_undo(_session: Any, _env: Any, _args: str, out: PrintFn) -> None:
-    """Undo the last assistant turn (placeholder; owner: O2/O3).
+# ---------------------------------------------------------------------------
+# /undo and /redo: per-session checkpoint stacks
+# ---------------------------------------------------------------------------
+#
+# Each REPL session owns an :class:`_UndoState` keyed by ``id(session)``. After
+# every assistant turn the REPL calls :func:`snapshot_after_turn`, which:
+#
+# * Lazily builds a :class:`chimera.checkpoints.CheckpointManager` over the
+#   session's environment.
+# * Calls ``manager.create()`` to snap the workspace and append an entry to
+#   the undo stack.
+# * Captures a deep copy of the session's :class:`Context` messages so the
+#   conversation can be rolled back alongside the filesystem.
+# * Drops any pending redo entries (a fresh turn invalidates the redo path,
+#   matching the upstream agent and most REPL-undo semantics).
+#
+# ``/undo`` pops the top of the undo stack, pushes it to the redo stack, then
+# restores the resulting top-of-undo (or the initial state if the stack is
+# empty). ``/redo`` is the inverse: pop redo, restore, push back onto undo.
+#
+# When the session has no environment (eg. tiny test fakes) we still drive
+# the conversation-context snapshot so undo/redo work for plain message
+# rewinds, even without filesystem checkpointing.
 
-    The shared REPL doesn't currently track per-turn snapshots, so the
-    undo verb degrades to a friendly notice. Once the session-tree work
-    grows a turn-level rewind, we'll route through it here.
+
+@dataclass
+class _UndoState:
+    """Per-session undo/redo state.
+
+    Attributes:
+        manager: Lazily constructed :class:`CheckpointManager` bound to the
+            session's environment. ``None`` until the first snapshot lands or
+            the session has no environment at all.
+        undo_stack: Checkpoints captured at end-of-turn, oldest first. The
+            top of the stack represents the current state.
+        redo_stack: Checkpoints popped by ``/undo`` and awaiting ``/redo``.
+        message_snapshots: Maps a checkpoint id to the deep-copied messages
+            present on the session at the time the snap was taken. Used so
+            ``/undo`` can restore the conversation context, not just the
+            filesystem.
+        initial_messages: Deep copy of the session's messages *before* any
+            snapshots were taken — restored when ``/undo`` empties the
+            undo stack.
     """
-    out("not yet wired: /undo will be available once turn-level rewind lands (owner: O2)")
+
+    manager: CheckpointManager | None = None
+    undo_stack: list[CheckpointInfo] = field(default_factory=list)
+    redo_stack: list[CheckpointInfo] = field(default_factory=list)
+    message_snapshots: dict[str, list[Any]] = field(default_factory=dict)
+    initial_messages: list[Any] | None = None
 
 
-def cmd_redo(_session: Any, _env: Any, _args: str, out: PrintFn) -> None:
-    """Redo a turn previously rewound by ``/undo`` (placeholder)."""
-    out("not yet wired: /redo will be available once turn-level rewind lands (owner: O2)")
+# Module-level registry. Keyed by ``id(session)`` so different sessions can
+# coexist without leaking state. Cleared via :func:`clear_undo_state` when a
+# session is discarded (e.g. ``/new``).
+_UNDO_STATES: dict[int, _UndoState] = {}
+
+
+def get_undo_state(session: Any) -> _UndoState:
+    """Return the :class:`_UndoState` for *session*, creating one if needed.
+
+    Exposed for tests and the REPL — the slash handlers use it internally to
+    look up or initialise the per-session stack.
+    """
+    key = id(session)
+    state = _UNDO_STATES.get(key)
+    if state is None:
+        state = _UndoState()
+        _UNDO_STATES[key] = state
+    return state
+
+
+def clear_undo_state(session: Any) -> None:
+    """Forget the undo/redo state for *session*.
+
+    Called by ``/new`` (and by the REPL on session teardown) so a fresh
+    session doesn't inherit a stale stack from its predecessor.
+    """
+    _UNDO_STATES.pop(id(session), None)
+
+
+def _snapshot_messages(session: Any) -> list[Any]:
+    """Deep-copy the current session messages, or return ``[]`` if absent."""
+    ctx = getattr(session, "context", None)
+    msgs = getattr(ctx, "messages", None) if ctx is not None else None
+    if msgs is None:
+        msgs = getattr(session, "messages", None)
+    if msgs is None:
+        return []
+    try:
+        return copy.deepcopy(list(msgs))
+    except Exception:  # noqa: BLE001 -- best-effort; never crash the REPL
+        return list(msgs)
+
+
+def _restore_messages(session: Any, messages: list[Any]) -> None:
+    """Replace the session's conversation context with *messages*.
+
+    Walks the same surfaces as :func:`_snapshot_messages` so duck-typed
+    fakes round-trip cleanly. If neither ``context.messages`` nor
+    ``session.messages`` is writable we silently skip — the env-level
+    restore still ran.
+    """
+    ctx = getattr(session, "context", None)
+    if ctx is not None:
+        ctx_msgs = getattr(ctx, "messages", None)
+        if isinstance(ctx_msgs, list):
+            ctx_msgs.clear()
+            ctx_msgs.extend(copy.deepcopy(messages))
+            return
+    session_msgs = getattr(session, "messages", None)
+    if isinstance(session_msgs, list):
+        session_msgs.clear()
+        session_msgs.extend(copy.deepcopy(messages))
+
+
+def _ensure_manager(state: _UndoState, env: Any) -> CheckpointManager | None:
+    """Lazily build a :class:`CheckpointManager` for *env*, if one exists.
+
+    Returns ``None`` when *env* is missing or doesn't expose ``checkpoint()``,
+    so the caller can fall back to message-only snapshots without crashing.
+    """
+    if state.manager is not None:
+        return state.manager
+    if env is None or not hasattr(env, "checkpoint"):
+        return None
+    from chimera.checkpoints import CheckpointManager
+
+    state.manager = CheckpointManager(env)
+    return state.manager
+
+
+def snapshot_after_turn(session: Any, env: Any) -> CheckpointInfo | None:
+    """Snap session state after an assistant turn.
+
+    The REPL calls this once per completed turn (see ``chimera.otter.repl``).
+    A new turn invalidates any pending redo entries — that mirrors the
+    upstream agent's behaviour and avoids the well-known "redo to a parallel
+    universe" footgun.
+
+    Args:
+        session: The active session whose state is being snapped.
+        env: The environment paired with *session* (may be ``None`` for tiny
+            REPL fakes that don't carry a filesystem).
+
+    Returns:
+        The :class:`CheckpointInfo` just created, or ``None`` if the session
+        has no environment to checkpoint (a message-only snapshot still
+        landed in that case).
+    """
+    state = get_undo_state(session)
+    if state.initial_messages is None:
+        # Capture the pre-turn-1 baseline exactly once, so /undo from the
+        # bottom of the stack can return us to a clean session.
+        state.initial_messages = _snapshot_messages(session)
+
+    manager = _ensure_manager(state, env)
+    msgs = _snapshot_messages(session)
+
+    info: CheckpointInfo | None = None
+    if manager is not None:
+        try:
+            info = manager.create(description="otter turn snapshot")
+        except Exception:  # noqa: BLE001 -- env may refuse mid-test
+            info = None
+
+    if info is not None:
+        state.message_snapshots[info.id] = msgs
+        state.undo_stack.append(info)
+    else:
+        # Synthesise a sentinel so message-only undo still has a stack to
+        # walk. The id is unique-per-snapshot; the manager stays ``None``.
+        from chimera.checkpoints import CheckpointInfo as _CI
+
+        sentinel = _CI(
+            id=f"otter-msg-{len(state.message_snapshots) + 1}",
+            name=f"otter-msg-{len(state.message_snapshots) + 1}",
+            timestamp=0.0,
+            description="otter turn snapshot (messages only)",
+        )
+        state.message_snapshots[sentinel.id] = msgs
+        state.undo_stack.append(sentinel)
+
+    # Any new turn invalidates the redo path.
+    state.redo_stack.clear()
+    return info
+
+
+def cmd_undo(session: Any, env: Any, _args: str, out: PrintFn) -> None:
+    """Roll the session back one turn.
+
+    Pops the top of the undo stack, restores the env to the next-most-recent
+    checkpoint (or the initial state if the stack is empty), and replays the
+    matching message snapshot onto :attr:`session.context`.
+    """
+    state = get_undo_state(session)
+    if not state.undo_stack:
+        out("/undo: nothing to undo")
+        return
+
+    popped = state.undo_stack.pop()
+    state.redo_stack.append(popped)
+
+    # Determine the target checkpoint to restore: the new top-of-stack, or
+    # the pre-turn-1 baseline if the stack is now empty.
+    if state.undo_stack:
+        target = state.undo_stack[-1]
+        target_messages = state.message_snapshots.get(target.id, [])
+    else:
+        target = None
+        target_messages = state.initial_messages or []
+
+    if target is not None and state.manager is not None:
+        try:
+            state.manager.restore_by_id(target.id)
+        except (KeyError, Exception):  # noqa: BLE001 -- never crash REPL
+            pass
+
+    _restore_messages(session, target_messages)
+    out(f"/undo: rewound 1 turn ({len(state.undo_stack)} remaining)")
+
+
+def cmd_redo(session: Any, env: Any, _args: str, out: PrintFn) -> None:
+    """Re-apply a turn previously rewound by :func:`cmd_undo`.
+
+    Pops the top of the redo stack, restores the env + messages, and pushes
+    the entry back onto the undo stack so it can be undone again.
+    """
+    state = get_undo_state(session)
+    if not state.redo_stack:
+        out("/redo: nothing to redo")
+        return
+
+    target = state.redo_stack.pop()
+    state.undo_stack.append(target)
+
+    if state.manager is not None:
+        try:
+            state.manager.restore_by_id(target.id)
+        except (KeyError, Exception):  # noqa: BLE001
+            pass
+
+    target_messages = state.message_snapshots.get(target.id, [])
+    _restore_messages(session, target_messages)
+    out(f"/redo: replayed 1 turn ({len(state.redo_stack)} remaining)")
 
 
 def cmd_edit(_session: Any, _env: Any, _args: str, out: PrintFn) -> None:
@@ -265,6 +507,162 @@ def cmd_quit(session: Any, env: Any, args: str, out: PrintFn) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Command origin tracking + grouped /help
+# ---------------------------------------------------------------------------
+#
+# Wave-3 (F8) split the otter ``/help`` output into "Built-in", "Custom", and
+# "Plugin" sections so users can tell at a glance which commands ship with
+# the binary versus which are sourced from ``.opencode/command/*.md`` or
+# ``.opencode/plugin/<name>/command/*.md``. To do that we keep a per-command
+# origin map alongside the registry and replace the shared ``cmd_help`` for
+# the otter palette only.
+
+# Origin tags used by :func:`mark_origin` / :func:`cmd_help`. Kept as plain
+# strings (not an enum) so plugins / tests can introduce new tags without
+# touching this module — unrecognised tags simply land in their own section.
+ORIGIN_BUILTIN = "builtin"
+ORIGIN_CUSTOM = "custom"
+ORIGIN_PLUGIN = "plugin"
+
+# Section labels (in render order). When a tag is present in the origin map
+# but missing from this list (e.g. an exotic plugin tag), it is rendered last
+# under a fallback "Other commands" heading so it remains discoverable.
+_ORIGIN_SECTIONS: list[tuple[str, str]] = [
+    (ORIGIN_BUILTIN, "Built-in commands"),
+    (ORIGIN_CUSTOM, "Custom commands"),
+    (ORIGIN_PLUGIN, "Plugin commands"),
+]
+
+# Per-command origin tag. Keyed by slash-command name (no leading slash).
+# Mutated by :func:`mark_origin`, :func:`register_otter_slash`,
+# :func:`register_custom_commands`, and :func:`register_plugin_commands`.
+_COMMAND_ORIGINS: dict[str, str] = {}
+
+# Help-text cache populated alongside the origin map. We can't always read
+# back the help text from whichever REPL state the caller installed onto
+# (a dict-style fake exposes ``commands`` but no descriptions), so we cache
+# it here at registration time. ``cmd_help`` consults this map before
+# falling through to :data:`OTTER_SLASH_HELP` and the shared registry.
+_COMMAND_HELP: dict[str, str] = {}
+
+
+def mark_origin(name: str, origin: str, help_text: str | None = None) -> None:
+    """Tag a slash-command name with its origin (and optional help text).
+
+    Args:
+        name: Command name without leading slash (matches the registry key).
+        origin: Origin tag — typically one of :data:`ORIGIN_BUILTIN`,
+            :data:`ORIGIN_CUSTOM`, or :data:`ORIGIN_PLUGIN`. Other values
+            are accepted and rendered under a generic "Other commands"
+            section by :func:`cmd_help`.
+        help_text: Optional one-line description. When provided, cached
+            alongside the origin so :func:`cmd_help` can render it even
+            against REPL states that don't expose the help text back to
+            us (e.g. a plain ``commands`` dict fake).
+
+    Last-write-wins so re-registering a name (e.g. a custom command
+    overriding a built-in) updates both the section it appears under
+    and any cached help text.
+    """
+    _COMMAND_ORIGINS[name] = origin
+    if help_text is not None:
+        _COMMAND_HELP[name] = help_text
+
+
+def get_command_origin(name: str) -> str | None:
+    """Return the origin tag for ``name``, or ``None`` if unknown."""
+    return _COMMAND_ORIGINS.get(name)
+
+
+def _list_help_entries(origin: str) -> list[tuple[str, str]]:
+    """Return ``(name, help_text)`` pairs registered under ``origin``, sorted.
+
+    Help-text resolution walks four sources in priority order:
+
+    1. The :data:`_COMMAND_HELP` cache populated at registration time
+       (covers customs + plugins where the source description is the
+       only authoritative copy).
+    2. The shared :mod:`chimera.cli.slash_commands` registry (catches
+       built-ins installed against the live registry).
+    3. :data:`OTTER_SLASH_HELP` (the canonical built-in fallback).
+    4. Empty string (last resort).
+    """
+    try:
+        from chimera.cli import slash_commands as _shared
+        live: dict[str, str] = {
+            name: ht for name, ht in _shared.list_commands()
+        }
+    except Exception:  # noqa: BLE001 -- shared registry optional in tests
+        live = {}
+
+    rows: list[tuple[str, str]] = []
+    for name, tag in _COMMAND_ORIGINS.items():
+        if tag != origin:
+            continue
+        help_text = (
+            _COMMAND_HELP.get(name)
+            or live.get(name)
+            or OTTER_SLASH_HELP.get(name, "")
+        )
+        rows.append((name, help_text))
+    rows.sort(key=lambda row: row[0])
+    return rows
+
+
+def cmd_help(_session: Any, _env: Any, _args: str, out: PrintFn) -> None:
+    """Render the otter ``/help`` output, grouped by command origin.
+
+    Built-in commands appear first, then user-defined customs from
+    ``.opencode/command/*.md`` (W2-eligible), then plugin-contributed
+    commands from ``.opencode/plugin/<name>/command/*.md``. Within each
+    section commands are sorted alphabetically. Sections with no
+    commands are skipped so the output stays compact for users who
+    haven't authored any extensions yet.
+
+    Falls back gracefully when the origin map is empty (e.g. a bare
+    test fixture that constructs the palette without calling
+    :func:`register_otter_slash`): in that case we emit the legacy flat
+    listing via :func:`chimera.cli.slash_commands.cmd_help` so the
+    behaviour matches ``chimera code``.
+    """
+    if not _COMMAND_ORIGINS:
+        # No origins were ever registered — fall through to the shared
+        # flat listing so the user still sees something sensible.
+        _cmd_help(_session, _env, _args, out)
+        return
+
+    out("Available commands:")
+
+    rendered_origins: set[str] = set()
+    for tag, label in _ORIGIN_SECTIONS:
+        rows = _list_help_entries(tag)
+        if not rows:
+            continue
+        rendered_origins.add(tag)
+        out("")
+        out(f"{label}:")
+        for name, help_text in rows:
+            if help_text:
+                out(f"  /{name:<14} {help_text}")
+            else:
+                out(f"  /{name}")
+
+    # Catch-all for non-standard tags so they remain visible.
+    leftover_tags = sorted(set(_COMMAND_ORIGINS.values()) - rendered_origins)
+    leftover_rows: list[tuple[str, str]] = []
+    for tag in leftover_tags:
+        leftover_rows.extend(_list_help_entries(tag))
+    if leftover_rows:
+        out("")
+        out("Other commands:")
+        for name, help_text in sorted(leftover_rows, key=lambda row: row[0]):
+            if help_text:
+                out(f"  /{name:<14} {help_text}")
+            else:
+                out(f"  /{name}")
+
+
+# ---------------------------------------------------------------------------
 # The palette
 # ---------------------------------------------------------------------------
 #
@@ -293,7 +691,7 @@ OTTER_SLASH_COMMANDS: dict[str, SlashHandler] = {
     "mcp": _cmd_mcp,
     "mcps": cmd_mcps,
     # System
-    "help": _cmd_help,
+    "help": cmd_help,
     "status": _cmd_status,
     "doctor": _cmd_doctor,
     "config": _cmd_config,
@@ -320,8 +718,8 @@ OTTER_SLASH_HELP: dict[str, str] = {
     "new": "start a new session (clears context)",
     "clear": "clear the current context",
     "share": "share the current session",
-    "undo": "undo the last turn (coming soon)",
-    "redo": "redo a previously undone turn (coming soon)",
+    "undo": "undo the last turn",
+    "redo": "redo a previously undone turn",
     # Agent
     "agent": "list agent presets",
     "agents": "list agent presets",
@@ -435,6 +833,7 @@ def register_otter_slash(
     for name, handler in OTTER_SLASH_COMMANDS.items():
         help_text = OTTER_SLASH_HELP.get(name, "")
         if _install_one(repl_state, name, handler, help_text):
+            mark_origin(name, ORIGIN_BUILTIN, help_text)
             installed += 1
 
     if custom_commands:
@@ -569,6 +968,12 @@ def register_custom_commands(
     first, then customs, so user files override built-ins on conflict
     (matching the upstream's last-wins ladder).
 
+    After installation, the readline tab-completion view is refreshed
+    via :func:`_refresh_completion` so the new ``/<custom>`` names
+    appear in ``<TAB>`` cycling on the very next prompt — without this,
+    the REPL completer would show a stale snapshot from before the
+    customs landed (W4 follow-up, F7).
+
     Args:
         repl_state: Target slash registry / REPL state.
         commands: Custom commands to install. Empty list is a no-op.
@@ -583,5 +988,114 @@ def register_custom_commands(
         handler = build_custom_command_handler(cmd)
         help_text = cmd.description or f"user command: /{cmd.name}"
         if _install_one(repl_state, cmd.name, handler, help_text):
+            mark_origin(cmd.name, ORIGIN_CUSTOM, help_text)
             installed += 1
+    if installed:
+        _refresh_completion(repl_state)
     return installed
+
+
+def register_plugin_commands(
+    repl_state: Any,
+    commands: list[Any],
+    *,
+    handler_factory: Callable[[Any], SlashHandler] | None = None,
+) -> int:
+    """Install plugin-contributed slash commands onto a slash registry.
+
+    W2 ships plugin slash commands as
+    :class:`chimera.otter.plugins.OtterCommand` records that already
+    carry a ``name``, ``description``, and (after
+    :func:`chimera.otter.cli._make_plugin_command_handler`) a
+    materialized handler. This helper is the F8 origin-aware mirror of
+    :func:`register_custom_commands`: it installs each command via
+    :func:`_install_one` and tags it with :data:`ORIGIN_PLUGIN` so
+    :func:`cmd_help` renders it under the "Plugin commands" section.
+
+    Args:
+        repl_state: Target slash registry / REPL state. Same three-flavor
+            compatibility shim as :func:`register_otter_slash`.
+        commands: Plugin command records. Each must expose ``name`` and
+            (optionally) ``description``. The dispatch target comes from
+            ``handler_factory`` — by default we pull a callable
+            ``handler`` attribute off the record.
+        handler_factory: Optional callable that turns a plugin command
+            record into a :data:`SlashHandler`. Defaults to looking up
+            ``cmd.handler`` on the record so callers that already
+            materialised the handler don't need to pass anything.
+
+    Returns:
+        Count of plugin commands successfully installed.
+    """
+    if not commands:
+        return 0
+
+    def _default_factory(cmd: Any) -> SlashHandler:
+        handler = getattr(cmd, "handler", None)
+        if not callable(handler):
+            raise TypeError(
+                f"plugin command {getattr(cmd, 'name', '?')!r} has no callable handler"
+            )
+        return handler  # type: ignore[no-any-return]
+
+    factory = handler_factory or _default_factory
+
+    installed = 0
+    for cmd in commands:
+        name = getattr(cmd, "name", "")
+        if not name:
+            continue
+        try:
+            handler = factory(cmd)
+        except Exception:  # noqa: BLE001 -- never crash the REPL over a bad plugin
+            continue
+        help_text = getattr(cmd, "description", "") or f"plugin command: /{name}"
+        if _install_one(repl_state, name, handler, help_text):
+            mark_origin(name, ORIGIN_PLUGIN, help_text)
+            installed += 1
+    if installed:
+        _refresh_completion(repl_state)
+    return installed
+
+
+def _refresh_completion(repl_state: Any) -> None:
+    """Resync tab-completion after custom commands land on *repl_state*.
+
+    Two refresh paths fire (best-effort; never raise so REPL stays
+    alive):
+
+    1. **Shared-registry view.** When *repl_state* exposes
+       ``refresh_command_names`` (the :mod:`chimera.cli.slash_commands`
+       module does), call it so the :data:`COMMAND_NAMES` list seen by
+       :func:`chimera.cli.code._complete_command` is rebuilt from the
+       live registry.
+    2. **Active readline completer.** When :mod:`readline` is
+       importable and a completer is currently bound, re-bind it. The
+       default completer in :mod:`chimera.cli.code` already reads
+       names dynamically, but rebinding forces readline to discard any
+       cached internal state (display columns, last-match list).
+
+    Args:
+        repl_state: The REPL state the customs were installed onto.
+    """
+    refresh = getattr(repl_state, "refresh_command_names", None)
+    if callable(refresh):
+        try:
+            refresh()
+        except Exception:  # noqa: BLE001 -- never crash REPL on refresh
+            pass
+
+    try:
+        import readline
+    except ImportError:
+        return
+    try:
+        completer = readline.get_completer()
+    except Exception:  # noqa: BLE001 -- some readline shims lack getter
+        return
+    if completer is None:
+        return
+    try:
+        readline.set_completer(completer)
+    except Exception:  # noqa: BLE001
+        return

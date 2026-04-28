@@ -62,6 +62,11 @@ class MCPServerConfig:
         headers: HTTP headers for http transport (empty for stdio).
         enabled: ``False`` if the upstream config disabled this entry.
         timeout_ms: Per-request timeout hint, if the source set one.
+        oauth: Optional OAuth block for http transport. The dict is passed
+            through verbatim to :func:`chimera.mcp.oauth.oauth_config_from_dict`
+            via ``MCPClient.add_from_spec``; typical keys are ``client_id``,
+            ``auth_server_metadata_url`` / ``authorization_endpoint`` /
+            ``token_endpoint``, ``redirect_uri``, and ``scopes``.
     """
 
     name: str
@@ -72,6 +77,7 @@ class MCPServerConfig:
     headers: dict[str, str] = field(default_factory=dict)
     enabled: bool = True
     timeout_ms: int | None = None
+    oauth: dict[str, Any] | None = None
 
     def to_client_spec(self) -> dict[str, Any]:
         """Convert this config to the dict shape ``MCPClient.add_from_spec`` accepts."""
@@ -92,6 +98,8 @@ class MCPServerConfig:
         }
         if self.headers:
             spec_http["headers"] = dict(self.headers)
+        if self.oauth:
+            spec_http["oauth"] = dict(self.oauth)
         return spec_http
 
 
@@ -230,6 +238,8 @@ def _entry_to_config(name: str, entry: dict[str, Any]) -> MCPServerConfig | None
     url = entry.get("url")
     if not isinstance(url, str) or not url.strip():
         return None
+    oauth_raw = entry.get("oauth")
+    oauth = dict(oauth_raw) if isinstance(oauth_raw, dict) else None
     return MCPServerConfig(
         name=name,
         transport="http",
@@ -237,6 +247,7 @@ def _entry_to_config(name: str, entry: dict[str, Any]) -> MCPServerConfig | None
         headers=_coerce_str_map(entry.get("headers")),
         enabled=enabled,
         timeout_ms=timeout_ms,
+        oauth=oauth,
     )
 
 

@@ -41,6 +41,13 @@ CommandHandler = Callable[[Any, Any, str, PrintFn], None]
 
 _REGISTRY: dict[str, tuple[CommandHandler, str]] = {}
 
+# Tab-completion friendly view, kept in sync with the registry by every
+# call to :func:`register`. Defined here (before :func:`register`) so the
+# refresh-on-register path has a list to mutate during the initial
+# :func:`_build_default_registry` walk; the canonical contents are
+# populated below once the default commands land.
+COMMAND_NAMES: list[str] = []
+
 
 def register(name: str, handler: CommandHandler, help_text: str = "") -> None:
     """Register a slash command handler.
@@ -51,6 +58,38 @@ def register(name: str, handler: CommandHandler, help_text: str = "") -> None:
         help_text: One-line description shown by ``/help``.
     """
     _REGISTRY[name] = (handler, help_text)
+    # Keep the tab-completion view in sync. ``COMMAND_NAMES`` is the
+    # canonical source the REPL completer pulls from; mutating it in
+    # place (rather than rebinding the module attribute) means callers
+    # who imported the list directly still see the fresh entries.
+    _refresh_command_names()
+
+
+def _refresh_command_names() -> None:
+    """Resync :data:`COMMAND_NAMES` with the live :data:`_REGISTRY`.
+
+    Mutates ``COMMAND_NAMES`` in place so prior ``from ... import
+    COMMAND_NAMES`` callers (or test fixtures holding a reference to
+    the list object) observe the change. Safe to call repeatedly; a
+    no-op when the registry has not changed.
+    """
+    fresh = sorted(f"/{name}" for name in _REGISTRY)
+    COMMAND_NAMES[:] = fresh
+
+
+def refresh_command_names() -> list[str]:
+    """Public refresh hook for tab-completion consumers.
+
+    Forces :data:`COMMAND_NAMES` to be recomputed from the live
+    registry and returns the resulting list. Called by the otter
+    REPL after :func:`chimera.otter.slash.register_custom_commands`
+    so user-defined commands surface in ``<TAB>`` completion.
+
+    Returns:
+        The refreshed sorted list of ``/name`` strings.
+    """
+    _refresh_command_names()
+    return list(COMMAND_NAMES)
 
 
 def list_commands() -> list[tuple[str, str]]:
@@ -974,6 +1013,8 @@ def _build_default_registry() -> None:
 
 
 _build_default_registry()
-
-# Tab-completion friendly view, kept in sync with the registry.
-COMMAND_NAMES: list[str] = sorted(f"/{name}" for name in _REGISTRY)
+# At this point :data:`COMMAND_NAMES` was already populated incrementally
+# by every ``register(...)`` call above. The explicit refresh keeps this
+# resilient to refactors where someone reaches into :data:`_REGISTRY`
+# directly without going through :func:`register`.
+_refresh_command_names()

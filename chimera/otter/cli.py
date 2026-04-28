@@ -254,6 +254,29 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
             "required on every request except /healthz."
         ),
     )
+    # WHY (O-SERVER-3): bearer auth over plain HTTP exposes the token to
+    # any on-path observer once the server binds off-localhost. Pair the
+    # bearer with TLS by passing both flags; the server wraps its listen
+    # socket via ``ssl.SSLContext`` (stdlib only) so clients use HTTPS.
+    parser.add_argument(
+        "--tls-cert",
+        dest="tls_cert",
+        default=None,
+        help=(
+            "With 'serve' (HTTP mode): path to a PEM-encoded server "
+            "certificate. Must be paired with --tls-key. When set the "
+            "server serves HTTPS instead of HTTP."
+        ),
+    )
+    parser.add_argument(
+        "--tls-key",
+        dest="tls_key",
+        default=None,
+        help=(
+            "With 'serve' (HTTP mode): path to the PEM-encoded private "
+            "key matching --tls-cert."
+        ),
+    )
     # WHY (W2): plugins under ``~/.opencode/plugin/*`` and
     # ``<project>/.opencode/plugin/*`` are wired into every otter session by
     # default. ``--no-plugins`` lets users / CI disable directory-based
@@ -478,38 +501,33 @@ def _attach_mcp_tools(tools: list[Any], project_root: Path) -> list[Any]:
     if not enabled:
         return list(tools)
 
-    # Lazy-import MCPClient so ``chimera otter --help`` doesn't pay for it.
+    # WHY (F2): route through the per-process MCP client cache so
+    # repeated agent builds (HTTP/ACP serve calls a fresh factory per
+    # session) don't re-spawn the same stdio MCP server subprocess.
+    # ``mcp_cache.get_or_create`` owns the build/connect/memoise dance
+    # and falls back to a fresh client on any cache miss.
     try:
-        from chimera.mcp.client import MCPClient
+        from chimera.otter.mcp_cache import get_or_create as _mcp_get_or_create
     except Exception as exc:  # noqa: BLE001 — never crash the agent
         sys.stderr.write(
-            f"[otter] MCP client import failed; continuing without MCP tools: {exc}\n"
+            f"[otter] MCP cache import failed; continuing without MCP tools: {exc}\n"
         )
         sys.stderr.flush()
         return list(tools)
 
-    client = MCPClient()
-    registered: list[str] = []
-    for server in enabled:
-        try:
-            client.add_from_spec(server.name, server.to_client_spec())
-            registered.append(server.name)
-        except Exception as exc:  # noqa: BLE001 — keep going on per-server failure
-            sys.stderr.write(
-                f"[otter] MCP server '{server.name}' failed to register: {exc}\n"
-            )
-            sys.stderr.flush()
-
-    if not registered:
-        return list(tools)
-
+    entries: list[tuple[str, dict[str, Any]]] = [
+        (s.name, s.to_client_spec()) for s in enabled
+    ]
     try:
-        client.connect_all()
-    except Exception as exc:  # noqa: BLE001 — connection-time failures are non-fatal
+        client = _mcp_get_or_create(entries)
+    except Exception as exc:  # noqa: BLE001 — defensive: cache must never crash the agent
         sys.stderr.write(
-            f"[otter] MCP connect_all failed; continuing without MCP tools: {exc}\n"
+            f"[otter] MCP cache lookup failed; continuing without MCP tools: {exc}\n"
         )
         sys.stderr.flush()
+        return list(tools)
+
+    if client is None:
         return list(tools)
 
     result = list(tools)
@@ -656,6 +674,71 @@ def _attach_plugin_extensions(
                 tools.append(tool)
 
     return plugins
+
+
+def _build_plugin_hook_emitter(plugin_hooks: list[Any]) -> Any | None:
+    """Convert plugin :class:`chimera.plugins.base.Hook` records to a HookEmitter.
+
+    Plugin hooks ship as ``Hook(command, event_type, working_dir, timeout, env)``
+    records collected by :func:`_attach_plugin_extensions`. mink consumes its
+    settings-style hooks via :class:`HookEmitter` wired onto
+    :attr:`LoopConfig.hook_emitter`; this helper does the equivalent
+    conversion for otter so directory-plugin hooks actually fire when
+    :mod:`chimera.core.tool_executor` emits ``PreToolUse`` (and any future
+    events) during a tool dispatch.
+
+    Each plugin :class:`Hook` becomes a :class:`HookMatcher` wrapping a
+    single :class:`CommandHook` with no tool-name fnmatch (matcher=None
+    means "match every tool"). All matchers land in one
+    :class:`HookExecutor` so the emitter fires every appropriate hook
+    on each ``emit()``.
+
+    Args:
+        plugin_hooks: List of plugin Hook records (the same list mutated
+            in-place by :func:`_attach_plugin_extensions`).
+
+    Returns:
+        A configured :class:`HookEmitter`, or ``None`` if the input list
+        is empty / no usable hooks were found.
+    """
+    if not plugin_hooks:
+        return None
+
+    from chimera.hooks.emitter import HookEmitter
+    from chimera.hooks.executor import HookExecutor
+    from chimera.hooks.hook_types import CommandHook, HookMatcher
+    from chimera.plugins.base import Hook as PluginHook
+
+    matchers: list[Any] = []
+    for raw in plugin_hooks:
+        if not isinstance(raw, PluginHook):
+            # Defensive: skip anything that isn't a recognised Hook record.
+            continue
+        if not getattr(raw, "command", ""):
+            continue
+        try:
+            timeout = int(raw.timeout) if raw.timeout else 60
+        except (TypeError, ValueError):
+            timeout = 60
+        cmd = CommandHook(
+            command=str(raw.command),
+            timeout=timeout,
+            cwd=str(raw.working_dir) if raw.working_dir else None,
+            extra_env=dict(raw.env) if raw.env else {},
+        )
+        matchers.append(
+            HookMatcher(
+                hooks=[cmd],
+                matcher=None,
+                source="plugin",
+            ),
+        )
+
+    if not matchers:
+        return None
+
+    executor = HookExecutor()
+    return HookEmitter(executor=executor, matchers=matchers)
 
 
 def _make_plugin_command_handler(cmd: Any) -> Any:
@@ -969,8 +1052,9 @@ def _run_print_mode(args: argparse.Namespace) -> int:
         tools = _attach_mcp_tools(tools, project_root=Path(cwd))
     # WHY (W2): plugin contributions land *after* MCP/LSP so plugin
     # ``_extra_tools`` (when an entry-point plugin opts in) can override
-    # earlier groups by name. Hooks accumulate in a local list — the
-    # caller can graft them onto a HookEmitter once W3 is in.
+    # earlier groups by name. Hooks accumulate in a local list and are
+    # then converted into a :class:`HookEmitter` (W3 — F3) so they fire
+    # through ``LoopConfig.hook_emitter`` on PreToolUse.
     plugin_hooks: list[Any] = []
     plugin_mcp_servers: list[Any] = []
     _attach_plugin_extensions(
@@ -981,6 +1065,9 @@ def _run_print_mode(args: argparse.Namespace) -> int:
         mcp_servers=plugin_mcp_servers,
         enabled=not bool(getattr(args, "no_plugins", False)),
     )
+    plugin_emitter = _build_plugin_hook_emitter(plugin_hooks)
+    if plugin_emitter is not None and config.hook_emitter is None:
+        config.hook_emitter = plugin_emitter
     allowed = (getattr(args, "allowed_tools", "") or "").strip()
     if allowed:
         try:
@@ -1224,6 +1311,17 @@ def _dispatch_serve_http(args: argparse.Namespace) -> int:
     host = str(getattr(args, "host", None) or DEFAULT_HOST)
     port = int(getattr(args, "port", None) or DEFAULT_PORT)
     auth_token = getattr(args, "auth_token", None)
+    tls_cert = getattr(args, "tls_cert", None)
+    tls_key = getattr(args, "tls_key", None)
+    # WHY: surface the typo-paired-flag mistake here (rather than deeper
+    # in OtterServer) so the user gets a CLI-level error before any other
+    # provider/MCP/LSP wiring fires.
+    if bool(tls_cert) ^ bool(tls_key):
+        print(
+            "error: --tls-cert and --tls-key must be set together",
+            file=sys.stderr,
+        )
+        return 2
 
     no_lsp = bool(getattr(args, "no_lsp", False))
     no_rules = bool(getattr(args, "no_rules", False))
@@ -1248,10 +1346,12 @@ def _dispatch_serve_http(args: argparse.Namespace) -> int:
         )
         if not no_mcp:
             tools = _attach_mcp_tools(tools, project_root=Path(workdir))
-        # WHY (W2): plugins augment the per-session agent. Hooks
-        # accumulate in a local list (handed to LoopConfig once W3
-        # closes the matcher conversion); MCP descriptors collected
-        # but not auto-spawned (W1 owns that wiring step).
+        # WHY (W2/W3 — F3): plugins augment the per-session agent. Hooks
+        # accumulate in a local list and are converted into a
+        # :class:`HookEmitter` wired onto ``config.hook_emitter`` so
+        # PreToolUse hooks fire from :mod:`chimera.core.tool_executor`.
+        # MCP descriptors are collected but not auto-spawned (W1 owns
+        # that wiring step).
         plugin_hooks: list[Any] = []
         plugin_mcp_servers: list[Any] = []
         _attach_plugin_extensions(
@@ -1262,6 +1362,9 @@ def _dispatch_serve_http(args: argparse.Namespace) -> int:
             mcp_servers=plugin_mcp_servers,
             enabled=not no_plugins,
         )
+        plugin_emitter = _build_plugin_hook_emitter(plugin_hooks)
+        if plugin_emitter is not None and config.hook_emitter is None:
+            config.hook_emitter = plugin_emitter
         return Agent(
             provider=provider,
             tools=tools,
@@ -1269,12 +1372,18 @@ def _dispatch_serve_http(args: argparse.Namespace) -> int:
             prompt=prompt,
         )
 
+    scheme = "https" if (tls_cert and tls_key) else "http"
     sys.stderr.write(
-        f"[otter] HTTP server listening on http://{host}:{port}\n"
+        f"[otter] HTTP server listening on {scheme}://{host}:{port}\n"
     )
     sys.stderr.flush()
     return serve_http(
-        _factory, host=host, port=port, auth_token=auth_token
+        _factory,
+        host=host,
+        port=port,
+        auth_token=auth_token,
+        tls_cert=tls_cert,
+        tls_key=tls_key,
     )
 
 
@@ -1324,8 +1433,9 @@ def _dispatch_serve_acp(args: argparse.Namespace) -> int:
         )
         if not no_mcp:
             tools = _attach_mcp_tools(tools, project_root=Path(workdir))
-        # WHY (W2): mirror the HTTP factory's plugin-attach surface so
-        # ACP and HTTP sessions see the same plugin set.
+        # WHY (W2/W3 — F3): mirror the HTTP factory's plugin-attach surface
+        # so ACP and HTTP sessions see the same plugin set, including hook
+        # wiring through ``config.hook_emitter``.
         plugin_hooks: list[Any] = []
         plugin_mcp_servers: list[Any] = []
         _attach_plugin_extensions(
@@ -1336,6 +1446,9 @@ def _dispatch_serve_acp(args: argparse.Namespace) -> int:
             mcp_servers=plugin_mcp_servers,
             enabled=not no_plugins,
         )
+        plugin_emitter = _build_plugin_hook_emitter(plugin_hooks)
+        if plugin_emitter is not None and config.hook_emitter is None:
+            config.hook_emitter = plugin_emitter
         return Agent(
             provider=provider,
             tools=tools,

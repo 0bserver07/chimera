@@ -10,10 +10,11 @@ coding agent's TUI command dialog. We verify three contracts:
 2. **Schema** — every command maps to a callable handler with the
    ``(session, env, args, out)`` shape, and every command has a help
    string in :data:`OTTER_SLASH_HELP`.
-3. **Behaviour** — three placeholder stubs (`/share`, `/undo`,
-   `/themes`) print friendly "not yet wired" messages instead of
-   raising, and `/help` lists registered commands when called against
-   the shared registry.
+3. **Behaviour** — placeholder stubs (`/share`, `/themes`, `/edit`)
+   print friendly "not yet wired" messages instead of raising. `/undo`
+   and `/redo` are wired to a per-session checkpoint stack (see
+   :mod:`tests.otter.test_slash_undo_redo`). `/help` lists registered
+   commands when called against the shared registry.
 """
 from __future__ import annotations
 
@@ -166,13 +167,13 @@ def test_share_prints_not_yet_wired_message() -> None:
     assert "O13" in text
 
 
-def test_undo_prints_not_yet_wired_message() -> None:
-    """/undo is a stub until turn-level rewind lands."""
+def test_undo_with_empty_stack_prints_friendly_notice() -> None:
+    """/undo with no prior snapshots reports nothing to undo (not a crash)."""
     out = _CapturePrinter()
     cmd_undo(_FakeSession(), None, "", out)
     text = "\n".join(out.lines)
-    assert "not yet wired" in text
     assert "/undo" in text
+    assert "nothing to undo" in text
 
 
 def test_themes_prints_not_yet_wired_message() -> None:
