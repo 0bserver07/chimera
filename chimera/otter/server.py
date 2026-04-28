@@ -34,6 +34,14 @@ Path                              Method Purpose
 ``/tool/approve``                 POST   Resolve a pending permission request
                                          (``{"permission_id": "...",``
                                          ``"approved": true}``).
+``/commands``                     GET    List custom slash commands discovered
+                                         from ``.opencode/command/*.md`` in the
+                                         server's commands cwd.
+``/commands/<name>/invoke``       POST   Render a custom command template and
+                                         push it as a message into the active
+                                         session. Body:
+                                         ``{"session_id": "...",``
+                                         ``"args": [...], "kwargs": {...}}``.
 ================================ ====== ==========================================
 
 Auth
@@ -61,11 +69,13 @@ from __future__ import annotations
 
 import json
 import queue
+import ssl
 import threading
 import time
 import uuid
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from typing import Any, AsyncIterator, Callable, Protocol
 
 from chimera.core.cancellation import CancellationToken
@@ -222,9 +232,26 @@ class OtterServer:
         auth_token: When set, every request except ``GET /healthz`` must
             carry ``Authorization: Bearer <auth_token>``. Defaults to
             ``None`` (no auth — only safe behind localhost).
+        tls_cert: Path to a PEM-encoded server certificate. When set
+            together with *tls_key* the server wraps its accept socket
+            with :class:`ssl.SSLContext` and clients must speak TLS.
+            Required when ``auth_token`` is used off-localhost so the
+            bearer token is not exposed in cleartext.
+        tls_key: Path to the matching PEM-encoded private key.
+        commands_cwd: Project root used to discover custom slash commands
+            via :func:`chimera.otter.commands.load_custom_commands`.
+            Defaults to :func:`os.getcwd` at handler-call time so the
+            ``GET /commands`` route always reflects the live filesystem.
+            Tests inject a ``tmp_path`` so synthetic
+            ``.opencode/command/*.md`` files are picked up without
+            polluting ``$HOME``.
 
     Attributes:
         sessions: Live :class:`OtterSessionState` objects keyed by id.
+
+    Raises:
+        ValueError: When exactly one of ``tls_cert`` / ``tls_key`` is
+            supplied — TLS requires both halves of the pair.
     """
 
     def __init__(
@@ -234,11 +261,30 @@ class OtterServer:
         host: str = DEFAULT_HOST,
         port: int = DEFAULT_PORT,
         auth_token: str | None = None,
+        tls_cert: Path | str | None = None,
+        tls_key: Path | str | None = None,
+        commands_cwd: Path | str | None = None,
     ) -> None:
         self._agent_factory = agent_factory
         self._host = host
         self._port = port
         self._auth_token = auth_token
+        # Normalize to ``Path`` so callers can pass plain strings (CLI flag
+        # plumbing) or pre-built ``Path`` objects (tests) interchangeably.
+        self._tls_cert: Path | None = Path(tls_cert) if tls_cert else None
+        self._tls_key: Path | None = Path(tls_key) if tls_key else None
+        if bool(self._tls_cert) ^ bool(self._tls_key):
+            raise ValueError(
+                "tls_cert and tls_key must be set together (or both unset); "
+                f"got tls_cert={self._tls_cert!r}, tls_key={self._tls_key!r}"
+            )
+        # ``None`` means "resolve to ``os.getcwd()`` at the time of every
+        # ``/commands`` call" so the route always reflects the live
+        # filesystem rather than a snapshot taken at server start. Tests
+        # pin a ``tmp_path`` to keep the route hermetic.
+        self._commands_cwd: Path | None = (
+            Path(commands_cwd) if commands_cwd is not None else None
+        )
         self.sessions: dict[str, OtterSessionState] = {}
         self._sessions_lock = threading.Lock()
         self._httpd: ThreadingHTTPServer | None = None
@@ -266,6 +312,17 @@ class OtterServer:
         httpd = ThreadingHTTPServer((self._host, self._port), handler_cls)
         # Surface the actual bound port back to the caller in case ``port=0``.
         self._port = httpd.server_address[1]
+        if self._tls_cert is not None and self._tls_key is not None:
+            # Stdlib-only TLS: build a server context, load the cert chain,
+            # and wrap the listening socket so every ``accept()`` returns an
+            # ``SSLSocket`` to ``ThreadingHTTPServer``'s per-connection
+            # dispatch. We use ``server_side=True`` so the wrapped socket
+            # performs the handshake on accept.
+            context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            context.load_cert_chain(
+                certfile=str(self._tls_cert), keyfile=str(self._tls_key)
+            )
+            httpd.socket = context.wrap_socket(httpd.socket, server_side=True)
         self._httpd = httpd
         if blocking:
             try:
@@ -361,12 +418,39 @@ class OtterServer:
                 pass
         return envelope
 
-    def subscribe(self, state: OtterSessionState) -> "queue.Queue[dict[str, Any] | None]":
-        """Register a fresh SSE subscriber queue and return it."""
+    def subscribe(
+        self,
+        state: OtterSessionState,
+        *,
+        last_event_id: int | None = None,
+    ) -> "queue.Queue[dict[str, Any] | None]":
+        """Register a fresh SSE subscriber queue and return it.
+
+        Args:
+            state: Target session.
+            last_event_id: Optional resume cursor. When set, history replay
+                skips every envelope whose 1-based ``id`` is less than or
+                equal to this value — matching the SSE spec's
+                ``Last-Event-ID`` header semantics. ``None`` (the default)
+                replays the full history.
+
+        Returns:
+            A queue pre-loaded with the chosen replay slice. Live frames
+            arrive on the same queue once :meth:`emit_event` fires.
+        """
         q: queue.Queue[dict[str, Any] | None] = queue.Queue()
         with state.lock:
             # Replay any history so a late-attaching subscriber catches up.
+            # When ``last_event_id`` is set, skip frames the client has
+            # already seen so reconnects don't replay everything.
             for envelope in state.events:
+                if last_event_id is not None:
+                    try:
+                        env_id = int(envelope["id"])
+                    except (KeyError, TypeError, ValueError):
+                        env_id = 0
+                    if env_id <= last_event_id:
+                        continue
                 q.put_nowait(envelope)
             state.subscribers.append(q)
         return q
@@ -421,6 +505,104 @@ class OtterServer:
         gate.approved = approved
         gate.event.set()
         return True
+
+    # ------------------------------------------------------------------
+    # Custom slash commands (parity with the otter REPL dispatcher)
+    # ------------------------------------------------------------------
+
+    def _resolve_commands_cwd(self) -> "Path":
+        """Return the project root for custom-command discovery.
+
+        ``commands_cwd`` is resolved lazily so the live filesystem is
+        always queried — handy when the server outlives a single project
+        checkout. Tests pin the value via the constructor.
+        """
+        import os
+
+        if self._commands_cwd is not None:
+            return self._commands_cwd
+        return Path(os.getcwd())
+
+    def list_commands(self) -> list[dict[str, Any]]:
+        """Return JSON-friendly entries for every discovered custom command.
+
+        Each entry mirrors :class:`chimera.otter.commands.CustomCommand`'s
+        public surface — ``name``, ``description``, ``args`` (a list of
+        ``{name, description}`` records), and ``source`` (absolute path
+        of the originating ``.md`` file). The list is sorted by name so
+        clients render a stable palette.
+
+        Import is lazy so a partial install (commands module missing)
+        degrades to an empty list rather than 500-ing the whole route.
+        """
+        try:
+            from chimera.otter.commands import (
+                load_custom_commands as _load,
+            )
+        except ImportError:  # pragma: no cover - defensive
+            return []
+        cmds = _load(self._resolve_commands_cwd())
+        out: list[dict[str, Any]] = []
+        for name in sorted(cmds):
+            cmd = cmds[name]
+            out.append(
+                {
+                    "name": cmd.name,
+                    "description": cmd.description,
+                    "args": [
+                        {"name": a.name, "description": a.description}
+                        for a in cmd.args
+                    ],
+                    "source": cmd.source,
+                }
+            )
+        return out
+
+    def invoke_command(
+        self,
+        name: str,
+        *,
+        session_id: str,
+        args: list[str] | None = None,
+        kwargs: dict[str, str] | None = None,
+    ) -> tuple[str, str] | None:
+        """Render *name* and push the rendered prompt into *session_id*.
+
+        Mirrors :func:`chimera.otter.slash.build_custom_command_handler`
+        end-to-end: positional ``args`` map to ``$1`` / ``$2`` / …
+        substitutions and ``kwargs`` map to ``$ARG_NAME`` substitutions.
+        The rendered prompt is then routed through :meth:`submit_message`
+        — i.e. it lands as a brand-new user turn, drives the agent, and
+        fans out the same SSE events any direct ``POST /session/<id>/message``
+        would.
+
+        Args:
+            name: Custom-command name (filename stem, no leading slash).
+            session_id: Target session id. Must already exist.
+            args: Positional arguments passed to the template renderer.
+            kwargs: Named arguments passed to the template renderer.
+
+        Returns:
+            ``(message_id, rendered_text)`` on success. ``None`` if either
+            the command is not registered or the session id is unknown —
+            the caller maps both misses onto a 404.
+        """
+        try:
+            from chimera.otter.commands import (
+                load_custom_commands as _load,
+            )
+        except ImportError:  # pragma: no cover - defensive
+            return None
+        cmds = _load(self._resolve_commands_cwd())
+        cmd = cmds.get(name)
+        if cmd is None:
+            return None
+        state = self.get_session(session_id)
+        if state is None:
+            return None
+        rendered = cmd.render(*(args or []), **(kwargs or {}))
+        message_id = self.submit_message(state, rendered)
+        return message_id, rendered
 
     # ------------------------------------------------------------------
     # Agent dispatch
@@ -560,8 +742,21 @@ class OtterServer:
         Cancellation: between yields we check ``state.cancel.is_cancelled``
         and break out of the loop. The terminal ``result`` frame still
         fires — clients see ``"cancelled": true`` on it.
+
+        Provider-level cancellation: if ``stream_factory`` accepts a
+        ``cancel_event`` keyword we forward
+        ``state.cancel.threading_event()`` so an in-flight provider HTTP
+        request can be preempted (rather than waiting for the next yield
+        boundary). This matches the wave-2 follow-up note in W6-REPORT.
         """
         import asyncio
+        import inspect
+
+        try:
+            factory_sig = inspect.signature(stream_factory)
+            accepts_cancel_event = "cancel_event" in factory_sig.parameters
+        except (TypeError, ValueError):
+            accepts_cancel_event = False
 
         steps = 0
         cost = 0.0
@@ -571,7 +766,14 @@ class OtterServer:
 
         async def _consume() -> None:
             nonlocal steps, cost, last_text, cancelled
-            agen = stream_factory(text, env=None)
+            if accepts_cancel_event:
+                agen = stream_factory(
+                    text,
+                    env=None,
+                    cancel_event=state.cancel.threading_event(),
+                )
+            else:
+                agen = stream_factory(text, env=None)
             try:
                 async for ev in agen:
                     if state.cancel.is_cancelled:
@@ -704,6 +906,8 @@ class OtterServer:
                 if path == "/session":
                     self._send_json(200, {"sessions": outer.list_session_ids()})
                     return
+                if path == "/commands":
+                    return self._handle_commands_list()
                 if path.startswith("/session/"):
                     parts = path.split("/")
                     # /session/<id>           parts == ["", "session", "<id>"]
@@ -728,6 +932,12 @@ class OtterServer:
                         return self._handle_session_message(parts[2])
                     if len(parts) == 4 and parts[3] == "cancel":
                         return self._handle_session_cancel(parts[2])
+                if path.startswith("/commands/"):
+                    parts = path.split("/")
+                    # /commands/<name>/invoke
+                    #   parts == ["", "commands", "<name>", "invoke"]
+                    if len(parts) == 4 and parts[3] == "invoke" and parts[2]:
+                        return self._handle_command_invoke(parts[2])
                 self._send_json(404, {"error": "not_found", "path": path})
 
             # ------- POST /session --------------------------------------
@@ -795,13 +1005,24 @@ class OtterServer:
                 if state is None:
                     self._send_json(404, {"error": "session_not_found"})
                     return
+                # Honor the SSE-spec ``Last-Event-ID`` header so reconnecting
+                # clients resume from where they dropped instead of replaying
+                # every persisted frame. Malformed values are ignored
+                # (full replay), matching the spec's "treat as if absent."
+                last_event_id: int | None = None
+                raw_last = self.headers.get("Last-Event-ID")
+                if raw_last is not None:
+                    try:
+                        last_event_id = int(raw_last.strip())
+                    except ValueError:
+                        last_event_id = None
                 self.send_response(200)
                 self.send_header("Content-Type", "text/event-stream")
                 self.send_header("Cache-Control", "no-cache")
                 self.send_header("Connection", "keep-alive")
                 self.send_header("X-Accel-Buffering", "no")
                 self.end_headers()
-                q = outer.subscribe(state)
+                q = outer.subscribe(state, last_event_id=last_event_id)
                 try:
                     while True:
                         try:
@@ -851,6 +1072,89 @@ class OtterServer:
                     return
                 self._send_json(200, {"resolved": True, "approved": approved})
 
+            # ------- GET /commands -------------------------------------
+            def _handle_commands_list(self) -> None:
+                # Discover .opencode/command/*.md (project + user scope).
+                # Failures are surfaced as a 500 — a broken loader is a
+                # bug, not an empty palette.
+                try:
+                    entries = outer.list_commands()
+                except Exception as exc:  # noqa: BLE001
+                    self._send_json(
+                        500,
+                        {
+                            "error": "command_load_failed",
+                            "detail": str(exc),
+                        },
+                    )
+                    return
+                self._send_json(200, {"commands": entries})
+
+            # ------- POST /commands/<name>/invoke ----------------------
+            def _handle_command_invoke(self, name: str) -> None:
+                body = self._read_json()
+                if body is None:
+                    return
+                session_id = str(body.get("session_id", "") or "")
+                if not session_id:
+                    self._send_json(400, {"error": "missing_session_id"})
+                    return
+
+                # ``args`` accepts a list (preferred) and ``kwargs`` accepts
+                # a dict. Both are coerced to strings since the renderer
+                # treats placeholders as text — non-string values would
+                # crash :meth:`str.replace` deep inside ``CustomCommand.render``.
+                raw_args = body.get("args") or []
+                if not isinstance(raw_args, list):
+                    self._send_json(400, {"error": "args_must_be_list"})
+                    return
+                raw_kwargs = body.get("kwargs") or {}
+                if not isinstance(raw_kwargs, dict):
+                    self._send_json(400, {"error": "kwargs_must_be_object"})
+                    return
+                args: list[str] = [str(a) for a in raw_args]
+                kwargs: dict[str, str] = {
+                    str(k): str(v) for k, v in raw_kwargs.items()
+                }
+
+                # ``invoke_command`` returns ``None`` for both unknown
+                # session and unknown command. Distinguish so the client
+                # gets an actionable 404 message.
+                if outer.get_session(session_id) is None:
+                    self._send_json(404, {"error": "session_not_found"})
+                    return
+                try:
+                    result = outer.invoke_command(
+                        name,
+                        session_id=session_id,
+                        args=args,
+                        kwargs=kwargs,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    self._send_json(
+                        500,
+                        {
+                            "error": "command_invoke_failed",
+                            "detail": str(exc),
+                        },
+                    )
+                    return
+                if result is None:
+                    self._send_json(
+                        404,
+                        {"error": "command_not_found", "name": name},
+                    )
+                    return
+                message_id, rendered = result
+                self._send_json(
+                    202,
+                    {
+                        "message_id": message_id,
+                        "name": name,
+                        "rendered": rendered,
+                    },
+                )
+
         return _Handler
 
 
@@ -865,6 +1169,9 @@ def serve_http(
     host: str = DEFAULT_HOST,
     port: int = DEFAULT_PORT,
     auth_token: str | None = None,
+    tls_cert: Path | str | None = None,
+    tls_key: Path | str | None = None,
+    commands_cwd: Path | str | None = None,
 ) -> int:
     """Start :class:`OtterServer` in blocking mode and return an exit code.
 
@@ -875,6 +1182,12 @@ def serve_http(
         host: Bind host.
         port: Bind port.
         auth_token: Optional shared-secret bearer token.
+        tls_cert: Optional path to a PEM-encoded server certificate.
+            When supplied together with ``tls_key`` the server speaks
+            HTTPS so the bearer token is not exposed in cleartext.
+        tls_key: Optional path to the matching PEM-encoded private key.
+        commands_cwd: Project root for ``.opencode/command/*.md``
+            discovery. Defaults to :func:`os.getcwd` resolved per-call.
 
     Returns:
         ``0`` on graceful shutdown (Ctrl-C). The function blocks until
@@ -885,6 +1198,9 @@ def serve_http(
         host=host,
         port=port,
         auth_token=auth_token,
+        tls_cert=tls_cert,
+        tls_key=tls_key,
+        commands_cwd=commands_cwd,
     )
     try:
         server.start(blocking=True)

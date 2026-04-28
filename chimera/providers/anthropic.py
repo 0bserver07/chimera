@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import os
+import threading
 from collections.abc import AsyncIterator, Iterator
 from typing import TYPE_CHECKING, Any
 
@@ -15,6 +17,61 @@ try:
     import anthropic  # type: ignore[import-not-found]
 except ImportError:
     anthropic = None  # type: ignore[assignment]
+
+
+class _AsyncCancelWatcher:
+    """Async-side bridge from a :class:`threading.Event` to ``aclient.close()``.
+
+    Spins a background thread (``loop.run_in_executor``) that blocks on the
+    event; on set, schedules ``aclient.close()`` on the event loop so any
+    in-flight async HTTP request is aborted promptly. Acts as a no-op when
+    *cancel_event* is ``None``.
+    """
+
+    def __init__(
+        self,
+        cancel_event: threading.Event | None,
+        aclient: Any,
+    ) -> None:
+        self._cancel_event = cancel_event
+        self._aclient = aclient
+        self._stop = threading.Event()
+        self._task: asyncio.Task[None] | None = None
+
+    async def start(self) -> None:
+        if self._cancel_event is None:
+            return
+        loop = asyncio.get_running_loop()
+
+        async def _runner() -> None:
+            cancel_event = self._cancel_event
+            assert cancel_event is not None  # checked above
+            stop = self._stop
+            while not stop.is_set():
+                fired = await loop.run_in_executor(
+                    None, lambda: cancel_event.wait(timeout=0.05),
+                )
+                if stop.is_set():
+                    return
+                if fired:
+                    try:
+                        await self._aclient.close()
+                    except Exception:  # noqa: BLE001 - best effort
+                        pass
+                    return
+
+        self._task = loop.create_task(_runner())
+
+    async def stop(self) -> None:
+        self._stop.set()
+        if self._task is not None:
+            try:
+                await asyncio.wait_for(self._task, timeout=0.5)
+            except (asyncio.TimeoutError, asyncio.CancelledError):
+                self._task.cancel()
+            except Exception:  # noqa: BLE001
+                pass
+            self._task = None
 
 
 class AnthropicProvider(Provider):
@@ -196,9 +253,11 @@ class AnthropicProvider(Provider):
         temperature: float = 0.0,
         max_tokens: int | None = None,
         thinking: Any = None,
+        cancel_event: threading.Event | None = None,
     ) -> Response:
         kwargs = self._prepare_request(messages, tools, temperature, max_tokens, thinking=thinking)
-        response = self._client.messages.create(**kwargs)
+        with self._sync_cancel_watcher(cancel_event):
+            response = self._client.messages.create(**kwargs)
         return self._parse_response(response)
 
     def stream(
@@ -208,6 +267,7 @@ class AnthropicProvider(Provider):
         temperature: float = 0.0,
         max_tokens: int | None = None,
         thinking: Any = None,
+        cancel_event: threading.Event | None = None,
     ) -> Iterator[StreamEvent]:
         """Stream a response using the Anthropic messages stream API."""
         kwargs = self._prepare_request(messages, tools, temperature, max_tokens, thinking=thinking)
@@ -217,7 +277,7 @@ class AnthropicProvider(Provider):
         current_tool_name: str | None = None
         current_tool_json = ""
 
-        with self._client.messages.stream(**kwargs) as stream:
+        with self._sync_cancel_watcher(cancel_event), self._client.messages.stream(**kwargs) as stream:
             for event in stream:
                 yield from self._map_anthropic_event(
                     event,
@@ -361,9 +421,15 @@ class AnthropicProvider(Provider):
         temperature: float = 0.0,
         max_tokens: int | None = None,
         thinking: Any = None,
+        cancel_event: threading.Event | None = None,
     ) -> Response:
         kwargs = self._prepare_request(messages, tools, temperature, max_tokens, thinking=thinking)
-        response = await self._aclient.messages.create(**kwargs)
+        watcher = _AsyncCancelWatcher(cancel_event, self._aclient)
+        await watcher.start()
+        try:
+            response = await self._aclient.messages.create(**kwargs)
+        finally:
+            await watcher.stop()
         return self._parse_response(response)
 
     async def async_stream(
@@ -373,6 +439,7 @@ class AnthropicProvider(Provider):
         temperature: float = 0.0,
         max_tokens: int | None = None,
         thinking: Any = None,
+        cancel_event: threading.Event | None = None,
     ) -> AsyncIterator[StreamEvent]:
         """Async stream using the Anthropic async messages stream API."""
         kwargs = self._prepare_request(messages, tools, temperature, max_tokens, thinking=thinking)
@@ -381,37 +448,85 @@ class AnthropicProvider(Provider):
         current_tool_name: str | None = None
         current_tool_json = ""
 
-        async with self._aclient.messages.stream(**kwargs) as stream:
-            async for event in stream:
-                for se in self._map_anthropic_event(
-                    event, current_tool_id, current_tool_name, current_tool_json,
-                ):
-                    yield se
-                current_tool_id, current_tool_name, current_tool_json = (
-                    self._update_tool_state(
+        watcher = _AsyncCancelWatcher(cancel_event, self._aclient)
+        await watcher.start()
+        try:
+            async with self._aclient.messages.stream(**kwargs) as stream:
+                async for event in stream:
+                    for se in self._map_anthropic_event(
                         event, current_tool_id, current_tool_name, current_tool_json,
+                    ):
+                        yield se
+                    current_tool_id, current_tool_name, current_tool_json = (
+                        self._update_tool_state(
+                            event, current_tool_id, current_tool_name, current_tool_json,
+                        )
                     )
-                )
 
-            if current_tool_id is not None:
-                try:
-                    args = json.loads(current_tool_json) if current_tool_json else {}
-                except json.JSONDecodeError:
-                    args = {}
+                if current_tool_id is not None:
+                    try:
+                        args = json.loads(current_tool_json) if current_tool_json else {}
+                    except json.JSONDecodeError:
+                        args = {}
+                    yield StreamEvent(
+                        type="tool_call_complete",
+                        tool_call=ToolCall(
+                            id=current_tool_id,
+                            name=current_tool_name or "",
+                            arguments=args,
+                        ),
+                    )
+
+                final = await stream.get_final_message()
                 yield StreamEvent(
-                    type="tool_call_complete",
-                    tool_call=ToolCall(
-                        id=current_tool_id,
-                        name=current_tool_name or "",
-                        arguments=args,
-                    ),
+                    type="done",
+                    usage=self._usage_from_final(final),
                 )
+        finally:
+            await watcher.stop()
 
-            final = await stream.get_final_message()
-            yield StreamEvent(
-                type="done",
-                usage=self._usage_from_final(final),
-            )
+    # ------------------------------------------------------------------
+    # Cancellation plumbing
+    # ------------------------------------------------------------------
+
+    def _sync_cancel_watcher(self, cancel_event: threading.Event | None) -> Any:
+        """Return a context manager that closes the sync httpx client on cancel.
+
+        When *cancel_event* is ``None`` we return a no-op context manager so
+        the call site stays a single ``with`` statement. When it's set, a
+        background daemon thread waits on the event; if it fires we call
+        ``self._client.close()`` which aborts any in-flight HTTP request,
+        preempting an otherwise long-running model call.
+        """
+        client = self._client
+
+        class _Watcher:
+            def __enter__(self_inner) -> "_Watcher":
+                self_inner._stop = threading.Event()
+                if cancel_event is None:
+                    self_inner._thread = None
+                    return self_inner
+
+                def _watch() -> None:
+                    while not self_inner._stop.is_set():
+                        if cancel_event.wait(timeout=0.05):
+                            try:
+                                client.close()
+                            except Exception:  # noqa: BLE001 - best effort
+                                pass
+                            return
+
+                t = threading.Thread(target=_watch, daemon=True)
+                t.start()
+                self_inner._thread = t
+                return self_inner
+
+            def __exit__(self_inner, *exc: Any) -> None:
+                self_inner._stop.set()
+                if self_inner._thread is not None:
+                    self_inner._thread.join(timeout=0.5)
+
+        return _Watcher()
 
     # ------------------------------------------------------------------
     # Properties

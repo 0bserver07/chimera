@@ -83,6 +83,7 @@ class CachedProvider(Provider):
         temperature: float = 0.0,
         max_tokens: int | None = None,
         thinking: Any = None,
+        cancel_event: Any = None,  # accepted for Liskov; not yet plumbed
     ) -> Response:
         key = _cache_key(
             self._provider.model_name, messages, tools, temperature, thinking,
@@ -122,6 +123,7 @@ class CachedProvider(Provider):
         temperature: float = 0.0,
         max_tokens: int | None = None,
         thinking: Any = None,
+        cancel_event: Any = None,  # accepted for Liskov; not yet plumbed
     ) -> Iterator[StreamEvent]:
         # Streaming bypasses cache — delegate directly.
         if thinking is not None:

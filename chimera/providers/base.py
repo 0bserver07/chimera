@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Iterator
 from dataclasses import dataclass
@@ -55,8 +56,43 @@ class Provider(ABC):
         temperature: float = 0.0,
         max_tokens: int | None = None,
         thinking: ThinkingLevel | None = None,
+        cancel_event: threading.Event | None = None,
     ) -> Response:
-        """Send messages, get a response."""
+        """Send messages, get a response.
+
+        Args:
+            cancel_event: Optional :class:`threading.Event`. When set, the
+                provider should make a best-effort attempt to abort its
+                in-flight HTTP request and raise. Subclasses that ignore
+                the parameter remain correct (cooperative).
+        """
+
+    def _supports_cancel_event(self, method_name: str) -> bool:
+        """Return ``True`` iff *method_name* on ``self`` accepts ``cancel_event``.
+
+        Used by the default :meth:`stream` / :meth:`async_complete` /
+        :meth:`async_stream` impls to decide whether to forward the
+        ``cancel_event`` kwarg. Subclasses written before the cancel-event
+        parameter existed keep working unchanged: we just drop the kwarg
+        when introspection says it isn't supported.
+        """
+        import inspect
+
+        method = getattr(self, method_name, None)
+        if method is None:
+            return False
+        try:
+            sig = inspect.signature(method)
+        except (TypeError, ValueError):
+            return False
+        params = sig.parameters
+        if "cancel_event" in params:
+            return True
+        # Older overrides may use **kwargs catch-all.
+        for p in params.values():
+            if p.kind is inspect.Parameter.VAR_KEYWORD:
+                return True
+        return False
 
     def stream(
         self,
@@ -65,16 +101,22 @@ class Provider(ABC):
         temperature: float = 0.0,
         max_tokens: int | None = None,
         thinking: ThinkingLevel | None = None,
+        cancel_event: threading.Event | None = None,
     ) -> Iterator[StreamEvent]:
         """Stream a response as incremental events.
 
         Default implementation wraps :meth:`complete` — subclasses should
         override for true token-by-token streaming.
         """
-        response = self.complete(
-            messages, tools=tools, temperature=temperature, max_tokens=max_tokens,
-            thinking=thinking,
-        )
+        kwargs: dict[str, Any] = {
+            "tools": tools,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            "thinking": thinking,
+        }
+        if self._supports_cancel_event("complete"):
+            kwargs["cancel_event"] = cancel_event
+        response = self.complete(messages, **kwargs)
         if response.content:
             yield StreamEvent(type="text_delta", content=response.content)
         for tc in response.tool_calls:
@@ -88,6 +130,7 @@ class Provider(ABC):
         temperature: float = 0.0,
         max_tokens: int | None = None,
         thinking: ThinkingLevel | None = None,
+        cancel_event: threading.Event | None = None,
     ) -> Response:
         """Async version of :meth:`complete`.
 
@@ -96,13 +139,20 @@ class Provider(ABC):
         async SDKs should override for true non-blocking I/O.
         """
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(
-            None,
-            lambda: self.complete(
-                messages, tools=tools, temperature=temperature, max_tokens=max_tokens,
-                thinking=thinking,
-            ),
-        )
+        forward_cancel = self._supports_cancel_event("complete")
+
+        def _call() -> Response:
+            kwargs: dict[str, Any] = {
+                "tools": tools,
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+                "thinking": thinking,
+            }
+            if forward_cancel:
+                kwargs["cancel_event"] = cancel_event
+            return self.complete(messages, **kwargs)
+
+        return await loop.run_in_executor(None, _call)
 
     async def async_stream(
         self,
@@ -111,6 +161,7 @@ class Provider(ABC):
         temperature: float = 0.0,
         max_tokens: int | None = None,
         thinking: ThinkingLevel | None = None,
+        cancel_event: threading.Event | None = None,
     ) -> AsyncIterator[StreamEvent]:
         """Async version of :meth:`stream`.
 
@@ -120,13 +171,19 @@ class Provider(ABC):
         """
         queue: asyncio.Queue[StreamEvent | None] = asyncio.Queue()
         loop = asyncio.get_running_loop()
+        forward_cancel = self._supports_cancel_event("stream")
 
         def _produce() -> None:
             try:
-                for event in self.stream(
-                    messages, tools=tools, temperature=temperature, max_tokens=max_tokens,
-                    thinking=thinking,
-                ):
+                kwargs: dict[str, Any] = {
+                    "tools": tools,
+                    "temperature": temperature,
+                    "max_tokens": max_tokens,
+                    "thinking": thinking,
+                }
+                if forward_cancel:
+                    kwargs["cancel_event"] = cancel_event
+                for event in self.stream(messages, **kwargs):
                     loop.call_soon_threadsafe(queue.put_nowait, event)
             finally:
                 loop.call_soon_threadsafe(queue.put_nowait, None)

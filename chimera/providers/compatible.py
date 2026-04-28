@@ -48,6 +48,7 @@ class OpenAICompatibleProvider(Provider):
         temperature: float = 0.0,
         max_tokens: int | None = None,
         thinking: Any = None,
+        cancel_event: Any = None,  # accepted for Liskov; not yet plumbed
     ) -> Response:
         api_messages = self._convert_messages(messages)
 

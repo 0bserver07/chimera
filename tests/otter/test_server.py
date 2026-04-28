@@ -404,6 +404,182 @@ def test_sse_replays_history_to_late_subscribers(
 
 
 # ---------------------------------------------------------------------------
+# SSE Last-Event-ID resume (W7)
+# ---------------------------------------------------------------------------
+
+
+def _read_sse_chunk_with_header(
+    srv: OtterServer,
+    sid: str,
+    *,
+    last_event_id: str | None = None,
+    max_bytes: int = 4096,
+    extra_blocks: int = 1,
+) -> bytes:
+    """Open ``/session/<id>/events`` with an optional ``Last-Event-ID`` header.
+
+    Mirrors :func:`_read_sse_chunk` but lets the test pass arbitrary
+    request headers and gate how many SSE blocks to wait for.
+    """
+    headers = (
+        f"GET /session/{sid}/events HTTP/1.1\r\n"
+        f"Host: 127.0.0.1:{srv.port}\r\n"
+        "Accept: text/event-stream\r\n"
+        "Connection: close\r\n"
+    )
+    if last_event_id is not None:
+        headers += f"Last-Event-ID: {last_event_id}\r\n"
+    headers += "\r\n"
+    s = socket.create_connection(("127.0.0.1", srv.port), timeout=5.0)
+    s.sendall(headers.encode("ascii"))
+    buf = b""
+    deadline = time.time() + 5.0
+    while time.time() < deadline and len(buf) < max_bytes:
+        try:
+            chunk = s.recv(max_bytes)
+        except socket.timeout:
+            break
+        if not chunk:
+            break
+        buf += chunk
+        if buf.count(b"\n\n") >= extra_blocks:
+            break
+    s.close()
+    return buf
+
+
+def _parse_sse_ids(raw: str) -> list[int]:
+    """Pull integer ``id:`` values out of an SSE chunk, in order."""
+    ids: list[int] = []
+    for line in raw.splitlines():
+        if line.startswith("id: "):
+            try:
+                ids.append(int(line[len("id: ") :].strip()))
+            except ValueError:
+                pass
+    return ids
+
+
+def test_sse_subscribe_with_last_event_id_skips_replay(
+    server: OtterServer,
+) -> None:
+    """``OtterServer.subscribe`` with a cursor skips matching replay frames."""
+    state = server.create_session(working_dir="/x")
+    server.emit_event(state, "first", {"n": 1})
+    server.emit_event(state, "second", {"n": 2})
+    server.emit_event(state, "third", {"n": 3})
+
+    q = server.subscribe(state, last_event_id=2)
+    drained: list[dict[str, Any]] = []
+    while True:
+        try:
+            env = q.get_nowait()
+        except Exception:  # queue.Empty
+            break
+        if env is None:
+            break
+        drained.append(env)
+
+    # Only the third event (id=3) should have been replayed.
+    assert [env["id"] for env in drained] == ["3"]
+    assert drained[0]["event"] == "third"
+
+
+def test_sse_subscribe_last_event_id_beyond_history_replays_nothing(
+    server: OtterServer,
+) -> None:
+    """A cursor past the current count drops every replay frame."""
+    state = server.create_session(working_dir="/x")
+    server.emit_event(state, "first", {"n": 1})
+    server.emit_event(state, "second", {"n": 2})
+
+    q = server.subscribe(state, last_event_id=99)
+    # Nothing should be queued.
+    import queue as _queue
+
+    with pytest.raises(_queue.Empty):
+        q.get_nowait()
+
+    # Live frames after subscribe still come through.
+    server.emit_event(state, "live", {"n": 3})
+    env = q.get(timeout=2.0)
+    assert env is not None
+    assert env["event"] == "live"
+    assert env["id"] == "3"
+
+
+def test_sse_http_resume_with_last_event_id_header(
+    server: OtterServer,
+) -> None:
+    """A reconnecting HTTP client with ``Last-Event-ID`` skips earlier frames."""
+    _, created = _http_json("POST", f"{_base_url(server)}/session", body={})
+    sid = created["session_id"]
+    state = server.get_session(sid)
+    assert state is not None
+
+    # Pre-seed three events so we have ids 1, 2, 3 to choose from.
+    server.emit_event(state, "alpha", {"n": 1})
+    server.emit_event(state, "beta", {"n": 2})
+    server.emit_event(state, "gamma", {"n": 3})
+
+    # First connection: drop after seeing 2 frames (no Last-Event-ID).
+    raw_first = _read_sse_chunk_with_header(
+        server, sid, extra_blocks=2, max_bytes=4096
+    ).decode("utf-8", "replace")
+    first_ids = _parse_sse_ids(raw_first)
+    assert first_ids[:2] == [1, 2], f"expected ids 1,2 first; got {first_ids}"
+
+    # Reconnect with Last-Event-ID: 2. Only id=3 should arrive.
+    raw_second = _read_sse_chunk_with_header(
+        server, sid, last_event_id="2", extra_blocks=1, max_bytes=4096
+    ).decode("utf-8", "replace")
+    second_ids = _parse_sse_ids(raw_second)
+    assert 1 not in second_ids
+    assert 2 not in second_ids
+    assert 3 in second_ids
+    assert "event: gamma" in raw_second
+    assert "event: alpha" not in raw_second
+    assert "event: beta" not in raw_second
+
+
+def test_sse_http_resume_malformed_last_event_id_replays_all(
+    server: OtterServer,
+) -> None:
+    """A non-integer ``Last-Event-ID`` is ignored (full replay)."""
+    _, created = _http_json("POST", f"{_base_url(server)}/session", body={})
+    sid = created["session_id"]
+    state = server.get_session(sid)
+    assert state is not None
+    server.emit_event(state, "alpha", {"n": 1})
+    server.emit_event(state, "beta", {"n": 2})
+
+    raw = _read_sse_chunk_with_header(
+        server, sid, last_event_id="not-an-int", extra_blocks=2, max_bytes=4096
+    ).decode("utf-8", "replace")
+    ids = _parse_sse_ids(raw)
+    assert 1 in ids
+    assert 2 in ids
+
+
+def test_sse_http_resume_zero_replays_everything(
+    server: OtterServer,
+) -> None:
+    """``Last-Event-ID: 0`` is a valid cursor below the first id (1)."""
+    _, created = _http_json("POST", f"{_base_url(server)}/session", body={})
+    sid = created["session_id"]
+    state = server.get_session(sid)
+    assert state is not None
+    server.emit_event(state, "alpha", {"n": 1})
+    server.emit_event(state, "beta", {"n": 2})
+
+    raw = _read_sse_chunk_with_header(
+        server, sid, last_event_id="0", extra_blocks=2, max_bytes=4096
+    ).decode("utf-8", "replace")
+    ids = _parse_sse_ids(raw)
+    assert ids[:2] == [1, 2]
+
+
+# ---------------------------------------------------------------------------
 # Permission bridge
 # ---------------------------------------------------------------------------
 

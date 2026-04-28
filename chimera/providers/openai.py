@@ -134,6 +134,7 @@ class OpenAIProvider(Provider):
         temperature: float = 0.0,
         max_tokens: int | None = None,
         thinking: Any = None,
+        cancel_event: Any = None,  # accepted for Liskov; not yet plumbed
     ) -> Response:
         kwargs = self._prepare_request(messages, tools, temperature, max_tokens)
         response = self._client.chat.completions.create(**kwargs)
@@ -146,6 +147,7 @@ class OpenAIProvider(Provider):
         temperature: float = 0.0,
         max_tokens: int | None = None,
         thinking: Any = None,
+        cancel_event: Any = None,  # accepted for Liskov; not yet plumbed
     ) -> Iterator[StreamEvent]:
         """Stream a response using the OpenAI chat completions stream API."""
         kwargs = self._prepare_request(messages, tools, temperature, max_tokens)
@@ -238,6 +240,7 @@ class OpenAIProvider(Provider):
         temperature: float = 0.0,
         max_tokens: int | None = None,
         thinking: Any = None,
+        cancel_event: Any = None,  # accepted for Liskov; not yet plumbed
     ) -> Response:
         kwargs = self._prepare_request(messages, tools, temperature, max_tokens)
         response = await self._aclient.chat.completions.create(**kwargs)
@@ -250,6 +253,7 @@ class OpenAIProvider(Provider):
         temperature: float = 0.0,
         max_tokens: int | None = None,
         thinking: Any = None,
+        cancel_event: Any = None,  # accepted for Liskov; not yet plumbed
     ) -> AsyncIterator[StreamEvent]:
         """Async stream using the OpenAI async chat completions API."""
         kwargs = self._prepare_request(messages, tools, temperature, max_tokens)

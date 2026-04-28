@@ -1,7 +1,9 @@
 # chimera/providers/ollama.py
 from __future__ import annotations
 
+import asyncio
 import json
+import threading
 import uuid
 from collections.abc import AsyncIterator, Iterator
 from typing import Any
@@ -13,6 +15,98 @@ try:
     import httpx  # type: ignore[import-not-found]
 except ImportError:
     httpx = None  # type: ignore[assignment]
+
+
+class _SyncOllamaCancelWatcher:
+    """Context manager: closes a sync httpx.Client when *cancel_event* fires.
+
+    Acts as a no-op when *cancel_event* is ``None``. The watcher thread
+    polls every 50ms (using :meth:`threading.Event.wait` with a timeout)
+    so cancel latency stays sub-100ms while never busy-looping.
+    """
+
+    def __init__(
+        self,
+        cancel_event: threading.Event | None,
+        client: Any,
+    ) -> None:
+        self._cancel_event = cancel_event
+        self._client = client
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+
+    def __enter__(self) -> "_SyncOllamaCancelWatcher":
+        if self._cancel_event is None:
+            return self
+
+        def _watch() -> None:
+            while not self._stop.is_set():
+                cancel_event = self._cancel_event
+                assert cancel_event is not None
+                if cancel_event.wait(timeout=0.05):
+                    try:
+                        self._client.close()
+                    except Exception:  # noqa: BLE001 - best effort
+                        pass
+                    return
+
+        t = threading.Thread(target=_watch, daemon=True)
+        t.start()
+        self._thread = t
+        return self
+
+    def __exit__(self, *exc: Any) -> None:
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=0.5)
+
+
+class _AsyncOllamaCancelWatcher:
+    """Async sibling of :class:`_SyncOllamaCancelWatcher` for httpx.AsyncClient."""
+
+    def __init__(
+        self,
+        cancel_event: threading.Event | None,
+        aclient: Any,
+    ) -> None:
+        self._cancel_event = cancel_event
+        self._aclient = aclient
+        self._stop = threading.Event()
+        self._task: asyncio.Task[None] | None = None
+
+    async def start(self) -> None:
+        if self._cancel_event is None:
+            return
+        loop = asyncio.get_running_loop()
+
+        async def _runner() -> None:
+            cancel_event = self._cancel_event
+            assert cancel_event is not None
+            while not self._stop.is_set():
+                fired = await loop.run_in_executor(
+                    None, lambda: cancel_event.wait(timeout=0.05),
+                )
+                if self._stop.is_set():
+                    return
+                if fired:
+                    try:
+                        await self._aclient.aclose()
+                    except Exception:  # noqa: BLE001 - best effort
+                        pass
+                    return
+
+        self._task = loop.create_task(_runner())
+
+    async def stop(self) -> None:
+        self._stop.set()
+        if self._task is not None:
+            try:
+                await asyncio.wait_for(self._task, timeout=0.5)
+            except (asyncio.TimeoutError, asyncio.CancelledError):
+                self._task.cancel()
+            except Exception:  # noqa: BLE001
+                pass
+            self._task = None
 
 
 _DEFAULT_NUM_CTX = 131_072
@@ -113,19 +207,41 @@ class OllamaProvider(Provider):
         temperature: float = 0.0,
         max_tokens: int | None = None,
         thinking: Any = None,
+        cancel_event: threading.Event | None = None,
         **kwargs: Any,
     ) -> Response:
         payload = self._build_payload(
             messages, tools, temperature, max_tokens, stream=False, overrides=kwargs,
         )
 
-        resp = httpx.post(  # type: ignore[union-attr]
-            f"{self._base_url}/api/chat",
-            json=payload,
-            timeout=300,
-        )
-        resp.raise_for_status()
-        data = resp.json()
+        if cancel_event is None:
+            # Fast path — no Client allocation; matches the historical
+            # behaviour and the unit-test mocks for ``httpx.post``.
+            resp = httpx.post(  # type: ignore[union-attr]
+                f"{self._base_url}/api/chat",
+                json=payload,
+                timeout=300,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+        else:
+            # Slow path — wrap in a Client so the cancel watcher can call
+            # .close() and preempt an in-flight POST. Module-level
+            # httpx.post() opens its own client we can't reach into.
+            client = httpx.Client(timeout=300)  # type: ignore[union-attr]
+            try:
+                with _SyncOllamaCancelWatcher(cancel_event, client):
+                    resp = client.post(
+                        f"{self._base_url}/api/chat",
+                        json=payload,
+                    )
+                    resp.raise_for_status()
+                    data = resp.json()
+            finally:
+                try:
+                    client.close()
+                except Exception:  # noqa: BLE001 - already closed in watcher
+                    pass
 
         msg = data.get("message", {})
         content = msg.get("content", "")
@@ -165,6 +281,7 @@ class OllamaProvider(Provider):
         temperature: float = 0.0,
         max_tokens: int | None = None,
         thinking: Any = None,
+        cancel_event: threading.Event | None = None,
         **kwargs: Any,
     ) -> Iterator[StreamEvent]:
         """Stream a response from Ollama via NDJSON over ``/api/chat``.
@@ -191,7 +308,8 @@ class OllamaProvider(Provider):
                 try:
                     async for event in self.async_stream(
                         messages, tools=tools, temperature=temperature,
-                        max_tokens=max_tokens, thinking=thinking, **kwargs,
+                        max_tokens=max_tokens, thinking=thinking,
+                        cancel_event=cancel_event, **kwargs,
                     ):
                         out.put(event)
                 except BaseException as exc:  # noqa: BLE001
@@ -218,6 +336,7 @@ class OllamaProvider(Provider):
         temperature: float = 0.0,
         max_tokens: int | None = None,
         thinking: Any = None,
+        cancel_event: threading.Event | None = None,
         **kwargs: Any,
     ) -> AsyncIterator[StreamEvent]:
         """Native async NDJSON streamer for ``/api/chat``.
@@ -247,59 +366,64 @@ class OllamaProvider(Provider):
         usage: dict[str, int] = {"input_tokens": 0, "output_tokens": 0}
 
         async with httpx.AsyncClient(timeout=None) as client:  # type: ignore[union-attr]
-            async with client.stream(
-                "POST", f"{self._base_url}/api/chat", json=payload,
-            ) as resp:
-                resp.raise_for_status()
-                async for line in resp.aiter_lines():
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        chunk = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
+            watcher = _AsyncOllamaCancelWatcher(cancel_event, client)
+            await watcher.start()
+            try:
+                async with client.stream(
+                    "POST", f"{self._base_url}/api/chat", json=payload,
+                ) as resp:
+                    resp.raise_for_status()
+                    async for line in resp.aiter_lines():
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            chunk = json.loads(line)
+                        except json.JSONDecodeError:
+                            continue
 
-                    msg = chunk.get("message") or {}
+                        msg = chunk.get("message") or {}
 
-                    text = msg.get("content") or ""
-                    if text:
-                        yield StreamEvent(type="text_delta", content=text)
+                        text = msg.get("content") or ""
+                        if text:
+                            yield StreamEvent(type="text_delta", content=text)
 
-                    for tc in msg.get("tool_calls") or []:
-                        func = tc.get("function") or {}
-                        name = func.get("name", "")
-                        args = func.get("arguments", {})
-                        if isinstance(args, str):
-                            try:
-                                args = json.loads(args)
-                            except json.JSONDecodeError:
-                                args = {}
+                        for tc in msg.get("tool_calls") or []:
+                            func = tc.get("function") or {}
+                            name = func.get("name", "")
+                            args = func.get("arguments", {})
+                            if isinstance(args, str):
+                                try:
+                                    args = json.loads(args)
+                                except json.JSONDecodeError:
+                                    args = {}
 
-                        # Ollama's native tool_calls have no id; key on
-                        # (index, name) within this stream and synthesize
-                        # a UUID reused across start/complete.
-                        key = f"{len(emitted_starts)}:{name}"
-                        call_id = emitted_starts.get(key)
-                        if call_id is None:
-                            call_id = f"call_{uuid.uuid4().hex[:12]}"
-                            emitted_starts[key] = call_id
+                            # Ollama's native tool_calls have no id; key on
+                            # (index, name) within this stream and synthesize
+                            # a UUID reused across start/complete.
+                            key = f"{len(emitted_starts)}:{name}"
+                            call_id = emitted_starts.get(key)
+                            if call_id is None:
+                                call_id = f"call_{uuid.uuid4().hex[:12]}"
+                                emitted_starts[key] = call_id
+                                yield StreamEvent(
+                                    type="tool_call_start",
+                                    tool_call=ToolCall(id=call_id, name=name, arguments={}),
+                                )
+
                             yield StreamEvent(
-                                type="tool_call_start",
-                                tool_call=ToolCall(id=call_id, name=name, arguments={}),
+                                type="tool_call_complete",
+                                tool_call=ToolCall(id=call_id, name=name, arguments=args),
                             )
 
-                        yield StreamEvent(
-                            type="tool_call_complete",
-                            tool_call=ToolCall(id=call_id, name=name, arguments=args),
-                        )
-
-                    if chunk.get("done"):
-                        usage = {
-                            "input_tokens": chunk.get("prompt_eval_count", 0),
-                            "output_tokens": chunk.get("eval_count", 0),
-                        }
-                        break
+                        if chunk.get("done"):
+                            usage = {
+                                "input_tokens": chunk.get("prompt_eval_count", 0),
+                                "output_tokens": chunk.get("eval_count", 0),
+                            }
+                            break
+            finally:
+                await watcher.stop()
 
         yield StreamEvent(type="done", usage=usage)
 

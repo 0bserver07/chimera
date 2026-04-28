@@ -42,6 +42,16 @@ class CancellationToken:
     def wait(self, timeout: float | None = None) -> bool:
         return self._cancelled.wait(timeout)
 
+    def threading_event(self) -> threading.Event:
+        """Return the underlying :class:`threading.Event`.
+
+        Useful for plumbing the token through APIs (notably HTTP / provider
+        layers) that take a generic ``threading.Event`` as their cancel
+        primitive. The returned event is the same one ``cancel()`` sets, so
+        a watcher waiting on it observes the cancellation immediately.
+        """
+        return self._cancelled
+
 
 class CancellableTool:
     """Mixin for tools that support cooperative cancellation."""

@@ -288,9 +288,62 @@ parent process spawned us, so the parent process is authorized."
   skip (the server-side equivalent of `--no-save`).
 - Sessions run in parallel; the server uses `asyncio` with one task per
   active turn, bounded by the `LoopConfig` cancellation token.
-- No built-in rate limiting or TLS; front otter with Caddy / nginx in
-  production.
+- No built-in rate limiting; front otter with Caddy / nginx in
+  production if you need throttling. Built-in TLS is available via
+  `--tls-cert` / `--tls-key` (see below) for off-localhost deployments.
 - Structured logs go to stderr.
+
+## SSE resume contract
+
+The `GET /session/<id>/events` handler honors the standard SSE
+`Last-Event-ID` request header so a client whose connection drops mid-run
+can reconnect and pick up where it left off without replaying every
+already-seen frame.
+
+### Wire shape
+
+Every SSE record the server sends carries a numeric `id:` line:
+
+```
+id: 7
+event: loop_event
+data: {"message_id": "…", "type": "tool_call", "data": {…}, "turn": 0, "timestamp": 1714…}
+
+```
+
+`id` is a 1-based monotonic counter scoped to the session — it equals the
+position of the envelope in the session's append-only event log.
+
+### Reconnect protocol
+
+On reconnect, the client supplies the last id it successfully observed:
+
+```http
+GET /session/<id>/events HTTP/1.1
+Last-Event-ID: 7
+```
+
+The server replays only frames whose id is **strictly greater** than the
+supplied cursor (id > 7), then continues to stream live frames as they
+are emitted. Concretely:
+
+| Header value          | Replay behavior                                           |
+|-----------------------|-----------------------------------------------------------|
+| Header absent         | Full history replay, then live frames.                    |
+| `Last-Event-ID: 0`    | Full history replay (no frame has id ≤ 0).                |
+| `Last-Event-ID: N`    | Skip every frame with id ≤ N; replay the rest; then live. |
+| `Last-Event-ID: 99…`  | (Past current count) Replay nothing; deliver live frames. |
+| Non-integer / blank   | Treated as absent — full replay (per the SSE spec).       |
+
+### Client expectations
+
+- Standard `EventSource` clients populate `Last-Event-ID` automatically
+  on reconnect — no special handling needed in JavaScript.
+- Custom HTTP clients (curl, Python `urllib`, Go's `http.Client`) must
+  set the header explicitly; the server does not infer the cursor from a
+  cookie or query string.
+- The server never rewrites the cursor — id `N` always maps to the same
+  envelope across the lifetime of the session.
 
 ## See also
 
@@ -303,3 +356,45 @@ parent process spawned us, so the parent process is authorized."
   `share` command.
 - [`providers.md`](providers.md) — provider chain that decides which
   SDK powers `model`.
+
+## TLS (`--tls-cert` / `--tls-key`)
+
+Once `chimera otter serve` binds anywhere other than `127.0.0.1`, the
+bearer token in `Authorization: Bearer …` rides any on-path observer's
+tcpdump. Pair the token with TLS so the channel is confidential before
+the auth header even leaves the client.
+
+```bash
+chimera otter serve \
+  --host 0.0.0.0 --port 5173 \
+  --auth-token "$OTTER_TOKEN" \
+  --tls-cert /etc/otter/server.crt \
+  --tls-key /etc/otter/server.key
+```
+
+When both flags are set the server wraps its listening socket via
+[`ssl.SSLContext.wrap_socket`](https://docs.python.org/3/library/ssl.html#ssl.SSLContext.wrap_socket)
+with `PROTOCOL_TLS_SERVER` and `load_cert_chain(certfile, keyfile)` —
+stdlib only, no extra runtime dependency. Cleartext clients that try
+to reach the same port get a connection error instead of an HTTP
+response, which is the correct failure mode for a TLS endpoint.
+
+Operational rules:
+
+- Both flags must be supplied together. Passing only one is a usage
+  error (`exit 2`) before the socket is bound.
+- `--auth-token` is **strongly recommended** alongside TLS. TLS hides
+  the bearer token in transit; the token is still what proves the
+  caller is allowed to drive the agent.
+- For LAN / staging use, a self-signed cert generated with `openssl
+  req -x509 …` (or any other CA toolchain) is sufficient. Production
+  deployments should use a cert from your real CA.
+- Certificate rotation is not hot-swappable today: restart the server
+  to pick up a new cert chain.
+- The startup banner on stderr switches from `http://…` to `https://…`
+  so logs unambiguously reflect the active scheme.
+
+Browser clients connecting over HTTPS still face the `EventSource`
+limitation noted in the auth section — terminate TLS at a reverse
+proxy if you need it to inject the `Authorization` header for an
+in-browser SSE consumer.
