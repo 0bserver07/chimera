@@ -29,7 +29,7 @@ import argparse
 import os
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from chimera.core.agent import Agent
@@ -57,6 +57,38 @@ DEFAULT_HUMANEVAL_PATH = (
 # ---------------------------------------------------------------------------
 # Agent construction
 # ---------------------------------------------------------------------------
+
+
+def _strip_code_fences(text: str) -> str:
+    """Extract a Python code block from a markdown-fenced agent reply.
+
+    Coding agents like otter routinely emit ```python ... ``` blocks
+    around the implementation. The HumanEval evaluator passes the raw
+    agent output to ``exec()`` so unparsed fences become a syntax error.
+
+    Strategy:
+
+    * If at least one ``````` fence is present, return the
+      concatenation of every fenced block's body in source order. This
+      handles agents that emit imports + helper + main function across
+      multiple blocks.
+    * Otherwise return *text* unchanged so callers that already produce
+      raw Python see no behavioral change.
+    """
+    if "```" not in text:
+        return text
+    parts: list[str] = []
+    inside = False
+    for line in text.splitlines():
+        stripped = line.lstrip()
+        if stripped.startswith("```"):
+            inside = not inside
+            continue
+        if inside:
+            parts.append(line)
+    if not parts:
+        return text
+    return "\n".join(parts)
 
 
 def build_otter_agent_for_eval(model: str | None = None) -> "Agent":
@@ -96,7 +128,14 @@ def build_otter_agent_for_eval(model: str | None = None) -> "Agent":
     loop = ReAct(config=LoopConfig())
     prompt = Prompt.from_string(
         "You are Otter, a Chimera coding agent under benchmark evaluation. "
-        "Read the task carefully, then produce the requested output."
+        "Read the task carefully, then produce the requested output. "
+        "When asked for a Python function: emit ONLY the complete function "
+        "definition (and any required imports) inside a single "
+        "```python ... ``` fenced code block. The block must execute "
+        "standalone with `exec()` and define the requested function. Do "
+        "NOT call the function, do NOT print anything, do NOT include "
+        "test code, do NOT wrap in `if __name__ == '__main__':`. No prose "
+        "outside the code block."
     )
     return Agent(
         provider=provider,
@@ -124,6 +163,11 @@ def run_humaneval(
     :func:`build_otter_agent_for_eval`. Tasks are loaded from the
     vendored ``data/humaneval.json`` by default.
 
+    A per-task :class:`~chimera.env.local.LocalEnvironment` is provided
+    via ``env_factory`` so file/list/bash tools have a working sandbox.
+    Each task gets a fresh temporary working directory which the
+    harness sets up + cleans up around the agent run.
+
     Args:
         limit: Maximum number of tasks to run. Use ``0`` or a negative
             value to run the full benchmark.
@@ -136,14 +180,57 @@ def run_humaneval(
     Returns:
         The :class:`EvalResult` aggregated across the requested tasks.
     """
+    import tempfile
+
+    from chimera.env.local import LocalEnvironment
     from chimera.eval.benchmarks.human_eval import HumanEval
     from chimera.eval.harness import Harness
 
     path = dataset_path or str(DEFAULT_HUMANEVAL_PATH)
     effective_limit = limit if limit and limit > 0 else None
+
+    # WHY: forward construction through ``HumanEval`` itself (rather than
+    # always instantiating a subclass) so tests that ``patch("chimera.eval
+    # .benchmarks.human_eval.HumanEval")`` observe the call. When the real
+    # class is in play we then attach the otter-side fence-strip +
+    # check-invocation fixes by monkey-patching the ``evaluate`` method on
+    # the instance — equivalent to subclassing without breaking the mock.
     benchmark = HumanEval(dataset_path=path, limit=effective_limit)
+
+    if isinstance(HumanEval, type):  # not a Mock; safe to patch evaluate
+        _orig_evaluate = benchmark.evaluate
+
+        def _patched_evaluate(task: Any, agent_output: str, env: Any) -> bool:
+            """Strip markdown fences and append ``check(<entry_point>)``.
+
+            The base ``evaluate()`` ``exec()``s ``solution + test_code``
+            but never calls ``check``, so any syntactically-valid output
+            passes. We inject the call.
+            """
+            cleaned = _strip_code_fences(agent_output)
+            entry_point = task.get("entry_point", "")
+            test_code = task.get("test", "")
+            if not test_code:
+                return bool(_orig_evaluate(task, cleaned, env))
+            invocation = (
+                f"\n\ncheck({entry_point})\n" if entry_point else "\n"
+            )
+            patched_test = test_code + invocation
+            patched_task = dict(task)
+            patched_task["test"] = patched_test
+            return bool(_orig_evaluate(patched_task, cleaned, env))
+
+        benchmark.evaluate = _patched_evaluate  # type: ignore[method-assign]
     agent = build_otter_agent_for_eval(model)
-    harness = Harness(benchmark=benchmark, agent=agent)
+
+    def _env_factory() -> LocalEnvironment:
+        # WHY: AGENT_TOOLS includes list_files / bash / read / write which
+        # require a non-None env. Give each task a fresh temp workdir so
+        # tool calls land somewhere safe and isolated from the repo root.
+        workdir = tempfile.mkdtemp(prefix="otter-humaneval-")
+        return LocalEnvironment(workdir=workdir)
+
+    harness = Harness(benchmark=benchmark, agent=agent, env_factory=_env_factory)
     return harness.run()
 
 
