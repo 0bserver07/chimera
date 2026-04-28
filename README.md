@@ -134,6 +134,42 @@ The plugin honors a `settings.json` schema for ecosystem interop, so the same ho
 
 [Setup guide](docs/playbooks/00-quick-start.md) — install in 2 minutes.
 
+### Otter — server-first coding agent
+
+`chimera otter` is the second coding-agent CLI. Where `chimera mink` mirrors a TUI-first agent, otter mirrors a server-first / multi-client open-source coding agent: a single ReAct loop you can drive from a one-shot CLI, an interactive REPL, an HTTP server with SSE streaming, or an ACP JSON-RPC transport — all backed by the same `LoopConfig`, tool registry, and event-sourced session store the rest of Chimera uses.
+
+Quick install + first run with `glm-5.1:cloud` (via Ollama's Anthropic-compatible bridge):
+
+```bash
+uv sync --extra dev --extra anthropic
+export ANTHROPIC_BASE_URL=http://localhost:11434
+export ANTHROPIC_AUTH_TOKEN=ollama
+chimera otter --model glm-5.1:cloud -p "summarize this repo"   # one-shot
+chimera otter --model glm-5.1:cloud                            # interactive REPL
+chimera otter --model glm-5.1:cloud serve --port 5173          # HTTP + SSE
+chimera otter --model glm-5.1:cloud serve --acp                # ACP over stdio
+```
+
+Three transports, one loop:
+
+- **REPL** — streaming text + tool calls, mid-turn steering, `Ctrl-C` cancel, 26-entry slash-command palette (`/help`, `/share`, `/agent`, `/model`, `/sessions`, `/compact`, …).
+- **HTTP + SSE** — `/sessions`, `/sessions/{id}`, `/sessions/{id}/turns`, `/sessions/{id}/events` (Server-Sent Events). Optional `OTTER_SERVER_TOKEN` Bearer auth.
+- **ACP** — JSON-RPC over stdio for IDE clients that already speak the Agent Client Protocol.
+
+Key flag surface:
+
+```bash
+chimera otter --model glm-5.1:cloud -p "..."     # pick the provider/model
+chimera otter --no-mcp -p "..."                  # disable MCP tool sources
+chimera otter --no-rules -p "..."                # ignore project + user rules files
+chimera otter --no-plugins -p "..."              # skip directory-loaded plugins
+chimera otter --no-lsp -p "..."                  # disable LSP-backed edit verification
+```
+
+Every persisted run lives under `~/.chimera/eventlog/otter-<utc>-<uuid>/` and is listable, showable, and shareable (`chimera otter sessions list | show | --since 7d`, `chimera otter share <id> --sink http|file|stdout --format html|md|json`).
+
+See the [Otter quickstart](docs/otter/quickstart.md) for the full walkthrough — provider resolution order, env vars, on-disk layout, and pointers to `providers.md`, `models.md`, `sessions.md`, `share.md`, and `server.md`.
+
 ## How It's Organized
 
 Chimera is an 8-layer stack. Each layer has a documented API boundary; swap any provider, tool, env, or strategy without touching the rest.
@@ -201,6 +237,7 @@ Use Chimera if you want to:
 - [Quick Start](docs/playbooks/00-quick-start.md) — hooks, MCP servers, skills
 - [Mink Quickstart](docs/mink/quickstart.md) — `chimera mink` REPL, runs/agents subcommands
 - [Mink Providers](docs/mink/providers.md) — backend matrix, env vars, troubleshooting
+- [Otter Quickstart](docs/otter/quickstart.md) — `chimera otter` one-shot, REPL, HTTP+SSE, ACP
 - [Build Your Own Agent](docs/playbooks/08-building-agents.md) — full library guide
 - [All Playbooks](docs/playbooks/) — 13 guides covering every feature
 - [Examples](examples/) — 28 curated runnable scripts across 7 categories

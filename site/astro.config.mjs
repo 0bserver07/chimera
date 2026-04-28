@@ -68,6 +68,45 @@ export default defineConfig({
 					autogenerate: { directory: 'reference' },
 				},
 				{
+					label: 'Mink',
+					collapsed: true,
+					items: [
+						{
+							label: 'Core',
+							items: [
+								{ label: 'Quickstart', slug: 'mink/quickstart' },
+								{ label: 'Providers', slug: 'mink/providers' },
+								{ label: 'Models', slug: 'mink/models' },
+								{ label: 'Sessions', slug: 'mink/sessions' },
+								{ label: 'Runs', slug: 'mink/runs' },
+								{ label: 'Settings', slug: 'mink/settings' },
+							],
+						},
+						{
+							label: 'Per-Area',
+							items: [
+								{ label: 'Parity Matrix', slug: 'mink/parity-matrix' },
+								{ label: 'Slash Commands', slug: 'mink/slash-commands' },
+								{ label: 'Tools', slug: 'mink/tools' },
+								{ label: 'Permissions', slug: 'mink/permissions' },
+								{ label: 'Output Formats', slug: 'mink/output-formats' },
+								{ label: 'MCP Advanced', slug: 'mink/mcp-advanced' },
+								{ label: 'Subagents', slug: 'mink/subagents' },
+								{ label: 'Agent Teams', slug: 'mink/agent-teams' },
+								{ label: 'Memory', slug: 'mink/memory' },
+								{ label: 'Benchmarks', slug: 'mink/benchmarks' },
+								{ label: 'Remote', slug: 'mink/remote' },
+							],
+						},
+						{
+							label: 'Policy',
+							items: [
+								{ label: 'Security and Licenses', slug: 'mink/security-and-licenses' },
+							],
+						},
+					],
+				},
+				{
 					label: 'Otter',
 					collapsed: true,
 					items: [
@@ -75,6 +114,7 @@ export default defineConfig({
 							label: 'Core',
 							items: [
 								{ label: 'Quickstart', slug: 'otter/quickstart' },
+								{ label: 'CLI Reference', slug: 'otter/cli-reference' },
 								{ label: 'Providers', slug: 'otter/providers' },
 								{ label: 'Models', slug: 'otter/models' },
 								{ label: 'Sessions', slug: 'otter/sessions' },

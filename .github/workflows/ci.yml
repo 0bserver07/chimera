@@ -69,6 +69,26 @@ jobs:
       - name: Run mink trademark scrub
         run: bash scripts/mink_trademark_scrub.sh
 
+  docs-sync-check:
+    # WHY: docs/otter/ and docs/mink/ are canonical Markdown sources;
+    # site/src/content/docs/otter/ and site/src/content/docs/mink/ are
+    # the Astro/Starlight mirror.  Without a check, the two trees drift
+    # silently (wave-1 W7 flagged this as Risk #4 in W7-REPORT.md).
+    # ``scripts/sync_docs.sh --check`` exits 1 if any mirrored file is
+    # out of sync with its canonical source; developers fix locally by
+    # running ``bash scripts/sync_docs.sh`` (no flag) and committing.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run docs sync check
+        run: bash scripts/sync_docs.sh --check
+
   docs:
     runs-on: ubuntu-latest
     needs: test
