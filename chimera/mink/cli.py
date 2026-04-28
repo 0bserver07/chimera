@@ -391,12 +391,46 @@ def _parse_remote_url(url: str) -> dict[str, Any]:
     }
 
 
+def _select_ssh_backend() -> str:
+    """Decide which SSH backend ``--remote`` should instantiate.
+
+    Returns ``"async"`` when ``CHIMERA_SSH_BACKEND=async`` *and* the
+    optional :mod:`asyncssh` dependency is importable; otherwise
+    ``"subprocess"``. The fall-through is deliberate: an unset variable,
+    an unrecognized value, or a missing extra all preserve the wave-1
+    subprocess default so existing users see no behavior change.
+
+    Returns:
+        ``"async"`` or ``"subprocess"``.
+    """
+    requested = os.environ.get("CHIMERA_SSH_BACKEND", "").strip().lower()
+    if requested != "async":
+        return "subprocess"
+    # Probe import without leaving a top-level dependency. ``find_spec``
+    # is cheap and never imports the module body, so callers that don't
+    # set the env var pay zero cost.
+    import importlib.util
+
+    if importlib.util.find_spec("asyncssh") is None:
+        return "subprocess"
+    return "async"
+
+
 def _build_environment(args: argparse.Namespace, cwd: str) -> Any:
-    """Instantiate :class:`SSHEnvironment` or :class:`LocalEnvironment`.
+    """Instantiate the right SSH backend or :class:`LocalEnvironment`.
 
     Centralized so ``_run_print_mode`` and any future entry points pick
     the same backend from the same flag set. ``setup()`` is called by
     the caller, not here, so cleanup ordering stays explicit.
+
+    Backend selection:
+
+    * No ``--remote`` flag → :class:`LocalEnvironment`.
+    * ``--remote …`` and ``CHIMERA_SSH_BACKEND=async`` *with*
+      :mod:`asyncssh` importable → :class:`AsyncSSHEnvironment`
+      (native SFTP, persistent connection).
+    * ``--remote …`` otherwise → :class:`SSHEnvironment` (subprocess /
+      OpenSSH, zero extra deps; the wave-1 default).
 
     Args:
         args: Parsed CLI namespace; reads ``args.remote``.
@@ -408,9 +442,24 @@ def _build_environment(args: argparse.Namespace, cwd: str) -> Any:
     """
     remote = getattr(args, "remote", None)
     if remote:
+        kwargs = _parse_remote_url(remote)
+        if _select_ssh_backend() == "async":
+            from chimera.env.ssh import AsyncSSHEnvironment
+
+            # AsyncSSHEnvironment splits ``user@host`` into separate
+            # ``host`` + ``username`` kwargs, so translate before splat.
+            host = kwargs["host"]
+            username: str | None = None
+            if "@" in host:
+                username, host = host.split("@", 1)
+            return AsyncSSHEnvironment(
+                host=host,
+                port=kwargs.get("port", 22),
+                username=username,
+                workdir=kwargs.get("workdir", "."),
+            )
         from chimera.env.ssh import SSHEnvironment
 
-        kwargs = _parse_remote_url(remote)
         return SSHEnvironment(**kwargs)
     from chimera.env.local import LocalEnvironment
 

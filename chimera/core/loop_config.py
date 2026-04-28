@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from chimera.checkpoints import CheckpointManager
     from chimera.checkpoints_ghost import GhostCommitManager
     from chimera.compaction.base import CompactionStrategy
+    from chimera.compaction.summary import SummaryCompaction
     from chimera.core.cancellation import CancellationToken
     from chimera.core.file_tracker import FileTracker
     from chimera.core.message_queue import MessageQueues
@@ -110,6 +111,17 @@ class LoopConfig:
     # than crashing the whole run. ``None`` (default) disables the wrap.
     # Audit H-4. See chimera/core/tool_executor.py:async_execute_tool_calls_incremental.
     tool_timeout_s: float | None = None
+
+    # -- LLM-condensation (M11) --
+    # When BOTH fields are set, ``ReAct.async_iter_steps`` will run the
+    # conversation through ``condensation.compact(...)`` every
+    # ``condense_every_n_steps`` steps (1-indexed; first trigger at step
+    # ``N``).  This is the runtime hookup for the ``should_condense``
+    # contract exposed by SWE-bench Verified's adapter
+    # (see ``chimera/eval/benchmarks/swe_bench_verified.py``).  Both fields
+    # default to ``None`` so existing loops are unaffected.
+    condensation: SummaryCompaction | None = None
+    condense_every_n_steps: int | None = None
 
     # -- Safety-default controls (opt-out) --
     yolo_mode: bool = False

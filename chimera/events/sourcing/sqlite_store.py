@@ -5,6 +5,9 @@ Schema:
 * ``events``        — one row per appended event (seq, aggregate_id, name,
                       version, payload_json, ts).
 * ``event_sequence`` — one row per aggregate tracking ``last_seq``.
+* ``snapshots``     — optional projector-derived state captured at a given
+                      seq, so long-lived aggregates can resume without
+                      replaying from seq=1.
 
 Sequences are *per-aggregate* (typically a session id) so multi-session
 workloads share one database without contending for a single global
@@ -16,11 +19,14 @@ Public entry points:
 
 * :meth:`SqliteEventStore.append` — write a typed event.
 * :meth:`SqliteEventStore.read_since` — yield events for replay.
+* :meth:`SqliteEventStore.snapshot` — persist projector state at a seq.
+* :meth:`SqliteEventStore.latest_snapshot` — fetch the newest snapshot.
 * :meth:`SqliteEventStore.replay` — drive a
   :class:`~chimera.events.sourcing.projector.ProjectorRegistry`,
   surfacing :class:`SequenceMismatchError` if the stored stream is
   inconsistent and *idempotently skipping* events the registry has
-  already folded.
+  already folded.  When called with ``since_seq=None`` and a snapshot
+  exists for the aggregate, replay starts from ``snapshot.seq + 1``.
 """
 
 from __future__ import annotations
@@ -63,6 +69,17 @@ CREATE TABLE IF NOT EXISTS event_sequence (
     aggregate_id   TEXT PRIMARY KEY,
     last_seq       INTEGER NOT NULL DEFAULT 0
 );
+
+CREATE TABLE IF NOT EXISTS snapshots (
+    session_id     TEXT    NOT NULL,
+    seq            INTEGER NOT NULL,
+    state          TEXT    NOT NULL,
+    created_at     REAL    NOT NULL,
+    PRIMARY KEY (session_id, seq)
+);
+
+CREATE INDEX IF NOT EXISTS idx_snapshots_latest
+    ON snapshots (session_id, seq DESC);
 """
 
 
@@ -286,6 +303,61 @@ class SqliteEventStore:
                 )
 
     # ------------------------------------------------------------------
+    # Public: snapshots
+    # ------------------------------------------------------------------
+
+    def snapshot(self, session_id: str, seq: int, state: Any) -> None:
+        """Persist projector-derived *state* for *session_id* at *seq*.
+
+        Snapshots let long-lived aggregates resume without replaying from
+        seq=1.  Callers typically capture the projector registry's
+        derived state (e.g. a JSON-serializable dict) once event count
+        crosses a threshold.
+
+        Args:
+            session_id: The aggregate (session) identifier.
+            seq: The event seq the *state* reflects.  Must be ``>= 0``.
+                A seq of 0 represents the empty initial state.
+            state: A JSON-serializable object (dict / list / scalar)
+                describing projector-derived state at *seq*.
+
+        Raises:
+            ValueError: if *seq* is negative.
+            TypeError: if *state* is not JSON-serializable.
+        """
+        if seq < 0:
+            raise ValueError(f"snapshot seq must be >= 0, got {seq}")
+        # Surface JSON serialization errors eagerly with a clear type.
+        state_json = json.dumps(state)
+        created_at = time.time()
+        with self._lock:
+            self._conn.execute(
+                "INSERT OR REPLACE INTO snapshots "
+                "(session_id, seq, state, created_at) VALUES (?, ?, ?, ?);",
+                (session_id, seq, state_json, created_at),
+            )
+
+    def latest_snapshot(self, session_id: str) -> tuple[int, Any] | None:
+        """Return ``(seq, state)`` for the newest snapshot or ``None``.
+
+        Args:
+            session_id: The aggregate identifier.
+
+        Returns:
+            Tuple of ``(seq, state)`` where ``state`` is the parsed JSON
+            payload, or ``None`` if no snapshot exists.
+        """
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT seq, state FROM snapshots "
+                "WHERE session_id = ? ORDER BY seq DESC LIMIT 1;",
+                (session_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return int(row[0]), json.loads(row[1])
+
+    # ------------------------------------------------------------------
     # Public: replay
     # ------------------------------------------------------------------
 
@@ -294,6 +366,8 @@ class SqliteEventStore:
         aggregate_id: str,
         registry: Any,
         from_seq: int = 0,
+        *,
+        since_seq: int | None = None,
     ) -> int:
         """Replay events into a :class:`ProjectorRegistry`.
 
@@ -303,7 +377,13 @@ class SqliteEventStore:
                 :class:`~chimera.events.sourcing.projector.ProjectorRegistry`.
             from_seq: Skip events with ``seq <= from_seq`` (used after
                 snapshot restore).  The registry's per-projector cursors
-                give per-projector idempotency on top of this.
+                give per-projector idempotency on top of this.  Retained
+                for back-compat; new callers should prefer *since_seq*.
+            since_seq: Replay starts at ``since_seq + 1``.  When ``None``
+                (the default) and a snapshot exists for *aggregate_id*,
+                replay resumes from ``snapshot.seq + 1`` automatically.
+                When ``None`` and no snapshot exists, replay falls back
+                to ``from_seq``.
 
         Returns:
             Number of events folded.
@@ -312,10 +392,16 @@ class SqliteEventStore:
             SequenceMismatchError: if the stored stream is non-monotonic
                 or has gaps (e.g. seq jumps from 3 -> 5).
         """
-        events_iter = self.read_since(aggregate_id, from_seq=from_seq)
+        if since_seq is None:
+            snap = self.latest_snapshot(aggregate_id)
+            effective_from = snap[0] if snap is not None else from_seq
+        else:
+            effective_from = since_seq
+
+        events_iter = self.read_since(aggregate_id, from_seq=effective_from)
 
         def _generate() -> Iterator[tuple[int, str, Any]]:
-            expected = from_seq + 1
+            expected = effective_from + 1
             for stored in events_iter:
                 if stored.seq < expected:
                     # Idempotent skip — handled by ProjectorRegistry too,

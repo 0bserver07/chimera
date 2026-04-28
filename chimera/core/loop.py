@@ -659,6 +659,29 @@ class ReAct:
                 for msg in self.config.message_queues.drain_steering():
                     context.add(msg)
 
+            # -- LLM condensation (M11) --
+            # Fire SummaryCompaction.compact() every N steps when both
+            # ``condensation`` and ``condense_every_n_steps`` are set on
+            # the LoopConfig. This wires SWE-bench Verified's
+            # ``should_condense`` contract (every-N-steps trigger) into
+            # the actual loop so the conversation window stays focused
+            # over long Verified runs (default budget = 500 steps).
+            if (
+                self.config
+                and self.config.condensation is not None
+                and self.config.condense_every_n_steps
+                and self.config.condense_every_n_steps > 0
+                and steps > 0
+                and steps % self.config.condense_every_n_steps == 0
+            ):
+                # The provider's context window is the natural budget.
+                # Falls back to a generous default when missing.
+                budget = getattr(provider, "context_window", 200_000) or 200_000
+                compacted = self.config.condensation.compact(
+                    list(context.messages), budget,
+                )
+                context.messages = compacted
+
         # Max steps
         yield StepResult(
             message=Message.assistant("Max steps reached"),
