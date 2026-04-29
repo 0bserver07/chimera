@@ -121,10 +121,21 @@ class Harness:
         fresh environment per task via *env_factory*, runs the agent, and
         evaluates the output.
 
+        If the benchmark exposes a ``prepare_agent(agent)`` method
+        (e.g. :class:`~chimera.eval.benchmarks.swe_bench_verified.SWEBenchVerified`),
+        it is invoked once before the run so the benchmark can wire its
+        recommended tools (IPython REPL) and loop config (LLM
+        condensation, max-step budget) onto the agent. Idempotent and
+        opt-in: benchmarks without this hook see unchanged behaviour.
+
         Returns:
             An :class:`EvalResult` with per-task outcomes, the overall pass
             rate, and the total cost.
         """
+        prepare_agent = getattr(self.benchmark, "prepare_agent", None)
+        if callable(prepare_agent):
+            prepare_agent(self.agent)
+
         results: list[TaskEvalResult] = []
         for task in self.benchmark.tasks():
             # Create fresh env per task if factory provided

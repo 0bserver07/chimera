@@ -213,6 +213,71 @@ class SWEBenchVerified(SWEBench):
             return False
         return current_step % n == 0
 
+    def prepare_agent(self, agent: Any) -> None:
+        """Wire IPython + condensation onto an existing agent in place.
+
+        This is the runtime hookup that the :class:`Harness` calls once
+        before running the task list. It mutates ``agent`` so that:
+
+        * When :attr:`SWEBenchConfig.ipython` is ``True``, an
+          :class:`~chimera.tools.ipython.IPythonTool` is appended to
+          ``agent.tools`` (deduplicated by tool name).
+        * When :attr:`SWEBenchConfig.condense_every_n_steps` is non-zero
+          and the agent has a ``loop`` with a ``config`` attribute, the
+          loop's :class:`~chimera.core.loop_config.LoopConfig` has
+          ``condensation`` and ``condense_every_n_steps`` populated
+          from this benchmark's config (using the agent's ``provider``
+          as the summary back-end when available).
+        * When :attr:`SWEBenchConfig.max_steps` is set and the agent has
+          a ``loop`` with ``max_steps``, the loop's budget is bumped to
+          match (but never reduced below the existing value).
+
+        Idempotent: re-running ``prepare_agent`` will not duplicate the
+        IPython tool or stomp existing condensation settings unless they
+        match this benchmark's expectations.
+
+        Args:
+            agent: An object that exposes a ``tools`` list, optional
+                ``loop`` (with ``config`` and ``max_steps`` attributes),
+                and optional ``provider``.
+        """
+        # 1. IPython tool — append if missing.
+        if self._config.ipython:
+            tool = self.build_ipython_tool()
+            if tool is not None:
+                tools = getattr(agent, "tools", None)
+                if tools is not None:
+                    has_ipython = any(
+                        getattr(t, "name", None) == tool.name for t in tools
+                    )
+                    if not has_ipython:
+                        tools.append(tool)
+
+        # 2. Condensation + max-steps — wire onto the loop's LoopConfig.
+        loop = getattr(agent, "loop", None)
+        if loop is None:
+            return
+
+        # Bump max_steps when the loop's budget is below ours.
+        existing_max = getattr(loop, "max_steps", None)
+        if isinstance(existing_max, int) and existing_max < self._config.max_steps:
+            loop.max_steps = self._config.max_steps
+
+        if self._config.condense_every_n_steps == 0:
+            return
+
+        loop_config = getattr(loop, "config", None)
+        if loop_config is None:
+            return
+
+        provider = getattr(agent, "provider", None)
+        if getattr(loop_config, "condensation", None) is None:
+            loop_config.condensation = self.build_condensation(provider=provider)
+        if getattr(loop_config, "condense_every_n_steps", None) is None:
+            loop_config.condense_every_n_steps = (
+                self._config.condense_every_n_steps
+            )
+
 
 __all__ = [
     "SWEBenchVerified",
