@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.5.0 — 2026-04-29 — Otter + Mink Waves 2 & 3
+
+This release rolls up otter waves 1-2 and mink waves 2-3. v0.4.0 was cut for the
+mink wave-2 milestone; 0.5.0 is the first release that ships otter as a
+first-class CLI alongside mink.
+
+### Otter — new coding REPL CLI (waves 1, 2)
+- `chimera otter` introduced as a sibling to `chimera mink` — streaming tool
+  calls, hooks, sessions, and the same provider abstraction.
+- Server hardening: TLS termination, cooperative cancellation propagation, and
+  Server-Sent Events resume-after-disconnect.
+- Event-sourcing subsystem — append-only event log, file locking, crash
+  recovery, gap detection; sessions can be reconstructed deterministically from
+  the log alone.
+- Remote execution: `asyncssh` integration with SFTP transfer and ProxyJump
+  bastion-host support; session sharing primitives over SSH.
+
+### Mink — wave 2 + wave 3
+- `chimera mink runs cost` — per-run cost rollups and granular token
+  breakdowns (cache, reasoning, per-step).
+- Benchmark adapter scaffolds for tau-bench and SWE-bench Verified, joining
+  the existing 11 adapters from #86-#96.
+
+### Quality
+- 4928 tests passing.
+- 517 mypy files clean.
+- `uv run ruff check chimera/` clean.
+
 ## 0.3.0 (2026-04-19) — Real Runtimes, Real Compilation, Honest Errors
 
 ### Function Synthesis — 3 real runtime backends
