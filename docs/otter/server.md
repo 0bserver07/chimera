@@ -482,3 +482,119 @@ ladder, same render semantics, same drop-into-the-session behavior.
 | 404    | `{"error": "session_not_found"}`                    | Unknown `session_id`.                |
 | 404    | `{"error": "command_not_found", "name": "<name>"}`  | No `.md` file matches `<name>`.      |
 | 500    | `{"error": "command_invoke_failed", "detail": …}`   | Renderer or submit raised.           |
+
+## Cost rollups across persisted runs
+
+Wave-4 (L6) lifts the M4 `chimera mink runs cost` aggregation onto the
+HTTP surface so a TUI / IDE / web client can pull the same rollups
+without shelling out to the CLI. Both routes walk
+`~/.chimera/eventlog/mink-*` **and** `~/.chimera/eventlog/otter-*` so
+the two persistence corpora are reported together. Bearer auth applies
+identically to every other endpoint (`OTTER_SERVER_TOKEN`).
+
+The eventlog root is taken from
+`chimera.mink.runs.default_eventlog_root()` per request so the routes
+always reflect the live filesystem; tests inject a `tmp_path` via the
+`OtterServer(eventlog_root=...)` constructor argument.
+
+### `GET /runs`
+
+Lightweight list of run summaries. One row per persisted run, newest
+first.
+
+Query parameters:
+
+| Param   | Notes                                                                  |
+|---------|------------------------------------------------------------------------|
+| `since` | `7d` / `24h` / `30m` shorthand or any ISO-8601 date / datetime.        |
+| `model` | Case-insensitive substring filter on the model name. `all` = no filter.|
+| `limit` | Cap row count (newest first). Non-integer values return `400`.         |
+
+Response shape:
+
+```json
+{
+  "total_runs": 4,
+  "runs": [
+    {
+      "run_id": "otter-20260425T120300-aaaa1111",
+      "started_at": "2026-04-25T12:03:00Z",
+      "ended_at": "2026-04-25T12:03:30Z",
+      "model": "glm-5.1:cloud",
+      "prompt": "do the thing",
+      "success": true,
+      "cost_usd": 0.07,
+      "steps": 4,
+      "tool_calls": 3,
+      "source": "otter"
+    }
+  ]
+}
+```
+
+`source` is `"mink"` or `"otter"` so the client can render the two
+corpora distinctly without re-parsing the run id.
+
+### `GET /runs/cost`
+
+Cost rollup for the same corpus. Same query parameters as `/runs`. The
+response carries both the flat top-level shape promised in the task
+contract and a strict-superset `totals` block that mirrors `chimera
+mink runs cost --format json` for clients already integrated against
+the CLI.
+
+```json
+{
+  "total_runs": 4,
+  "total_cost": 0.22,
+  "total_tokens": 3800,
+  "by_model": {
+    "glm-5.1:cloud":     {"runs": 2, "cost_usd": 0.10, "tokens": 1800},
+    "claude-sonnet-4-6": {"runs": 2, "cost_usd": 0.12, "tokens": 2000}
+  },
+  "by_run": [
+    {
+      "run_id": "otter-20260425T120300-aaaa1111",
+      "started_at": "2026-04-25T12:03:00Z",
+      "model": "glm-5.1:cloud",
+      "cost_usd": 0.07,
+      "total_tokens": 1200,
+      "input_tokens": 800,
+      "output_tokens": 350,
+      "cache_tokens": 50,
+      "success": true,
+      "steps": 4,
+      "source": "otter"
+    }
+  ],
+  "totals": {
+    "runs": 4,
+    "successful_runs": 3,
+    "failed_runs": 1,
+    "cost_usd": 0.22,
+    "tokens": 3800,
+    "input_tokens": 800,
+    "output_tokens": 350,
+    "cache_tokens": 50,
+    "avg_cost_usd": 0.055,
+    "p50_cost_usd": 0.05,
+    "p95_cost_usd": 0.12
+  },
+  "filters": {"since": null, "model": null}
+}
+```
+
+Worked example:
+
+```bash
+curl -s -H "Authorization: Bearer $OTTER_SERVER_TOKEN" \
+  "http://127.0.0.1:5173/runs/cost?since=7d&model=glm-5.1:cloud&limit=50" \
+  | jq '{runs: .total_runs, cost: .total_cost, by_model}'
+```
+
+| Status | Body                                              | Cause                                |
+|--------|---------------------------------------------------|--------------------------------------|
+| 200    | `{total_runs, total_cost, total_tokens, …}`       | Aggregation succeeded.               |
+| 400    | `{"error": "invalid_query", "detail": …}`         | Malformed `since` / `limit`.         |
+| 401    | `{"error": "unauthorized"}`                       | Missing or wrong bearer token.       |
+| 500    | `{"error": "runs_cost_failed", "detail": …}`      | Filesystem or aggregator raised.     |
