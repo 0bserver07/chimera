@@ -664,6 +664,17 @@ def run_code(args: Any) -> int:
     session._model_list = model_list  # type: ignore[attr-defined]
     session._model_index = 0  # type: ignore[attr-defined]
 
+    # Optional post-session-init hook. Used by the otter REPL to wire its
+    # per-turn snapshot stack (``chimera.otter.repl.install_snapshot_hooks``)
+    # without forking the shared interactive loop. ``None`` (the default)
+    # leaves behavior identical to before this hook was introduced.
+    post_session_init = getattr(args, "_post_session_init", None)
+    if callable(post_session_init):
+        try:
+            post_session_init(session, env)
+        except Exception as exc:  # noqa: BLE001 - never crash the REPL
+            print(f"[post_session_init] hook failed: {exc}", file=sys.stderr)
+
     _setup_readline()
 
     print(f"chimera code v{__version__} | model: {provider.model_name} | /help for commands")

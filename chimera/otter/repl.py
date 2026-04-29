@@ -38,6 +38,7 @@ from typing import Any
 
 __all__ = [
     "build_otter_agent",
+    "install_snapshot_hooks",
     "load_otter_custom_commands",
     "make_run_id",
     "open_otter_run_log",
@@ -212,6 +213,154 @@ def load_otter_custom_commands(
 
 
 # ---------------------------------------------------------------------------
+# /undo + /redo snapshot wiring (collaborates with F6)
+# ---------------------------------------------------------------------------
+#
+# F6 shipped a real ``/undo`` and ``/redo`` palette backed by per-session
+# checkpoint stacks, but the contract requires the REPL to call
+# :func:`chimera.otter.slash.snapshot_after_turn` once at session start
+# (baseline) and once after every assistant turn. Without that, the stacks
+# stay empty and the slash commands fall through to "nothing to undo".
+#
+# This module owns the wiring. :func:`install_snapshot_hooks` is the single
+# entry point: it captures the baseline snap immediately and wraps the
+# session's ``iter_chat`` / ``chat`` methods so each subsequent turn snaps
+# its post-turn state. The wrapping is idempotent — re-installing on the
+# same session is a no-op so partial-init failures don't double-snap.
+
+# Sentinel attribute marking a session whose iter_chat/chat methods have
+# already been wrapped by :func:`install_snapshot_hooks`. Idempotent
+# semantics: calling the installer twice is a no-op the second time.
+_OTTER_SNAPSHOT_INSTALLED_ATTR = "_otter_snapshot_hooks_installed"
+
+
+def install_snapshot_hooks(session: Any, env: Any) -> int:
+    """Wire ``snapshot_after_turn`` calls onto *session* for the lifetime of the REPL.
+
+    F6's contract:
+
+    1. ``snapshot_after_turn(session, env)`` is called ONCE at session
+       start so ``/undo`` from the empty stack returns to the pristine
+       pre-conversation state.
+    2. ``snapshot_after_turn(session, env)`` is called ONCE after every
+       assistant turn so the turn's filesystem mutations + message
+       deltas are captured on the undo stack.
+
+    This helper achieves both by (a) taking the baseline snap inline and
+    (b) wrapping ``session.iter_chat`` and ``session.chat`` so each
+    invocation triggers a fresh snap on completion. The wrappers preserve
+    the original return type — :meth:`Session.chat` is a regular function
+    and :meth:`Session.iter_chat` is a generator that yields steps and
+    returns the final :class:`AgentResult`. Both are wrapped without
+    losing semantics.
+
+    Args:
+        session: The active Chimera session. Must expose ``iter_chat``
+            and/or ``chat`` for the per-turn hook to fire. The slash
+            module's :func:`chimera.otter.slash.snapshot_after_turn` is
+            duck-typed via ``id(session)`` so any object with a stable
+            identity works as a key (the REPL passes a real
+            :class:`chimera.sessions.session.Session`; the HTTP server
+            passes its :class:`OtterSessionState`).
+        env: The environment paired with *session*. May be ``None`` for
+            sessions without a filesystem (a sentinel ``CheckpointInfo``
+            backs message-only undo in that case).
+
+    Returns:
+        The number of session methods wrapped (``2`` when both
+        ``iter_chat`` and ``chat`` are present, ``1`` when only one is
+        present, ``0`` when neither exists — message-only baseline still
+        lands in that case).
+
+    The wrap is idempotent: calling this a second time on the same
+    session installs nothing and returns ``0``.
+    """
+    # Late import keeps the slash module optional — same hygiene as the
+    # rest of the otter REPL module.
+    from chimera.otter import slash as _slash
+
+    if getattr(session, _OTTER_SNAPSHOT_INSTALLED_ATTR, False):
+        return 0
+
+    # 1. Baseline snapshot — fires unconditionally so the deepest /undo
+    #    can return the user to a pristine pre-conversation state. F6's
+    #    snapshot_after_turn is itself idempotent on baseline (it only
+    #    captures ``initial_messages`` once), so calling it here before
+    #    any user turn lands the right thing.
+    try:
+        _slash.snapshot_after_turn(session, env)
+    except Exception as exc:  # noqa: BLE001 - never crash the REPL
+        print(
+            f"[otter] baseline snapshot failed: {exc}",
+            file=sys.stderr,
+        )
+
+    wrapped = 0
+
+    # 2. Wrap iter_chat — the path used by ``chimera code``'s interactive
+    #    REPL (it iterates per step and drains to a final AgentResult).
+    iter_chat = getattr(session, "iter_chat", None)
+    if callable(iter_chat):
+        original_iter_chat = iter_chat
+
+        def _iter_chat_with_snap(message: str) -> Any:
+            gen = original_iter_chat(message)
+            try:
+                while True:
+                    yield next(gen)
+            except StopIteration as stop:
+                # ``Session.iter_chat`` returns the final AgentResult via
+                # StopIteration.value (standard generator return contract).
+                # Snap once the turn fully completes, then propagate.
+                try:
+                    _slash.snapshot_after_turn(session, env)
+                except Exception as exc:  # noqa: BLE001
+                    print(
+                        f"[otter] post-turn snapshot failed: {exc}",
+                        file=sys.stderr,
+                    )
+                return stop.value
+
+        try:
+            session.iter_chat = _iter_chat_with_snap  # type: ignore[method-assign]
+            wrapped += 1
+        except (AttributeError, TypeError):
+            # Some duck-typed test fakes refuse method assignment. Fall
+            # through silently — the baseline snap still landed.
+            pass
+
+    # 3. Wrap chat — the synchronous one-shot path (legacy / tests).
+    chat = getattr(session, "chat", None)
+    if callable(chat):
+        original_chat = chat
+
+        def _chat_with_snap(message: str) -> Any:
+            try:
+                return original_chat(message)
+            finally:
+                try:
+                    _slash.snapshot_after_turn(session, env)
+                except Exception as exc:  # noqa: BLE001
+                    print(
+                        f"[otter] post-turn snapshot failed: {exc}",
+                        file=sys.stderr,
+                    )
+
+        try:
+            session.chat = _chat_with_snap  # type: ignore[method-assign]
+            wrapped += 1
+        except (AttributeError, TypeError):
+            pass
+
+    try:
+        setattr(session, _OTTER_SNAPSHOT_INSTALLED_ATTR, True)
+    except (AttributeError, TypeError):
+        pass
+
+    return wrapped
+
+
+# ---------------------------------------------------------------------------
 # Argument shimming for chimera.cli.code.run_code
 # ---------------------------------------------------------------------------
 
@@ -231,7 +380,7 @@ def shim_otter_args(args: argparse.Namespace) -> argparse.Namespace:
         A new namespace tailored for ``run_code``.
     """
     cwd = os.path.abspath(getattr(args, "cwd", None) or getattr(args, "workdir", None) or os.getcwd())
-    return argparse.Namespace(
+    shimmed = argparse.Namespace(
         model=getattr(args, "model", None),
         workdir=cwd,
         max_steps=getattr(args, "max_steps", 50) or 50,
@@ -240,6 +389,12 @@ def shim_otter_args(args: argparse.Namespace) -> argparse.Namespace:
         preset=getattr(args, "agent", None) or getattr(args, "preset", None),
         print_mode=None,
     )
+    # Wire the F6 ``/undo`` + ``/redo`` snapshot stack: ``run_code`` calls
+    # this hook with ``(session, env)`` immediately after building the
+    # session so the baseline snap + per-turn snaps fire from the otter
+    # REPL without forking the shared interactive loop.
+    shimmed._post_session_init = install_snapshot_hooks  # type: ignore[attr-defined]
+    return shimmed
 
 
 # ---------------------------------------------------------------------------

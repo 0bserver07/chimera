@@ -42,6 +42,14 @@ Path                              Method Purpose
                                          session. Body:
                                          ``{"session_id": "...",``
                                          ``"args": [...], "kwargs": {...}}``.
+``/runs``                         GET    List run summaries aggregated across
+                                         ``~/.chimera/eventlog/{otter,mink}-*``.
+                                         Query: ``since=7d``, ``model=...``,
+                                         ``limit=50``.
+``/runs/cost``                    GET    Cost rollup for the same corpus. Same
+                                         query params as ``/runs``. Returns
+                                         ``{total_runs, total_cost, total_tokens,
+                                         by_model, by_run}``.
 ================================ ====== ==========================================
 
 Auth
@@ -72,11 +80,12 @@ import queue
 import ssl
 import threading
 import time
+import urllib.parse
 import uuid
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, AsyncIterator, Callable, Protocol
+from typing import Any, AsyncIterator, Callable, Iterator, Protocol
 
 from chimera.core.cancellation import CancellationToken
 
@@ -245,6 +254,12 @@ class OtterServer:
             Tests inject a ``tmp_path`` so synthetic
             ``.opencode/command/*.md`` files are picked up without
             polluting ``$HOME``.
+        eventlog_root: Override the eventlog root used by ``GET /runs``
+            and ``GET /runs/cost`` (defaults to
+            :func:`chimera.mink.runs.default_eventlog_root` resolved
+            per-call). Tests inject a ``tmp_path`` containing synthetic
+            ``mink-*`` / ``otter-*`` summary fixtures so the routes
+            don't depend on the developer's real ``~/.chimera/eventlog``.
 
     Attributes:
         sessions: Live :class:`OtterSessionState` objects keyed by id.
@@ -264,6 +279,7 @@ class OtterServer:
         tls_cert: Path | str | None = None,
         tls_key: Path | str | None = None,
         commands_cwd: Path | str | None = None,
+        eventlog_root: Path | str | None = None,
     ) -> None:
         self._agent_factory = agent_factory
         self._host = host
@@ -284,6 +300,14 @@ class OtterServer:
         # pin a ``tmp_path`` to keep the route hermetic.
         self._commands_cwd: Path | None = (
             Path(commands_cwd) if commands_cwd is not None else None
+        )
+        # ``None`` defers to :func:`chimera.mink.runs.default_eventlog_root`
+        # at every ``/runs`` / ``/runs/cost`` request so the routes always
+        # reflect the live ``~/.chimera/eventlog/`` corpus. Tests pin a
+        # ``tmp_path`` so synthetic ``mink-*`` / ``otter-*`` summary
+        # fixtures don't bleed into a developer's real eventlog.
+        self._eventlog_root: Path | None = (
+            Path(eventlog_root) if eventlog_root is not None else None
         )
         self.sessions: dict[str, OtterSessionState] = {}
         self._sessions_lock = threading.Lock()
@@ -366,13 +390,32 @@ class OtterServer:
     # ------------------------------------------------------------------
 
     def create_session(self, *, working_dir: str = "") -> OtterSessionState:
-        """Create + register a fresh :class:`OtterSessionState`."""
+        """Create + register a fresh :class:`OtterSessionState`.
+
+        F6 ``/undo`` + ``/redo`` snapshot stack: take the baseline snap
+        immediately so a freshly-created session has a valid
+        bottom-of-stack to roll back to. Per-turn snaps fire from
+        :meth:`_drive_agent_streaming` (and the legacy ``async_run``
+        fallback) once each assistant turn finalizes.
+        """
         state = OtterSessionState(
             session_id=uuid.uuid4().hex,
             working_dir=working_dir,
         )
         with self._sessions_lock:
             self.sessions[state.session_id] = state
+        # Best-effort baseline snap — keyed by ``id(state)`` inside the
+        # slash module's ``_UNDO_STATES`` registry, so distinct HTTP
+        # sessions get distinct undo stacks. The slash module degrades to
+        # message-only undo when env is None (or lacks ``checkpoint``),
+        # which is what we want here — the HTTP path doesn't own a
+        # filesystem env.
+        try:
+            from chimera.otter.slash import snapshot_after_turn
+
+            snapshot_after_turn(state, None)
+        except Exception:  # noqa: BLE001 - never crash session create
+            pass
         return state
 
     def get_session(self, session_id: str) -> OtterSessionState | None:
@@ -605,6 +648,215 @@ class OtterServer:
         return message_id, rendered
 
     # ------------------------------------------------------------------
+    # Run aggregation (mink-* + otter-* eventlog dirs)
+    # ------------------------------------------------------------------
+
+    def _resolve_eventlog_root(self) -> Path:
+        """Return the eventlog root used by the ``/runs`` routes.
+
+        Resolved lazily so ``None`` defaults to the live
+        ``~/.chimera/eventlog`` even if ``$HOME`` changes between
+        constructor and request. Tests pin a ``tmp_path`` to keep the
+        routes hermetic.
+        """
+        if self._eventlog_root is not None:
+            return self._eventlog_root
+        from chimera.mink.runs import default_eventlog_root
+
+        return default_eventlog_root()
+
+    def _iter_run_records(self) -> Iterator[Any]:
+        """Yield :class:`chimera.mink.runs.RunRecord` for every persisted
+        run under both ``mink-*`` and ``otter-*`` directories, newest first.
+
+        ``chimera.mink.runs.iter_runs`` only walks ``mink-*`` (the M4
+        contract). M4 shipped ``mink runs cost`` as CLI-only, so we
+        re-implement the directory walk here to widen the prefix to
+        ``{mink,otter}-*`` without touching the mink-side public API.
+
+        Run ids start with ``<prefix>-<UTC>-<uuid>`` so lexical sort by
+        directory name equals chronological sort within a prefix; we
+        merge the two prefixes and re-sort by name descending so the
+        combined stream is still newest-first.
+        """
+        from chimera.mink.runs import _read_summary, _summary_to_record
+
+        root = self._resolve_eventlog_root()
+        if not root.exists():
+            return
+        candidates = [
+            p
+            for p in root.iterdir()
+            if p.is_dir()
+            and (p.name.startswith("mink-") or p.name.startswith("otter-"))
+        ]
+        candidates.sort(key=lambda p: p.name, reverse=True)
+        for run_dir in candidates:
+            summary = _read_summary(run_dir)
+            if summary is None:
+                continue
+            yield _summary_to_record(run_dir, summary)
+
+    def list_runs(
+        self,
+        *,
+        since: str | None = None,
+        model: str | None = None,
+        limit: int | None = None,
+    ) -> dict[str, Any]:
+        """Return a JSON-friendly list of run summaries (lightweight).
+
+        Mirrors the subset of fields :func:`chimera.mink.runs.format_run_table`
+        renders — ``run_id``, ``started_at``, ``ended_at``, ``model``,
+        ``prompt``, ``success``, ``cost_usd``, ``steps``, ``tool_calls`` —
+        plus the originating directory ``source`` (one of ``"mink"`` or
+        ``"otter"``) so a client can tell the two corpora apart.
+
+        Args:
+            since: Optional ``--since`` shorthand (``"7d"`` / ``"24h"``)
+                or ISO-8601 cutoff. Invalid values raise ``ValueError``
+                so the route can map them onto a 400.
+            model: Optional case-insensitive substring filter on the
+                model name. ``"all"`` and ``None`` mean "every model".
+            limit: Optional cap on the number of rows returned (newest
+                first). ``None`` / ``0`` means "no cap".
+
+        Returns:
+            ``{"total_runs": int, "runs": [...]}``.
+
+        Raises:
+            ValueError: When ``since`` is non-empty but neither shorthand
+                nor an ISO-8601 date.
+        """
+        from chimera.mink.cost import filter_records, parse_since
+
+        cutoff = parse_since(since)
+        records = filter_records(
+            self._iter_run_records(),
+            since=cutoff,
+            model=model,
+            limit=limit,
+        )
+        runs: list[dict[str, Any]] = []
+        for r in records:
+            runs.append(
+                {
+                    "run_id": r.run_id,
+                    "started_at": r.started_at,
+                    "ended_at": r.ended_at,
+                    "model": r.model,
+                    "prompt": r.prompt,
+                    "success": r.success,
+                    "cost_usd": r.cost_usd,
+                    "steps": r.steps,
+                    "tool_calls": r.tool_calls,
+                    "source": (
+                        "mink"
+                        if r.run_id.startswith("mink-")
+                        else "otter"
+                        if r.run_id.startswith("otter-")
+                        else "unknown"
+                    ),
+                }
+            )
+        return {"total_runs": len(runs), "runs": runs}
+
+    def runs_cost(
+        self,
+        *,
+        since: str | None = None,
+        model: str | None = None,
+        limit: int | None = None,
+    ) -> dict[str, Any]:
+        """Return the cost rollup for runs under ``mink-*`` + ``otter-*``.
+
+        Re-uses :func:`chimera.mink.cost.compute_summary` so the on-the-
+        wire JSON shape is a strict superset of what ``chimera mink runs
+        cost --format json`` produces today (``totals``, ``by_model``,
+        ``rows``). The route response also surfaces top-level
+        ``total_runs`` / ``total_cost`` / ``total_tokens`` /
+        ``by_model`` / ``by_run`` keys for clients that prefer the
+        flatter shape promised in the task contract.
+
+        Args:
+            since: Same semantics as :meth:`list_runs`.
+            model: Same semantics as :meth:`list_runs`.
+            limit: Same semantics as :meth:`list_runs`.
+
+        Returns:
+            JSON-friendly dict; see schema above.
+
+        Raises:
+            ValueError: When ``since`` is malformed.
+        """
+        from chimera.mink.cost import compute_summary, parse_since
+
+        cutoff = parse_since(since)
+        summary = compute_summary(
+            self._iter_run_records(),
+            since=cutoff,
+            since_label=since,
+            model=model,
+            limit=limit,
+        )
+        by_model: dict[str, dict[str, float | int]] = {}
+        for name, bucket in summary.by_model.items():
+            by_model[name] = {
+                "runs": int(bucket["runs"]),
+                "cost_usd": float(bucket["cost_usd"]),
+                "tokens": int(bucket["tokens"]),
+            }
+        by_run = [
+            {
+                "run_id": row.run_id,
+                "started_at": row.started_at,
+                "model": row.model,
+                "cost_usd": row.cost_usd,
+                "total_tokens": row.total_tokens,
+                "input_tokens": row.input_tokens,
+                "output_tokens": row.output_tokens,
+                "cache_tokens": row.cache_tokens,
+                "success": row.success,
+                "steps": row.steps,
+                "source": (
+                    "mink"
+                    if row.run_id.startswith("mink-")
+                    else "otter"
+                    if row.run_id.startswith("otter-")
+                    else "unknown"
+                ),
+            }
+            for row in summary.rows
+        ]
+        return {
+            # Flat top-level keys (task contract).
+            "total_runs": summary.total_runs,
+            "total_cost": summary.total_cost_usd,
+            "total_tokens": summary.total_tokens,
+            "by_model": by_model,
+            "by_run": by_run,
+            # Strict-superset of ``mink runs cost --format json`` so
+            # existing clients can switch over without re-mapping.
+            "totals": {
+                "runs": summary.total_runs,
+                "successful_runs": summary.successful_runs,
+                "failed_runs": summary.failed_runs,
+                "cost_usd": summary.total_cost_usd,
+                "tokens": summary.total_tokens,
+                "input_tokens": summary.total_input_tokens,
+                "output_tokens": summary.total_output_tokens,
+                "cache_tokens": summary.total_cache_tokens,
+                "avg_cost_usd": summary.avg_cost_usd,
+                "p50_cost_usd": summary.p50_cost_usd,
+                "p95_cost_usd": summary.p95_cost_usd,
+            },
+            "filters": {
+                "since": summary.since,
+                "model": summary.model_filter,
+            },
+        }
+
+    # ------------------------------------------------------------------
     # Agent dispatch
     # ------------------------------------------------------------------
 
@@ -723,6 +975,25 @@ class OtterServer:
                 "success": getattr(result, "success", False),
             },
         )
+        # F6 ``/undo`` + ``/redo``: snap once the legacy turn finalizes so
+        # the per-state undo stack picks up this turn's terminal state.
+        self._snap_after_turn(state)
+
+    def _snap_after_turn(self, state: OtterSessionState) -> None:
+        """Push a per-state snapshot onto the F6 undo stack.
+
+        Best-effort: calls :func:`chimera.otter.slash.snapshot_after_turn`
+        with the OtterSessionState as the session key (the slash module is
+        duck-typed via ``id(session)``). The HTTP server has no filesystem
+        env to checkpoint, so the slash module synthesises a sentinel and
+        falls through to message-only undo.
+        """
+        try:
+            from chimera.otter.slash import snapshot_after_turn
+
+            snapshot_after_turn(state, None)
+        except Exception:  # noqa: BLE001 - never crash a turn over a snap
+            pass
 
     def _drive_agent_streaming(
         self,
@@ -831,6 +1102,11 @@ class OtterServer:
                 "cancelled": cancelled,
             },
         )
+        # F6 ``/undo`` + ``/redo``: snap once the streaming turn finalizes
+        # so the per-state undo stack picks up this turn's terminal state.
+        # Cancelled turns still get a snap so /undo can rewind the partial
+        # work the user saw before they hit cancel.
+        self._snap_after_turn(state)
 
     # ------------------------------------------------------------------
     # Handler factory (closure over self)
@@ -908,6 +1184,10 @@ class OtterServer:
                     return
                 if path == "/commands":
                     return self._handle_commands_list()
+                if path == "/runs":
+                    return self._handle_runs_list()
+                if path == "/runs/cost":
+                    return self._handle_runs_cost()
                 if path.startswith("/session/"):
                     parts = path.split("/")
                     # /session/<id>           parts == ["", "session", "<id>"]
@@ -1090,6 +1370,84 @@ class OtterServer:
                     return
                 self._send_json(200, {"commands": entries})
 
+            # ------- /runs query helpers -------------------------------
+            def _parse_runs_query(
+                self,
+            ) -> tuple[str | None, str | None, int | None]:
+                """Return ``(since, model, limit)`` parsed from ``self.path``.
+
+                ``limit`` is coerced to ``int``; non-numeric values are
+                rejected via :class:`ValueError` so the caller maps them
+                onto a 400. ``since`` and ``model`` are passed through
+                verbatim so :func:`chimera.mink.cost.parse_since` and the
+                substring filter handle their own validation.
+                """
+                qs = self.path.split("?", 1)[1] if "?" in self.path else ""
+                params = urllib.parse.parse_qs(qs, keep_blank_values=False)
+                since = params.get("since", [None])[0]
+                model = params.get("model", [None])[0]
+                limit_raw = params.get("limit", [None])[0]
+                limit: int | None = None
+                if limit_raw is not None and limit_raw != "":
+                    try:
+                        limit = int(limit_raw)
+                    except ValueError as exc:
+                        raise ValueError(
+                            f"limit must be an integer, got {limit_raw!r}"
+                        ) from exc
+                return since, model, limit
+
+            # ------- GET /runs -----------------------------------------
+            def _handle_runs_list(self) -> None:
+                """Return the lightweight run-summary list across both
+                ``mink-*`` and ``otter-*`` eventlog directories.
+                """
+                try:
+                    since, model, limit = self._parse_runs_query()
+                except ValueError as exc:
+                    self._send_json(400, {"error": "invalid_query", "detail": str(exc)})
+                    return
+                try:
+                    payload = outer.list_runs(
+                        since=since, model=model, limit=limit
+                    )
+                except ValueError as exc:
+                    # ``parse_since`` raises on malformed shorthand /
+                    # ISO-8601 strings; surface as a 400 so clients see
+                    # a structured error rather than a 500.
+                    self._send_json(400, {"error": "invalid_query", "detail": str(exc)})
+                    return
+                except Exception as exc:  # noqa: BLE001
+                    self._send_json(
+                        500, {"error": "runs_list_failed", "detail": str(exc)}
+                    )
+                    return
+                self._send_json(200, payload)
+
+            # ------- GET /runs/cost ------------------------------------
+            def _handle_runs_cost(self) -> None:
+                """Return the cost rollup across both ``mink-*`` and
+                ``otter-*`` eventlog directories.
+                """
+                try:
+                    since, model, limit = self._parse_runs_query()
+                except ValueError as exc:
+                    self._send_json(400, {"error": "invalid_query", "detail": str(exc)})
+                    return
+                try:
+                    payload = outer.runs_cost(
+                        since=since, model=model, limit=limit
+                    )
+                except ValueError as exc:
+                    self._send_json(400, {"error": "invalid_query", "detail": str(exc)})
+                    return
+                except Exception as exc:  # noqa: BLE001
+                    self._send_json(
+                        500, {"error": "runs_cost_failed", "detail": str(exc)}
+                    )
+                    return
+                self._send_json(200, payload)
+
             # ------- POST /commands/<name>/invoke ----------------------
             def _handle_command_invoke(self, name: str) -> None:
                 body = self._read_json()
@@ -1172,6 +1530,7 @@ def serve_http(
     tls_cert: Path | str | None = None,
     tls_key: Path | str | None = None,
     commands_cwd: Path | str | None = None,
+    eventlog_root: Path | str | None = None,
 ) -> int:
     """Start :class:`OtterServer` in blocking mode and return an exit code.
 
@@ -1188,6 +1547,10 @@ def serve_http(
         tls_key: Optional path to the matching PEM-encoded private key.
         commands_cwd: Project root for ``.opencode/command/*.md``
             discovery. Defaults to :func:`os.getcwd` resolved per-call.
+        eventlog_root: Override the eventlog root used by ``GET /runs``
+            and ``GET /runs/cost``. Defaults to
+            :func:`chimera.mink.runs.default_eventlog_root` resolved
+            per-call.
 
     Returns:
         ``0`` on graceful shutdown (Ctrl-C). The function blocks until
@@ -1201,6 +1564,7 @@ def serve_http(
         tls_cert=tls_cert,
         tls_key=tls_key,
         commands_cwd=commands_cwd,
+        eventlog_root=eventlog_root,
     )
     try:
         server.start(blocking=True)
