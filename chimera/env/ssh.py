@@ -719,6 +719,15 @@ class SSHEnvironment(Environment):
         # ``tar`` runs in a parent dir to keep relative paths inside the
         # archive. Use ``mkdir -p`` so the checkpoint store is created on
         # first use without a separate setup step.
+        #
+        # NOTE: ``$HOME`` is left UNQUOTED on purpose. Wrapping the path
+        # in ``shlex.quote`` would single-quote ``$HOME`` and prevent
+        # POSIX shell expansion, leading ``tar`` to write to a literal
+        # ``$HOME/.chimera/...`` directory that doesn't exist (surfaced
+        # by the live Docker-sshd test in M9). The components we
+        # interpolate into the path (``cid`` is uuid4 hex, the rest is
+        # constant) contain no shell metacharacters, so leaving them
+        # unquoted is safe.
         store = "$HOME/.chimera/ssh-checkpoints"
         snapshot = f"{store}/{cid}.tar.gz"
         # We deliberately don't ``cd`` into the workdir here — we tar
@@ -727,7 +736,7 @@ class SSHEnvironment(Environment):
         leaf = self.workdir.rstrip("/").rsplit("/", 1)[-1]
         cmd = (
             f"mkdir -p {store} && "
-            f"tar -czf {shlex.quote(snapshot)} "
+            f"tar -czf {snapshot} "
             f"-C {shlex.quote(parent)} {shlex.quote(leaf)}"
         )
         argv = [*self._ssh_prefix(), cmd]
@@ -751,6 +760,9 @@ class SSHEnvironment(Environment):
         if not checkpoint_id or "/" in checkpoint_id or ".." in checkpoint_id:
             # Defensive — stop a malicious id from escaping the store.
             raise ValueError(f"invalid checkpoint id: {checkpoint_id!r}")
+        # Same ``$HOME`` quoting caveat as :meth:`checkpoint` — leave the
+        # snapshot path unquoted so the remote shell expands ``$HOME``.
+        # ``checkpoint_id`` is validated above to be slash/dot-free.
         store = "$HOME/.chimera/ssh-checkpoints"
         snapshot = f"{store}/{checkpoint_id}.tar.gz"
         parent = _dirname(self.workdir.rstrip("/")) or "/"
@@ -759,9 +771,9 @@ class SSHEnvironment(Environment):
         # added since the checkpoint. The ``test -f`` guard surfaces a
         # missing-checkpoint error before we delete anything.
         cmd = (
-            f"test -f {shlex.quote(snapshot)} && "
+            f"test -f {snapshot} && "
             f"rm -rf {shlex.quote(self.workdir)} && "
-            f"tar -xzf {shlex.quote(snapshot)} -C {shlex.quote(parent)}"
+            f"tar -xzf {snapshot} -C {shlex.quote(parent)}"
         )
         del leaf  # only used for symmetry in checkpoint(); not needed here.
         argv = [*self._ssh_prefix(), cmd]
@@ -1235,13 +1247,14 @@ class AsyncSSHEnvironment(Environment):
                 "AsyncSSHEnvironment.checkpoint() requires an explicit workdir."
             )
         cid = uuid.uuid4().hex[:16]
+        # See SSHEnvironment.checkpoint for why ``$HOME`` stays unquoted.
         store = "$HOME/.chimera/ssh-checkpoints"
         snapshot = f"{store}/{cid}.tar.gz"
         parent = _dirname(self.workdir.rstrip("/")) or "/"
         leaf = self.workdir.rstrip("/").rsplit("/", 1)[-1]
         cmd = (
             f"mkdir -p {store} && "
-            f"tar -czf {shlex.quote(snapshot)} "
+            f"tar -czf {snapshot} "
             f"-C {shlex.quote(parent)} {shlex.quote(leaf)}"
         )
         result = self.run_bash(cmd)
@@ -1255,13 +1268,14 @@ class AsyncSSHEnvironment(Environment):
         """Restore from a previously-saved checkpoint."""
         if not checkpoint_id or "/" in checkpoint_id or ".." in checkpoint_id:
             raise ValueError(f"invalid checkpoint id: {checkpoint_id!r}")
+        # See SSHEnvironment.restore for why ``$HOME`` stays unquoted.
         store = "$HOME/.chimera/ssh-checkpoints"
         snapshot = f"{store}/{checkpoint_id}.tar.gz"
         parent = _dirname(self.workdir.rstrip("/")) or "/"
         cmd = (
-            f"test -f {shlex.quote(snapshot)} && "
+            f"test -f {snapshot} && "
             f"rm -rf {shlex.quote(self.workdir)} && "
-            f"tar -xzf {shlex.quote(snapshot)} -C {shlex.quote(parent)}"
+            f"tar -xzf {snapshot} -C {shlex.quote(parent)}"
         )
         result = self.run_bash(cmd)
         if result.exit_code != 0:

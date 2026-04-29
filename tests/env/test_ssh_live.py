@@ -137,15 +137,11 @@ def test_upload_file_round_trip(
 def test_checkpoint_restore_round_trip(docker_sshd: SshdEndpoint) -> None:
     """Snapshot a workdir, mutate it, then restore should bring it back.
 
-    NOTE — surfaces a real bug in :meth:`SSHEnvironment.checkpoint`
-    that the mocked unit tests miss: the snapshot path is built as
-    ``$HOME/.chimera/ssh-checkpoints/<cid>.tar.gz`` and then run
-    through :func:`shlex.quote`, which wraps it in single quotes and
-    suppresses ``$HOME`` expansion in the remote shell. To validate
-    the round-trip end-to-end we set ``HOME`` explicitly via the
-    ``SetEnv`` SSH option so any literal ``$HOME`` substring still
-    resolves on the remote, and rely on the mkdir-store step (which
-    is *not* quoted) to materialize the directory first.
+    Previously xfail-ed: surfaced a real bug where the snapshot path
+    was wrapped in :func:`shlex.quote`, single-quoting ``$HOME`` and
+    blocking POSIX shell expansion. Fixed in wave-4 (L2) by leaving
+    ``$HOME`` unquoted in the remote command — see research/mink/M9
+    and L2 reports.
     """
     workdir = "/config/chimera-ckpt-test"
 
@@ -168,20 +164,10 @@ def test_checkpoint_restore_round_trip(docker_sshd: SshdEndpoint) -> None:
         assert seed.exit_code == 0, f"seed failed: {seed.stderr!r}"
 
         # Snapshot. The checkpoint helper builds a remote command of the
-        # form ``mkdir -p $HOME/.chimera/... && tar -czf '$HOME/...'``;
-        # the second leg is single-quoted by shlex.quote, so it doesn't
-        # expand $HOME. We work around that limitation in the live test
-        # by xfail-ing the round-trip when the production shell-quoting
-        # bug bites (real fix tracked in M9 report).
-        try:
-            cid = env.checkpoint()
-        except OSError as exc:
-            if "No such file or directory" in str(exc):
-                pytest.xfail(
-                    "SSHEnvironment.checkpoint quotes $HOME via shlex.quote, "
-                    "blocking shell expansion. See research/mink/M9-REPORT.md."
-                )
-            raise
+        # form ``mkdir -p $HOME/.chimera/... && tar -czf $HOME/...``;
+        # both legs leave ``$HOME`` unquoted so the remote shell expands
+        # it before tar opens the destination file.
+        cid = env.checkpoint()
         assert cid and len(cid) == 16, f"unexpected checkpoint id: {cid!r}"
 
         # Mutate the workdir AFTER checkpoint.
