@@ -69,6 +69,42 @@ jobs:
       - name: Run mink trademark scrub
         run: bash scripts/mink_trademark_scrub.sh
 
+  ferret-trademark-scrub:
+    # WHY: enforce the ferret trademark policy.  Runs the same script
+    # developers run locally; fast, no-deps job that exits 1 on a
+    # branded mention in live ferret source/docs.  Filesystem-fact paths
+    # like ``~/.codex/config.toml`` are allowed.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Run ferret trademark scrub
+        run: bash scripts/ferret_trademark_scrub.sh
+
+  weasel-trademark-scrub:
+    # WHY: enforce the weasel trademark policy.  Runs the same script
+    # developers run locally; fast, no-deps job that exits 1 on a
+    # branded mention in live weasel source/docs.  Filesystem-fact paths
+    # like ``~/.weasel/config.json`` are allowed.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Run weasel trademark scrub
+        run: bash scripts/weasel_trademark_scrub.sh
+
+  shrew-trademark-scrub:
+    # WHY: enforce the shrew trademark policy.  Runs the same script
+    # developers run locally; fast, no-deps job that exits 1 on a
+    # branded mention in live shrew source/docs.  Filesystem-fact paths
+    # like ``~/.shrew/config.json`` are allowed.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Run shrew trademark scrub
+        run: bash scripts/shrew_trademark_scrub.sh
+
   docs-sync-check:
     # WHY: docs/otter/ and docs/mink/ are canonical Markdown sources;
     # site/src/content/docs/otter/ and site/src/content/docs/mink/ are

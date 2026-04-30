@@ -170,6 +170,55 @@ Every persisted run lives under `~/.chimera/eventlog/otter-<utc>-<uuid>/` and is
 
 See the [Otter quickstart](docs/otter/quickstart.md) for the full walkthrough — provider resolution order, env vars, on-disk layout, and pointers to `providers.md`, `models.md`, `sessions.md`, `share.md`, and `server.md`.
 
+### Ferret — sandbox-first IDE-flagship coding agent
+
+`chimera ferret` is the third coding-agent CLI. Where mink is TUI-first and otter is server-first, ferret mirrors the upstream IDE-flagship posture: a sandbox-first runner with single-flag approval presets, an ACP JSON-RPC transport that ships as the *default* `serve` transport (HTTP is opt-in), and an optional cloud bridge so a local ferret session can be driven from a remote UI. The two headline guardrails compose: `--sandbox` blocks at the OS level, `--approval` blocks at the policy level, and a tool call has to pass both.
+
+```bash
+uv sync --extra dev --extra openai
+export OPENAI_API_KEY=sk-...
+chimera ferret -p "audit the repo"                                       # default: read-only sandbox + read-only approval
+chimera ferret --sandbox workspace-write --approval auto -p "fix tests"  # writes inside cwd, no asks for safe ops
+chimera ferret                                                           # interactive REPL
+chimera ferret serve                                                     # ACP over stdio (the default)
+chimera ferret serve --http --port 5173                                  # HTTP, opt-in
+```
+
+See the [Ferret quickstart](docs/ferret/quickstart.md) for the four entry points, sandbox modes, approval presets, IDE-bridge wiring, and cloud-bridge setup.
+
+### Weasel — minimal harness with four operating modes
+
+`chimera weasel` is the fourth coding-agent CLI. Where mink/otter/ferret each ship strong opinions, weasel mirrors the *minimal harness* posture: powerful defaults, no sub-agents, no plan mode, no built-in approval presets — just one ReAct loop reachable through four interchangeable I/O envelopes (interactive REPL, one-shot print, stdio JSON-RPC, embedded SDK), an auto-discovered `.weasel/extensions/` directory, and an embeddable `Agent` class. If you want more, you build it (or install an extension); weasel will not get in the way.
+
+```bash
+uv sync --extra dev --extra anthropic
+export ANTHROPIC_API_KEY=sk-ant-...
+chimera weasel                                       # mode 1: interactive REPL
+chimera weasel -p "summarize TODO comments in src/"  # mode 2: one-shot print (add --json for a single JSON blob)
+chimera weasel --mode rpc < requests.jsonl           # mode 3: stdio JSON-RPC server
+python -c "from chimera.weasel.sdk import Agent; print(Agent(model='claude-sonnet-4-6').run('list files').text)"  # mode 4: SDK
+```
+
+See the [Weasel quickstart](docs/weasel/quickstart.md) for the four modes in detail, the extension layout, and the SDK recipe.
+
+### Shrew — coding agent tuned for small local models
+
+`chimera shrew` is the fifth coding-agent CLI, **explicitly tuned for small local models** (Qwen3.5-9B, Qwen3.6-35B-A3B MoE, and friends). It is a thin layer on top of weasel — same four modes, same session schema, same extension surface — but with three small-model adjustments: the default model is `qwen3.6-35b-a3b` served by llama.cpp on `127.0.0.1:8888`, `--max-steps` defaults to 30 (smaller than mink/otter's 50; small models don't benefit from long horizons), and the default `--allowed-tools` is the restricted `Read,Write,Edit,Bash` set so a 4-bit quantised model doesn't burn its context budget on tool selection. Cloud fallbacks (`anthropic/claude-haiku-4-5`, `openai/gpt-4o-mini`) work via `--model vendor/name`.
+
+```bash
+# Build llama.cpp and serve a GGUF on :8888 (see docs/shrew/small-model-setup.md)
+./llama-server -m qwen3.6-35b-a3b.Q4_K_M.gguf --host 127.0.0.1 --port 8888 &
+
+uv sync --extra dev
+chimera shrew -p "explain this repo"                    # one-shot against the local llama.cpp server
+chimera shrew                                           # interactive REPL
+chimera shrew --list-models                             # known model identifiers
+chimera shrew bench aider-polyglot --bench-limit 5      # small-model benchmark harness
+chimera shrew --model anthropic/claude-haiku-4-5 -p "..."  # cloud fallback
+```
+
+See the [Shrew quickstart](docs/shrew/quickstart.md) for the small-model setup walkthrough and benchmark harness.
+
 ## How It's Organized
 
 Chimera is an 8-layer stack. Each layer has a documented API boundary; swap any provider, tool, env, or strategy without touching the rest.
@@ -235,9 +284,13 @@ Use Chimera if you want to:
 ## Links
 
 - [Quick Start](docs/playbooks/00-quick-start.md) — hooks, MCP servers, skills
+- [Coding Agents Overview](docs/coding-agents.md) — comparative tour of mink, otter, ferret, weasel, shrew
 - [Mink Quickstart](docs/mink/quickstart.md) — `chimera mink` REPL, runs/agents subcommands
 - [Mink Providers](docs/mink/providers.md) — backend matrix, env vars, troubleshooting
 - [Otter Quickstart](docs/otter/quickstart.md) — `chimera otter` one-shot, REPL, HTTP+SSE, ACP
+- [Ferret Quickstart](docs/ferret/quickstart.md) — `chimera ferret` sandbox + approval presets, ACP-default `serve`, cloud bridge
+- [Weasel Quickstart](docs/weasel/quickstart.md) — `chimera weasel` four modes (REPL / print / RPC / SDK), extensions
+- [Shrew Quickstart](docs/shrew/quickstart.md) — `chimera shrew` small-model defaults, llama.cpp setup, benchmark harness
 - [Build Your Own Agent](docs/playbooks/08-building-agents.md) — full library guide
 - [All Playbooks](docs/playbooks/) — 13 guides covering every feature
 - [Examples](examples/) — 28 curated runnable scripts across 7 categories

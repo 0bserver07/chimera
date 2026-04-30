@@ -145,6 +145,84 @@ export default defineConfig({
 						},
 					],
 				},
+				{
+					label: 'Ferret',
+					collapsed: true,
+					items: [
+						{
+							label: 'Core',
+							items: [
+								{ label: 'Quickstart', slug: 'ferret/quickstart' },
+								{ label: 'Providers', slug: 'ferret/providers' },
+							],
+						},
+						{
+							label: 'Per-Area',
+							items: [
+								{ label: 'Parity Matrix', slug: 'ferret/parity-matrix' },
+								{ label: 'Sandbox', slug: 'ferret/sandbox' },
+								{ label: 'Approval', slug: 'ferret/approval' },
+								{ label: 'IDE Bridge', slug: 'ferret/ide' },
+								{ label: 'Cloud Bridge', slug: 'ferret/cloud-bridge' },
+							],
+						},
+						{
+							label: 'Policy',
+							items: [
+								{ label: 'Security and Trademarks', slug: 'ferret/security-and-trademarks' },
+							],
+						},
+					],
+				},
+				{
+					label: 'Weasel',
+					collapsed: true,
+					items: [
+						{
+							label: 'Core',
+							items: [
+								{ label: 'Quickstart', slug: 'weasel/quickstart' },
+								{ label: 'Providers', slug: 'weasel/providers' },
+								{ label: 'Modes', slug: 'weasel/modes' },
+							],
+						},
+						{
+							label: 'Per-Area',
+							items: [
+								{ label: 'SDK', slug: 'weasel/sdk' },
+								{ label: 'Extensions', slug: 'weasel/extensions' },
+							],
+						},
+					],
+				},
+				{
+					label: 'Shrew',
+					collapsed: true,
+					items: [
+						{
+							label: 'Core',
+							items: [
+								{ label: 'Quickstart', slug: 'shrew/quickstart' },
+								{ label: 'Small-Model Setup', slug: 'shrew/small-model-setup' },
+							],
+						},
+						{
+							label: 'Per-Area',
+							items: [
+								{ label: 'Parity Matrix', slug: 'shrew/parity-matrix' },
+								{ label: 'Skills', slug: 'shrew/skills' },
+								{ label: 'Extensions', slug: 'shrew/extensions' },
+								{ label: 'Benchmarks', slug: 'shrew/benchmarks' },
+							],
+						},
+						{
+							label: 'Policy',
+							items: [
+								{ label: 'Security and Trademarks', slug: 'shrew/security-and-trademarks' },
+							],
+						},
+					],
+				},
 			],
 		}),
 	],

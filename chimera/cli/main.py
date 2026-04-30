@@ -183,6 +183,47 @@ def build_parser() -> argparse.ArgumentParser:
     from chimera.otter import cli as _otter_cli
     _otter_cli.add_arguments(otter_parser)
 
+    # ---- ferret subcommand ----
+    # WHY: ferret is the third Chimera coding-agent CLI — sandbox-first /
+    # IDE-first / OpenAI-flagship. Mirrors a different point in the
+    # design space than mink (TUI-first) or otter (server-first).
+    ferret_parser = subparsers.add_parser(
+        "ferret",
+        help="Ferret — a Chimera coding agent in the sandbox-first IDE tradition",
+    )
+    try:
+        from chimera.ferret import cli as _ferret_cli  # type: ignore[attr-defined]
+        _ferret_cli.add_arguments(ferret_parser)
+    except (ImportError, AttributeError):
+        # Scaffold not yet wired by the per-agent build; placeholder parser.
+        ferret_parser.add_argument("--version", action="store_true")
+
+    # ---- weasel subcommand ----
+    # WHY: weasel is the fourth Chimera coding-agent CLI — minimal harness
+    # with four operating modes (interactive / print / RPC / SDK).
+    weasel_parser = subparsers.add_parser(
+        "weasel",
+        help="Weasel — a minimal Chimera coding-agent harness",
+    )
+    try:
+        from chimera.weasel import cli as _weasel_cli  # type: ignore[attr-defined]
+        _weasel_cli.add_arguments(weasel_parser)
+    except (ImportError, AttributeError):
+        weasel_parser.add_argument("--version", action="store_true")
+
+    # ---- shrew subcommand ----
+    # WHY: shrew is the fifth Chimera coding-agent CLI — explicitly tuned
+    # for small local models (llama.cpp / Ollama). Built on top of weasel.
+    shrew_parser = subparsers.add_parser(
+        "shrew",
+        help="Shrew — a Chimera coding agent tuned for small local models",
+    )
+    try:
+        from chimera.shrew import cli as _shrew_cli  # type: ignore[attr-defined]
+        _shrew_cli.add_arguments(shrew_parser)
+    except (ImportError, AttributeError):
+        shrew_parser.add_argument("--version", action="store_true")
+
     # ---- review subcommand ----
     review_parser = subparsers.add_parser(
         "review",
@@ -802,6 +843,27 @@ def main(argv: Sequence[str] | None = None) -> int:
     elif args.command == "otter":
         from chimera.otter import cli as _otter_cli
         return _otter_cli.run(args)
+    elif args.command == "ferret":
+        try:
+            from chimera.ferret import cli as _ferret_cli  # type: ignore[attr-defined]
+            return _ferret_cli.run(args)
+        except (ImportError, AttributeError) as exc:
+            print(f"chimera ferret: scaffold not yet built ({exc})", file=sys.stderr)
+            return 2
+    elif args.command == "weasel":
+        try:
+            from chimera.weasel import cli as _weasel_cli  # type: ignore[attr-defined]
+            return _weasel_cli.run(args)
+        except (ImportError, AttributeError) as exc:
+            print(f"chimera weasel: scaffold not yet built ({exc})", file=sys.stderr)
+            return 2
+    elif args.command == "shrew":
+        try:
+            from chimera.shrew import cli as _shrew_cli  # type: ignore[attr-defined]
+            return _shrew_cli.run(args)
+        except (ImportError, AttributeError) as exc:
+            print(f"chimera shrew: scaffold not yet built ({exc})", file=sys.stderr)
+            return 2
     elif args.command == "review":
         return run_review(args)
     elif args.command == "ci-fix":
