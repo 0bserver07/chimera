@@ -279,7 +279,44 @@ def load_memory(cwd: Path | None = None, *, max_hops: int = 5) -> str:
         body = _HTML_COMMENT_RE.sub("", raw)
         expanded = resolve_imports(body, f.parent, hops=max_hops)
         parts.append(f"<!-- source: {f} -->\n{expanded.rstrip()}\n")
-    return "\n".join(parts)
+
+    combined = "\n".join(parts)
+
+    # Fire INSTRUCTIONS_LOADED once the rules block has been built. Lists
+    # the source paths so observers (audit, plugins) can see what got
+    # ingested. Best-effort; never raises.
+    _emit_instructions_loaded(
+        files=[str(p) for p in files],
+        char_count=len(combined),
+        source="agent_memory",
+    )
+
+    return combined
+
+
+def _emit_instructions_loaded(
+    *,
+    files: list[str],
+    char_count: int,
+    source: str,
+) -> None:
+    """Fire :data:`HookEvent.INSTRUCTIONS_LOADED` via the global emitter.
+
+    No-op when no global emitter has been registered, or when hook
+    emission raises — instruction loading must never fail.
+    """
+    try:
+        from chimera.hooks.emitter import get_global_emitter
+        from chimera.hooks.events import HookEvent
+        emitter = get_global_emitter()
+        if emitter.active:
+            emitter.emit_sync(
+                HookEvent.INSTRUCTIONS_LOADED,
+                tool_name=source,
+                tool_input={"files": files, "char_count": char_count},
+            )
+    except Exception:
+        pass
 
 
 def inject_memory(messages: list[dict[str, Any]], cwd: Path) -> list[dict[str, Any]]:

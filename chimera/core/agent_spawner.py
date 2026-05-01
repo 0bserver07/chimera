@@ -133,6 +133,13 @@ class AgentSpawner:
                         HookEvent.SUBAGENT_STOP,
                         tool_name=definition.name,
                     )
+                    # A backgrounded sub-agent that just finished is, by
+                    # definition, idle: fire TEAMMATE_IDLE so coordinators
+                    # can pick up the next piece of work.
+                    await self._hook_emitter.emit(
+                        HookEvent.TEAMMATE_IDLE,
+                        tool_name=definition.name,
+                    )
 
             asyncio.create_task(_run_background())
 

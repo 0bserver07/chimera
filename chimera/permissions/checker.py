@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from chimera.hooks.emitter import HookEmitter
+from chimera.hooks.events import HookEvent
 from chimera.permissions.context import PermissionContext
 from chimera.permissions.decisions import DecisionReason, PermissionDecision
 from chimera.permissions.modes import PermissionMode
@@ -58,13 +60,21 @@ class PermissionChecker:
     def __init__(
         self,
         security_analyzer: SecurityAnalyzer | None = None,
+        *,
+        hook_emitter: HookEmitter | None = None,
     ) -> None:
         """Construct a checker, optionally wiring a security analyzer.
 
         Args:
             security_analyzer: Optional analyzer evaluated at step 1c.
+            hook_emitter: Optional :class:`HookEmitter` used to fire
+                :data:`HookEvent.PERMISSION_REQUEST` whenever the checker
+                returns an ``ASK`` decision and
+                :data:`HookEvent.PERMISSION_DENIED` whenever it returns
+                ``DENY``.  When ``None``, no hook fires (backwards-compat).
         """
         self._security_analyzer = security_analyzer
+        self._hook_emitter = hook_emitter
 
     async def check(
         self,
@@ -87,6 +97,51 @@ class PermissionChecker:
         Returns:
             A :class:`PermissionDecision`.
         """
+        result = await self._check_internal(
+            tool, input_args, context, permission_decision=permission_decision
+        )
+        await self._emit_decision_hooks(tool, input_args, result)
+        return result
+
+    async def _emit_decision_hooks(
+        self,
+        tool: Any,
+        input_args: dict[str, Any],
+        decision: PermissionDecision,
+    ) -> None:
+        """Fire PERMISSION_REQUEST / PERMISSION_DENIED on the right outcomes.
+
+        Hooks are best-effort: any exception is swallowed so a misbehaving
+        hook can never block a permission decision.
+        """
+        if self._hook_emitter is None or not self._hook_emitter.active:
+            return
+        tool_name = getattr(tool, "name", "") or ""
+        try:
+            if decision.behavior == PermissionBehavior.ASK:
+                await self._hook_emitter.emit(
+                    HookEvent.PERMISSION_REQUEST,
+                    tool_name=tool_name,
+                    tool_input=dict(input_args),
+                )
+            elif decision.behavior == PermissionBehavior.DENY:
+                await self._hook_emitter.emit(
+                    HookEvent.PERMISSION_DENIED,
+                    tool_name=tool_name,
+                    tool_input=dict(input_args),
+                )
+        except Exception:  # pragma: no cover - hook errors must not propagate
+            pass
+
+    async def _check_internal(
+        self,
+        tool: Any,
+        input_args: dict[str, Any],
+        context: PermissionContext,
+        *,
+        permission_decision: str | None = None,
+    ) -> PermissionDecision:
+        """Original permission-resolution algorithm; see :meth:`check`."""
         tool_name: str = tool.name
         content = self._get_content(tool, input_args)
 

@@ -13,7 +13,19 @@ from typing import Any
 
 from chimera.core.tool import BaseTool
 from chimera.env.base import Environment
+from chimera.hooks.emitter import get_global_emitter
+from chimera.hooks.events import HookEvent
 from chimera.types import ToolResult
+
+
+def _emit_worktree_event(event: HookEvent, **kwargs: Any) -> None:
+    """Best-effort hook emission. Worktree work must never fail on hooks."""
+    try:
+        emitter = get_global_emitter()
+        if emitter.active:
+            emitter.emit_sync(event, **kwargs)
+    except Exception:
+        pass
 
 
 def _git(args: list[str], cwd: str | None = None) -> subprocess.CompletedProcess[str]:
@@ -72,6 +84,11 @@ class EnterWorktreeTool(BaseTool):
         proc = _git(["worktree", "add", str(wt_path), "-b", name, base])
         if proc.returncode != 0:
             return ToolResult(output="", error=f"git worktree add failed: {proc.stderr.strip()}")
+        _emit_worktree_event(
+            HookEvent.WORKTREE_CREATE,
+            tool_name="enter_worktree",
+            tool_input={"path": str(wt_path), "branch": name, "base": base},
+        )
         return ToolResult(
             output=str(wt_path),
             metadata={"worktree_path": str(wt_path), "branch": name},
@@ -132,6 +149,11 @@ class ExitWorktreeTool(BaseTool):
             proc = _git(["worktree", "remove", wt])
             if proc.returncode != 0:
                 return ToolResult(output="", error=f"remove failed: {proc.stderr.strip()}")
+            _emit_worktree_event(
+                HookEvent.WORKTREE_REMOVE,
+                tool_name="exit_worktree",
+                tool_input={"path": wt, "action": "remove"},
+            )
             return ToolResult(output=f"Removed worktree {wt}")
 
         if action == "merge":
@@ -145,6 +167,11 @@ class ExitWorktreeTool(BaseTool):
                     output=merge.stdout,
                     error=f"merged but cleanup failed: {rm.stderr.strip()}",
                 )
+            _emit_worktree_event(
+                HookEvent.WORKTREE_REMOVE,
+                tool_name="exit_worktree",
+                tool_input={"path": wt, "action": "merge", "branch": branch},
+            )
             return ToolResult(output=f"Merged {branch} and removed worktree")
 
         # action == "abandon"
@@ -154,4 +181,9 @@ class ExitWorktreeTool(BaseTool):
             return ToolResult(output="", error=f"abandon remove failed: {rm.stderr.strip()}")
         if branch and branch != "HEAD":
             _git(["branch", "-D", branch])  # best-effort; some branches may not exist
+        _emit_worktree_event(
+            HookEvent.WORKTREE_REMOVE,
+            tool_name="exit_worktree",
+            tool_input={"path": wt, "action": "abandon", "branch": branch},
+        )
         return ToolResult(output=f"Abandoned worktree {wt}")

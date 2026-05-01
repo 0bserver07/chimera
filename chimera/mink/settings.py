@@ -297,4 +297,31 @@ def load_mink_settings(cwd: Path | None = None) -> MinkSettings:
     for layer in layers:
         merged = _deep_merge(merged, layer)
     merged = _apply_env_overrides(merged, dict(os.environ))
-    return _build_settings(merged)
+    settings = _build_settings(merged)
+
+    # Fire CONFIG_CHANGE once settings have been (re)materialised. Hot reloads
+    # call this same function, so observers see one event per refresh. Best-
+    # effort: a missing global emitter or a hook error is swallowed.
+    _emit_config_change(cwd)
+
+    return settings
+
+
+def _emit_config_change(cwd: Path) -> None:
+    """Fire :data:`HookEvent.CONFIG_CHANGE` via the global emitter.
+
+    No-op when no global emitter has been registered, so this function is
+    safe to call from import-time / startup code paths.
+    """
+    try:
+        from chimera.hooks.emitter import get_global_emitter
+        from chimera.hooks.events import HookEvent
+        emitter = get_global_emitter()
+        if emitter.active:
+            emitter.emit_sync(
+                HookEvent.CONFIG_CHANGE,
+                tool_name="mink.settings",
+                tool_input={"cwd": str(cwd)},
+            )
+    except Exception:
+        pass

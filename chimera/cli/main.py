@@ -144,9 +144,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         choices=["coding_agent", "claude_code", "codex", "minimal", "explore"],
         help=(
-            "Agent preset — uses the CodingAgent stack (default: legacy stack). "
-            "'claude_code' is a deprecated alias for 'coding_agent' and will be "
-            "removed in a future release."
+            "Agent preset for the CodingAgent stack. The bare REPL "
+            "(no --preset, no --legacy-react) defaults to 'coding_agent'. "
+            "Pass --preset to pick a different preset (codex / minimal / "
+            "explore). 'claude_code' is a deprecated alias for "
+            "'coding_agent' and will be removed in a future release."
         ),
     )
     code_parser.add_argument(
@@ -154,6 +156,18 @@ def build_parser() -> argparse.ArgumentParser:
         dest="print_mode",
         default=None,
         help="Non-interactive: run a single task and print the result",
+    )
+    code_parser.add_argument(
+        "--legacy-react",
+        dest="legacy_react",
+        action="store_true",
+        default=False,
+        help=(
+            "Opt out of the new CodingAgent default and use the legacy "
+            "ReAct + Session stack instead. Reserved for back-compat with "
+            "users who depend on the rich slash-command REPL "
+            "(/checkpoint, /tree, /branch, /switch, steering)."
+        ),
     )
 
     # ---- mink subcommand ----
@@ -1068,6 +1082,22 @@ def run_auth(args: argparse.Namespace) -> int:
     return 2
 
 
+def _emit_setup_hook(command: str) -> None:
+    """Fire :data:`HookEvent.SETUP` once at CLI startup.
+
+    Best-effort: any wiring or hook error is swallowed so the CLI never
+    refuses to run because of a hook misconfiguration.
+    """
+    try:
+        from chimera.hooks.emitter import get_global_emitter
+        from chimera.hooks.events import HookEvent
+        emitter = get_global_emitter()
+        if emitter.active:
+            emitter.emit_sync(HookEvent.SETUP, tool_name=command)
+    except Exception:
+        pass
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """CLI entry point."""
     parser = build_parser()
@@ -1076,6 +1106,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command is None:
         parser.print_help()
         return 0
+
+    # Fire SETUP hook once per CLI invocation, after argv is parsed and the
+    # subcommand is known. No-op when no global emitter has been registered.
+    _emit_setup_hook(args.command)
 
     if args.command in ("synthesize", "synth"):
         return run_synthesize(args)

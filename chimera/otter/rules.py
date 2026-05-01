@@ -204,4 +204,26 @@ def load_otter_rules(
         keep = max(0, max_chars - len(TRUNCATION_MARKER))
         combined = combined[:keep] + TRUNCATION_MARKER
 
+    _emit_instructions_loaded([str(f) for f in files], len(combined))
+
     return combined
+
+
+def _emit_instructions_loaded(files: list[str], char_count: int) -> None:
+    """Fire :data:`HookEvent.INSTRUCTIONS_LOADED` via the global emitter.
+
+    Best-effort: missing emitter or hook errors are swallowed so rule
+    loading is never gated on the hook system being healthy.
+    """
+    try:
+        from chimera.hooks.emitter import get_global_emitter
+        from chimera.hooks.events import HookEvent
+        emitter = get_global_emitter()
+        if emitter.active:
+            emitter.emit_sync(
+                HookEvent.INSTRUCTIONS_LOADED,
+                tool_name="otter.rules",
+                tool_input={"files": files, "char_count": char_count},
+            )
+    except Exception:
+        pass
