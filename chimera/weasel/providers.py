@@ -65,10 +65,54 @@ _DEFAULT_LLAMACPP_MODEL = "gpt-oss"
 # Ollama's default tag for cloud serving; users override via ``--model``
 # when they want a specific local id (e.g. ``llama3.2:3b``).
 _DEFAULT_OLLAMA_MODEL = "qwen3.5:cloud"
+# WHY: ``$XAI_API_KEY`` is a late-binding fallback after every existing
+# key path. Users with only an xAI key get ``grok-3``; everyone else
+# keeps their current default unless they pass ``--model grok-*``.
+_DEFAULT_XAI_MODEL = "grok-3"
 
 _OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 _LLAMACPP_BASE_URL = "http://127.0.0.1:8888/v1"
 _OLLAMA_BASE_URL = "http://127.0.0.1:11434"
+
+# Local OpenAI-compatible serving defaults — mirror
+# :data:`chimera.providers.factory._VLLM_DEFAULT_BASE_URL` /
+# ``_SGLANG_DEFAULT_BASE_URL`` so the weasel chain stays in sync with
+# the upstream factory.
+_VLLM_BASE_URL = "http://localhost:8000/v1"
+_SGLANG_BASE_URL = "http://localhost:30000/v1"
+
+# Default model ids when only the corresponding local server probe answers.
+# The ``vllm/`` / ``sglang/`` prefix is consumed by
+# :func:`chimera.providers.factory.create_provider` (it strips the head
+# before forwarding the id to the OpenAI-compatible provider). Keeping
+# the prefix in the resolved id makes the ``--list-models`` / chain-step
+# disambiguation obvious.
+_DEFAULT_VLLM_MODEL = "vllm/qwen3.6-35b-a3b"
+_DEFAULT_SGLANG_MODEL = "sglang/qwen3.6-35b-a3b"
+
+# WHY: OpenRouter recommends every client send ``HTTP-Referer`` and
+# ``X-Title`` so requests show up identifiably in their dashboard. These
+# are cosmetic — the API works without them — but setting them is the
+# polite default. Users override via the matching env vars.
+_OPENROUTER_DEFAULT_REFERER = "https://github.com/0bserver07/chimera"
+_OPENROUTER_DEFAULT_TITLE = "chimera weasel 0.5.0"
+
+
+def _openrouter_extra_headers() -> dict[str, str]:
+    """Return the cosmetic OpenRouter headers (``HTTP-Referer`` / ``X-Title``).
+
+    Resolution order per field:
+
+    1. ``$OPENROUTER_REFERER`` / ``$OPENROUTER_TITLE`` (user override).
+    2. Module defaults baked in above.
+
+    Returns:
+        Two-key dict ready to pass as ``extra_headers=`` to the
+        OpenAI-compatible provider.
+    """
+    referer = os.environ.get("OPENROUTER_REFERER") or _OPENROUTER_DEFAULT_REFERER
+    title = os.environ.get("OPENROUTER_TITLE") or _OPENROUTER_DEFAULT_TITLE
+    return {"HTTP-Referer": referer, "X-Title": title}
 
 # WHY: the friendly error message lists every supported env var so users
 # know which knobs to flip. Kept as a module constant so tests can assert
@@ -88,6 +132,14 @@ _NO_KEY_MESSAGE = (
     "  - OLLAMA_API_KEY (default model: "
     f"{_DEFAULT_OLLAMA_MODEL}, server: "
     f"{_OLLAMA_BASE_URL})\n"
+    "  - XAI_API_KEY (default model: "
+    f"{_DEFAULT_XAI_MODEL})\n"
+    "  - VLLM_API_KEY (default model: "
+    f"{_DEFAULT_VLLM_MODEL}, server: "
+    f"{_VLLM_BASE_URL})\n"
+    "  - SGLANG_API_KEY (default model: "
+    f"{_DEFAULT_SGLANG_MODEL}, server: "
+    f"{_SGLANG_BASE_URL})\n"
     "or override the model via --model / $WEASEL_MODEL."
 )
 
@@ -113,6 +165,9 @@ def resolved_catalog() -> list[tuple[str, str]]:
         (_DEFAULT_OPENROUTER_MODEL, "OPENROUTER_API_KEY"),
         (_DEFAULT_LLAMACPP_MODEL, f"LLAMACPP_API_KEY @ {_LLAMACPP_BASE_URL}"),
         (_DEFAULT_OLLAMA_MODEL, f"OLLAMA_API_KEY @ {_OLLAMA_BASE_URL}"),
+        (_DEFAULT_XAI_MODEL, "XAI_API_KEY"),
+        (_DEFAULT_VLLM_MODEL, f"VLLM_API_KEY @ {_VLLM_BASE_URL}"),
+        (_DEFAULT_SGLANG_MODEL, f"SGLANG_API_KEY @ {_SGLANG_BASE_URL}"),
     ]
 
 
@@ -165,8 +220,43 @@ def _resolve_model(args: argparse.Namespace) -> str:
         return _DEFAULT_LLAMACPP_MODEL
     if os.environ.get("OLLAMA_API_KEY"):
         return _DEFAULT_OLLAMA_MODEL
+    # Late-binding xAI fallback. Routed via the factory's ``grok-*``
+    # prefix inference -> ``xai`` provider -> ``api.x.ai/v1``.
+    if os.environ.get("XAI_API_KEY"):
+        return _DEFAULT_XAI_MODEL
+    # Late-binding local-server fallbacks. ``$VLLM_API_KEY`` /
+    # ``$SGLANG_API_KEY`` are presence flags; setting either of them
+    # signals "I'm running this server locally, use it as a last resort".
+    # An additional reachability probe (250ms timeout) runs only when the
+    # presence flag is set so we don't pay for a network round trip on
+    # every chain miss.
+    if os.environ.get("VLLM_API_KEY") and _probe_vllm():
+        return _DEFAULT_VLLM_MODEL
+    if os.environ.get("SGLANG_API_KEY") and _probe_sglang():
+        return _DEFAULT_SGLANG_MODEL
 
     raise ValueError(_NO_KEY_MESSAGE)
+
+
+def _probe_vllm() -> bool:
+    """Return ``True`` when a vLLM server answers at ``$VLLM_BASE_URL``.
+
+    Stdlib-only (mirrors :func:`chimera.shrew.providers.probe_ollama`):
+    250ms timeout, ``/models`` endpoint, treats 401/403 as "alive".
+    Lazy-imports the shared helper from
+    :mod:`chimera.providers.factory` so the weasel module stays
+    stdlib-clean at import time.
+    """
+    from chimera.providers.factory import probe_vllm
+
+    return probe_vllm()
+
+
+def _probe_sglang() -> bool:
+    """Return ``True`` when an SGLang server answers at ``$SGLANG_BASE_URL``."""
+    from chimera.providers.factory import probe_sglang
+
+    return probe_sglang()
 
 
 def _is_ollama_id(model: str) -> bool:
@@ -322,14 +412,25 @@ def build_provider(args: argparse.Namespace) -> Provider:
     if max_tokens is not None:
         extra_kwargs["max_tokens"] = max_tokens
 
+    # --- vLLM / SGLang explicit prefix (handled BEFORE OpenRouter so
+    #     the slash form isn't hijacked by a stray $OPENROUTER_API_KEY) ---
+    model_lower = model.lower()
+    if model_lower.startswith("vllm/"):
+        return create_provider(provider_type="vllm", model=model)
+    if model_lower.startswith("sglang/"):
+        return create_provider(provider_type="sglang", model=model)
+
     # --- OpenRouter (vendor/name convention) ---
     if _should_use_openrouter(model):
+        # Pass cosmetic ``HTTP-Referer`` / ``X-Title`` so OpenRouter's
+        # dashboard attributes the traffic correctly.
         api_key = os.environ.get("OPENROUTER_API_KEY")
         return create_provider(
             provider_type="compatible",
             model=model,
             api_key=api_key,
             base_url=_OPENROUTER_BASE_URL,
+            extra_headers=_openrouter_extra_headers(),
         )
 
     # --- llama.cpp local server (OpenAI-compatible) ---

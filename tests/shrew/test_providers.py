@@ -452,11 +452,15 @@ def test_resolved_catalog_shape() -> None:
     sources = [src for _model, src in catalog]
     # Order-significant: mirrors the resolution chain.
     assert "llama.cpp" in sources[0]
-    assert "ollama" in sources[1]
-    assert sources[2] == "ANTHROPIC_API_KEY"
-    assert sources[3] == "OPENAI_API_KEY"
-    assert sources[4] == "OPENROUTER_API_KEY"
-    assert len(catalog) == 5
+    assert "vllm" in sources[1]
+    assert "sglang" in sources[2]
+    assert "ollama" in sources[3]
+    assert sources[4] == "ANTHROPIC_API_KEY"
+    assert sources[5] == "OPENAI_API_KEY"
+    assert sources[6] == "OPENROUTER_API_KEY"
+    # XAI is appended last by the linter-applied chain extension.
+    assert sources[-1] == "XAI_API_KEY"
+    assert len(catalog) == 8
 
 
 def test_format_catalog_contains_every_default() -> None:

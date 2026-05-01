@@ -15,12 +15,88 @@ Example:
 # chimera/providers/factory.py
 from __future__ import annotations
 
+import os
+import urllib.error
+import urllib.request
 from typing import TYPE_CHECKING, Any
 
 from chimera.providers.base import Provider
 
 if TYPE_CHECKING:
     from chimera.auth.manager import AuthManager
+
+# Per-probe socket timeout for local-server liveness checks. Kept tight so
+# resolution chains feel snappy when the server isn't running.
+_LOCAL_PROBE_TIMEOUT_SECONDS = 0.25
+
+
+def _local_probe(url: str, timeout: float = _LOCAL_PROBE_TIMEOUT_SECONDS) -> bool:
+    """Return ``True`` when an HTTP GET to *url* yields a non-error status.
+
+    Mirrors :func:`chimera.shrew.providers._http_probe`: stdlib-only
+    (:mod:`urllib.request`), with a tight socket timeout so callers can
+    chain probes without paying for stale base URLs. ``401``/``403`` are
+    treated as "alive" because the OpenAI-compat ``/v1/models`` endpoint
+    may demand a key even when the caller just wants a liveness signal.
+    """
+    try:
+        req = urllib.request.Request(url, method="GET")
+        with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
+            status = getattr(resp, "status", None) or resp.getcode()
+            return 200 <= int(status) < 400
+    except urllib.error.HTTPError as err:
+        return err.code in (401, 403)
+    except Exception:  # noqa: BLE001 — any failure means "unreachable"
+        return False
+
+
+def vllm_base_url() -> str:
+    """Return the configured vLLM base URL.
+
+    Reads ``$VLLM_BASE_URL`` and falls back to the documented vLLM default
+    (``http://localhost:8000/v1``). Trailing slashes are trimmed so callers
+    can safely append paths.
+    """
+    return os.environ.get("VLLM_BASE_URL", _VLLM_DEFAULT_BASE_URL).rstrip("/")
+
+
+def sglang_base_url() -> str:
+    """Return the configured SGLang base URL.
+
+    Reads ``$SGLANG_BASE_URL`` and falls back to the documented SGLang
+    default (``http://localhost:30000/v1``). Trailing slashes are trimmed.
+    """
+    return os.environ.get(
+        "SGLANG_BASE_URL", _SGLANG_DEFAULT_BASE_URL,
+    ).rstrip("/")
+
+
+def probe_vllm(base_url: str | None = None) -> bool:
+    """Return ``True`` when a vLLM server answers at *base_url*.
+
+    Probes ``/models`` (the OpenAI-compatible listing endpoint, which vLLM
+    serves under its ``/v1`` mount).
+
+    Args:
+        base_url: Override ``$VLLM_BASE_URL``. When ``None`` we resolve
+            from env (with a default of :data:`_VLLM_DEFAULT_BASE_URL`).
+    """
+    url = (base_url or vllm_base_url()).rstrip("/")
+    return _local_probe(f"{url}/models")
+
+
+def probe_sglang(base_url: str | None = None) -> bool:
+    """Return ``True`` when an SGLang server answers at *base_url*.
+
+    Probes ``/models``. SGLang's OpenAI-compatible router lives under its
+    ``/v1`` mount on port 30000 by default.
+
+    Args:
+        base_url: Override ``$SGLANG_BASE_URL``. When ``None`` we resolve
+            from env (with a default of :data:`_SGLANG_DEFAULT_BASE_URL`).
+    """
+    url = (base_url or sglang_base_url()).rstrip("/")
+    return _local_probe(f"{url}/models")
 
 # Maps provider_type to auth provider name for token lookup.
 _AUTH_PROVIDER_MAP: dict[str, str] = {
@@ -30,7 +106,16 @@ _AUTH_PROVIDER_MAP: dict[str, str] = {
     "ollama": "ollama",
     "compatible": "openai",
     "modal": "modal",
+    "vllm": "vllm",
+    "sglang": "sglang",
+    "xai": "xai",
 }
+
+# Local OpenAI-compatible serving defaults. Both vLLM and SGLang expose
+# ``/v1/chat/completions`` so they piggy-back on
+# :class:`~chimera.providers.compatible.OpenAICompatibleProvider`.
+_VLLM_DEFAULT_BASE_URL = "http://localhost:8000/v1"
+_SGLANG_DEFAULT_BASE_URL = "http://localhost:30000/v1"
 
 
 def create_provider(
@@ -78,7 +163,6 @@ def create_provider(
     _ensure_builtins_registered()
 
     if model is None:
-        import os
         model = os.environ.get("ANTHROPIC_MODEL") or os.environ.get("OPENAI_MODEL")
         if model is None:
             raise ValueError(
@@ -92,6 +176,14 @@ def create_provider(
     if provider_type is None:
         provider_type = _infer_provider(model)
 
+    # Strip ``vllm/`` and ``sglang/`` model-id prefixes — they are hints
+    # used by ``_infer_provider`` to pick the right local server, not part
+    # of the model name the server itself sees.
+    if provider_type in ("vllm", "sglang") and "/" in model:
+        head, _, tail = model.partition("/")
+        if head.lower() == provider_type:
+            model = tail
+
     # Try auth_manager for API key when none was explicitly provided.
     if api_key is None and auth_manager is not None:
         auth_name = _AUTH_PROVIDER_MAP.get(provider_type, provider_type)
@@ -99,6 +191,45 @@ def create_provider(
             api_key = auth_manager.get_token(auth_name)
         except Exception:
             pass  # Fall through to env var lookup inside provider
+
+    # vLLM and SGLang both expose OpenAI-compatible endpoints; route them
+    # through the ``compatible`` provider with defaults pinned to each
+    # server's documented port. ``$VLLM_BASE_URL`` / ``$SGLANG_BASE_URL``
+    # override the URL; ``$VLLM_API_KEY`` / ``$SGLANG_API_KEY`` override
+    # the (typically anonymous) key — local servers usually accept any
+    # value, so we default to ``"noop"`` when neither is configured.
+    if provider_type in ("vllm", "sglang"):
+        if provider_type == "vllm":
+            resolved_base = (
+                base_url
+                or os.environ.get("VLLM_BASE_URL")
+                or _VLLM_DEFAULT_BASE_URL
+            )
+            resolved_key = (
+                api_key
+                or os.environ.get("VLLM_API_KEY")
+                or "noop"
+            )
+        else:
+            resolved_base = (
+                base_url
+                or os.environ.get("SGLANG_BASE_URL")
+                or _SGLANG_DEFAULT_BASE_URL
+            )
+            resolved_key = (
+                api_key
+                or os.environ.get("SGLANG_API_KEY")
+                or "noop"
+            )
+        compatible_factory = get_provider_factory("compatible")
+        if compatible_factory is None:  # pragma: no cover — registry bug
+            raise ValueError("compatible provider not registered")
+        return compatible_factory(
+            model=model,
+            api_key=resolved_key,
+            base_url=resolved_base,
+            **kwargs,
+        )
 
     factory = get_provider_factory(provider_type)
     if factory is not None:
@@ -129,9 +260,14 @@ def _infer_provider(model: str) -> str:
        OpenAI.
     5. **Give up** with an actionable error message.
     """
-    import os
-
     model_lower = model.lower()
+
+    # Local OpenAI-compatible serving prefixes win unconditionally — the
+    # user explicitly opted into vLLM / SGLang by namespacing the model id.
+    if model_lower.startswith("vllm/"):
+        return "vllm"
+    if model_lower.startswith("sglang/"):
+        return "sglang"
 
     # Models that must NEVER be routed to the anthropic provider regardless of
     # env vars — they use fundamentally different wire protocols.
@@ -164,6 +300,11 @@ def _infer_provider(model: str) -> str:
         # Kimi / Moonshot models are served via Anthropic-compatible endpoints
         # (api.moonshot.ai, Ollama cloud, etc.). Default to anthropic.
         return "anthropic"
+    if model_lower.startswith("grok"):
+        # xAI Grok models are served via the OpenAI-compatible API at
+        # ``https://api.x.ai/v1``. The xai provider wraps
+        # OpenAICompatibleProvider with that base URL and ``$XAI_API_KEY``.
+        return "xai"
     if model_lower.startswith(("llama", "mistral", "qwen", "phi")):
         return "ollama"
 
@@ -189,5 +330,6 @@ def _infer_provider(model: str) -> str:
         f"  2. Pass provider_type='anthropic' | 'openai' | 'google' | "
         f"'ollama' explicitly.\n"
         f"  3. Use a prefix that matches a known provider (claude-*, gpt-*,\n"
-        f"     gemini-*, glm-*, kimi-*, llama*, qwen*, mistral*, phi*)."
+        f"     gemini-*, glm-*, kimi-*, grok-*, llama*, qwen*, mistral*, phi*,\n"
+        f"     vllm/* (local vLLM), sglang/* (local SGLang))."
     )

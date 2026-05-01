@@ -28,7 +28,25 @@ class OpenAICompatibleProvider(Provider):
         api_key: str | None = None,
         headers: dict[str, str] | None = None,
         context_length: int = 128_000,
+        extra_headers: dict[str, str] | None = None,
     ) -> None:
+        """Initialise the provider.
+
+        Args:
+            model: Upstream model id (e.g. ``"anthropic/claude-sonnet-4"``).
+            base_url: API root (e.g. ``"https://openrouter.ai/api/v1"``).
+            api_key: Bearer token. Falls back to ``$OPENAI_API_KEY``.
+            headers: Optional override map merged on top of the default
+                ``Content-Type`` + ``Authorization`` pair. Kept for
+                backwards compatibility with existing callers.
+            context_length: Advertised context window (informational).
+            extra_headers: Additional headers attached to every request.
+                Distinct from *headers* purely as a naming hint for
+                cosmetic-but-recommended fields (OpenRouter's
+                ``HTTP-Referer`` / ``X-Title``, e.g.). Merged after
+                *headers* so an explicit *extra_headers* entry wins on
+                key collision.
+        """
         if httpx is None:
             raise ImportError("pip install httpx")
         self._model = model
@@ -38,6 +56,7 @@ class OpenAICompatibleProvider(Provider):
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self._api_key}",
             **(headers or {}),
+            **(extra_headers or {}),
         }
         self._context_length = context_length
 

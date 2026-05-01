@@ -98,3 +98,81 @@ class TestRegisterModelCost:
     def test_deepseek_pricing_exists(self):
         cost = calculate_cost("deepseek-chat", {"input_tokens": 1_000_000, "output_tokens": 0})
         assert abs(cost - 0.27) < 1e-9
+
+
+class TestRefreshedCatalog:
+    """Cover the 2025/2026 model IDs added in P1-CATALOG."""
+
+    def test_claude_opus_4_7(self):
+        cost = calculate_cost("claude-opus-4-7", {
+            "input_tokens": 1_000_000, "output_tokens": 1_000_000,
+        })
+        # Opus 4.x: $15 in / $75 out per 1M
+        assert abs(cost - 90.0) < 1e-9
+
+    def test_claude_opus_4_7_dated_id(self):
+        # Real Anthropic IDs include date suffixes; longest-prefix match must win.
+        cost = calculate_cost("claude-opus-4-7-20260315", {
+            "input_tokens": 1_000_000, "output_tokens": 0,
+        })
+        assert abs(cost - 15.0) < 1e-9
+
+    def test_claude_haiku_4_5(self):
+        cost = calculate_cost("claude-haiku-4-5", {
+            "input_tokens": 1_000_000, "output_tokens": 1_000_000,
+        })
+        # Haiku 4.5: $1 in / $5 out per 1M
+        assert abs(cost - 6.0) < 1e-9
+
+    def test_claude_sonnet_4_5_dated_id(self):
+        cost = calculate_cost("claude-sonnet-4-5-20250929", {
+            "input_tokens": 1_000_000, "output_tokens": 0,
+        })
+        assert abs(cost - 3.0) < 1e-9
+
+    def test_gpt_5(self):
+        cost = calculate_cost("gpt-5", {
+            "input_tokens": 1_000_000, "output_tokens": 1_000_000,
+        })
+        # GPT-5: $1.25 in / $10 out per 1M
+        assert abs(cost - 11.25) < 1e-9
+
+    def test_gpt_5_mini_longest_prefix(self):
+        # gpt-5-mini must NOT collapse onto gpt-5 pricing.
+        cost = calculate_cost("gpt-5-mini", {
+            "input_tokens": 1_000_000, "output_tokens": 1_000_000,
+        })
+        assert abs(cost - 2.25) < 1e-9
+
+    def test_gpt_5_nano_longest_prefix(self):
+        cost = calculate_cost("gpt-5-nano", {
+            "input_tokens": 1_000_000, "output_tokens": 1_000_000,
+        })
+        assert abs(cost - 0.45) < 1e-9
+
+    def test_o3_distinct_from_o3_mini(self):
+        # "o3" prefix must match a bare o3 id without colliding with o3-mini.
+        cost = calculate_cost("o3", {
+            "input_tokens": 1_000_000, "output_tokens": 0,
+        })
+        assert abs(cost - 2.0) < 1e-9
+
+    def test_o3_mini_longest_prefix(self):
+        cost = calculate_cost("o3-mini", {
+            "input_tokens": 1_000_000, "output_tokens": 0,
+        })
+        assert abs(cost - 1.10) < 1e-9
+
+    def test_gemini_2_5_pro(self):
+        cost = calculate_cost("gemini-2.5-pro", {
+            "input_tokens": 1_000_000, "output_tokens": 1_000_000,
+        })
+        # Gemini 2.5 Pro (≤200K tier): $1.25 in / $10 out per 1M
+        assert abs(cost - 11.25) < 1e-9
+
+    def test_gemini_2_5_flash(self):
+        cost = calculate_cost("gemini-2.5-flash", {
+            "input_tokens": 1_000_000, "output_tokens": 1_000_000,
+        })
+        # Gemini 2.5 Flash: $0.30 in / $2.50 out per 1M
+        assert abs(cost - 2.80) < 1e-9

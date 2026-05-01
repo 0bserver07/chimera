@@ -15,16 +15,23 @@ Resolution chain (first match wins):
    ``http://127.0.0.1:8888/v1``) — probed via ``/health`` then
    ``/v1/models``. Default model: :data:`_DEFAULT_LLAMACPP_MODEL`
    (``qwen3.6-35b-a3b``). Routed through the OpenAI-compatible provider.
-4. **Ollama** at ``$OLLAMA_BASE_URL`` (default ``http://localhost:11434``)
+4. **vLLM** at ``$VLLM_BASE_URL`` (default ``http://localhost:8000/v1``)
+   — probed via ``/v1/models``. Default model: :data:`_DEFAULT_VLLM_MODEL`.
+   Routed through the OpenAI-compatible provider.
+5. **SGLang** at ``$SGLANG_BASE_URL`` (default
+   ``http://localhost:30000/v1``) — probed via ``/v1/models``. Default
+   model: :data:`_DEFAULT_SGLANG_MODEL`. Routed through the
+   OpenAI-compatible provider.
+6. **Ollama** at ``$OLLAMA_BASE_URL`` (default ``http://localhost:11434``)
    — probed via ``/api/tags``. Default model: :data:`_DEFAULT_OLLAMA_MODEL`
    (``qwen3.5:cloud``). Routed through the OpenAI-compatible provider
    (``/v1`` shim) so tool-calling shape matches the rest of the catalog.
-5. ``$ANTHROPIC_API_KEY`` set      -> :data:`_DEFAULT_ANTHROPIC_MODEL`.
-6. ``$OPENAI_API_KEY`` set         -> :data:`_DEFAULT_OPENAI_MODEL`.
-7. ``$OPENROUTER_API_KEY`` set     -> :data:`_DEFAULT_OPENROUTER_MODEL`
+7. ``$ANTHROPIC_API_KEY`` set      -> :data:`_DEFAULT_ANTHROPIC_MODEL`.
+8. ``$OPENAI_API_KEY`` set         -> :data:`_DEFAULT_OPENAI_MODEL`.
+9. ``$OPENROUTER_API_KEY`` set     -> :data:`_DEFAULT_OPENROUTER_MODEL`
                                       (routed through the OpenAI-compatible
                                       provider against ``openrouter.ai``).
-8. Friendly :class:`ValueError` listing every supported env var.
+10. Friendly :class:`ValueError` listing every supported env var.
 
 Once a model id is in hand we choose a provider:
 
@@ -72,16 +79,51 @@ checkpoint — small enough to run on a 32-64 GB Mac with 4-bit quantisation,
 big enough to handle real coding tasks. The id is informational; llama.cpp
 serves whatever GGUF is loaded regardless of the advertised name."""
 
+_DEFAULT_VLLM_MODEL = "vllm/qwen3.6-35b-a3b"
+"""Default vLLM model id when a vLLM server is the only reachable backend.
+
+The ``vllm/`` prefix is stripped by
+:func:`chimera.providers.factory.create_provider` before the request
+reaches the server, but it keeps the id distinguishable from the
+llama.cpp default (which serves the same Qwen MoE checkpoint on a
+different port). vLLM serves whatever ``--model`` was passed at server
+start; the id is informational and overridable via ``--model`` /
+``$SHREW_MODEL``."""
+
+_DEFAULT_SGLANG_MODEL = "sglang/qwen3.6-35b-a3b"
+"""Default SGLang model id when an SGLang server is the only reachable backend.
+
+The ``sglang/`` prefix mirrors vLLM's behaviour: it tags the chain step
+that resolved this id without affecting what the server itself sees."""
+
 _DEFAULT_OLLAMA_MODEL = "qwen3.5:cloud"
 """Default Ollama tag when llama.cpp isn't reachable but Ollama is."""
 
 _DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-6"
 _DEFAULT_OPENAI_MODEL = "gpt-4o"
 _DEFAULT_OPENROUTER_MODEL = "openai/gpt-4o"
+# WHY: ``$XAI_API_KEY`` is added as a late-binding fallback after the
+# small-model-first chain. Local servers and existing cloud keys keep
+# precedence; xAI only kicks in when nothing else resolves.
+_DEFAULT_XAI_MODEL = "grok-3"
 
 _LLAMACPP_DEFAULT_BASE_URL = "http://127.0.0.1:8888/v1"
 """Default llama.cpp HTTP server base URL — overridable via
 ``$LLAMACPP_BASE_URL``."""
+
+_VLLM_DEFAULT_BASE_URL = "http://localhost:8000/v1"
+"""Default vLLM HTTP server base URL — overridable via ``$VLLM_BASE_URL``.
+
+Mirrors :data:`chimera.providers.factory._VLLM_DEFAULT_BASE_URL`. vLLM's
+upstream documentation defaults to port ``8000``; we keep the same value
+here so users running ``vllm serve <model>`` with no extra flags land on
+shrew's chain automatically."""
+
+_SGLANG_DEFAULT_BASE_URL = "http://localhost:30000/v1"
+"""Default SGLang HTTP server base URL — overridable via ``$SGLANG_BASE_URL``.
+
+Mirrors :data:`chimera.providers.factory._SGLANG_DEFAULT_BASE_URL`. SGLang's
+upstream documentation defaults to port ``30000``."""
 
 _OLLAMA_DEFAULT_BASE_URL = "http://localhost:11434"
 """Default Ollama daemon base URL — overridable via ``$OLLAMA_BASE_URL``.
@@ -167,6 +209,12 @@ _NO_KEY_MESSAGE = (
     "  - Run a llama.cpp HTTP server on $LLAMACPP_BASE_URL "
     f"(default {_LLAMACPP_DEFAULT_BASE_URL}; default model: "
     f"{_DEFAULT_LLAMACPP_MODEL}).\n"
+    "  - Run a vLLM HTTP server on $VLLM_BASE_URL "
+    f"(default {_VLLM_DEFAULT_BASE_URL}; default model: "
+    f"{_DEFAULT_VLLM_MODEL}).\n"
+    "  - Run an SGLang HTTP server on $SGLANG_BASE_URL "
+    f"(default {_SGLANG_DEFAULT_BASE_URL}; default model: "
+    f"{_DEFAULT_SGLANG_MODEL}).\n"
     "  - Run Ollama on $OLLAMA_BASE_URL "
     f"(default {_OLLAMA_DEFAULT_BASE_URL}; default model: "
     f"{_DEFAULT_OLLAMA_MODEL}).\n"
@@ -176,6 +224,8 @@ _NO_KEY_MESSAGE = (
     f"{_DEFAULT_OPENAI_MODEL}).\n"
     "  - OPENROUTER_API_KEY (default model: "
     f"{_DEFAULT_OPENROUTER_MODEL}).\n"
+    "  - XAI_API_KEY (default model: "
+    f"{_DEFAULT_XAI_MODEL}).\n"
     "or override the model via --model / $SHREW_MODEL."
 )
 
@@ -232,6 +282,20 @@ def _llamacpp_base_url() -> str:
     ).rstrip("/")
 
 
+def _vllm_base_url() -> str:
+    """Return the configured vLLM base URL (with trailing slash trimmed)."""
+    return os.environ.get(
+        "VLLM_BASE_URL", _VLLM_DEFAULT_BASE_URL,
+    ).rstrip("/")
+
+
+def _sglang_base_url() -> str:
+    """Return the configured SGLang base URL (with trailing slash trimmed)."""
+    return os.environ.get(
+        "SGLANG_BASE_URL", _SGLANG_DEFAULT_BASE_URL,
+    ).rstrip("/")
+
+
 def _ollama_base_url() -> str:
     """Return the configured Ollama base URL (with trailing slash trimmed)."""
     return os.environ.get(
@@ -281,6 +345,39 @@ def probe_ollama(base_url: str | None = None) -> bool:
     return _http_probe(f"{url}/api/tags")
 
 
+def probe_vllm(base_url: str | None = None) -> bool:
+    """Return True when a vLLM server answers at *base_url*.
+
+    Probes ``/models`` (the OpenAI-compatible listing endpoint, which vLLM
+    serves under its ``/v1`` mount). Auth-error responses (401/403) are
+    treated as "alive" because vLLM may demand ``--api-key`` even when we
+    only want a liveness signal.
+
+    Args:
+        base_url: Override the ``$VLLM_BASE_URL`` lookup.
+
+    Returns:
+        ``True`` when the server answers, else ``False``.
+    """
+    url = (base_url or _vllm_base_url()).rstrip("/")
+    return _http_probe(f"{url}/models", accept_auth_errors=True)
+
+
+def probe_sglang(base_url: str | None = None) -> bool:
+    """Return True when an SGLang server answers at *base_url*.
+
+    Probes ``/models`` (the OpenAI-compatible listing endpoint).
+
+    Args:
+        base_url: Override the ``$SGLANG_BASE_URL`` lookup.
+
+    Returns:
+        ``True`` when the server answers, else ``False``.
+    """
+    url = (base_url or _sglang_base_url()).rstrip("/")
+    return _http_probe(f"{url}/models", accept_auth_errors=True)
+
+
 # ---------------------------------------------------------------------------
 # Catalog formatting
 # ---------------------------------------------------------------------------
@@ -302,12 +399,21 @@ def resolved_catalog() -> list[tuple[str, str]]:
             f"llama.cpp @ {_LLAMACPP_DEFAULT_BASE_URL}",
         ),
         (
+            _DEFAULT_VLLM_MODEL,
+            f"vllm @ {_VLLM_DEFAULT_BASE_URL}",
+        ),
+        (
+            _DEFAULT_SGLANG_MODEL,
+            f"sglang @ {_SGLANG_DEFAULT_BASE_URL}",
+        ),
+        (
             _DEFAULT_OLLAMA_MODEL,
             f"ollama @ {_OLLAMA_DEFAULT_BASE_URL}",
         ),
         (_DEFAULT_ANTHROPIC_MODEL, "ANTHROPIC_API_KEY"),
         (_DEFAULT_OPENAI_MODEL, "OPENAI_API_KEY"),
         (_DEFAULT_OPENROUTER_MODEL, "OPENROUTER_API_KEY"),
+        (_DEFAULT_XAI_MODEL, "XAI_API_KEY"),
     ]
 
 
@@ -353,6 +459,10 @@ def _resolve_model(args: argparse.Namespace) -> str:
     # Local backends come first — shrew is small-model-first.
     if probe_llamacpp():
         return _DEFAULT_LLAMACPP_MODEL
+    if probe_vllm():
+        return _DEFAULT_VLLM_MODEL
+    if probe_sglang():
+        return _DEFAULT_SGLANG_MODEL
     if probe_ollama():
         return _DEFAULT_OLLAMA_MODEL
 
@@ -365,6 +475,10 @@ def _resolve_model(args: argparse.Namespace) -> str:
         return _DEFAULT_OPENAI_MODEL
     if os.environ.get("OPENROUTER_API_KEY"):
         return _DEFAULT_OPENROUTER_MODEL
+    # Late-binding xAI fallback — last resort before raising. Routed via
+    # the factory's ``grok-*`` prefix inference -> ``xai`` provider.
+    if os.environ.get("XAI_API_KEY"):
+        return _DEFAULT_XAI_MODEL
 
     raise ValueError(_NO_KEY_MESSAGE)
 
@@ -446,6 +560,15 @@ def build_provider(args: argparse.Namespace) -> Provider:
 
     max_tokens = getattr(args, "max_tokens", None)
 
+    # --- vLLM / SGLang explicit prefix (handled BEFORE OpenRouter so the
+    #     ``vllm/`` / ``sglang/`` slash form isn't hijacked by a stray
+    #     ``$OPENROUTER_API_KEY``) ---
+    model_lower = model.lower()
+    if model_lower.startswith("vllm/"):
+        return create_provider(provider_type="vllm", model=model)
+    if model_lower.startswith("sglang/"):
+        return create_provider(provider_type="sglang", model=model)
+
     # --- OpenRouter (vendor/name convention) ---
     if _should_use_openrouter(model):
         api_key = os.environ.get("OPENROUTER_API_KEY")
@@ -506,5 +629,7 @@ __all__ = [
     "get_catalog",
     "probe_llamacpp",
     "probe_ollama",
+    "probe_sglang",
+    "probe_vllm",
     "resolved_catalog",
 ]

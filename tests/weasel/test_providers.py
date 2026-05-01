@@ -445,7 +445,12 @@ def test_resolved_catalog_shape() -> None:
     assert sources[2] == "OPENROUTER_API_KEY"
     assert "LLAMACPP_API_KEY" in sources[3]
     assert "OLLAMA_API_KEY" in sources[4]
-    assert len(catalog) == 5
+    # XAI_API_KEY is appended as a late-binding fallback (P2 wave 8).
+    assert sources[5] == "XAI_API_KEY"
+    # vLLM / SGLang are appended last as local-server fallbacks (P3 wave 8).
+    assert "VLLM_API_KEY" in sources[6]
+    assert "SGLANG_API_KEY" in sources[7]
+    assert len(catalog) == 8
 
 
 def test_format_catalog_contains_every_default() -> None:

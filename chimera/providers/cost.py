@@ -5,17 +5,44 @@ from __future__ import annotations
 import threading
 
 # Pricing: model_prefix -> (input_cost_per_million, output_cost_per_million)
+#
+# Prefix-match semantics: ``calculate_cost`` matches the *longest* prefix
+# first, so ``claude-opus-4-7`` overrides the generic ``claude-opus-4``
+# entry while still falling back to it for ``claude-opus-4-1``.
+#
+# Only entries with publicly-published pricing are listed. New IDs whose
+# pricing is unverified are intentionally omitted rather than fabricated.
 PRICING: dict[str, tuple[float, float]] = {
-    # Anthropic
+    # Anthropic — Opus 4 family ($15 / $75 across 4.0, 4.1, 4.5, 4.6, 4.7).
+    "claude-opus-4-7": (15.0, 75.0),
+    "claude-opus-4-6": (15.0, 75.0),
+    "claude-opus-4-5": (15.0, 75.0),
+    "claude-opus-4-1": (15.0, 75.0),
     "claude-opus-4": (15.0, 75.0),
+    # Anthropic — Sonnet 4 family ($3 / $15).
+    "claude-sonnet-4-7": (3.0, 15.0),
+    "claude-sonnet-4-6": (3.0, 15.0),
+    "claude-sonnet-4-5": (3.0, 15.0),
     "claude-sonnet-4": (3.0, 15.0),
+    # Anthropic — Haiku 4.5 ($1 / $5, published Oct 2025).
+    "claude-haiku-4-5": (1.0, 5.0),
     "claude-haiku-3.5": (0.80, 4.0),
-    # OpenAI
+    # OpenAI — GPT-5 family (published Aug 2025).
+    "gpt-5-nano": (0.05, 0.40),
+    "gpt-5-mini": (0.25, 2.0),
+    "gpt-5": (1.25, 10.0),
+    # OpenAI — GPT-4o family.
     "gpt-4o-mini": (0.15, 0.60),
     "gpt-4o": (2.50, 10.0),
+    # OpenAI — reasoning models.
+    "o1-mini": (1.10, 4.40),
     "o1": (15.0, 60.0),
     "o3-mini": (1.10, 4.40),
-    # Google
+    "o3": (2.0, 8.0),
+    # Google — Gemini 2.5 family (published 2025; uses ≤200K-token tier).
+    "gemini-2.5-pro": (1.25, 10.0),
+    "gemini-2.5-flash": (0.30, 2.50),
+    # Google — Gemini 2.0 / 1.5.
     "gemini-2.0-flash": (0.10, 0.40),
     "gemini-1.5-pro": (1.25, 5.00),
     "gemini-1.5-flash": (0.075, 0.30),
@@ -26,6 +53,11 @@ PRICING: dict[str, tuple[float, float]] = {
     # DeepSeek
     "deepseek-chat": (0.27, 1.10),
     "deepseek-reasoner": (0.55, 2.19),
+    # xAI / Grok — public pricing (verify against console.x.ai before billing).
+    # Longer prefixes (grok-3-mini) are matched first by ``calculate_cost``.
+    "grok-3-mini": (0.30, 0.50),
+    "grok-3": (3.0, 15.0),
+    "grok-4": (5.0, 25.0),
 }
 
 _pricing_lock = threading.Lock()

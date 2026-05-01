@@ -59,8 +59,36 @@ if TYPE_CHECKING:
 _DEFAULT_OPENAI_MODEL = "gpt-4o"
 _DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-6"
 _DEFAULT_OPENROUTER_MODEL = "openai/gpt-4o"
+# WHY: ``$XAI_API_KEY`` is added as a late-binding fallback after the
+# OpenAI-flagship chain. Users with only an xAI key get ``grok-3``;
+# higher-priority keys retain their existing defaults.
+_DEFAULT_XAI_MODEL = "grok-3"
 
 _OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+
+# WHY: OpenRouter recommends every client send ``HTTP-Referer`` and
+# ``X-Title`` so requests show up identifiably in their dashboard. These
+# are cosmetic — the API works without them — but setting them is the
+# polite default. Users override via the matching env vars.
+_OPENROUTER_DEFAULT_REFERER = "https://github.com/0bserver07/chimera"
+_OPENROUTER_DEFAULT_TITLE = "chimera ferret 0.5.0"
+
+
+def _openrouter_extra_headers() -> dict[str, str]:
+    """Return the cosmetic OpenRouter headers (``HTTP-Referer`` / ``X-Title``).
+
+    Resolution order per field:
+
+    1. ``$OPENROUTER_REFERER`` / ``$OPENROUTER_TITLE`` (user override).
+    2. Module defaults baked in above.
+
+    Returns:
+        Two-key dict ready to pass as ``extra_headers=`` to the
+        OpenAI-compatible provider.
+    """
+    referer = os.environ.get("OPENROUTER_REFERER") or _OPENROUTER_DEFAULT_REFERER
+    title = os.environ.get("OPENROUTER_TITLE") or _OPENROUTER_DEFAULT_TITLE
+    return {"HTTP-Referer": referer, "X-Title": title}
 
 # WHY: the friendly error message lists every env var the user can set.
 # Kept as a module constant so tests can assert on the exact wording and
@@ -75,6 +103,8 @@ _NO_KEY_MESSAGE = (
     f"{_DEFAULT_ANTHROPIC_MODEL})\n"
     "  - OPENROUTER_API_KEY (default model: "
     f"{_DEFAULT_OPENROUTER_MODEL})\n"
+    "  - XAI_API_KEY (default model: "
+    f"{_DEFAULT_XAI_MODEL})\n"
     "or override the model via --model / $FERRET_MODEL."
 )
 
@@ -107,6 +137,10 @@ def _resolve_model(args: argparse.Namespace) -> str:
         return _DEFAULT_ANTHROPIC_MODEL
     if os.environ.get("OPENROUTER_API_KEY"):
         return _DEFAULT_OPENROUTER_MODEL
+    # Late-binding xAI fallback. Factory's ``grok-*`` prefix inference
+    # routes the resolved id through the xai provider automatically.
+    if os.environ.get("XAI_API_KEY"):
+        return _DEFAULT_XAI_MODEL
 
     raise ValueError(_NO_KEY_MESSAGE)
 
@@ -231,15 +265,26 @@ def build_provider(args: argparse.Namespace) -> Provider:
         # exposed via the CLI flag surface.
         extra_kwargs["max_tokens"] = max_tokens
 
+    # vLLM / SGLang prefix recognition (handled BEFORE OpenRouter so a
+    # ``vllm/<id>`` model isn't hijacked by a stray ``$OPENROUTER_API_KEY``).
+    model_lower = model.lower()
+    if model_lower.startswith("vllm/"):
+        return create_provider(provider_type="vllm", model=model)
+    if model_lower.startswith("sglang/"):
+        return create_provider(provider_type="sglang", model=model)
+
     if _should_use_openrouter(model):
         # OpenRouter is OpenAI-compatible. Route through the
         # ``compatible`` provider with the OpenRouter base URL and key.
+        # Pass the cosmetic ``HTTP-Referer`` / ``X-Title`` headers so
+        # requests show up correctly in OpenRouter's dashboard.
         api_key = os.environ.get("OPENROUTER_API_KEY")
         return create_provider(
             provider_type="compatible",
             model=model,
             api_key=api_key,
             base_url=_OPENROUTER_BASE_URL,
+            extra_headers=_openrouter_extra_headers(),
         )
 
     if _is_ollama_id(model):
