@@ -3,8 +3,30 @@
 **Source baseline:** `research/otter/SPEC.md` (Apr 25 2026), upstream tree
 walk under `packages/opencode/src/` (cli, agent, command, mcp, lsp, acp,
 plugin, config, permission).
-**Updated:** 2026-04-25, after wave-1 ship (O1–O15).
+**Updated:** 2026-04-25, after wave-1 ship (O1–O15). Refreshed 2026-04-30
+by D1 at the wave-9 close — five YELLOW rows promoted to GREEN as the
+wave-9 batch (O1/O2/O3/O4/O5) closed the carry-over gaps.
 **Legend:** GREEN = shipped / at parity (or superset); YELLOW = partial; RED = deferred.
+
+> **Wave-9 close (2026-04-30, D1).** Five carry-over items from the
+> wave-1 follow-up list landed in this wave:
+>
+> - `agents create` (interactive scaffolder) — O1/W9, `chimera/otter/agents.py`.
+> - `mcp add` / `mcp auth` (live add + OAuth device-flow) — O2/W9,
+>   `chimera/otter/mcp_cli.py`.
+> - `-f` / `--file` (one-shot file attachment, stdin via `-`, 100 KB
+>   warn / 500 KB cap) — O3/W9, `chimera/otter/cli.py`.
+> - `--title` + `sessions rename` (titleable runs) — O4/W9,
+>   `chimera/otter/cli.py` + `chimera/otter/sessions.py`.
+> - `chimera completion bash|zsh|fish [--cli all|<animal>]` —
+>   O5/W9 cross-CLI shell-completion generator, `chimera/cli/completion.py`.
+>
+> All five reports live under `research/otter/{O1..O4}-W9-REPORT.md` and
+> `research/O5-COMPLETION.md`. Live tests against the new files pass:
+> 10 (`test_agents_create.py`) + 25 (`test_mcp_cli.py`) + 16
+> (`test_file_attachment.py`) + 19 (`test_session_title.py`) + 25
+> (`test_completion.py`) = 95 new tests. The trademark scrub still
+> exits OK at the codename-aggregate level (`passed: 7`).
 
 > **Trademark hygiene.** Throughout this document the upstream project is
 > referred to as "the open-source coding agent" or "the upstream". Live
@@ -29,8 +51,8 @@ make otter useful as a coding-agent driver.
 | `serve` (HTTP)               | GREEN        | `chimera/otter/server.py`, dispatched from `cli.py`             | Minimum REST + SSE surface (`/healthz`, `/session`, `/turn`, `/events`). Backs an out-of-tree TUI client. |
 | `acp`                        | GREEN        | `chimera/otter/acp.py` (invoked via `serve --acp`)              | JSON-RPC 2.0 over stdio. `initialize`, `session/new`, `session/message`, `session/cancel`, permission round-trip. |
 | `session list \| delete`     | GREEN / YELLOW | `chimera/otter/sessions.py`, `cli.py`                         | `sessions list` + `sessions show <id>` shipped (read-only). `delete` not yet wired (covered by `rm -rf <eventlog-dir>`). |
-| `agent create \| <list>`     | YELLOW       | `chimera/otter/agents.py`                                       | `agents list/show` shipped (read-only). `create` (interactive scaffolder) deferred. |
-| `mcp list \| add \| auth`    | YELLOW       | `chimera/otter/mcp.py`, slash `/mcps`                           | `load_mcp_servers()` reads `~/.opencode/config.json` + project `.opencode/mcp.json`; live status / auth flow ride on the shared `chimera.mcp` runtime. |
+| `agent create \| <list>`     | GREEN        | `chimera/otter/agents.py` (`cmd_agents_create`)                 | `agents list/show` (read-only) + `agents create [<name>] [--user]` interactive scaffolder shipped. Stdlib-only (no `$EDITOR`, no readline); writes `.opencode/agent/<name>.md`. **Wave-9 close (O1/W9).** |
+| `mcp list \| add \| auth`    | GREEN        | `chimera/otter/mcp.py` + `chimera/otter/mcp_cli.py`             | `mcp list` walks user + project scopes; `mcp add <name> [-- <command...>]` (or `--mcp-http`) writes the entry atomically to the chosen scope's config; `mcp auth <name>` runs `OAuthDeviceFlow` for HTTP entries with manual paste fallback. **Wave-9 close (O2/W9).** |
 | `models [provider]`          | GREEN        | `chimera/otter/providers.py`                                    | `--model provider/model` honored everywhere; `OTTER_MODEL` env var pinned. Refresh-cache flag deferred. |
 | `providers` (auth login/list)| YELLOW       | `chimera/otter/providers.py`                                    | Default chain (Anthropic → OpenRouter → OpenAI); device-flow OAuth ridden via `chimera.auth`. Plugin-driven auth methods deferred. |
 | `stats`                      | GREEN        | `chimera otter sessions cost` (G6)                              | `sessions cost --since 7d --format json` aggregates `~/.chimera/eventlog/otter-*/summary.json`. Same rollup the `GET /runs/cost` HTTP route serves. |
@@ -44,7 +66,7 @@ make otter useful as a coding-agent driver.
 | `generate` (OpenAPI dump)    | RED          | n/a                                                             | Defer; generated when needed via `chimera/otter/server.py`. |
 | `tui thread \| attach`       | YELLOW       | `chimera otter` REPL                                            | Interactive REPL ships; multi-window thread mode deferred. |
 | `plugin` (install/list/...)  | GREEN        | `chimera/otter/plugins.py`                                      | Reads `~/.opencode/plugin/<name>/` and project-level overrides; agents/commands/MCP entries are forwarded to existing Chimera registries. |
-| `completion`                 | RED          | n/a                                                             | Shell-completion script generation deferred. |
+| `completion`                 | GREEN        | `chimera/cli/completion.py` (`chimera completion bash\|zsh\|fish`) | Cross-CLI shell-completion generator, walks the live argparse tree. Honors `--cli all\|<animal>`. **Wave-9 close (O5).** |
 
 ## `run` (and `chimera otter -p`) flag map
 
@@ -63,8 +85,8 @@ plumbing.
 | `--model`/`-m`        | GREEN        | `--model`, `$OTTER_MODEL`                       | Identical syntax: `provider/model`. |
 | `--agent`             | GREEN        | shimmed via `chimera.cli.code` agent resolution | Honors `chimera otter agents list`. |
 | `--format`            | GREEN        | `--output-format text\|json\|stream-json`       | Adds `stream-json` (one event per line) on top of upstream's `default\|json`. |
-| `--file`/`-f`         | YELLOW       | manual context inclusion                        | File-attachment plumbing deferred; users include via prompt body. |
-| `--title`             | YELLOW       | n/a (auto-derived from prompt)                  | Wave-2 may add a `--title` flag for sessions. |
+| `--file`/`-f`         | GREEN        | `-f / --file PATH` (repeatable; `-` for stdin)  | Stacks via `action="append"`; wraps each file in `<file path="X" lines="N">…</file>` and prepends to `-p` prompt. 100 KB per-file warn, 500 KB cumulative cap with truncation marker. **Wave-9 close (O3/W9).** |
+| `--title`             | GREEN        | `--title "..."` + `sessions rename <id> <title...>` | Persists in `summary.json`, surfaces in `sessions list` (TITLE column) + `sessions show` (`title:` line). Empty title clears the label. **Wave-9 close (O4/W9).** |
 | `--attach`            | RED          | n/a                                             | Remote-server attach is covered by `chimera mink --remote ssh://...` instead. |
 | `--password`/`-p`     | RED          | basic auth managed via reverse proxy           | Otter server is unauthenticated by default; production deployments front it with the user's reverse proxy. |
 | `--dir`               | GREEN        | `--cwd`                                         | Same semantics. |
@@ -161,8 +183,8 @@ TUI-only chrome.
 
 ## Counts
 
-- **Top-level CLI subcommands:** 7 GREEN, 4 YELLOW, 9 RED of the 20 upstream commands. Coverage focuses on the agent runtime; admin/install/account flows are intentionally not mirrored.
-- **`run` flags:** 5 GREEN, 7 YELLOW, 5 RED of the 17 upstream flags.
+- **Top-level CLI subcommands:** 10 GREEN, 2 YELLOW, 8 RED of the 20 upstream commands (refreshed at wave-9 close — `agent create`, `mcp add/auth`, and `completion` promoted to GREEN). Coverage focuses on the agent runtime; admin/install/account flows are intentionally not mirrored.
+- **`run` flags:** 7 GREEN, 5 YELLOW, 5 RED of the 17 upstream flags (refreshed at wave-9 close — `--file/-f` and `--title` promoted to GREEN).
 - **Slash commands:** 17 GREEN, 7 YELLOW, 4 RED of the 28 reviewed.
 - **Plugin hooks:** 5 GREEN, 8 YELLOW, 4 RED of the 17 reviewed.
 - **Config keys:** 6 GREEN, 4 YELLOW, 4 RED of the 14 reviewed.
@@ -181,15 +203,16 @@ breakdown, the 26-event `EventBus`, and the multi-tier
 ## Follow-up issues to file (or already filed)
 
 1. `chimera otter --continue` / `--session <id>` / `--fork` (one-shot resume).
-2. `chimera otter agents create` (interactive agent scaffolder).
-3. `chimera otter mcp add` / `chimera otter mcp auth <name>` (live add + OAuth).
+2. ~~`chimera otter agents create` (interactive agent scaffolder).~~ Shipped at wave-9 close (O1/W9).
+3. ~~`chimera otter mcp add` / `chimera otter mcp auth <name>` (live add + OAuth).~~ Shipped at wave-9 close (O2/W9).
 4. `chimera otter session delete <id>` (currently `rm -rf` the eventlog dir).
 5. Plugin-driven provider auth (mirror the upstream `Hooks.auth` flow).
 6. ~~`chimera otter stats --since=<duration>` aggregating `summary.json` across `~/.chimera/eventlog/otter-*/`.~~ Shipped as `chimera otter sessions cost` (G6).
-7. File-attachment flag (`--file <path>`) for one-shot prompts.
+7. ~~File-attachment flag (`--file <path>`) for one-shot prompts.~~ Shipped at wave-9 close (O3/W9; `-f` / `--file PATH`, repeatable, stdin via `-`).
 8. Theme switcher (`/themes`) for the REPL once a TUI palette lands.
 9. Workspace mode (multiple cwds in a single session).
-10. Shell-completion script generation (`chimera otter completion`).
+10. ~~Shell-completion script generation (`chimera otter completion`).~~ Shipped at wave-9 close as the cross-CLI `chimera completion bash|zsh|fish [--cli all|<animal>]` generator (O5).
+11. Session titles. ~~Add a `--title "..."` flag and `sessions rename <id> <title>` subcommand.~~ Shipped at wave-9 close (O4/W9).
 
 ## How to use
 
