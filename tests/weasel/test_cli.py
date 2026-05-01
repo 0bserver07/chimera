@@ -115,10 +115,19 @@ def test_add_arguments_subcommand_choices() -> None:
         parser.parse_args(["bogus-subcommand"])
 
 
-def test_add_arguments_sub_action_choices() -> None:
+def test_add_arguments_sub_action_is_free_form() -> None:
+    """``sub_action`` no longer enforces choices at parse time.
+
+    ``share <session-id>`` puts an arbitrary id in slot 2, so we let
+    the dispatcher (:func:`chimera.weasel.sessions.dispatch_sessions`)
+    reject unknown actions instead of argparse. This test pins that
+    contract: the parser accepts ``"sessions delete"`` and the bogus
+    action surfaces only when dispatched.
+    """
     parser = _build_parser()
-    with pytest.raises(SystemExit):
-        parser.parse_args(["sessions", "delete"])
+    args = parser.parse_args(["sessions", "delete"])
+    assert args.subcommand == "sessions"
+    assert args.sub_action == "delete"
 
 
 def test_add_arguments_json_default_false() -> None:

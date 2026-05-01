@@ -1,15 +1,18 @@
-"""``chimera shrew sessions`` — list/show over the shrew eventlog.
+"""``chimera shrew sessions`` — list/show/cost/share over the shrew eventlog.
 
 Every persisted shrew run journals its prompt, agent result, and event
 trail to ``~/.chimera/eventlog/shrew-<utc>-<uuid>/``. This module exposes
 that on-disk corpus to the CLI so users can ``sessions list`` for a
-chronological table and ``sessions show <id>`` for the persisted summary
-+ events.
+chronological table, ``sessions show <id>`` for the persisted summary +
+events, ``sessions cost`` for cost rollups, and ``share <id>`` to package
+a transcript for offline review.
 
 Stdlib only. Mirrors the weasel sessions on-disk schema (``summary.json``
 + ``event-NNNNNN-<id>.json``) so operators familiar with
 ``chimera weasel sessions`` find a near-identical UX under
-``chimera shrew sessions``.
+``chimera shrew sessions``. The cost rollup re-uses
+:func:`chimera.mink.cost.compute_summary` so the JSON / CSV / text
+schema stays identical across all four CLIs.
 
 Trademark hygiene: no upstream brand names. ``shrew-`` is the on-disk
 session prefix, paralleling the ``weasel-`` / ``otter-`` / ``mink-``
@@ -28,13 +31,23 @@ __all__ = [
     "SessionRecord",
     "SessionDetail",
     "iter_sessions",
+    "iter_run_records",
     "get_session",
     "default_eventlog_root",
     "format_session_table",
     "format_session_detail",
     "cmd_sessions_list",
     "cmd_sessions_show",
+    "cmd_sessions_cost",
+    "cmd_share",
     "dispatch_sessions",
+    "dispatch_share",
+    "render_share_json",
+    "render_share_markdown",
+    "default_shares_dir",
+    "write_share_file",
+    "VALID_SHARE_SINKS",
+    "VALID_SHARE_FORMATS",
 ]
 
 
@@ -361,12 +374,312 @@ def cmd_sessions_show(
     return 0
 
 
+# ---------------------------------------------------------------------------
+# Cost rollup — re-uses chimera.mink.cost.compute_summary
+# ---------------------------------------------------------------------------
+
+
+def iter_run_records(eventlog_root: Path | None = None) -> Iterator[Any]:
+    """Yield :class:`chimera.mink.runs.RunRecord` for every persisted shrew session.
+
+    The cost machinery in :mod:`chimera.mink.cost` is keyed off
+    :class:`chimera.mink.runs.RunRecord`; we mirror
+    :func:`chimera.otter.server.OtterServer._iter_run_records` so the
+    same ``compute_summary`` rollup applies verbatim.
+
+    Yields:
+        :class:`chimera.mink.runs.RunRecord` instances (newest first).
+    """
+    from chimera.mink.runs import _read_summary, _summary_to_record
+
+    root = eventlog_root or default_eventlog_root()
+    if not root.exists():
+        return
+    candidates = [
+        p for p in root.iterdir()
+        if p.is_dir() and p.name.startswith(_PREFIX)
+    ]
+    candidates.sort(key=lambda p: p.name, reverse=True)
+    for run_dir in candidates:
+        summary = _read_summary(run_dir)
+        if summary is None:
+            continue
+        yield _summary_to_record(run_dir, summary)
+
+
+def cmd_sessions_cost(
+    *,
+    since: str | None = None,
+    model: str | None = None,
+    fmt: str = "text",
+    limit: int | None = None,
+    eventlog_root: Path | None = None,
+    use_rich: bool = True,
+    out: Any = None,
+    err: Any = None,
+) -> int:
+    """Implement ``chimera shrew sessions cost``.
+
+    Walks ``~/.chimera/eventlog/shrew-*/summary.json`` and aggregates
+    cost via :func:`chimera.mink.cost.compute_summary`. Output schema is
+    byte-identical to ``mink runs cost`` / ``weasel sessions cost`` so
+    downstream dashboards stay one-parser.
+
+    Args:
+        since: Optional ``--since`` shorthand (``"7d"``) or ISO date.
+        model: Optional case-insensitive substring filter on model name.
+        fmt: One of ``"text"``, ``"json"``, ``"csv"``.
+        limit: Cap on rows considered, newest first.
+        eventlog_root: Override the eventlog root (used by tests).
+        use_rich: Forwarded to :func:`chimera.mink.cost.format_text`.
+        out: Output stream (defaults to :data:`sys.stdout`).
+        err: Error stream (defaults to :data:`sys.stderr`).
+
+    Returns:
+        Process exit code (``0`` on success, ``2`` on usage error).
+    """
+    from chimera.mink.cost import (
+        compute_summary,
+        format_csv,
+        format_json,
+        format_text,
+        parse_since,
+    )
+
+    stream = out if out is not None else sys.stdout
+    err_stream = err if err is not None else sys.stderr
+
+    fmt_norm = (fmt or "text").strip().lower()
+    if fmt_norm not in {"text", "json", "csv"}:
+        err_stream.write(
+            f"shrew sessions cost: unknown --format {fmt!r} "
+            "(supported: text, json, csv)\n"
+        )
+        return 2
+    try:
+        cutoff = parse_since(since)
+    except ValueError as exc:
+        err_stream.write(f"shrew sessions cost: {exc}\n")
+        return 2
+
+    summary = compute_summary(
+        iter_run_records(eventlog_root),
+        since=cutoff,
+        since_label=since,
+        model=model,
+        limit=limit,
+    )
+    if fmt_norm == "json":
+        body = format_json(summary)
+    elif fmt_norm == "csv":
+        body = format_csv(summary)
+    else:
+        body = format_text(summary, use_rich=use_rich)
+    stream.write(body)
+    if not body.endswith("\n"):
+        stream.write("\n")
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# Share — render a session as JSON or markdown, write to file or stdout
+# ---------------------------------------------------------------------------
+
+
+VALID_SHARE_SINKS = ("file", "stdout")
+"""Sinks supported by :func:`cmd_share`. HTTP / HTML are intentionally
+omitted: shrew inherits weasel's minimal posture, so we keep the share
+surface small. Mink/otter ship the full sink palette."""
+
+VALID_SHARE_FORMATS = ("json", "md")
+"""Render formats supported by :func:`cmd_share`. ``json`` is the
+default — it round-trips with ``sessions show --json`` so downstream
+tooling can ingest a share file directly."""
+
+_SHARE_FORMAT_EXTENSIONS: dict[str, str] = {
+    "json": ".json",
+    "md": ".md",
+}
+
+
+def default_shares_dir() -> Path:
+    """Return ``~/.chimera/shares/`` (created lazily by :func:`write_share_file`)."""
+    return Path.home() / ".chimera" / "shares"
+
+
+def render_share_json(detail: SessionDetail) -> str:
+    """Render ``detail`` as JSON, schema-compatible with ``sessions show --json``."""
+    return json.dumps(detail.to_dict(), indent=2, default=str) + "\n"
+
+
+def render_share_markdown(detail: SessionDetail) -> str:
+    """Render ``detail`` as a GitHub-flavored Markdown transcript.
+
+    Mirrors :func:`chimera.weasel.sessions.render_share_markdown` —
+    same heading layout, same code-fence per event — adapted to the
+    shrew banner.
+    """
+    s = detail.summary
+    lines: list[str] = []
+    lines.append(f"# Shrew session `{detail.session_id}`")
+    lines.append("")
+    lines.append(f"- model: `{s.get('model', '')}`")
+    lines.append(f"- started: {s.get('started_at', '')}")
+    lines.append(f"- ended: {s.get('ended_at', '')}")
+    lines.append(f"- steps: {s.get('steps', 0)}")
+    lines.append(f"- tool calls: {s.get('tool_calls_total', 0)}")
+    cost = float(s.get("cost_usd", 0.0) or 0.0)
+    lines.append(f"- cost (USD): {cost:.6f}")
+    lines.append(f"- success: {bool(s.get('success', False))}")
+    if s.get("error"):
+        lines.append(f"- error: {s['error']}")
+    lines.append("")
+    lines.append("## Prompt")
+    lines.append("")
+    lines.append("```")
+    lines.append(str(s.get("prompt", "")))
+    lines.append("```")
+    lines.append("")
+    lines.append(f"## Events ({len(detail.events)})")
+    if not detail.events:
+        lines.append("")
+        lines.append("_(no events recorded)_")
+        return "\n".join(lines) + "\n"
+    for ev in detail.events:
+        ev_type = str(ev.get("type") or "?")
+        meta = ev.get("metadata") or {}
+        if not isinstance(meta, dict):
+            meta = {"raw": meta}
+        lines.append("")
+        lines.append(f"### `{ev_type}`")
+        lines.append("")
+        lines.append("```json")
+        lines.append(json.dumps(meta, indent=2, default=str))
+        lines.append("```")
+    return "\n".join(lines) + "\n"
+
+
+def _render_share(detail: SessionDetail, fmt: str) -> str:
+    """Dispatch to the per-format renderer."""
+    if fmt == "json":
+        return render_share_json(detail)
+    return render_share_markdown(detail)
+
+
+def write_share_file(
+    session_id: str,
+    body: str,
+    fmt: str,
+    *,
+    shares_dir: Path | None = None,
+) -> Path:
+    """Write ``body`` to ``<shares_dir>/<session_id>.<ext>`` and return the absolute path.
+
+    The session id already starts with ``shrew-`` for any session that
+    came from this CLI, so we don't re-prefix. Shares dir is created with
+    parents on demand.
+    """
+    out_dir = shares_dir or default_shares_dir()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    ext = _SHARE_FORMAT_EXTENSIONS[fmt]
+    name = session_id if session_id.startswith(_PREFIX) else f"{_PREFIX}{session_id}"
+    path = out_dir / f"{name}{ext}"
+    path.write_text(body, encoding="utf-8")
+    return path.resolve()
+
+
+def cmd_share(
+    session_id: str | None,
+    *,
+    sink: str = "file",
+    fmt: str = "json",
+    eventlog_root: Path | None = None,
+    shares_dir: Path | None = None,
+    out: Any = None,
+    err: Any = None,
+) -> int:
+    """Implement ``chimera shrew share <session-id>``.
+
+    Mirrors :func:`chimera.weasel.sessions.cmd_share`. Renders the
+    session via :func:`render_share_json` / :func:`render_share_markdown`
+    and writes to disk (``file``) or stdout. Skips HTTP / HTML to keep
+    the shrew surface small.
+
+    Args:
+        session_id: The ``shrew-...`` session id to share.
+        sink: One of :data:`VALID_SHARE_SINKS`.
+        fmt: One of :data:`VALID_SHARE_FORMATS`.
+        eventlog_root: Override the eventlog root (used by tests).
+        shares_dir: Override the shares output dir (used by tests).
+        out: Output stream (defaults to :data:`sys.stdout`).
+        err: Error stream (defaults to :data:`sys.stderr`).
+
+    Returns:
+        ``0`` on success, ``2`` on usage / not-found, ``1`` on disk errors.
+    """
+    stream = out if out is not None else sys.stdout
+    err_stream = err if err is not None else sys.stderr
+
+    if not session_id:
+        err_stream.write(
+            "shrew share: missing session id "
+            "(see 'shrew sessions list' for available ids)\n"
+        )
+        return 2
+    sink_norm = (sink or "file").strip().lower()
+    fmt_norm = (fmt or "json").strip().lower()
+    if sink_norm not in VALID_SHARE_SINKS:
+        err_stream.write(
+            f"shrew share: unknown --sink {sink!r} "
+            f"(supported: {', '.join(VALID_SHARE_SINKS)})\n"
+        )
+        return 2
+    if fmt_norm not in VALID_SHARE_FORMATS:
+        err_stream.write(
+            f"shrew share: unknown --format {fmt!r} "
+            f"(supported: {', '.join(VALID_SHARE_FORMATS)})\n"
+        )
+        return 2
+
+    try:
+        detail = get_session(session_id, eventlog_root=eventlog_root)
+    except FileNotFoundError as exc:
+        err_stream.write(f"shrew share: {exc}\n")
+        return 2
+
+    body = _render_share(detail, fmt_norm)
+
+    if sink_norm == "stdout":
+        stream.write(body)
+        if not body.endswith("\n"):
+            stream.write("\n")
+        return 0
+
+    # sink == "file"
+    try:
+        path = write_share_file(
+            session_id, body, fmt_norm, shares_dir=shares_dir,
+        )
+    except OSError as exc:
+        err_stream.write(f"shrew share: failed to write share file: {exc}\n")
+        return 1
+    stream.write(f"{path}\n")
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# Top-level dispatchers
+# ---------------------------------------------------------------------------
+
+
 def dispatch_sessions(args: argparse.Namespace) -> int:
-    """Dispatch ``chimera shrew sessions [list|show <id>]``.
+    """Dispatch ``chimera shrew sessions [list|show <id>|cost]``.
 
     The S1 scaffold parser puts the action under ``args.sub_action`` and
     the optional id under ``args.sub_target``. ``--json`` is honored
-    when set on the namespace.
+    when set on the namespace. The ``cost`` action additionally reads
+    ``args.cost_since`` / ``args.cost_model`` / ``args.cost_format`` /
+    ``args.cost_limit`` (all optional; sane defaults applied here).
 
     Args:
         args: Parsed shrew CLI namespace.
@@ -381,9 +694,38 @@ def dispatch_sessions(args: argparse.Namespace) -> int:
         return cmd_sessions_list(json_output=json_output)
     if action == "show":
         return cmd_sessions_show(target, json_output=json_output)
+    if action == "cost":
+        # Cost flags share the namespace with the rest of the parser.
+        # Defaults match ``mink runs cost`` / ``weasel sessions cost``.
+        fmt_default = "json" if json_output else "text"
+        return cmd_sessions_cost(
+            since=getattr(args, "cost_since", None),
+            model=getattr(args, "cost_model", None),
+            fmt=getattr(args, "cost_format", None) or fmt_default,
+            limit=getattr(args, "cost_limit", None),
+        )
     print(
         f"shrew sessions: unknown action {action!r} "
-        "(supported: list, show)",
+        "(supported: list, show, cost)",
         file=sys.stderr,
     )
     return 2
+
+
+def dispatch_share(args: argparse.Namespace) -> int:
+    """Dispatch ``chimera shrew share <session-id>``.
+
+    The S1 scaffold parser stores the session id as ``args.sub_action``
+    when ``args.subcommand == "share"`` (positional slot 2). Optional
+    ``--share-sink`` / ``--share-format`` flags live on the namespace.
+
+    Args:
+        args: Parsed shrew CLI namespace.
+
+    Returns:
+        Process exit code.
+    """
+    target = getattr(args, "sub_target", None) or getattr(args, "sub_action", None)
+    sink = getattr(args, "share_sink", None) or "file"
+    fmt = getattr(args, "share_format", None) or "json"
+    return cmd_share(target, sink=sink, fmt=fmt)

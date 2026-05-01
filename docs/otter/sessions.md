@@ -179,6 +179,59 @@ The id format the loader accepts is the **directory name**:
 `otter-20260425T091201-71032a5e`. The leading `otter-` is required so
 the loader can disambiguate from mink runs in the same eventlog root.
 
+## `chimera otter sessions cost`
+
+Aggregate `cost_usd` and `total_tokens` across persisted otter sessions
+under `~/.chimera/eventlog/otter-*/`. The same rollup the
+[`GET /runs/cost`](server.md) HTTP route exposes, served from the CLI:
+
+```bash
+chimera otter sessions cost
+```
+
+Flags (all optional):
+
+```bash
+chimera otter sessions cost --since 7d
+chimera otter sessions cost --since 24h
+chimera otter sessions cost --since 2026-04-01
+chimera otter sessions cost --sessions-model glm-5.1
+chimera otter sessions cost --sessions-limit 50
+chimera otter sessions cost --format json
+chimera otter sessions cost --format csv
+```
+
+`--since`, `--sessions-model`, and `--sessions-limit` mirror
+`sessions list` semantics so users only learn the filter once. `--format`
+selects the output renderer:
+
+- `text` (default) — a totals overview plus a `by model` breakdown.
+  Uses `rich` when installed, falls back to a plain ASCII table.
+- `json` — the same JSON shape as `chimera mink runs cost --format json`
+  and `GET /runs/cost`: `totals`, `filters`, `by_model`, `rows`. Each
+  `rows[*].run_id` carries the full `otter-<utc>-<uuid>` id.
+- `csv` — per-session rows only (no totals); columns match `CostRow`
+  so spreadsheet pivots can re-derive aggregates locally.
+
+Aggregation reuses `chimera.mink.cost.compute_summary` (the same engine
+behind `mink runs cost` and the HTTP route), pointed at otter session
+dirs through the new `iter_session_run_records()` helper. Schema-wise
+the `summary.json` fields read are exactly those `_write_run_summary`
+writes today: `run_id` / `session_id`, `started_at`, `model`, `cost_usd`,
+`total_tokens`, `success`, `steps`. Optional token-breakdown fields
+(`input_tokens`, `output_tokens`, `cache_tokens`) are surfaced when the
+schema reports them and default to zero otherwise.
+
+Errors:
+
+- Unparseable `--since` → exit 2 with a clear stderr message naming the
+  expected forms (`7d`, `24h`, `30m`, or ISO-8601).
+- Unknown `--format` → exit 2 listing the supported values.
+
+Empty corpora return exit 0 with a zero-row totals block (text) or an
+empty `rows: []` array (json/csv) so scripts can poll without special
+casing "no sessions yet".
+
 ## REPL `/sessions` slash command
 
 Inside the REPL, `/sessions` calls into the same loader. The default

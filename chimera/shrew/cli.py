@@ -61,8 +61,8 @@ high-leverage toolkit. The small-model coding agent posture: cap surface
 area so a 9B / 35B-MoE model doesn't burn context on tool selection."""
 
 _VALID_MODES = ("interactive", "print", "rpc", "sdk")
-_VALID_SUBCOMMANDS = (None, "sessions", "bench")
-_VALID_SUB_ACTIONS = (None, "list", "show", "aider-polyglot", "gaia", "terminal-bench")
+_VALID_SUBCOMMANDS = (None, "sessions", "bench", "share")
+_VALID_SUB_ACTIONS = (None, "list", "show", "cost", "aider-polyglot", "gaia", "terminal-bench")
 
 
 def _resolve_version() -> str:
@@ -187,19 +187,23 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         choices=list(_VALID_SUBCOMMANDS),
         metavar="SUBCOMMAND",
         help=(
-            "Optional: 'sessions' (list/show), 'bench' "
-            "(aider-polyglot/gaia/terminal-bench)."
+            "Optional: 'sessions' (list/show/cost), 'bench' "
+            "(aider-polyglot/gaia/terminal-bench), or 'share <id>'."
         ),
     )
+    # WHY: ``sub_action`` is intentionally free-form so ``share <id>`` can
+    # accept arbitrary session ids in slot 2. The dispatcher
+    # (:mod:`chimera.shrew.sessions` / benchmarks) rejects unknown actions
+    # with a clear message.
     parser.add_argument(
         "sub_action",
         nargs="?",
         default=None,
-        choices=list(_VALID_SUB_ACTIONS),
         metavar="ACTION",
         help=(
-            "With 'sessions': 'list' or 'show <id>'. With 'bench': "
-            "'aider-polyglot', 'gaia', or 'terminal-bench'."
+            "With 'sessions': 'list', 'show <id>', or 'cost'. With "
+            "'bench': 'aider-polyglot', 'gaia', or 'terminal-bench'. "
+            "With 'share': the SESSION_ID to share (positional)."
         ),
     )
     parser.add_argument(
@@ -208,6 +212,70 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         default=None,
         metavar="TARGET",
         help="Session id consumed by 'sessions show'.",
+    )
+    # WHY: cost subcommand flags. Mirror ``mink runs cost`` so the rollup
+    # JSON/CSV/text shape is byte-identical across CLIs. All optional;
+    # defaults come from ``cmd_sessions_cost``.
+    parser.add_argument(
+        "--since",
+        dest="cost_since",
+        default=None,
+        help=(
+            "With 'sessions cost': drop sessions older than this cutoff. "
+            "Accepts shorthand (``7d`` / ``24h`` / ``30m``) or ISO-8601."
+        ),
+    )
+    parser.add_argument(
+        "--cost-model",
+        dest="cost_model",
+        default=None,
+        help=(
+            "With 'sessions cost': case-insensitive substring filter on "
+            "model name. Pass ``all`` (or omit) for every model."
+        ),
+    )
+    parser.add_argument(
+        "--cost-format",
+        dest="cost_format",
+        choices=("text", "json", "csv"),
+        default=None,
+        help=(
+            "With 'sessions cost': output format. Defaults to ``json`` "
+            "when ``--json`` is set, ``text`` otherwise."
+        ),
+    )
+    parser.add_argument(
+        "--cost-limit",
+        dest="cost_limit",
+        type=int,
+        default=None,
+        help=(
+            "With 'sessions cost': cap on rows considered (newest first; "
+            "no cap by default)."
+        ),
+    )
+    # WHY: share subcommand flags. Mirror weasel's share surface; HTTP /
+    # HTML are intentionally omitted — shrew inherits weasel's minimal
+    # posture.
+    parser.add_argument(
+        "--share-sink",
+        dest="share_sink",
+        choices=("file", "stdout"),
+        default=None,
+        help=(
+            "With 'share': destination for the rendered transcript. "
+            "Defaults to ``file`` (writes ``~/.chimera/shares/shrew-<id>.<ext>``)."
+        ),
+    )
+    parser.add_argument(
+        "--share-format",
+        dest="share_format",
+        choices=("json", "md"),
+        default=None,
+        help=(
+            "With 'share': render format. Defaults to ``json`` "
+            "(round-trips with ``sessions show --json``)."
+        ),
     )
     # WHY (S4): bench-specific flag. Keeps the surface unambiguous
     # against future ``sessions`` filters.
@@ -541,7 +609,19 @@ def _run_print_mode(args: argparse.Namespace) -> int:
     env.setup()
 
     cancel = CancellationToken()
-    config = LoopConfig(cancellation=cancel)
+    # WHY: ``-p`` is headless — there is no human present to answer
+    # ASK prompts. ``LoopConfig`` defaults to an :class:`Interactive`
+    # policy that ASKs for ``bash`` / ``write_file`` / ``edit_file``,
+    # which :func:`async_drain_steps` then auto-denies. The CLI has
+    # *already* fenced the tool surface via ``--allowed-tools`` (the
+    # default itself is the minimal ``Read,Write,Edit,Bash`` set), so
+    # the LoopConfig-level ASK is redundant and actively harmful: it
+    # turns every bash call in print mode into ``Auto-denied by
+    # async_drain_steps`` and pushes small models into max-step loops.
+    # Explicitly opt the print path into ``AutoApprove`` so the
+    # ``--allowed-tools`` filter remains the sole gate.
+    from chimera.permissions.presets import AutoApprove
+    config = LoopConfig(cancellation=cancel, permissions=AutoApprove())
     loop = ReAct(max_steps=int(getattr(args, "max_steps", _DEFAULT_MAX_STEPS)), config=config)
     prompt = Prompt.from_string(final_prompt)
     agent = Agent(
@@ -652,9 +732,23 @@ def _dispatch_bench(args: argparse.Namespace) -> int:
     return int(dispatch_bench(args))
 
 
+def _dispatch_share(args: argparse.Namespace) -> int:
+    """Forward ``chimera shrew share <session-id>`` to S1's share handler.
+
+    The S1 parser stores the session id in ``args.sub_action`` (the
+    second positional slot). The namespace is forwarded so
+    :func:`chimera.shrew.sessions.dispatch_share` reads
+    ``share_sink`` / ``share_format`` flags off the same args object.
+    """
+    from chimera.shrew.sessions import dispatch_share
+
+    return dispatch_share(args)
+
+
 _SUBCOMMAND_DISPATCH: dict[str, Any] = {
     "sessions": _dispatch_sessions,
     "bench": _dispatch_bench,
+    "share": _dispatch_share,
 }
 
 

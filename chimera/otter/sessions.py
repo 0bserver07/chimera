@@ -31,6 +31,7 @@ __all__ = [
     "SessionRecord",
     "SessionDetail",
     "iter_sessions",
+    "iter_session_run_records",
     "get_session",
     "format_session_table",
     "format_session_detail",
@@ -38,6 +39,7 @@ __all__ = [
     "parse_since",
     "cmd_sessions_list",
     "cmd_sessions_show",
+    "cmd_sessions_cost",
     "dispatch_sessions",
 ]
 
@@ -159,6 +161,48 @@ def _summary_to_record(session_dir: Path, summary: dict[str, Any]) -> SessionRec
         path=session_dir,
         error=summary.get("error"),
     )
+
+
+def iter_session_run_records(eventlog_root: Path | None = None) -> Iterator[Any]:
+    """Yield :class:`chimera.mink.runs.RunRecord` for every persisted otter session.
+
+    Otter and mink share the on-disk ``summary.json`` schema, so we can
+    reuse the mink-side aggregation (:func:`chimera.mink.cost.compute_summary`)
+    by rebuilding :class:`RunRecord` instances from each otter session dir.
+    The ``run_id`` field is set to the otter session id so cost rollups
+    show ``otter-...`` prefixes verbatim.
+
+    Args:
+        eventlog_root: Override the eventlog root. Defaults to
+            :func:`default_eventlog_root`.
+
+    Yields:
+        :class:`RunRecord` instances ordered by directory name descending
+        (newest first).
+    """
+    from chimera.mink.runs import _summary_to_record
+
+    root = eventlog_root or default_eventlog_root()
+    if not root.exists():
+        return
+    candidates = [
+        p for p in root.iterdir()
+        if p.is_dir() and p.name.startswith(_PREFIX)
+    ]
+    candidates.sort(key=lambda p: p.name, reverse=True)
+    for session_dir in candidates:
+        summary = _read_summary(session_dir)
+        if summary is None:
+            continue
+        # WHY: ``chimera.mink.runs._summary_to_record`` keys off
+        # ``run_id`` first, then falls back to the directory name. Otter
+        # summaries write ``session_id`` instead of ``run_id``, so we
+        # bridge the field here so the mink-side helper sees a stable
+        # id across both flavors.
+        if "run_id" not in summary and "session_id" in summary:
+            summary = dict(summary)
+            summary["run_id"] = summary["session_id"]
+        yield _summary_to_record(session_dir, summary)
 
 
 def iter_sessions(eventlog_root: Path | None = None) -> Iterator[SessionRecord]:
@@ -606,6 +650,84 @@ def cmd_sessions_show(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_sessions_cost(args: argparse.Namespace) -> int:
+    """Implement ``chimera otter sessions cost``.
+
+    Aggregates ``cost_usd`` / ``total_tokens`` across persisted otter
+    sessions under ``~/.chimera/eventlog/otter-*/`` and emits a rollup
+    in human-readable, JSON, or CSV form. Reuses
+    :func:`chimera.mink.cost.compute_summary` so the on-the-wire JSON
+    shape is a strict superset of ``chimera mink runs cost --format json``
+    (``totals``, ``by_model``, ``rows``) — i.e. parity with M4 and the
+    ``GET /runs/cost`` HTTP route.
+
+    Recognized ``args`` attributes:
+
+    * ``sessions_since`` — shorthand (``7d`` / ``24h`` / ``30m``) or
+      ISO-8601 cutoff. ``None`` / empty disables the filter.
+    * ``sessions_model`` — case-insensitive substring filter on the
+      model name. ``"all"`` and ``None`` mean "every model".
+    * ``sessions_format`` — ``"text"`` (default) / ``"json"`` / ``"csv"``.
+    * ``sessions_limit`` — cap on the number of rows considered (newest
+      first). ``None`` / ``0`` means "no cap".
+    * ``no_color`` — when truthy, force the plain ASCII renderer (no
+      rich, no ANSI).
+
+    Args:
+        args: Parsed argparse namespace.
+
+    Returns:
+        Exit code: ``0`` on success (including empty result set),
+        ``2`` when ``--since`` / ``--format`` cannot be parsed.
+    """
+    from chimera.mink.cost import (
+        compute_summary,
+        format_csv,
+        format_json,
+        format_text,
+        parse_since as _parse_cost_since,
+    )
+
+    since_raw = getattr(args, "sessions_since", None)
+    try:
+        cutoff = _parse_cost_since(since_raw)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+    fmt = str(getattr(args, "sessions_format", "text") or "text").lower()
+    if fmt not in {"text", "json", "csv"}:
+        print(
+            f"error: unknown --format {fmt!r} (supported: text, json, csv)",
+            file=sys.stderr,
+        )
+        return 2
+
+    limit_raw = getattr(args, "sessions_limit", None)
+    try:
+        limit = int(limit_raw) if limit_raw is not None else None
+    except (TypeError, ValueError):
+        limit = None
+
+    summary = compute_summary(
+        iter_session_run_records(),
+        since=cutoff,
+        since_label=since_raw,
+        model=getattr(args, "sessions_model", None),
+        limit=limit,
+    )
+
+    if fmt == "json":
+        print(format_json(summary))
+        return 0
+    if fmt == "csv":
+        print(format_csv(summary))
+        return 0
+    no_color = bool(getattr(args, "no_color", False))
+    print(format_text(summary, use_rich=not no_color))
+    return 0
+
+
 def dispatch_sessions(args: argparse.Namespace) -> int | None:
     """Top-level entry called by O1's CLI.
 
@@ -616,8 +738,8 @@ def dispatch_sessions(args: argparse.Namespace) -> int | None:
     Args:
         args: Parsed argparse namespace. Looks at
             ``args.sessions_command`` (must equal ``"sessions"`` to engage)
-            and ``args.sessions_action`` (``"list"``, ``"show"``, or
-            ``None`` -> default to ``list``).
+            and ``args.sessions_action`` (``"list"``, ``"show"``,
+            ``"cost"``, or ``None`` -> default to ``list``).
 
     Returns:
         Exit code, or ``None`` when this dispatcher does not apply.
@@ -629,9 +751,11 @@ def dispatch_sessions(args: argparse.Namespace) -> int | None:
         return cmd_sessions_list(args)
     if action == "show":
         return cmd_sessions_show(args)
+    if action == "cost":
+        return cmd_sessions_cost(args)
     print(
         f"error: unknown 'sessions' action: {action!r} "
-        "(supported: list, show)",
+        "(supported: list, show, cost)",
         file=sys.stderr,
     )
     return 2

@@ -41,8 +41,8 @@ _DEFAULT_MODEL = "claude-sonnet-4-6"
 """Default model when neither ``--model`` nor ``$WEASEL_MODEL`` is set."""
 
 _VALID_MODES = ("interactive", "print", "rpc", "sdk")
-_VALID_SUBCOMMANDS = (None, "sessions")
-_VALID_SUB_ACTIONS = (None, "list", "show")
+_VALID_SUBCOMMANDS = (None, "sessions", "share")
+_VALID_SUB_ACTIONS = (None, "list", "show", "cost")
 
 
 def _resolve_version() -> str:
@@ -143,15 +143,17 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         default=None,
         choices=list(_VALID_SUBCOMMANDS),
         metavar="SUBCOMMAND",
-        help="Optional: 'sessions' (list/show).",
+        help="Optional: 'sessions' (list/show/cost) or 'share <id>'.",
     )
     parser.add_argument(
         "sub_action",
         nargs="?",
         default=None,
-        choices=list(_VALID_SUB_ACTIONS),
         metavar="ACTION",
-        help="With 'sessions': 'list' or 'show <id>'.",
+        help=(
+            "With 'sessions': 'list', 'show <id>', or 'cost'. With "
+            "'share': the SESSION_ID to share (positional)."
+        ),
     )
     parser.add_argument(
         "sub_target",
@@ -159,6 +161,69 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         default=None,
         metavar="TARGET",
         help="Session id consumed by 'sessions show'.",
+    )
+    # WHY: cost subcommand flags. Mirror ``mink runs cost`` so the rollup
+    # JSON/CSV/text shape is byte-identical across CLIs. All optional;
+    # defaults come from ``cmd_sessions_cost``.
+    parser.add_argument(
+        "--since",
+        dest="cost_since",
+        default=None,
+        help=(
+            "With 'sessions cost': drop sessions older than this cutoff. "
+            "Accepts shorthand (``7d`` / ``24h`` / ``30m``) or ISO-8601."
+        ),
+    )
+    parser.add_argument(
+        "--cost-model",
+        dest="cost_model",
+        default=None,
+        help=(
+            "With 'sessions cost': case-insensitive substring filter "
+            "on model name. Pass ``all`` (or omit) for every model."
+        ),
+    )
+    parser.add_argument(
+        "--cost-format",
+        dest="cost_format",
+        choices=("text", "json", "csv"),
+        default=None,
+        help=(
+            "With 'sessions cost': output format. Defaults to ``json`` "
+            "when ``--json`` is set, ``text`` otherwise."
+        ),
+    )
+    parser.add_argument(
+        "--cost-limit",
+        dest="cost_limit",
+        type=int,
+        default=None,
+        help=(
+            "With 'sessions cost': cap on rows considered (newest first; "
+            "no cap by default)."
+        ),
+    )
+    # WHY: share subcommand flags. Mirror otter's share_cmd; HTTP / HTML
+    # are intentionally omitted — weasel keeps the share surface small.
+    parser.add_argument(
+        "--share-sink",
+        dest="share_sink",
+        choices=("file", "stdout"),
+        default=None,
+        help=(
+            "With 'share': destination for the rendered transcript. "
+            "Defaults to ``file`` (writes ``~/.chimera/shares/weasel-<id>.<ext>``)."
+        ),
+    )
+    parser.add_argument(
+        "--share-format",
+        dest="share_format",
+        choices=("json", "md"),
+        default=None,
+        help=(
+            "With 'share': render format. Defaults to ``json`` "
+            "(round-trips with ``sessions show --json``)."
+        ),
     )
 
 
@@ -398,19 +463,35 @@ def _run_sdk_mode(_args: argparse.Namespace) -> int:
 
 
 def _dispatch_sessions(args: argparse.Namespace) -> int:
-    """Forward ``chimera weasel sessions [list|show <id>]`` to W1's handler.
+    """Forward ``chimera weasel sessions [list|show <id>|cost]`` to W1's handler.
 
     Mirrors otter's dispatch shape so the same on-disk eventlog layout
     (under ``~/.chimera/eventlog/weasel-*``) is consumable with the same
-    UX as ``chimera otter sessions``.
+    UX as ``chimera otter sessions``. The ``cost`` action re-uses
+    :mod:`chimera.mink.cost` so the rollup schema stays identical across
+    all four CLIs.
     """
     from chimera.weasel.sessions import dispatch_sessions
 
     return dispatch_sessions(args)
 
 
+def _dispatch_share(args: argparse.Namespace) -> int:
+    """Forward ``chimera weasel share <session-id>`` to W1's share handler.
+
+    The W1 parser stores the session id in ``args.sub_action`` (the
+    second positional slot). We forward the namespace so
+    :func:`chimera.weasel.sessions.dispatch_share` reads
+    ``share_sink`` / ``share_format`` flags off the same args object.
+    """
+    from chimera.weasel.sessions import dispatch_share
+
+    return dispatch_share(args)
+
+
 _SUBCOMMAND_DISPATCH: dict[str, Any] = {
     "sessions": _dispatch_sessions,
+    "share": _dispatch_share,
 }
 
 

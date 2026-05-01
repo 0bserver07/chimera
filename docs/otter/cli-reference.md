@@ -34,7 +34,7 @@ chimera otter [-h] [--version] [--model MODEL] [-p PRINT_MODE]
 | Argument | Choices | Meaning |
 |---|---|---|
 | `SUBCOMMAND` | `serve`, `sessions`, `share`, `agents`, `bench` | Pick a non-REPL entry point. Optional. |
-| `ACTION` | `list`, `show`, `humaneval`, `tau-bench` | With `sessions` or `agents`: `list` or `show <name>`. With `bench`: the benchmark name. |
+| `ACTION` | `list`, `show`, `cost`, `humaneval`, `tau-bench` | With `sessions` or `agents`: `list`, `show <name>`, or (`sessions` only) `cost`. With `bench`: the benchmark name. |
 | `TARGET` | (free-form) | Run/session id consumed by `show` or `share` actions. |
 
 ## Top-level flags
@@ -142,6 +142,9 @@ chimera otter sessions list --json
 chimera otter sessions show otter-20260425T091201-71032a5e
 chimera otter sessions show <id> --json
 chimera otter sessions show <id> --full
+chimera otter sessions cost
+chimera otter sessions cost --since 7d --format json
+chimera otter sessions cost --sessions-model glm-5.1 --format csv
 ```
 
 | Action | Flag | Default | Description |
@@ -152,8 +155,12 @@ chimera otter sessions show <id> --full
 | `list` | `--json` | off | Emit `SessionRecord.to_dict()` as a JSON array. |
 | `show <id>` | `--json` | off | Emit the full record as a single JSON object. |
 | `show <id>` | `--full` | off | Print every event inline rather than a summary. |
+| `cost` | `--since <duration\|date>` | (unset) | Aggregation window: `Ns`/`Nm`/`Nh`/`Nd`/`Nw` shorthand or ISO-8601. |
+| `cost` | `--sessions-model NAME` | (unset) | Case-insensitive substring match on the session's model. |
+| `cost` | `--sessions-limit N` | (unset) | Cap on rows considered (newest first). |
+| `cost` | `--format text\|json\|csv` | `text` | Output format. JSON shape mirrors `GET /runs/cost` and `mink runs cost --format json`. |
 
-Full layout, summary schema, and resume guidance in [`sessions.md`](sessions.md).
+Full layout, summary schema, cost rollup details, and resume guidance in [`sessions.md`](sessions.md).
 
 ## `chimera otter share`
 

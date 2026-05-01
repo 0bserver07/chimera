@@ -49,7 +49,7 @@ _VALID_SUBCOMMANDS = (None, "serve", "sessions", "share", "agents", "bench")
 # the benchmark name (``humaneval`` / ``tau-bench``). The choices below
 # are the union of all sub_action shapes any otter subcommand accepts so
 # argparse keeps validating the slot consistently across handlers.
-_VALID_SUB_ACTIONS = (None, "list", "show", "humaneval", "tau-bench")
+_VALID_SUB_ACTIONS = (None, "list", "show", "cost", "humaneval", "tau-bench")
 
 
 def _resolve_version() -> str:
@@ -341,6 +341,58 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     # WHY (O18): bench-specific flags. Kept under their own ``--bench-*``
     # prefix so ``otter bench humaneval --limit 20`` is unambiguous against
     # the future ``otter sessions list --limit 20`` surface.
+    # WHY (G6): ``sessions cost`` flags — parity with ``mink runs cost``
+    # (see :mod:`chimera.mink.cost`) and the ``GET /runs/cost`` HTTP route.
+    # Naming uses ``sessions_*`` dest names so the dispatcher
+    # :func:`chimera.otter.sessions.dispatch_sessions` reads them
+    # uniformly across ``list``, ``show``, and ``cost`` actions.
+    parser.add_argument(
+        "--since",
+        dest="sessions_since",
+        default=None,
+        help=(
+            "With 'sessions cost' (or 'sessions list'): filter window. "
+            "Accepts shorthand ('7d', '24h', '30m') or ISO-8601 date."
+        ),
+    )
+    parser.add_argument(
+        "--format",
+        dest="sessions_format",
+        choices=["text", "json", "csv"],
+        default="text",
+        help=(
+            "With 'sessions cost': output format (default: text)."
+        ),
+    )
+    parser.add_argument(
+        "--sessions-model",
+        dest="sessions_model",
+        default=None,
+        help=(
+            "With 'sessions list/cost': filter to sessions whose model "
+            "matches (case-insensitive substring; 'all' = no filter)."
+        ),
+    )
+    parser.add_argument(
+        "--sessions-limit",
+        dest="sessions_limit_flag",
+        type=int,
+        default=None,
+        help=(
+            "With 'sessions list/cost': cap rows considered "
+            "(newest first; <=0 / unset = no cap)."
+        ),
+    )
+    parser.add_argument(
+        "--sessions-json",
+        dest="sessions_json",
+        action="store_true",
+        default=False,
+        help=(
+            "With 'sessions list/show': emit JSON instead of the table. "
+            "(``sessions cost`` uses ``--format json`` instead.)"
+        ),
+    )
     parser.add_argument(
         "--bench-limit",
         dest="bench_limit",
@@ -1488,11 +1540,20 @@ def _dispatch_sessions(args: argparse.Namespace) -> int:
     args.sessions_command = "sessions"
     args.sessions_action = getattr(args, "sub_action", None) or "list"
     args.sessions_id = getattr(args, "sub_target", None)
+    # WHY (G6): the ``show`` action keys off ``sessions_target`` (the
+    # SESSION_ID positional in slot 3) — bridge ``sub_target`` so the
+    # dispatcher's ``getattr(args, "sessions_target")`` finds the id.
+    args.sessions_target = getattr(args, "sub_target", None)
     args.sessions_since = getattr(args, "sessions_since", None)
     args.sessions_model = getattr(args, "sessions_model", None)
-    args.sessions_limit = getattr(args, "sessions_limit", 50)
+    # WHY: ``--sessions-limit`` (G6) lives under ``sessions_limit_flag``
+    # so we don't shadow the bench ``--limit`` argparse dest. Fall back
+    # to 50 when the flag is unset, matching the prior O3 behavior.
+    sessions_limit = getattr(args, "sessions_limit_flag", None)
+    args.sessions_limit = sessions_limit if sessions_limit is not None else 50
     args.sessions_json = getattr(args, "sessions_json", False)
     args.sessions_full = getattr(args, "sessions_full", False)
+    args.sessions_format = getattr(args, "sessions_format", "text") or "text"
     rc = dispatch_sessions(args)
     return rc if rc is not None else 0
 

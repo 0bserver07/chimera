@@ -33,7 +33,7 @@ make otter useful as a coding-agent driver.
 | `mcp list \| add \| auth`    | YELLOW       | `chimera/otter/mcp.py`, slash `/mcps`                           | `load_mcp_servers()` reads `~/.opencode/config.json` + project `.opencode/mcp.json`; live status / auth flow ride on the shared `chimera.mcp` runtime. |
 | `models [provider]`          | GREEN        | `chimera/otter/providers.py`                                    | `--model provider/model` honored everywhere; `OTTER_MODEL` env var pinned. Refresh-cache flag deferred. |
 | `providers` (auth login/list)| YELLOW       | `chimera/otter/providers.py`                                    | Default chain (Anthropic → OpenRouter → OpenAI); device-flow OAuth ridden via `chimera.auth`. Plugin-driven auth methods deferred. |
-| `stats`                      | YELLOW       | `chimera mink runs` covers cost/usage rollups                   | Otter sessions live under `~/.chimera/eventlog/otter-*/`; stats UI deferred. |
+| `stats`                      | GREEN        | `chimera otter sessions cost` (G6)                              | `sessions cost --since 7d --format json` aggregates `~/.chimera/eventlog/otter-*/summary.json`. Same rollup the `GET /runs/cost` HTTP route serves. |
 | `export` / `import`          | YELLOW       | `chimera/otter/share_cmd.py` covers export                       | `share <id> --sink file --format json` writes a portable transcript. Import flow deferred. |
 | `pr <number>` (PR checkout)  | RED          | n/a                                                             | Out of scope for wave-1; users run `gh pr checkout` then `chimera otter`. |
 | `github` (CI bot)            | RED          | n/a                                                             | Defer; orthogonal to coding-agent runtime. |
@@ -161,7 +161,7 @@ TUI-only chrome.
 
 ## Counts
 
-- **Top-level CLI subcommands:** 6 GREEN, 5 YELLOW, 9 RED of the 20 upstream commands. Coverage focuses on the agent runtime; admin/install/account flows are intentionally not mirrored.
+- **Top-level CLI subcommands:** 7 GREEN, 4 YELLOW, 9 RED of the 20 upstream commands. Coverage focuses on the agent runtime; admin/install/account flows are intentionally not mirrored.
 - **`run` flags:** 5 GREEN, 7 YELLOW, 5 RED of the 17 upstream flags.
 - **Slash commands:** 17 GREEN, 7 YELLOW, 4 RED of the 28 reviewed.
 - **Plugin hooks:** 5 GREEN, 8 YELLOW, 4 RED of the 17 reviewed.
@@ -185,7 +185,7 @@ breakdown, the 26-event `EventBus`, and the multi-tier
 3. `chimera otter mcp add` / `chimera otter mcp auth <name>` (live add + OAuth).
 4. `chimera otter session delete <id>` (currently `rm -rf` the eventlog dir).
 5. Plugin-driven provider auth (mirror the upstream `Hooks.auth` flow).
-6. `chimera otter stats --since=<duration>` aggregating `summary.json` across `~/.chimera/eventlog/otter-*/`.
+6. ~~`chimera otter stats --since=<duration>` aggregating `summary.json` across `~/.chimera/eventlog/otter-*/`.~~ Shipped as `chimera otter sessions cost` (G6).
 7. File-attachment flag (`--file <path>`) for one-shot prompts.
 8. Theme switcher (`/themes`) for the REPL once a TUI palette lands.
 9. Workspace mode (multiple cwds in a single session).
