@@ -44,7 +44,15 @@ provider factory raises a friendly "no API key" error.
 """
 
 _VALID_OUTPUT_FORMATS = ("text", "json", "stream-json")
-_VALID_SUBCOMMANDS = (None, "serve", "sessions", "share", "agents", "bench")
+_VALID_SUBCOMMANDS = (
+    None,
+    "serve",
+    "sessions",
+    "share",
+    "agents",
+    "bench",
+    "bridge",
+)
 _VALID_SUB_ACTIONS = (None, "list", "show", "humaneval", "tau-bench")
 _VALID_SANDBOX_MODES = (
     "read-only",
@@ -247,6 +255,52 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
             "on every request except /healthz."
         ),
     )
+    # WHY (F1/W8): TLS pair gates the HTTP path off-localhost so the
+    # bearer token is never exposed in cleartext. Both halves must be
+    # set together; ``_dispatch_serve_http`` rejects half-pairs at the
+    # CLI layer (mirrors ``chimera otter serve``'s contract).
+    parser.add_argument(
+        "--tls-cert",
+        dest="tls_cert",
+        default=None,
+        help=(
+            "With 'serve --http': path to a PEM-encoded server "
+            "certificate. Must be paired with --tls-key. When set the "
+            "server speaks HTTPS and Authorization headers stay encrypted."
+        ),
+    )
+    parser.add_argument(
+        "--tls-key",
+        dest="tls_key",
+        default=None,
+        help=(
+            "With 'serve --http': path to a PEM-encoded private key "
+            "matching --tls-cert."
+        ),
+    )
+    # WHY (FF5): cloud-bridge flags. ``--remote-url`` selects the HTTPS
+    # base URL of the remote bridge service; ``--bridge-token`` supplies
+    # the bearer token (falls back to ``$FERRET_BRIDGE_TOKEN``). Both are
+    # consumed by ``chimera.ferret.cloud_bridge.build_bridge_from_args``.
+    parser.add_argument(
+        "--remote-url",
+        default=None,
+        help=(
+            "With 'bridge': HTTPS base URL of the remote bridge service "
+            "(default: see chimera.ferret.cloud_bridge.DEFAULT_REMOTE_URL, "
+            "which points at a placeholder .invalid domain — operators "
+            "must opt in to a real remote)."
+        ),
+    )
+    parser.add_argument(
+        "--bridge-token",
+        default=None,
+        help=(
+            "With 'bridge': shared-secret bearer token sent on every "
+            "request as 'Authorization: Bearer <token>'. Falls back to "
+            "$FERRET_BRIDGE_TOKEN."
+        ),
+    )
     # WHY: subcommand placeholders are positionals so the orchestrator can
     # route ``chimera ferret serve``, ``chimera ferret sessions list``, etc.
     # without re-parsing. Sibling agents in the wave own the bodies.
@@ -371,10 +425,11 @@ def _dispatch_serve(args: argparse.Namespace) -> int:
 
     FF4 owns the IDE-first ACP schema; the HTTP variant is opt-in. The
     real ACP server is reached via :func:`chimera.ferret.ide.maybe_serve_ide_acp`
-    (late-bound). When ``--http`` is set or the ACP module isn't available,
-    fall through to a scaffold message so shell pipelines stay honest.
+    (late-bound). When ``--http`` is set, F1/W8 wires the HTTP + SSE
+    server by delegating to :func:`chimera.otter.server.serve_http` with
+    a ferret-flavored agent factory (provider via FF6, sandbox via FF2,
+    approval via FF3).
     """
-    transport = "http" if getattr(args, "http", False) else "acp"
     if not getattr(args, "http", False):
         # WHY: ACP is the IDE-first default. Late-bind so cli.py loads even
         # if FF4 hasn't shipped, and so ``--help`` stays cheap.
@@ -390,13 +445,142 @@ def _dispatch_serve(args: argparse.Namespace) -> int:
         rc = maybe_serve_ide_acp(args)
         if rc is not None:
             return int(rc)
-    # HTTP path is owned by a future agent (mirrors otter's HTTP server).
-    print(
-        f"ferret serve: transport={transport} (scaffold; see "
-        "research/ferret/SPEC.md, agents FF4 / FF5).",
-        file=sys.stderr,
+        # ACP module declined (rc=None): fall through to HTTP. Rare; the
+        # current ACP helper only returns ``None`` when ``--http`` is set,
+        # which is already handled above.
+        return _dispatch_serve_http(args)
+    return _dispatch_serve_http(args)
+
+
+# Default HTTP bind port for ``chimera ferret serve --http``. Distinct from
+# the otter default (5173) so the two servers can coexist on a single host.
+_FERRET_DEFAULT_HTTP_PORT = 5174
+
+
+def _dispatch_serve_http(args: argparse.Namespace) -> int:
+    """Run the HTTP + SSE ferret server.
+
+    Thin wrapper around :func:`chimera.otter.server.serve_http`. The
+    server protocol (``/healthz``, ``/session``, SSE event stream,
+    ``/tool/approve``) is identical to otter's; what differs is the
+    per-session agent factory: ferret routes through its own provider
+    chain (FF6), sandbox wrapper (FF2), and approval preset (FF3).
+
+    All heavy imports (``Agent``, ``ReAct``, ``LocalEnvironment``,
+    ``OtterSessionState``) stay inside the function so ``chimera ferret
+    --help`` and ``chimera ferret serve --help`` remain cheap.
+
+    Args:
+        args: Parsed argparse namespace. Reads ``host``, ``port``,
+            ``auth_token``, ``tls_cert``, ``tls_key``, ``model``,
+            ``cwd``, ``max_steps``, ``sandbox``, ``approval``.
+
+    Returns:
+        Process exit code: 0 on graceful shutdown, 2 on usage error
+        (e.g. half-paired ``--tls-cert`` / ``--tls-key``).
+    """
+    from chimera.core.agent import Agent
+    from chimera.core.loop import ReAct
+    from chimera.core.loop_config import LoopConfig
+    from chimera.core.prompt import Prompt
+    from chimera.core.tool_group import AGENT_TOOLS
+    from chimera.env.local import LocalEnvironment
+    from chimera.otter.server import (
+        DEFAULT_HOST,
+        OtterSessionState,
+        serve_http,
     )
-    return 2
+
+    cwd = os.path.abspath(getattr(args, "cwd", None) or os.getcwd())
+    model = getattr(args, "model", None) or _DEFAULT_MODEL
+    max_steps = int(getattr(args, "max_steps", 50) or 50)
+
+    host = str(getattr(args, "host", None) or DEFAULT_HOST)
+    port = int(getattr(args, "port", None) or _FERRET_DEFAULT_HTTP_PORT)
+    auth_token = getattr(args, "auth_token", None)
+    tls_cert = getattr(args, "tls_cert", None)
+    tls_key = getattr(args, "tls_key", None)
+    # WHY: surface the typo-paired-flag mistake here so the user gets a
+    # CLI-level error before any provider/sandbox wiring fires. Mirrors
+    # otter's ``_dispatch_serve_http`` contract.
+    if bool(tls_cert) ^ bool(tls_key):
+        print(
+            "error: --tls-cert and --tls-key must be set together",
+            file=sys.stderr,
+        )
+        return 2
+
+    sandbox_value = getattr(args, "sandbox", "read-only") or "read-only"
+    approval_value = getattr(args, "approval", "read-only") or "read-only"
+
+    def _factory(state: OtterSessionState) -> Any:
+        # Provider — late-bind FF6 so the factory uses the ferret chain
+        # (gpt-5 → gpt-4o → claude-sonnet-4-6 → openrouter), with a
+        # generic fallback when FF6 is absent.
+        provider = _build_provider(model)
+
+        # Environment — wrap LocalEnvironment with the ferret sandbox
+        # (FF2) per ``--sandbox``. Falls through to the unsandboxed env
+        # when the sandbox module isn't importable, matching the print-
+        # mode contract.
+        workdir = state.working_dir or cwd
+        base_env = LocalEnvironment(workdir=workdir)
+        base_env.setup()
+        env: Any = base_env
+        try:
+            from chimera.ferret import sandbox as _sandbox_mod
+
+            mode = _sandbox_mod.parse_sandbox_mode(sandbox_value)
+            env = _sandbox_mod.SandboxedEnvironment(base_env, mode=mode)
+        except Exception:  # noqa: BLE001 - keep base env on missing/error
+            env = base_env
+
+        # Approval preset (FF3) → LoopConfig.permissions.
+        permissions: Any = None
+        try:
+            from chimera.ferret import approval as _approval_mod
+
+            permissions = _approval_mod.policy_for_preset(
+                _approval_mod.preset_from_string(approval_value)
+            )
+        except Exception:  # noqa: BLE001 - default LoopConfig on miss
+            permissions = None
+
+        config = LoopConfig(permissions=permissions)
+        loop = ReAct(max_steps=max_steps, config=config)
+        prompt = Prompt.from_string(
+            "You are Ferret, a Chimera coding agent driven over HTTP."
+        )
+        agent = Agent(
+            provider=provider,
+            tools=list(AGENT_TOOLS),
+            loop=loop,
+            prompt=prompt,
+        )
+        # Surface the sandboxed env onto the agent so future tool calls
+        # routed through ``state.agent`` honor the per-session sandbox.
+        # OtterServer's ``_drive_agent`` passes ``env=None`` (the agent
+        # carries its own env reference), so we attach via attribute for
+        # downstream tooling that expects ``agent.env``.
+        try:
+            agent.env = env  # type: ignore[attr-defined]
+        except Exception:  # noqa: BLE001 - best-effort, never crash factory
+            pass
+        return agent
+
+    scheme = "https" if (tls_cert and tls_key) else "http"
+    sys.stderr.write(
+        f"[ferret] HTTP server listening on {scheme}://{host}:{port}\n"
+    )
+    sys.stderr.flush()
+    return serve_http(
+        _factory,
+        host=host,
+        port=port,
+        auth_token=auth_token,
+        tls_cert=tls_cert,
+        tls_key=tls_key,
+    )
 
 
 def _dispatch_sessions(args: argparse.Namespace) -> int:
@@ -498,12 +682,55 @@ def _dispatch_bench(args: argparse.Namespace) -> int:
     return 2
 
 
+def _default_bridge_inbound_handler(message: Any) -> None:
+    """Default no-op ``inbound_handler`` used by ``ferret bridge``.
+
+    The bridge spec leaves wiring of inbound prompts to the local agent
+    as a wave-9 concern (live REPL attachment). Until that lands, the
+    CLI dispatcher uses a stderr-logging handler so operators can verify
+    the round-trip without a live agent. The handler stays synchronous
+    on purpose — the bridge owns its own daemon thread.
+    """
+    text = getattr(message, "text", "")
+    msg_id = getattr(message, "message_id", "")
+    print(
+        f"[ferret bridge] inbound message_id={msg_id!r} text={text!r}",
+        file=sys.stderr,
+    )
+
+
+def _dispatch_bridge(args: argparse.Namespace) -> int:
+    """Dispatch ``chimera ferret bridge`` to the FF5 cloud-bridge runner.
+
+    Reads ``--remote-url`` and ``--bridge-token`` (with fallbacks
+    documented in :mod:`chimera.ferret.cloud_bridge`), connects, and
+    blocks on the inbound poll loop until ``Ctrl-C``. Late-binds the
+    cloud-bridge module so an absent FF5 surfaces a friendly error
+    rather than an :class:`ImportError` traceback.
+
+    Returns:
+        Process exit code: 0 on graceful shutdown, 2 on auth failure or
+        when FF5 is missing, 1 on any other bridge-level error.
+    """
+    try:
+        from chimera.ferret import cloud_bridge as _cloud_bridge
+    except Exception as exc:  # noqa: BLE001
+        print(
+            f"ferret bridge: cloud-bridge module unavailable ({exc}). "
+            "See research/ferret/SPEC.md (FF5).",
+            file=sys.stderr,
+        )
+        return 2
+    return int(_cloud_bridge.run_bridge(args, _default_bridge_inbound_handler))
+
+
 _SUBCOMMAND_DISPATCH: dict[str, Any] = {
     "serve": _dispatch_serve,
     "sessions": _dispatch_sessions,
     "share": _dispatch_share,
     "agents": _dispatch_agents,
     "bench": _dispatch_bench,
+    "bridge": _dispatch_bridge,
 }
 
 

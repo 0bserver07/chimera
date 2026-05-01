@@ -260,12 +260,30 @@ def test_run_dispatches_serve_subcommand_acp_default(capsys, monkeypatch) -> Non
     assert captured_args, "maybe_serve_ide_acp was not called"
 
 
-def test_run_dispatches_serve_subcommand_http_when_flag_set(capsys) -> None:
-    """``ferret serve --http`` selects the HTTP transport (scaffold)."""
+def test_run_dispatches_serve_subcommand_http_when_flag_set(
+    capsys, monkeypatch
+) -> None:
+    """``ferret serve --http`` routes through the HTTP server.
+
+    F1/W8 wires the HTTP transport: the dispatch helper delegates to
+    :func:`chimera.otter.server.serve_http` with a ferret-built
+    ``agent_factory``. We stub the otter entry point to a sentinel so
+    the test asserts the wiring without binding any port.
+    """
+    captured_kwargs: list = []
+
+    def _fake_serve(*_a, **kw):
+        captured_kwargs.append(kw)
+        return 0
+
+    monkeypatch.setattr(
+        "chimera.otter.server.serve_http", _fake_serve, raising=True
+    )
     rc = ferret_cli.run(_ns(subcommand="serve", http=True))
-    assert rc == 2
+    assert rc == 0
+    assert captured_kwargs, "serve_http was not invoked"
     captured = capsys.readouterr()
-    assert "transport=http" in captured.err
+    assert "[ferret]" in captured.err and "://" in captured.err
 
 
 def test_run_dispatches_sessions_subcommand(capsys) -> None:

@@ -194,6 +194,47 @@ config file on disk, to avoid checking secrets into version control.
 - **`bridge: replay window exceeded`.** A long disconnect dropped
   events. The remote UI will need a `session/load` to resync.
 
+## CLI invocation
+
+The `bridge` subcommand is wired into `chimera ferret` via
+`chimera/ferret/cli.py`. Two flags drive the connection:
+
+- `--remote-url URL` — HTTPS base URL of the remote bridge service.
+  Defaults to `chimera.ferret.cloud_bridge.DEFAULT_REMOTE_URL`, which
+  points at a placeholder `.invalid` domain on purpose. Operators must
+  opt in to a real remote.
+- `--bridge-token TOKEN` — shared-secret bearer token sent on every
+  request as `Authorization: Bearer <token>`. Falls back to the
+  `FERRET_BRIDGE_TOKEN` environment variable when omitted.
+
+Minimal invocation:
+
+```bash
+chimera ferret bridge \
+  --remote-url https://ferret.example.com \
+  --bridge-token "$FERRET_BRIDGE_TOKEN"
+```
+
+Equivalent with the env-var fallback:
+
+```bash
+export FERRET_BRIDGE_TOKEN="$(openssl rand -hex 32)"
+chimera ferret bridge --remote-url https://ferret.example.com
+```
+
+Exit codes:
+
+- `0` — graceful shutdown (Ctrl-C after a successful handshake).
+- `1` — transport-level connect failure (network unreachable, parse
+  error, etc.).
+- `2` — auth failure (the remote returned 401/403, or no token was
+  supplied via `--bridge-token` / `$FERRET_BRIDGE_TOKEN`).
+
+The dispatcher hands every inbound message from the remote UI to a
+default `inbound_handler` that logs `[ferret bridge] inbound …` to
+stderr. A future wave will swap this for a live REPL attachment so
+remote prompts drive the local agent directly.
+
 ## See also
 
 - [`ide.md`](ide.md) — the ACP wire shared with the bridge.
@@ -201,3 +242,4 @@ config file on disk, to avoid checking secrets into version control.
 - [`security-and-trademarks.md`](security-and-trademarks.md) — why
   the auth token is env-var only.
 - `chimera/ferret/cloud_bridge.py` — bridge client implementation.
+- `chimera/ferret/cli.py` — CLI subparser + `_dispatch_bridge`.
