@@ -223,6 +223,13 @@ export default defineConfig({
 						},
 					],
 				},
+				{
+					label: 'Releases',
+					collapsed: true,
+					items: [
+						{ label: '0.5.0 — Five-Strong Family', slug: 'releases/0.5.0' },
+					],
+				},
 			],
 		}),
 	],

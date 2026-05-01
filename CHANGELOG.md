@@ -1,32 +1,156 @@
 # Changelog
 
-## 0.5.0 — 2026-04-29 — Otter + Mink Waves 2 & 3
+## 0.5.0 — 2026-04-30 — Five-Strong Coding-Agent Family
 
-This release rolls up otter waves 1-2 and mink waves 2-3. v0.4.0 was cut for the
-mink wave-2 milestone; 0.5.0 is the first release that ships otter as a
-first-class CLI alongside mink.
+The 0.5.0 release ships the full **mink / otter / ferret / weasel / shrew**
+coding-agent family on a single Chimera substrate. v0.4.0 was cut for the mink
+wave-2 milestone; 0.5.0 rolls up otter waves 1–2, mink waves 2–3, and the
+wave-5 ship + wave-6 cross-CLI verification + wave-7 gap closure for the
+three new CLIs (ferret / weasel / shrew). All five share the same `Agent` /
+`AgentLoop` / `EventSourcedSession` / provider factory, the same 26-event
+EventBus, and the same tool registry — adding a sixth is an additive walk
+through the same agent allocation pattern.
 
-### Otter — new coding REPL CLI (waves 1, 2)
-- `chimera otter` introduced as a sibling to `chimera mink` — streaming tool
-  calls, hooks, sessions, and the same provider abstraction.
-- Server hardening: TLS termination, cooperative cancellation propagation, and
-  Server-Sent Events resume-after-disconnect.
-- Event-sourcing subsystem — append-only event log, file locking, crash
-  recovery, gap detection; sessions can be reconstructed deterministically from
-  the log alone.
-- Remote execution: `asyncssh` integration with SFTP transfer and ProxyJump
-  bastion-host support; session sharing primitives over SSH.
+### Headline — five coding-agent CLIs on one substrate
 
-### Mink — wave 2 + wave 3
+| CLI | Posture | Lines that distinguish it |
+|---|---|---|
+| `chimera mink` | TUI-first | `glm-5.1:cloud` defaults, 31 slash commands, 11 benchmark adapters |
+| `chimera otter` | Server-first | TUI + HTTP `serve` + ACP `serve --acp`, share-by-link, 26 slash commands |
+| `chimera ferret` | Sandbox-first / IDE-flagship | three sandbox modes, three approval presets, IDE-first ACP, cloud bridge |
+| `chimera weasel` | Minimal harness, four modes | interactive / print / RPC / SDK, four-command slash palette, auto-discovered extensions |
+| `chimera shrew` | Small-model tuned | local-first provider chain, 11 curated skills, MoE-aware context sizing, Aider Polyglot + GAIA |
+
+Composition over rebuild — none of the new CLIs forks Chimera; each is a
+thin posture on the upstream substrate. Trademark scrubs are clean across
+all five (`bash scripts/all_trademark_scrub.sh` exits 0).
+
+### New CLIs (waves 5 + 6 + 7)
+
+- **`chimera ferret`** — sandbox-first / IDE-flagship coding agent.
+  Three sandbox modes (`read-only` / `workspace-write` /
+  `workspace-write-network`), three approval presets (`read-only` / `auto`
+  / `full`), an IDE-first ACP transport that is a strict superset of
+  otter's ACP schema with four extra notification kinds (`code/diff`,
+  `editor/open_file`, `terminal/output`, `progress/step`), and an
+  optional `chimera ferret bridge` long-poll HTTPS pipe with bearer auth.
+  13 modules, 303 tests, 8 user docs.
+- **`chimera weasel`** — minimal four-mode harness. A single resolver
+  picks `interactive` / `print` / `rpc` / `sdk` from `--mode`, `-p`, or
+  default. Newline-delimited JSON-RPC 2.0 over stdio (four methods, all
+  five JSON-RPC error codes exported). Embeddable SDK
+  (`from chimera.weasel.sdk import Agent`) with sync `run`, async `arun`,
+  sync / async streaming, and multi-turn `chat`. Auto-discovered
+  extensions from `.weasel/extensions/*` and `~/.weasel/extensions/`.
+  Four-command slash palette (`/help`, `/exit`, `/clear`, `/model`) — no
+  `/agent`, no `/share`, no `/init` by design. 9 modules, 164 tests,
+  7 user docs.
+- **`chimera shrew`** — small-local-model tuned harness layered on top
+  of weasel. Local-first provider chain inversion (probes llama.cpp at
+  `$LLAMACPP_BASE_URL` and Ollama at `$OLLAMA_BASE_URL` before any
+  cloud key). Default `qwen3.6-35b-a3b` on llama.cpp. 11 curated skill
+  markdowns (`knowledge/`, `protocols/`, `tools/`) with stdlib-only
+  frontmatter parsing. Three small-model-fit extensions
+  (`moe_offload`, `scaffold_fit`, `tool_filter`). Aider Polyglot + GAIA
+  benchmark adapters. `--max-steps` defaulted to 30, restricted
+  `--allowed-tools=Read,Write,Edit,Bash`. 14 modules, 193 tests,
+  7 user docs.
+
+### Otter (waves 1 + 2)
+
+- `chimera otter` introduced as a sibling to `chimera mink` — streaming
+  tool calls, hooks, sessions, and the same provider abstraction.
+- HTTP server (`chimera otter serve --port`) and ACP server
+  (`chimera otter serve --acp`) both wired.
+- Slash palette grew to 26 entries; persisted-run inspection
+  (`sessions list/show`); share-by-link (`chimera otter share`);
+  preset registry; LSP first-class tools.
+- Wired the full O-WIRE-1..6 set: real provider, MCP runtime,
+  plugin → agent registry, rules → system prompt, custom commands →
+  slash registry, LSP default-on.
+
+### Mink (waves 2 + 3)
+
 - `chimera mink runs cost` — per-run cost rollups and granular token
   breakdowns (cache, reasoning, per-step).
-- Benchmark adapter scaffolds for tau-bench and SWE-bench Verified, joining
-  the existing 11 adapters from #86-#96.
+- Tau-bench (#90) end-to-end wireup + SWE-bench Verified (#84) adapter
+  scaffold with `IPythonTool` + condensation hooks.
+- 11 benchmark adapters under `chimera/eval/benchmarks/`
+  (cline, context, dpai, feature, humaneval-plus, livecodebench, math500,
+  mbpp, swe-polybench, swt, tau-bench).
+
+### Server hardening
+
+- TLS termination on otter `serve --tls-cert` / `--tls-key`.
+- Cooperative cancellation propagation: `POST /session/<id>/cancel`
+  drains the agent loop without killing the worker.
+- Server-Sent Events resume-after-disconnect: `Last-Event-ID` header
+  honored across reconnects.
+- Per-step SSE events plumbed through `_drive_agent_streaming` over
+  `async_run_events`; legacy fallback preserved.
+- `GET /runs` and `GET /runs/cost` HTTP routes — eventlog inspection
+  and per-run cost rollups now reachable over HTTP without dropping
+  into the CLI.
+
+### Event sourcing
+
+- New `chimera/events/sourcing/` subsystem — registry, projector,
+  `sqlite_store`, `sink`, `types`, export.
+- Append-only event log with file locking, crash recovery, and gap
+  detection; sessions can be reconstructed deterministically from the
+  log alone.
+- SQLite store + snapshot fast-resume in `EventSourcedSession` —
+  resumed sessions skip log replay when a snapshot is current.
+- `snapshot_after_turn` wired into otter's REPL + server.
+
+### SSH / remote execution
+
+- `AsyncSSHEnvironment` + SFTP transfer + ProxyJump bastion-host
+  support + control-master multiplexing.
+- `[ssh]` extra; `chimera mink --remote ssh://user@host[:port]/path`.
+- `$HOME` expansion fix in checkpoint / restore tar paths so
+  remote-environment snapshots round-trip correctly.
+
+### Bench
+
+- SWE-bench Verified scaffold landed (`chimera/eval/benchmarks/swe_bench_verified.py`)
+  with `IPythonTool`, `SWEBenchConfig`, and condensation hooks.
+- IPython tool + LLM condensation plumbed end-to-end through the
+  SWE-bench Verified harness.
+- HumanEval (full 164) live from each of the five CLIs against
+  glm-5.1, kimi-k2.6, deepseek-v4-pro.
+
+### Live verification
+
+5×3 matrix exercised end-to-end on 2026-04-30:
+
+| CLI \ Model | glm-5.1:cloud | kimi-k2.6:cloud | deepseek-v4-pro:cloud |
+|---|---|---|---|
+| mink | math + bash | math + bash | math + bash |
+| otter | math (bash flake) | math + bash | math + bash |
+| ferret | math + bash | math + bash | math (bash flake) |
+| weasel | math + bash | math + bash | math (bash flake) |
+| shrew | math (small-model bash limit) | math (small-model bash limit) | math (auto-deny) |
+
+Math row 15/15. Bash row 9/15 (failures concentrated on smaller
+context windows + auto-deny on shrew's deepseek path; no regressions
+attributable to wave-7 work). Total wall-clock 813 s across 30 cells.
+Documented in `research/I4-LIVE-MATRIX.md`.
 
 ### Quality
-- 4928 tests passing.
-- 517 mypy files clean.
-- `uv run ruff check chimera/` clean.
+
+- **5654+ tests passing** (5651 in V1 validation pass + 660 ferret /
+  weasel / shrew tests verified independently).
+- **553+ mypy source files clean** (`Success: no issues found in 553
+  source files`).
+- **`uv run ruff check chimera/`** clean.
+- **All five trademark scrubs clean** —
+  `bash scripts/all_trademark_scrub.sh` exits 0
+  (`passed: 5 (mink otter ferret weasel shrew); failed: 0`).
+- **CI green** on Python 3.11 / 3.12 / 3.13 with five
+  per-codename trademark-scrub jobs wired (`mink-trademark-scrub`,
+  `otter-trademark-scrub`, `ferret-trademark-scrub`,
+  `weasel-trademark-scrub`, `shrew-trademark-scrub`).
 
 ## 0.3.0 (2026-04-19) — Real Runtimes, Real Compilation, Honest Errors
 
