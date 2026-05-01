@@ -367,21 +367,67 @@ def test_print_p_priority(monkeypatch) -> None:
     assert called["args"] is args
 
 
-def test_print_mode_late_binds_to_weasel(monkeypatch) -> None:
-    """``_run_print_mode`` forwards to :func:`chimera.weasel.cli._run_print_mode`."""
+def test_print_mode_uses_shrew_provider_chain(monkeypatch) -> None:
+    """``_run_print_mode`` builds a provider via shrew's native chain.
+
+    This used to delegate to ``chimera.weasel.cli._run_print_mode``,
+    which silently lost shrew's "llama.cpp first, Ollama next, cloud
+    fallback" preference. We now build the provider locally via
+    :func:`chimera.shrew.providers.build_provider` and apply skills +
+    extensions before handing control to the agent.
+    """
     called: dict[str, object] = {}
 
-    def _fake_weasel_print(args):
-        called["args"] = args
-        return 7
+    class _StubProvider:
+        model_name = "stub-model"
+        _context_length = 32_768
+
+        def __init__(self) -> None:
+            pass
+
+    def _fake_build_provider(args):
+        called["build_provider_args"] = args
+        return _StubProvider()
+
+    class _StubResult:
+        success = True
+        output = "ok"
+
+    async def _fake_async_run(self, prompt, env=None):  # noqa: ARG001
+        called["agent_prompt"] = prompt
+        called["agent_system"] = self.prompt.render(
+            tools=[t.name for t in self.tools],
+        )
+        called["agent_tool_count"] = len(self.tools)
+        return _StubResult()
 
     monkeypatch.setattr(
-        "chimera.weasel.cli._run_print_mode", _fake_weasel_print,
+        "chimera.shrew.providers.build_provider", _fake_build_provider,
     )
-    args = argparse.Namespace(print_mode="hi")
+    monkeypatch.setattr(
+        "chimera.core.agent.Agent.async_run", _fake_async_run,
+    )
+
+    args = argparse.Namespace(
+        print_mode="hi",
+        model="qwen3.6-35b-a3b",
+        max_steps=5,
+        allowed_tools="Read,Write,Edit,Bash",
+        cwd=None,
+        json_output=False,
+        vram_gb=None,
+    )
     rc = shrew_cli._run_print_mode(args)  # noqa: SLF001
-    assert rc == 7
-    assert called["args"] is args
+    assert rc == 0
+    assert called["build_provider_args"] is args
+    # --allowed-tools=Read,Write,Edit,Bash narrows the AGENT_TOOLS surface
+    # via the friendly-alias map (Read -> read_file, etc.).
+    assert called["agent_tool_count"] == 4
+    # The S2 skills block + S3 small-model scaffold should both have
+    # made it into the rendered system prompt.
+    rendered = str(called["agent_system"])
+    assert "Shrew skills" in rendered
+    assert "<small-model-scaffold>" in rendered
 
 
 def test_default_routes_to_repl(monkeypatch) -> None:

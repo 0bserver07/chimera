@@ -369,11 +369,28 @@ def _build_provider(model: str) -> Any:
 def _dispatch_serve(args: argparse.Namespace) -> int:
     """Dispatch ``chimera ferret serve`` to ACP (default) or HTTP (``--http``).
 
-    FF4 owns the IDE-first ACP schema; the HTTP variant is opt-in. Until
-    the sibling modules land, return 2 with a stub message so shell
-    pipelines don't silently treat an unimplemented command as success.
+    FF4 owns the IDE-first ACP schema; the HTTP variant is opt-in. The
+    real ACP server is reached via :func:`chimera.ferret.ide.maybe_serve_ide_acp`
+    (late-bound). When ``--http`` is set or the ACP module isn't available,
+    fall through to a scaffold message so shell pipelines stay honest.
     """
     transport = "http" if getattr(args, "http", False) else "acp"
+    if not getattr(args, "http", False):
+        # WHY: ACP is the IDE-first default. Late-bind so cli.py loads even
+        # if FF4 hasn't shipped, and so ``--help`` stays cheap.
+        try:
+            from chimera.ferret.ide import maybe_serve_ide_acp
+        except Exception as exc:  # noqa: BLE001
+            print(
+                f"ferret serve: ACP transport unavailable ({exc}). "
+                "Pass --http for the HTTP server.",
+                file=sys.stderr,
+            )
+            return 2
+        rc = maybe_serve_ide_acp(args)
+        if rc is not None:
+            return int(rc)
+    # HTTP path is owned by a future agent (mirrors otter's HTTP server).
     print(
         f"ferret serve: transport={transport} (scaffold; see "
         "research/ferret/SPEC.md, agents FF4 / FF5).",
@@ -430,16 +447,37 @@ def _dispatch_share(args: argparse.Namespace) -> int:
 
 
 def _dispatch_agents(args: argparse.Namespace) -> int:
-    """Stub for ``chimera ferret agents [list|show <name>]``.
+    """Wire ``chimera ferret agents [list|show <name>]`` to the FF7 handlers.
 
-    FF7 owns the agents preset surface. Returning 2 keeps shell
-    pipelines honest about the scaffold state.
+    Routes through :func:`chimera.ferret.agents.cmd_agents_list` and
+    :func:`chimera.ferret.agents.cmd_agents_show`. The handler module is
+    late-bound so a missing ``chimera.ferret.agents`` falls back to a
+    scaffold message with rc=2.
     """
     action = getattr(args, "sub_action", None) or "list"
     target = getattr(args, "sub_target", None)
+    no_color = bool(getattr(args, "no_color", False) or getattr(args, "no_rich", False))
+    try:
+        from chimera.ferret.agents import cmd_agents_list, cmd_agents_show
+    except Exception as exc:  # noqa: BLE001
+        print(
+            f"ferret agents: handler unavailable ({exc}). action={action!r} "
+            f"target={target!r}.",
+            file=sys.stderr,
+        )
+        return 2
+    # Status line — keeps the "ferret agents" tag in stderr so callers /
+    # CI greps that key off the prefix continue to work.
     print(
-        f"ferret agents: action={action!r} target={target!r} "
-        "(scaffold; see research/ferret/SPEC.md, agent FF7).",
+        f"ferret agents: action={action!r} target={target!r}",
+        file=sys.stderr,
+    )
+    if action == "list":
+        return int(cmd_agents_list(no_color=no_color))
+    if action == "show":
+        return int(cmd_agents_show(target, no_color=no_color))
+    print(
+        f"ferret agents: unknown action {action!r} (use 'list' or 'show').",
         file=sys.stderr,
     )
     return 2
@@ -470,6 +508,167 @@ _SUBCOMMAND_DISPATCH: dict[str, Any] = {
 
 
 # ---------------------------------------------------------------------------
+# One-shot --print path with sandbox + approval + provider wiring
+# ---------------------------------------------------------------------------
+
+
+def _run_print_mode(args: argparse.Namespace) -> int:
+    """Run ``chimera ferret -p PROMPT`` with full sandbox + approval wiring.
+
+    This is the wave-6 "live-driven" one-shot path: it wraps the
+    :class:`~chimera.env.local.LocalEnvironment` with a
+    :class:`~chimera.ferret.sandbox.SandboxedEnvironment` per ``--sandbox``
+    and constructs a :class:`~chimera.core.loop_config.LoopConfig` whose
+    :attr:`permissions` slot is populated from
+    :func:`chimera.ferret.approval.policy_for_preset` per ``--approval``.
+    The provider is resolved through
+    :func:`chimera.ferret.providers.build_provider` (FF6) so the OpenAI-
+    flagship chain (gpt-5 → gpt-4o → claude-sonnet-4-6 → openai/gpt-5
+    via OpenRouter, plus ``:cloud`` Ollama tags) is honored.
+
+    Late-binds every sibling import so an absent module degrades to a
+    sensible default rather than crashing the runner.
+
+    Args:
+        args: Parsed ferret namespace; reads ``print_mode``, ``model``,
+            ``cwd``, ``max_steps``, ``output_format``, ``sandbox``,
+            ``approval``.
+
+    Returns:
+        Process exit code: 0 on success, 1 on agent failure, 2 on usage
+        error, 130 on cancellation.
+    """
+    import asyncio
+    import json
+
+    from chimera.core.agent import Agent
+    from chimera.core.cancellation import CancellationToken
+    from chimera.core.loop import ReAct
+    from chimera.core.loop_config import LoopConfig
+    from chimera.core.prompt import Prompt
+    from chimera.core.tool_group import AGENT_TOOLS
+    from chimera.env.local import LocalEnvironment
+
+    prompt_text = getattr(args, "print_mode", None)
+    if not prompt_text:
+        print("ferret -p: missing PROMPT argument", file=sys.stderr)
+        return 2
+
+    cwd = os.path.abspath(getattr(args, "cwd", None) or os.getcwd())
+    output_format = getattr(args, "output_format", "text") or "text"
+
+    # 1. Provider (FF6) — late-bind, fall back to generic factory.
+    _providers_mod: Any = None
+    try:
+        import chimera.ferret.providers as _providers_mod  # noqa: F811
+    except Exception:  # noqa: BLE001
+        _providers_mod = None
+    if _providers_mod is not None and hasattr(_providers_mod, "build_provider"):
+        try:
+            provider = _providers_mod.build_provider(args)
+        except ValueError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+    else:
+        from chimera.providers.factory import create_provider
+
+        provider = create_provider(model=getattr(args, "model", None))
+
+    # 2. Environment + sandbox (FF2) — wrap LocalEnvironment when available.
+    base_env = LocalEnvironment(workdir=cwd)
+    base_env.setup()
+    env: Any = base_env
+    _sandbox_mod: Any = None
+    try:
+        import chimera.ferret.sandbox as _sandbox_mod  # noqa: F811 — module ref.
+    except Exception:  # noqa: BLE001 — FF2 not present; keep LocalEnvironment.
+        _sandbox_mod = None
+    if _sandbox_mod is not None and hasattr(_sandbox_mod, "SandboxedEnvironment"):
+        try:
+            mode = _sandbox_mod.parse_sandbox_mode(
+                getattr(args, "sandbox", "read-only")
+            )
+            env = _sandbox_mod.SandboxedEnvironment(base_env, mode=mode)
+        except Exception as exc:  # noqa: BLE001 — keep base env on parse error.
+            print(
+                f"[ferret] --sandbox {getattr(args, 'sandbox', None)!r} "
+                f"unrecognised ({exc}); falling back to unsandboxed env.",
+                file=sys.stderr,
+            )
+
+    # 3. Approval (FF3) — populate LoopConfig.permissions from preset.
+    permissions: Any = None
+    _approval_mod: Any = None
+    try:
+        import chimera.ferret.approval as _approval_mod  # noqa: F811 — module ref.
+    except Exception:  # noqa: BLE001 — FF3 not present; default LoopConfig.
+        _approval_mod = None
+    approval_value = getattr(args, "approval", "read-only") or "read-only"
+    if _approval_mod is not None and hasattr(_approval_mod, "policy_for_preset"):
+        try:
+            permissions = _approval_mod.policy_for_preset(
+                _approval_mod.preset_from_string(approval_value)
+            )
+        except Exception as exc:  # noqa: BLE001
+            print(
+                f"[ferret] --approval {approval_value!r} unrecognised "
+                f"({exc}); falling back to default policy.",
+                file=sys.stderr,
+            )
+
+    cancel = CancellationToken()
+    config = LoopConfig(cancellation=cancel, permissions=permissions)
+    loop = ReAct(
+        max_steps=int(getattr(args, "max_steps", 50) or 50),
+        config=config,
+    )
+    base_prompt = (
+        "You are Ferret, a Chimera coding agent. Plan briefly, then act."
+    )
+    chimera_prompt = Prompt.from_string(base_prompt)
+    tools = list(AGENT_TOOLS)
+    allowed = getattr(args, "allowed_tools", "") or ""
+    if allowed:
+        try:
+            tools = _filter_allowed_tools(tools, allowed)
+        except _UnknownAllowedTool as exc:
+            print(str(exc), file=sys.stderr)
+            base_env.cleanup()
+            return 2
+    agent = Agent(
+        provider=provider,
+        tools=tools,
+        loop=loop,
+        prompt=chimera_prompt,
+    )
+
+    try:
+        result = asyncio.run(agent.async_run(prompt_text, env=env))
+    except KeyboardInterrupt:
+        cancel.cancel()
+        print("\n[cancelled]", file=sys.stderr)
+        return 130
+    finally:
+        base_env.cleanup()
+
+    if output_format == "json":
+        payload = {
+            "output": getattr(result, "output", ""),
+            "steps": getattr(result, "steps", 0),
+            "cost": getattr(result, "cost", 0.0),
+            "success": getattr(result, "success", False),
+            "model": getattr(provider, "model_name", getattr(args, "model", "")),
+        }
+        json.dump(payload, sys.stdout)
+        sys.stdout.write("\n")
+    else:
+        out = getattr(result, "output", None)
+        if out:
+            print(out)
+    return 0 if getattr(result, "success", False) else 1
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
@@ -489,17 +688,14 @@ def run(args: argparse.Namespace) -> int:
         return int(handler(args))
 
     if getattr(args, "print_mode", None) is not None:
-        # One-shot path is owned by sibling agents (sandbox + approval +
-        # providers). Until they land, fall through to the otter
-        # one-shot delegation via the REPL module's run-code shim. Tests
-        # can still exercise the dispatch routing without this path.
+        # Wave-6: full one-shot path with sandbox + approval + provider
+        # wiring. Falls back to the wave-5 REPL one-shot only if the
+        # internal entry point fails to import (defence in depth).
         try:
-            from chimera.ferret.repl import run_ferret_print
-
-            return int(run_ferret_print(args))
+            return int(_run_print_mode(args))
         except Exception as exc:  # noqa: BLE001
             print(
-                f"ferret -p: one-shot path not yet wired ({exc}). "
+                f"ferret -p: one-shot path failed ({exc}). "
                 "See research/ferret/SPEC.md (FF2/FF3/FF6).",
                 file=sys.stderr,
             )

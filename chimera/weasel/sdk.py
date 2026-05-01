@@ -387,14 +387,29 @@ class Agent:
 
     @staticmethod
     def _default_provider(model: str | None) -> Provider:
-        """Resolve the default provider via :func:`create_provider`.
+        """Resolve the default provider via the weasel chain (W5).
+
+        Prefers :func:`chimera.weasel.providers.build_provider` so that
+        Ollama-tagged ids (``glm-5.1:cloud``) and the OpenRouter /
+        llama.cpp fallbacks all work out of the box. Falls back to the
+        bare :func:`chimera.providers.factory.create_provider` if the
+        weasel chain raises (e.g. no env var configured AND no model
+        passed) so callers who pre-built credentials elsewhere still
+        get a usable provider.
 
         Lazy-imported so the SDK module never forces a provider SDK at
         ``import`` time.
         """
-        from chimera.providers.factory import create_provider
+        import argparse
 
-        return create_provider(model=model)
+        from chimera.providers.factory import create_provider
+        from chimera.weasel.providers import build_provider
+
+        ns = argparse.Namespace(model=model)
+        try:
+            return build_provider(ns)
+        except Exception:  # noqa: BLE001 — fall through to bare factory
+            return create_provider(model=model)
 
     @staticmethod
     def _default_tools() -> list[BaseTool]:

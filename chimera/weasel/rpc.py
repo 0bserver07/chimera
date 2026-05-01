@@ -343,12 +343,27 @@ def _try_build_session(args: Any) -> Any | None:
         from chimera.env.local import LocalEnvironment
         from chimera.providers.factory import create_provider
         from chimera.sessions.session import Session
+        from chimera.weasel.providers import build_provider
     except ImportError:
         return None
 
     try:
-        workdir = os.path.abspath(getattr(args, "workdir", None) or os.getcwd())
-        provider = create_provider(model=getattr(args, "model", None))
+        workdir = os.path.abspath(
+            getattr(args, "workdir", None)
+            or getattr(args, "cwd", None)
+            or os.getcwd()
+        )
+        # WHY: route through the weasel chain so Ollama-tagged model ids
+        # (``glm-5.1:cloud``) and OpenRouter / llama.cpp fallbacks all
+        # work. The bare ``create_provider`` factory only does
+        # prefix-based inference — it would route ``glm-5.1:cloud`` to
+        # Anthropic and fail. Fall back to ``create_provider`` only when
+        # the weasel chain raises (e.g. caller passed an Anthropic id
+        # directly without setting OLLAMA_API_KEY).
+        try:
+            provider = build_provider(args)
+        except Exception:
+            provider = create_provider(model=getattr(args, "model", None))
         env = LocalEnvironment(workdir=workdir)
         env.setup()
         loop = ReAct(max_steps=int(getattr(args, "max_steps", 50) or 50))

@@ -236,13 +236,28 @@ def _ns(**overrides: object) -> argparse.Namespace:
     return args
 
 
-def test_run_dispatches_serve_subcommand_acp_default(capsys) -> None:
-    """``ferret serve`` defaults to ACP transport (scaffold returns 2)."""
-    rc = ferret_cli.run(_ns(subcommand="serve"))
-    assert rc == 2
-    captured = capsys.readouterr()
-    assert "ferret serve" in captured.err
-    assert "transport=acp" in captured.err
+def test_run_dispatches_serve_subcommand_acp_default(capsys, monkeypatch) -> None:
+    """``ferret serve`` (no ``--http``) routes through the IDE-first ACP path.
+
+    Wave-6 wires :func:`chimera.ferret.ide.maybe_serve_ide_acp` into
+    ``_dispatch_serve``; we patch the helper to return a sentinel rc so
+    the test asserts the wiring without actually running the JSON-RPC
+    loop on stdin/stdout.
+    """
+    from chimera.ferret import cli as _cli
+
+    captured_args: list = []
+
+    def _fake(args):
+        captured_args.append(args)
+        return 7
+
+    monkeypatch.setattr(
+        "chimera.ferret.ide.maybe_serve_ide_acp", _fake, raising=False
+    )
+    rc = _cli.run(_ns(subcommand="serve"))
+    assert rc == 7
+    assert captured_args, "maybe_serve_ide_acp was not called"
 
 
 def test_run_dispatches_serve_subcommand_http_when_flag_set(capsys) -> None:

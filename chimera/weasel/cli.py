@@ -188,13 +188,69 @@ def _run_list_models() -> int:
 # ---------------------------------------------------------------------------
 
 
+def _activate_extensions(cwd: str) -> tuple[list[Any], list[Any]]:
+    """Discover and activate weasel extensions for a single agent run.
+
+    Walks ``<cwd>/.weasel/extensions/`` and ``~/.weasel/extensions/``
+    via :func:`chimera.weasel.extensions.load_weasel_extensions`, then
+    activates each plugin onto a fresh
+    :class:`chimera.plugins.base.ComponentRegistry` so we can collect
+    the tool + hook contributions. Plugin activation failures are
+    swallowed: a single bad extension must not break the print path.
+
+    Args:
+        cwd: Project root used as the project-scope discovery anchor.
+
+    Returns:
+        ``(tools, hooks)`` — a list of :class:`BaseTool` instances and
+        a list of :class:`Hook` records, both possibly empty.
+    """
+    from pathlib import Path
+
+    from chimera.plugins.base import ComponentRegistry
+    from chimera.weasel.extensions import load_weasel_extensions
+
+    try:
+        plugins = load_weasel_extensions(Path(cwd))
+    except Exception as exc:  # noqa: BLE001 — never crash the print path
+        print(
+            f"weasel: extension discovery failed; continuing without "
+            f"extensions: {exc}",
+            file=sys.stderr,
+        )
+        return [], []
+
+    registry = ComponentRegistry()
+    for plugin in plugins:
+        try:
+            plugin.activate(registry)
+        except Exception as exc:  # noqa: BLE001 — quarantine extension errors
+            print(
+                f"weasel: extension '{getattr(plugin, 'name', '?')}' failed "
+                f"to activate: {exc}",
+                file=sys.stderr,
+            )
+            continue
+
+    tools = list(registry.tools)
+    # ``ComponentRegistry.hooks`` is keyed by event type; flatten back to
+    # a list of Hook records so downstream consumers see one record per
+    # contribution.
+    hooks: list[Any] = []
+    for entries in registry.hooks.values():
+        hooks.extend(entries)
+    return tools, hooks
+
+
 def _run_print_mode(args: argparse.Namespace) -> int:
     """Execute a single turn and emit results in the requested format.
 
-    Builds a minimal :class:`Agent` directly (no plugin / MCP / LSP wiring,
-    no rules ingestion, no checkpointing — that's the weasel point). When
-    ``--json`` is set, emits a single JSON object on stdout; otherwise
-    prints the plain-text output.
+    Builds a minimal :class:`Agent` directly (no MCP / LSP wiring, no
+    rules ingestion, no checkpointing — that's the weasel point), then
+    layers in any extensions discovered under
+    ``<cwd>/.weasel/extensions/`` and ``~/.weasel/extensions/`` (W3).
+    When ``--json`` is set, emits a single JSON object on stdout;
+    otherwise prints the plain-text output.
 
     Args:
         args: Parsed CLI namespace from :func:`add_arguments`.
@@ -212,12 +268,17 @@ def _run_print_mode(args: argparse.Namespace) -> int:
     from chimera.core.prompt import Prompt
     from chimera.core.tool_group import AGENT_TOOLS
     from chimera.env.local import LocalEnvironment
-    from chimera.providers.factory import create_provider
+    from chimera.weasel.providers import build_provider as _build_provider
 
     cwd = os.path.abspath(args.cwd or os.getcwd())
 
     try:
-        provider = create_provider(model=args.model)
+        # WHY: weasel.providers.build_provider knows about the full chain
+        # including Ollama tag detection (`name:tag` ids like glm-5.1:cloud)
+        # and the OpenRouter / llama.cpp / Ollama fallbacks. The bare
+        # ``create_provider`` factory only handles prefix-based inference
+        # which routes ``glm-*`` to Anthropic and fails on Ollama-tagged ids.
+        provider = _build_provider(args)
     except Exception as exc:  # noqa: BLE001 — surface provider auth errors cleanly
         print(f"weasel: provider error: {exc}", file=sys.stderr)
         return 1
@@ -226,6 +287,13 @@ def _run_print_mode(args: argparse.Namespace) -> int:
     env.setup()
 
     cancel = CancellationToken()
+    # WHY: load extensions before constructing the loop so any
+    # extension-contributed hooks land in the LoopConfig.hooks bag and
+    # extension tools are merged into the agent's tool group below.
+    # Extension load failures are swallowed (load_errors lives on the
+    # extension instance) so a bad extension cannot break the print path.
+    ext_tools, ext_hooks = _activate_extensions(cwd)
+
     config = LoopConfig(cancellation=cancel)
     loop = ReAct(max_steps=int(args.max_steps), config=config)
     prompt = Prompt.from_string(
@@ -233,12 +301,22 @@ def _run_print_mode(args: argparse.Namespace) -> int:
         "Use tools to inspect and modify the user's repo. Be concise."
     )
 
+    tools = list(AGENT_TOOLS) + ext_tools
     agent = Agent(
         provider=provider,
-        tools=list(AGENT_TOOLS),
+        tools=tools,
         loop=loop,
         prompt=prompt,
     )
+    # WHY: stash hooks where downstream consumers can find them. The
+    # core ReAct loop doesn't natively dispatch shell-command hooks
+    # (that's a follow-up); attaching them to the agent makes them
+    # introspectable via tests and future hook-runner middleware.
+    if ext_hooks:
+        try:
+            setattr(agent, "_weasel_extension_hooks", ext_hooks)
+        except Exception:  # noqa: BLE001 — defensive
+            pass
 
     result: Any = None
     try:

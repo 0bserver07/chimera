@@ -22,8 +22,8 @@ without booting a real provider.
 
 Trademark hygiene: never names the upstream brand. The on-disk session
 prefix is ``shrew-`` (parallel to ``weasel-``, ``otter-``, ``mink-``);
-``~/.little-coder/`` (a filesystem path mentioned in docs) is a fact,
-not a brand claim.
+where docs reference an upstream's filesystem layout (e.g. ``~/.shrew/``),
+those mentions are paths, not brand claims.
 """
 from __future__ import annotations
 
@@ -345,18 +345,103 @@ def _run_list_models() -> int:
 
 
 # ---------------------------------------------------------------------------
-# print mode (one-shot) — late-binds to weasel
+# print mode (one-shot) — shrew-native (skills + extensions wired)
 # ---------------------------------------------------------------------------
 
 
-def _run_print_mode(args: argparse.Namespace) -> int:
-    """Execute a single turn via weasel's print-mode plumbing.
+_BASE_SYSTEM_PROMPT = (
+    "You are Shrew, a small-model coding agent. "
+    "Use tools to inspect and modify the user's repo. "
+    "Be concise; one tool call per turn."
+)
+"""Base system prompt for shrew print/REPL paths.
 
-    Late-binds to :func:`chimera.weasel.cli._run_print_mode` so the
-    one-shot path inherits weasel's provider creation, prompt
-    composition, and JSON / text output. Shrew's small-model defaults
-    (model, max-steps, allowed-tools) are already resolved on ``args``
-    by :func:`add_arguments` before this function runs.
+Kept short on purpose — small models do worse with verbose system
+prompts. The S3 :func:`wrap_for_small_model` scaffold layers
+explicit step-by-step reasoning rules around it when the active
+model is below :data:`SMALL_MODEL_THRESHOLD_B`."""
+
+
+# Friendly alias map for ``--allowed-tools``. Lets users write the
+# capitalised, terse names the upstream small-model coding agent uses
+# (``Read,Write,Edit,Bash``) while still matching Chimera's snake-case
+# tool registry (``read_file``, ``write_file``, ``edit_file``, ``bash``).
+# All comparisons are lowercase; aliases listed here are *also* matched
+# against the canonical name so explicit ``read_file`` keeps working.
+_TOOL_NAME_ALIASES: dict[str, set[str]] = {
+    "read_file": {"read", "read_file", "readfile"},
+    "write_file": {"write", "write_file", "writefile"},
+    "edit_file": {"edit", "edit_file", "editfile"},
+    "bash": {"bash", "shell"},
+    "search": {"search", "grep"},
+    "list_files": {"list", "list_files", "ls"},
+    "test": {"test"},
+    "git": {"git"},
+    "replace_in_file": {"replace", "replace_in_file"},
+    "read_image": {"image", "read_image", "image_read"},
+    "repo_map": {"repo_map", "repomap"},
+    "think": {"think"},
+    "todo": {"todo"},
+    "verify_answer": {"verify", "verify_answer"},
+    "web_search": {"web_search", "web", "websearch"},
+}
+
+
+def _matches_allowed(tool_name: str, wanted: set[str]) -> bool:
+    """Return True when ``tool_name`` (canonical) is in ``wanted``.
+
+    Honours :data:`_TOOL_NAME_ALIASES` so ``"Read"`` matches
+    ``"read_file"``.
+    """
+    canonical = tool_name.lower()
+    if canonical in wanted:
+        return True
+    aliases = _TOOL_NAME_ALIASES.get(canonical, set())
+    return bool(aliases & wanted)
+
+
+def _filter_tools_by_allowed(tools: list[Any], allowed: str | None) -> list[Any]:
+    """Filter ``tools`` down to the ``allowed`` comma-separated names.
+
+    Mirrors the small-model coding agent posture: cap surface area so
+    a 9B / 35B-MoE model doesn't burn context on tool selection.
+    Comparison is case-insensitive and honours
+    :data:`_TOOL_NAME_ALIASES` so ``Read,Write,Edit,Bash`` resolves to
+    the canonical ``read_file,write_file,edit_file,bash`` set.
+    Empty / ``None`` ``allowed`` opts back into the full input list.
+
+    Args:
+        tools: Tools to filter (typically :data:`AGENT_TOOLS`).
+        allowed: Comma-separated tool-name allow-list, or ``""``/``None``.
+
+    Returns:
+        New list of tools whose ``.name`` matches ``allowed`` (or the
+        input list when ``allowed`` is empty).
+    """
+    if not allowed:
+        return list(tools)
+    wanted = {n.strip().lower() for n in allowed.split(",") if n.strip()}
+    if not wanted:
+        return list(tools)
+    out: list[Any] = []
+    for t in tools:
+        name = str(getattr(t, "name", ""))
+        if _matches_allowed(name, wanted):
+            out.append(t)
+    return out
+
+
+def _run_print_mode(args: argparse.Namespace) -> int:
+    """Execute a single turn with shrew's small-model defaults applied.
+
+    Builds the provider via :func:`chimera.shrew.providers.build_provider`
+    (llama.cpp first, Ollama next, cloud fallback) so a colon-tagged
+    Ollama id like ``glm-5.1:cloud`` routes correctly without weasel's
+    OpenAI-first chain getting in the way. Mounts the bundled S2 skills
+    into the system prompt, applies the S3 scaffold-fit wrap, filters
+    the tool list by ``--allowed-tools`` and then by S3
+    :func:`filter_tools_for_model`, and sets the provider's effective
+    context window from :func:`compute_optimal_context_window`.
 
     Args:
         args: Parsed CLI namespace from :func:`add_arguments`.
@@ -364,14 +449,133 @@ def _run_print_mode(args: argparse.Namespace) -> int:
     Returns:
         Process exit code (``0`` on agent success, ``1`` otherwise).
     """
-    # WHY: weasel's _run_print_mode currently doesn't honor an
-    # ``--allowed-tools`` filter — its surface is intentionally minimal.
-    # We forward through it for now; once weasel grows the filter we
-    # inherit automatically. The default tool set is already the full
-    # AGENT_TOOLS group, which is acceptable behaviour for a scaffold.
-    from chimera.weasel.cli import _run_print_mode as _weasel_print_mode
+    import asyncio
+    import json
 
-    return int(_weasel_print_mode(args))
+    from chimera.core.agent import Agent
+    from chimera.core.cancellation import CancellationToken
+    from chimera.core.loop import ReAct
+    from chimera.core.loop_config import LoopConfig
+    from chimera.core.prompt import Prompt
+    from chimera.core.tool_group import AGENT_TOOLS
+    from chimera.env.local import LocalEnvironment
+    from chimera.shrew.providers import build_provider as _shrew_build_provider
+    from chimera.shrew.skills import (
+        discover_shrew_skills,
+        format_shrew_skills_for_prompt,
+    )
+
+    cwd = os.path.abspath(getattr(args, "cwd", None) or os.getcwd())
+
+    # --- Provider (small-model-first chain) ---
+    try:
+        provider = _shrew_build_provider(args)
+    except Exception as exc:  # noqa: BLE001 — surface provider auth errors cleanly
+        print(f"shrew: provider error: {exc}", file=sys.stderr)
+        return 1
+
+    # --- Skills (S2): mount the 11 bundled skill summaries into the prompt ---
+    skills_block = ""
+    skill_count = 0
+    try:
+        from pathlib import Path as _Path
+
+        skills = discover_shrew_skills(
+            extra_search_paths=[_Path.home() / ".shrew" / "skills"],
+        )
+        skill_count = len(skills)
+        skills_block = format_shrew_skills_for_prompt(skills)
+    except Exception as exc:  # noqa: BLE001 — never crash on skill discovery drift
+        print(f"shrew: skill discovery skipped: {exc}", file=sys.stderr)
+
+    composed_prompt = _BASE_SYSTEM_PROMPT
+    if skills_block:
+        composed_prompt = f"{_BASE_SYSTEM_PROMPT}\n\n{skills_block}"
+
+    # --- Tools: --allowed-tools filter, then S3 tiny-model trim ---
+    full_tools = list(AGENT_TOOLS)
+    allowed_tools = getattr(args, "allowed_tools", _DEFAULT_ALLOWED_TOOLS)
+    base_tools = _filter_tools_by_allowed(full_tools, allowed_tools)
+    pre_filter_tool_count = len(base_tools)
+
+    # --- Extensions (S3): scaffold-fit prompt + tool filter + context window ---
+    ext = apply_small_model_extensions(
+        args,
+        system_prompt=composed_prompt,
+        tools=base_tools,
+    )
+    final_prompt = ext["system_prompt"] or composed_prompt
+    final_tools = ext["tools"] if ext["tools"] is not None else base_tools
+    context_window = int(ext["context_window"])
+    model_size_b = ext["model_size_b"]
+    scaffold_applied = (
+        model_size_b is not None
+        and final_prompt != composed_prompt
+    )
+    tools_dropped = pre_filter_tool_count - len(final_tools)
+
+    # --- Override provider context window when the extension recommends one ---
+    # The OpenAI-compatible provider exposes ``_context_length`` (and the
+    # public ``context_window`` property reads from it). Setting this
+    # value drives compaction triggering at the loop level via
+    # ``LoopConfig.auto_compact_threshold`` * provider.context_window.
+    if hasattr(provider, "_context_length"):
+        try:
+            provider._context_length = context_window  # type: ignore[attr-defined]
+        except Exception:  # noqa: BLE001 — never crash on provider drift
+            pass
+
+    # --- Stderr breadcrumbs (so live runs can verify wiring) ---
+    breadcrumbs = (
+        f"shrew: skills={skill_count} mounted; "
+        f"scaffold={'on' if scaffold_applied else 'off'}; "
+        f"tools={len(final_tools)} (dropped {tools_dropped}); "
+        f"context_window={context_window}; "
+        f"model={getattr(provider, 'model_name', getattr(args, 'model', '?'))}; "
+        f"size_b={model_size_b}"
+    )
+    print(breadcrumbs, file=sys.stderr)
+
+    # --- Agent + loop ---
+    env = LocalEnvironment(workdir=cwd)
+    env.setup()
+
+    cancel = CancellationToken()
+    config = LoopConfig(cancellation=cancel)
+    loop = ReAct(max_steps=int(getattr(args, "max_steps", _DEFAULT_MAX_STEPS)), config=config)
+    prompt = Prompt.from_string(final_prompt)
+    agent = Agent(
+        provider=provider,
+        tools=final_tools,
+        loop=loop,
+        prompt=prompt,
+    )
+
+    result: Any = None
+    try:
+        result = asyncio.run(agent.async_run(args.print_mode, env=env))
+    except KeyboardInterrupt:
+        cancel.cancel()
+        print("\n[cancelled]", file=sys.stderr)
+        return 130
+    finally:
+        env.cleanup()
+
+    success = bool(getattr(result, "success", False))
+    output = getattr(result, "output", "") or ""
+
+    if getattr(args, "json_output", False):
+        payload = {
+            "output": output,
+            "success": success,
+            "model": getattr(provider, "model_name", args.model),
+        }
+        json.dump(payload, sys.stdout)
+        sys.stdout.write("\n")
+    else:
+        if output:
+            print(output)
+    return 0 if success else 1
 
 
 # ---------------------------------------------------------------------------

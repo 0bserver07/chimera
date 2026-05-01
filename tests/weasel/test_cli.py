@@ -338,6 +338,80 @@ def test_run_list_models_helper_output(monkeypatch, capsys) -> None:
     assert lines == ["alpha-1", "beta-2"]
 
 
+# ---------------------------------------------------------------------------
+# Extension wiring (W3 -> _run_print_mode integration)
+# ---------------------------------------------------------------------------
+
+
+def test_activate_extensions_returns_empty_when_no_dot_weasel(tmp_path) -> None:
+    """No project ``.weasel/extensions/`` => empty tools and hooks."""
+    tools, hooks = weasel_cli._activate_extensions(str(tmp_path))  # noqa: SLF001
+    assert tools == []
+    assert hooks == []
+
+
+def test_activate_extensions_collects_tool_from_project_extension(tmp_path) -> None:
+    """A project-scope extension contributes its tools through activation."""
+    import json
+
+    ext_root = tmp_path / ".weasel" / "extensions" / "demo"
+    ext_root.mkdir(parents=True)
+    (ext_root / "manifest.json").write_text(
+        json.dumps({"name": "demo", "version": "0.0.1", "main": "ext.py"}),
+    )
+    # A tiny BaseTool subclass; the loader recognises module-level ``TOOLS``.
+    (ext_root / "ext.py").write_text(
+        "from chimera.core.tool import BaseTool\n"
+        "class _T(BaseTool):\n"
+        "    name = 'demo_tool'\n"
+        "    description = 'demo'\n"
+        "    parameters = {'type': 'object', 'properties': {}, 'required': []}\n"
+        "    def execute(self, **kwargs):\n"
+        "        return 'ok'\n"
+        "TOOLS = [_T()]\n",
+    )
+    tools, hooks = weasel_cli._activate_extensions(str(tmp_path))  # noqa: SLF001
+    assert [t.name for t in tools] == ["demo_tool"]
+    assert hooks == []
+
+
+def test_activate_extensions_collects_hooks(tmp_path) -> None:
+    """A manifest-declared hook lands in the hooks list."""
+    import json
+
+    ext_root = tmp_path / ".weasel" / "extensions" / "hooks-demo"
+    ext_root.mkdir(parents=True)
+    (ext_root / "manifest.json").write_text(
+        json.dumps({
+            "name": "hooks-demo",
+            "version": "0.0.1",
+            "hooks": [
+                {"command": "echo pre", "event_type": "PreToolUse"},
+            ],
+        }),
+    )
+    tools, hooks = weasel_cli._activate_extensions(str(tmp_path))  # noqa: SLF001
+    assert tools == []
+    assert len(hooks) == 1
+    assert hooks[0].command == "echo pre"
+    assert hooks[0].event_type == "PreToolUse"
+
+
+def test_activate_extensions_swallows_discovery_errors(monkeypatch, tmp_path, capsys) -> None:
+    """A loader exception is logged to stderr; the print path keeps going."""
+    def _boom(*a, **kw):
+        raise RuntimeError("simulated")
+
+    monkeypatch.setattr(
+        "chimera.weasel.extensions.load_weasel_extensions", _boom,
+    )
+    tools, hooks = weasel_cli._activate_extensions(str(tmp_path))  # noqa: SLF001
+    captured = capsys.readouterr()
+    assert tools == []
+    assert hooks == []
+    assert "extension discovery failed" in captured.err
+
+
 def test_run_list_models_handles_import_failure(monkeypatch, capsys) -> None:
     """Missing ``cost`` module surfaces a stderr message and exits 1."""
     real_import = __builtins__["__import__"] if isinstance(__builtins__, dict) else __builtins__.__import__
