@@ -227,6 +227,31 @@ If you want to build your own coding agent in this style — same substrate,
 your own posture — see the [Build Your Own Agent](playbooks/08-building-agents.md)
 playbook (988 lines, full library guide).
 
+## `chimera code` REPL default — CodingAgent vs legacy ReAct
+
+Wave 10 (G3) flipped the default for the bare `chimera code` REPL from a
+hand-wired `ReAct` loop to the assembled `CodingAgent` stack. The
+practical implications:
+
+- `chimera code` (no flags) — drops you into the new `CodingAgent` REPL
+  with `preset="coding_agent"`. This is the canonical, most feature-
+  complete preset; it carries the full hook / permission / compaction /
+  spawner / snapshot wiring from `chimera/assembly/coding_agent.py`.
+- `chimera code --preset NAME` — pick a different preset (`codex`,
+  `minimal`, `explore`). The deprecated `claude_code` alias still
+  resolves to `coding_agent` with a one-line `DeprecationWarning`.
+- `chimera code --legacy-react` — opt back into the legacy `ReAct +
+  Session + SessionTree` REPL. Reserved for users who depend on the
+  rich slash-command surface (`/checkpoint`, `/tree`, `/branch`,
+  `/switch`, mid-turn steering). The legacy REPL is unchanged; only
+  the *default* moved.
+
+The seven per-CLI REPLs (mink/otter/ferret/badger/shrew/stoat) still pin
+`legacy_react=True` in their argument shims, so their existing rich-REPL
+features (snapshot hooks, slash commands, session trees) stay green
+through the default flip. Weasel has its own REPL and is unaffected.
+Stoat's RPC handshake also pins `legacy_react=True`.
+
 ## Cross-links
 
 Per-agent quickstarts (each has its own `providers.md`,
@@ -243,7 +268,7 @@ Per-agent quickstarts (each has its own `providers.md`,
 Adjacent reading:
 
 - [Build Your Own Agent](playbooks/08-building-agents.md) — full developer guide
-- [Architecture overview](https://0bserver07.github.io/chimera/architecture/) — the 8-layer stack
+- [Architecture overview](architecture.md) — the 8-phase architecture map and how the seven CLIs compose from it (mirror at <https://0bserver07.github.io/chimera/architecture/>)
 - [All Playbooks](playbooks/) — 13 end-to-end recipes
 - [Benchmarks](benchmarks/README.md) — transparency framework, raw data
 - [Mink benchmark adapters](mink/benchmarks.md) — every adapter under `chimera/eval/benchmarks/`

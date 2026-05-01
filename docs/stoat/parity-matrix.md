@@ -176,3 +176,7 @@ the body is owned by another wave or another sibling CLI.
   parity matrix (harness-rewrite tradition)
 - [`../weasel/parity-matrix.md`](../weasel/parity-matrix.md) — sibling
   parity matrix (minimal harness)
+
+## Cross-links
+
+- [Chimera architecture (8-phase map)](../architecture.md) — where the rows in this matrix live in the shared library.

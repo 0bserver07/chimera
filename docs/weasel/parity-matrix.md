@@ -300,3 +300,7 @@ reason explicit.
 - [`providers.md`](providers.md) — provider chain.
 - [`security-and-trademarks.md`](security-and-trademarks.md) —
   trademark hygiene + security posture.
+
+## Cross-links
+
+- [Chimera architecture (8-phase map)](../architecture.md) — where the rows in this matrix live in the shared library.

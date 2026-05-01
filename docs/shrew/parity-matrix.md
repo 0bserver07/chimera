@@ -284,3 +284,7 @@ makes the reason explicit.
   trademark hygiene + security posture.
 - [`docs/weasel/parity-matrix.md`](../weasel/parity-matrix.md) —
   the underlying weasel surface shrew layers on.
+
+## Cross-links
+
+- [Chimera architecture (8-phase map)](../architecture.md) — where the rows in this matrix live in the shared library.

@@ -69,3 +69,7 @@ is owned by another wave or another sibling CLI.
 The `chimera badger parity --against …` subcommand asserts these
 values against the live agent at runtime. See
 [parity.md](./parity.md).
+
+## Cross-links
+
+- [Chimera architecture (8-phase map)](../architecture.md) — where the rows in this matrix live in the shared library.

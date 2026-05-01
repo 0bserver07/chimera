@@ -1,7 +1,4 @@
----
-title: Chimera Architecture
-description: The eight-phase architecture of Chimera and how the seven coding-agent CLIs (mink, otter, ferret, weasel, shrew, stoat, badger) compose from those phase primitives.
----
+# Chimera Architecture
 
 Chimera is composed from eight phases of agent infrastructure. Each phase is
 a self-contained set of modules with a defined public surface, and each of
@@ -39,31 +36,47 @@ CLI it shows up in first.
 
 ## Phase overview
 
-```mermaid
-graph TD
-    P7["Phase 7 — Command + Skill surface<br/>slash commands, skills, flow workflows"]
-    P6["Phase 6 — Hook system<br/>Pre/PostToolUse, lifecycle, async registry"]
-    P5["Phase 5 — System prompt + context<br/>layered prompts, cache-safe, tool deferral"]
-    P4["Phase 4 — Permission system<br/>modes, rules, denial tracking, sandbox"]
-    P3["Phase 3 — State + persistence<br/>eventlog, snapshots, content replacement"]
-    P2["Phase 2 — Sub-agent architecture<br/>isolation tiers, spawner, task manager"]
-    P1["Phase 1 — Core loop<br/>AgentLoop, streaming executor, recovery"]
+```
+    ┌──────────────────────────────────────────────────────────┐
+    │ Phase 7: Command + Skill surface                          │
+    │   slash commands, skills, flow workflows                  │
+    └──────────────────────────────────────────────────────────┘
+                             │
+    ┌──────────────────────────────────────────────────────────┐
+    │ Phase 6: Hook system                                      │
+    │   PreToolUse / PostToolUse / lifecycle / async registry   │
+    └──────────────────────────────────────────────────────────┘
+                             │
+    ┌──────────────────────────────────────────────────────────┐
+    │ Phase 5: System prompt + context assembly                 │
+    │   layered prompts, cache-safe params, tool deferral       │
+    └──────────────────────────────────────────────────────────┘
+                             │
+    ┌──────────────────────────────────────────────────────────┐
+    │ Phase 4: Permission system                                │
+    │   modes, rules, denial tracking, sandbox adapter          │
+    └──────────────────────────────────────────────────────────┘
+                             │
+    ┌──────────────────────────────────────────────────────────┐
+    │ Phase 3: State + persistence                              │
+    │   eventlog, snapshots, content replacement, file cache    │
+    └──────────────────────────────────────────────────────────┘
+                             │
+    ┌──────────────────────────────────────────────────────────┐
+    │ Phase 2: Sub-agent architecture                           │
+    │   isolation tiers, spawner, task manager, builtin agents  │
+    └──────────────────────────────────────────────────────────┘
+                             │
+    ┌──────────────────────────────────────────────────────────┐
+    │ Phase 1: Core loop                                        │
+    │   AgentLoop async generator, streaming executor, recovery │
+    └──────────────────────────────────────────────────────────┘
 
-    P8["Phase 8 — Production infrastructure<br/>auth, secrets, MCP/LSP/ACP, plugins"]
-    P9["Phase 9 — Snapshot / format / patch<br/>undo, auto-format, structured patching"]
+    Phase 8: Production infrastructure   ── threads through all phases ──
+      auth, secrets, streaming, feature flags, MCP / LSP / ACP, plugins
 
-    P7 --> P6 --> P5 --> P4 --> P3 --> P2 --> P1
-    P8 -.threads through.-> P1
-    P8 -.threads through.-> P3
-    P8 -.threads through.-> P7
-    P9 -.plugs into.-> P1
-    P9 -.plugs into.-> P3
-    P9 -.plugs into.-> P4
-
-    classDef stack fill:#2563eb,stroke:#60a5fa,color:#fff
-    classDef cross fill:#d97706,stroke:#fbbf24,color:#000
-    class P1,P2,P3,P4,P5,P6,P7 stack
-    class P8,P9 cross
+    Phase 9: Snapshot / format / patch   ── plugs into phases 1, 3, 4 ──
+      undo, auto-formatter, structured multi-file patching
 ```
 
 The dependency edges are real. Phase 2 needs Phase 1's `AbortSignal`
@@ -88,7 +101,6 @@ synchronous `ReAct` loop is preserved alongside for back-compat with
 callers that still use `Agent.run()` directly.
 
 **Key modules.**
-
 - `chimera/core/agent_loop.py` — `AgentLoop`, the async-generator core loop
 - `chimera/core/loop.py` — legacy synchronous `ReAct` loop (back-compat)
 - `chimera/core/loop_events.py` — `LoopEvent`, `LoopEventType`, `LoopResult`
@@ -101,7 +113,6 @@ callers that still use `Agent.run()` directly.
 - `chimera/core/tool.py` — `BaseTool` plus the `is_concurrency_safe` / `is_read_only` / `is_destructive` flags
 
 **Public API.**
-
 ```python
 from chimera.core.agent_loop import AgentLoop
 from chimera.core.abort import AbortSignal
@@ -115,9 +126,9 @@ async for event in loop.run(
     handle(event)
 ```
 
-Tools default to `is_concurrency_safe = False` (fail-closed). Read-only
-tools (`read`, `glob`, `grep`, `list_files`) opt in. The recovery ladder
-is `context-collapse → reactive-compact → escalate-output → multi-turn`.
+**Notes.** Tools default to `is_concurrency_safe = False` (fail-closed).
+Read-only tools (`read`, `glob`, `grep`, `list_files`) opt in. The recovery
+ladder is `context-collapse → reactive-compact → escalate-output → multi-turn`.
 
 ---
 
@@ -133,7 +144,6 @@ re-implements its primitives via `AgentSpawner`. Built-in agents
 (`general-purpose`, `explore`, `plan`) are registered out of the box.
 
 **Key modules.**
-
 - `chimera/core/agent_context.py` — `AgentContext`, `IsolationLevel`
 - `chimera/core/agent_spawner.py` — `AgentSpawner.spawn()`
 - `chimera/core/agent_definition.py` — `AgentDefinition` and the on-disk loader
@@ -147,7 +157,6 @@ re-implements its primitives via `AgentSpawner`. Built-in agents
 - `chimera/tools/task_tools.py` — `TaskCreate`, `TaskGet`, `TaskList`, `TaskStop`, `TaskOutput`
 
 **Public API.**
-
 ```python
 from chimera.core.agent_context import AgentContext, IsolationLevel
 from chimera.core.agent_spawner import AgentSpawner
@@ -158,8 +167,8 @@ async for event in spawner.spawn(definition, prompt, parent_ctx,
     ...
 ```
 
-Sub-agents get a per-agent denial counter (so "deny three times → stop
-asking" works inside a sub-agent's own scope). The
+**Notes.** Sub-agents get a per-agent denial counter (so "deny three
+times → stop asking" works inside a sub-agent's own scope). The
 `set_app_state_for_tasks` callback bypasses isolation so background bash
 tasks can register with the root task manager.
 
@@ -178,7 +187,6 @@ JSONL-on-disk implementation and a side-car SQLite store with snapshot-driven
 fast resume.
 
 **Key modules.**
-
 - `chimera/sessions/eventlog/` — append-only event log with file locking, gap detection, crash recovery
 - `chimera/sessions/eventlog/session.py` — `EventSourcedSession`, snapshot integration, `with_sqlite()` helper
 - `chimera/events/sourcing/sqlite_store.py` — `SqliteEventStore` (SQLite + WAL + per-aggregate seq + snapshot table)
@@ -193,7 +201,6 @@ fast resume.
 - `chimera/compaction/` — `SummaryCompaction`, prune / counter / composite, threshold-based atomic compaction
 
 **Public API.**
-
 ```python
 from chimera.sessions.eventlog.session import EventSourcedSession
 
@@ -203,11 +210,11 @@ session = EventSourcedSession.with_sqlite(
 )
 ```
 
-Once a `tool_use_id` is replaced (persisted-to-disk), the decision is
-frozen — this is critical for prompt-cache stability across turns.
-Snapshots let resume start from `snapshot.seq + 1` instead of seq=1; the
-side-car mode keeps the journal authoritative and the snapshot purely
-for fast-forward.
+**Notes.** Once a `tool_use_id` is replaced (persisted-to-disk), the
+decision is frozen — this is critical for prompt-cache stability across
+turns. Snapshots let resume start from `snapshot.seq + 1` instead of
+seq=1; the side-car mode keeps the journal authoritative and the snapshot
+purely for fast-forward.
 
 ---
 
@@ -224,7 +231,6 @@ ferret adds an OS-level sandbox layer on top via `--sandbox` × `--approval`
 preset composition.
 
 **Key modules.**
-
 - `chimera/permissions/base.py` — `ApprovalPolicy`, `PermissionPolicy`
 - `chimera/permissions/modes.py` — `PermissionMode` enum (default / plan / accept_edits / bypass / dont_ask / auto)
 - `chimera/permissions/rule.py`, `rules.py`, `patterns.py` — `PermissionRuleValue`, `ToolName(content)` parsing
@@ -239,7 +245,6 @@ preset composition.
 - `chimera/cli/permission_prompt.py` — REPL prompt UI
 
 **Public API.**
-
 ```python
 from chimera.permissions import (
     PermissionMode, PermissionRuleValue, AllowList, AlwaysDeny,
@@ -248,8 +253,8 @@ rule = PermissionRuleValue.from_string("bash(git *)")
 policy = AllowList([rule])
 ```
 
-Settings discovery is project-root → user-global → built-in. Ferret's
-two-flag composition is implemented as the cross product of
+**Notes.** Settings discovery is project-root → user-global → built-in.
+Ferret's two-flag composition is implemented as the cross product of
 `PermissionMode` (policy gate) and a sandbox adapter (OS gate); a tool
 call has to pass both.
 
@@ -266,7 +271,6 @@ keep the initial prompt small even when the registry is large.
 callers; new code uses `SystemPromptBuilder`.
 
 **Key modules.**
-
 - `chimera/core/prompt.py` — `Prompt` class with `{{variable}}` template substitution (legacy)
 - `chimera/core/system_prompt.py` — `PromptLayer`, `SystemPrompt`, `SystemPromptBuilder` (cache-segmented layers)
 - `chimera/core/prompt_template.py` — additional template helpers
@@ -279,7 +283,6 @@ callers; new code uses `SystemPromptBuilder`.
 - `chimera/core/memory.py` — `CLAUDE.md` / `AGENTS.md` ingestion (per-CLI rules)
 
 **Public API.**
-
 ```python
 from chimera.core.system_prompt import SystemPromptBuilder
 
@@ -290,10 +293,10 @@ prompt = (SystemPromptBuilder()
     .build())
 ```
 
-Each CLI ingests its own rule files (`~/.claude/CLAUDE.md`, `AGENTS.md`,
-`.codex/AGENTS.md`, etc.) into the user-append layer; the default and
-agent-override layers stay cacheable so the cache prefix doesn't move
-when a user edits a project rule file mid-session.
+**Notes.** Each CLI ingests its own rule files (`~/.claude/CLAUDE.md`,
+`AGENTS.md`, `.codex/AGENTS.md`, etc.) into the user-append layer; the
+default and agent-override layers stay cacheable so the cache prefix
+doesn't move when a user edits a project rule file mid-session.
 
 ---
 
@@ -308,7 +311,6 @@ directories with priority ordering.
 **Status.** Shipped with five built-in hooks plus a fully-async registry.
 
 **Key modules.**
-
 - `chimera/hooks/events.py` — `HookEvent` enum (27 lifecycle events)
 - `chimera/hooks/emitter.py` — fire-and-collect hook event dispatcher
 - `chimera/hooks/executor.py` — three executors (shell / prompt / function)
@@ -321,7 +323,6 @@ directories with priority ordering.
 - `chimera/core/middleware.py` — `MiddlewareChain` (before_model / after_model / after_agent) for in-process hooks
 
 **Public API.**
-
 ```python
 from chimera.hooks.events import HookEvent
 from chimera.hooks.async_registry import AsyncHookRegistry
@@ -330,9 +331,9 @@ reg = AsyncHookRegistry()
 reg.register(HookEvent.POST_TOOL_USE, my_callback)
 ```
 
-Hooks support `updatedInput` mutation: a `PreToolUse` hook can rewrite
-the tool input before execution. Audit-trail and cwd / env inheritance
-landed in M2-B.
+**Notes.** Hooks support `updatedInput` mutation: a `PreToolUse` hook can
+rewrite the tool input before execution. Audit-trail and cwd / env
+inheritance landed in M2-B.
 
 ---
 
@@ -348,7 +349,6 @@ each CLI selects which subset to expose. Skills auto-discover from
 `<project>/skills/`, `~/.chimera/skills/`, and bundled defaults.
 
 **Key modules.**
-
 - `chimera/skills/discovery.py` — `discover_skills()`, walks SKILL.md files
 - `chimera/skills/loader.py` — `SkillLoader`
 - `chimera/skills/definition.py` — `SkillDefinition`
@@ -359,7 +359,6 @@ each CLI selects which subset to expose. Skills auto-discover from
 - `chimera/cli/code.py`, `chimera/mink/cli.py`, `chimera/otter/cli.py`, etc. — per-CLI command surfaces
 
 **Public API.**
-
 ```python
 from chimera.commands.registry import CommandRegistry
 from chimera.skills.discovery import discover_skills
@@ -367,10 +366,11 @@ from chimera.skills.discovery import discover_skills
 skills = discover_skills(["~/.chimera/skills/", "skills/"])
 ```
 
-Each CLI shows only its slash subset (mink: 19, otter: 26, weasel: 7 on
-purpose, badger: shared + `/parity` + `/rerun`, stoat: shared + `/shell`).
-Skills can register hooks at invocation time so a skill becomes a small
-bundle of "command + hooks + system prompt override" in one file.
+**Notes.** Each CLI shows only its slash subset (mink: 19, otter: 26,
+weasel: 7 on purpose, badger: shared + `/parity` + `/rerun`, stoat:
+shared + `/shell`). Skills can register hooks at invocation time so a
+skill becomes a small bundle of "command + hooks + system prompt
+override" in one file.
 
 ---
 
@@ -388,7 +388,6 @@ orchestration.
 secrets are all wired into the default `CodingAgent` build.
 
 **Key modules.**
-
 - `chimera/auth/` — `manager.py`, `api_key.py`, `oauth.py`, `oauth_device.py`, `store.py` (file-based, 0o600)
 - `chimera/secrets/` — `registry.py` (env-var loading), `detector.py` (10 built-in patterns), `redactor.py` (event bus middleware)
 - `chimera/security/` — `risk.py`, `analyzer.py` (rule / LLM / composite), `policy.py` (`ConfirmationPolicy` variants)
@@ -413,9 +412,10 @@ The clearest seam is `chimera/assembly/coding_agent.CodingAgent`,
 which wires production infrastructure into a single buildable
 agent: `CodingAgent(model=..., preset='claude_code')`.
 
-Feature flags read `CHIMERA_FEATURE_<NAME>=1` from the environment.
-Secrets pre-empt the event bus before logs / transcripts are persisted.
-The plugin marketplace is a directory loader plus an HTTP-fetched index.
+**Notes.** Feature flags read `CHIMERA_FEATURE_<NAME>=1` from the
+environment. Secrets pre-empt the event bus before logs / transcripts
+are persisted. The plugin marketplace is a directory loader plus an
+HTTP-fetched index.
 
 ---
 
@@ -434,7 +434,6 @@ ships alongside the legacy edit formats (`whole-file`, `search-replace`,
 `diff`, `udiff`) for callers that want the GPT-family-emitted format.
 
 **Key modules.**
-
 - `chimera/core/snapshot.py` — `SnapshotManager`, `Snapshot`, shadow-git plumbing with file-copy fallback
 - `chimera/checkpoints.py` — high-level `CheckpointManager` (create / restore_by_name / restore_by_id / undo / list)
 - `chimera/checkpoints_ghost.py` — ghost-checkpoint helpers
@@ -446,7 +445,6 @@ ships alongside the legacy edit formats (`whole-file`, `search-replace`,
 - `chimera/transactions.py` — file-transaction coordinator
 
 **Public API.**
-
 ```python
 from chimera.core.snapshot import SnapshotManager
 from chimera.checkpoints import CheckpointManager
@@ -456,10 +454,11 @@ await snap.take(turn=N, modified_files=[...])
 await snap.revert(to_turn=N - 2)
 ```
 
-Snapshots use shadow git (a separate `.git`-style directory outside the
-user's repo) when git is available, falling back to direct file copies.
-Auto-format runs after the file write completes but before the
-`POST_TOOL_USE` hook fires, so downstream hooks see the formatted file.
+**Notes.** Snapshots use shadow git (a separate `.git`-style directory
+outside the user's repo) when git is available, falling back to direct
+file copies. Auto-format runs after the file write completes but before
+the `POST_TOOL_USE` hook fires, so downstream hooks see the formatted
+file.
 
 ---
 
@@ -493,24 +492,24 @@ chimera/sessions/eventlog        (file locking, gap detection, crash recovery)
 | **stoat** | `AgentLoop`, `max_steps=50` | full | eventlog + sqlite | `~/.claude/settings.json` | rules + Kimi tuning | full | shared + `/shell` (mode toggle) | + Moonshot provider chain | snapshot + auto-format |
 | **badger** | `AgentLoop`, `max_steps=25` | full | eventlog + sqlite | shared + harness-tight defaults | shared | full + parity hook | shared + `/parity`, `/rerun` | + parity-tracker subcommand | snapshot + auto-format |
 
-Every CLI inherits all nine phases. The differences are in defaults
-(step budget, tool restriction, model chain), which slash commands are
-exposed, and which Phase-8 transports the CLI fronts (HTTP+SSE for
-otter, ACP-default for ferret, RPC + SDK for weasel, shell-mode toggle
-for stoat, parity tracker for badger).
+The takeaway: every CLI inherits all nine phases. The differences are in
+defaults (step budget, tool restriction, model chain), which slash
+commands are exposed, and which Phase-8 transports the CLI fronts
+(HTTP+SSE for otter, ACP-default for ferret, RPC + SDK for weasel,
+shell-mode toggle for stoat, parity tracker for badger).
 
 For the per-CLI quickstart and parity row, see each CLI's docs:
 
-- [Mink quickstart](/chimera/mink/quickstart/) — TUI-first
-- [Otter quickstart](/chimera/otter/quickstart/) — server-first / multi-client
-- [Ferret quickstart](/chimera/ferret/quickstart/) — IDE-flagship sandbox-first
-- [Weasel quickstart](/chimera/weasel/quickstart/) — minimal harness, four modes
-- [Shrew quickstart](/chimera/shrew/quickstart/) — small-local-model
-- [Stoat quickstart](/chimera/stoat/quickstart/) — shell-mode toggle
-- [Badger quickstart](/chimera/badger/quickstart/) — harness-rewrite discipline
+- [Mink quickstart](mink/quickstart.md) — TUI-first
+- [Otter quickstart](otter/quickstart.md) — server-first / multi-client
+- [Ferret quickstart](ferret/quickstart.md) — IDE-flagship sandbox-first
+- [Weasel quickstart](weasel/quickstart.md) — minimal harness, four modes
+- [Shrew quickstart](shrew/quickstart.md) — small-local-model
+- [Stoat quickstart](stoat/quickstart.md) — shell-mode toggle
+- [Badger quickstart](badger/quickstart.md) — harness-rewrite discipline
 
 For the side-by-side surface comparison and provider-chain matrix, see
-the [Coding Agents Overview](https://github.com/0bserver07/chimera/blob/master/docs/coding-agents.md).
+[Coding Agents Overview](coding-agents.md).
 
 ---
 
@@ -545,3 +544,10 @@ is:
 When in doubt, prefer the phase view for changes that touch the agent
 loop / tool-execution path, and prefer the layer view for changes that
 touch the synthesis or evaluation pipelines.
+
+## See also
+
+- [Coding Agents Overview](coding-agents.md) — comparative tour of the seven CLIs
+- [Build Your Own Agent](playbooks/08-building-agents.md) — full developer library guide
+- [All Playbooks](playbooks/) — 13 end-to-end recipes
+- [Benchmarks](benchmarks/README.md) — transparency framework, raw data

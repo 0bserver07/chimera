@@ -116,3 +116,7 @@ the discovery path set `CHIMERA_MINK_SETTINGS_PATH` or pass `--cwd` to
 point at a different project. YELLOW rows degrade gracefully (and emit
 a warning where the gap is user-visible). RED rows raise
 `NotImplementedError` with a pointer to the follow-up issue.
+
+## Cross-links
+
+- [Chimera architecture (8-phase map)](../architecture.md) — where the rows in this matrix live in the shared library.

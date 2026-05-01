@@ -65,7 +65,14 @@ export default defineConfig({
 				{
 					label: 'API Reference',
 					collapsed: true,
-					autogenerate: { directory: 'reference' },
+					items: [
+						{ label: 'Architecture (8 phases)', slug: 'architecture' },
+						{
+							label: 'Generated reference',
+							collapsed: true,
+							autogenerate: { directory: 'reference' },
+						},
+					],
 				},
 				{
 					label: 'Mink',

@@ -306,3 +306,7 @@ tracker entry.
   parity matrix.
 - [`../mink/parity-matrix.md`](../mink/parity-matrix.md) — sibling
   parity matrix.
+
+## Cross-links
+
+- [Chimera architecture (8-phase map)](../architecture.md) — where the rows in this matrix live in the shared library.

@@ -224,3 +224,7 @@ agent / command / rules ingest, plugin loading). YELLOW rows degrade
 gracefully and emit a hint where the gap is user-visible. RED rows
 are not implemented and will return a "not yet wired" notice with a
 pointer to the issue tracker entry.
+
+## Cross-links
+
+- [Chimera architecture (8-phase map)](../architecture.md) — where the rows in this matrix live in the shared library.
