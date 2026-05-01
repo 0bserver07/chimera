@@ -44,12 +44,32 @@ Anthropic provider auto-detection.
 """
 
 _VALID_OUTPUT_FORMATS = ("text", "json", "stream-json")
-_VALID_SUBCOMMANDS = (None, "serve", "sessions", "share", "agents", "bench")
+_VALID_SUBCOMMANDS = (None, "serve", "sessions", "share", "agents", "bench", "mcp")
 # WHY (O18): ``bench`` repurposes the ``sub_action`` positional slot for
 # the benchmark name (``humaneval`` / ``tau-bench``). The choices below
 # are the union of all sub_action shapes any otter subcommand accepts so
 # argparse keeps validating the slot consistently across handlers.
-_VALID_SUB_ACTIONS = (None, "list", "show", "cost", "humaneval", "tau-bench")
+# WHY (server-mgmt): ``status`` and ``stop`` are added so ``otter serve
+# status`` / ``otter serve stop`` reuse the ``sub_action`` positional slot
+# without breaking argparse choices validation across other subcommands.
+# WHY (W9-O2): ``add`` + ``auth`` are added for ``otter mcp add`` and
+# ``otter mcp auth``; ``list`` is reused from sessions/agents.
+_VALID_SUB_ACTIONS = (
+    None,
+    "list",
+    "show",
+    "create",
+    "cost",
+    "humaneval",
+    "tau-bench",
+    "status",
+    "stop",
+    "add",
+    "auth",
+    # WHY (O4-W9): ``rename`` lets ``otter sessions rename <id> <title>``
+    # update the title key in summary.json after the run finished.
+    "rename",
+)
 
 
 def _resolve_version() -> str:
@@ -107,6 +127,41 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         dest="print_mode",
         default=None,
         help="One-shot: run a single turn with PROMPT, print, exit.",
+    )
+    # WHY (O4-W9): a hand-authored ``--title`` lets users tag a one-shot
+    # ``-p`` run so ``chimera otter sessions list`` surfaces a friendly
+    # label instead of the truncated prompt heuristic. When unset, the
+    # ``prompt`` field continues to drive the rendered title (back-compat).
+    # The value is persisted into ``summary.json`` under the ``title`` key
+    # so ``sessions show`` and ``sessions list`` can both surface it.
+    parser.add_argument(
+        "--title",
+        dest="session_title",
+        default=None,
+        help=(
+            "With -p: human-friendly label stored in summary.json and shown "
+            "by 'chimera otter sessions list'. When unset, the prompt is "
+            "used as the title."
+        ),
+    )
+    # WHY (O3-W9): ``--file/-f`` lets ``-p`` invocations attach the contents
+    # of one or more files to the prompt without copy-paste. Each path is
+    # read at run time and wrapped in a ``<file path="..." lines="N">``
+    # block (XML-like, mirrors mink's prompt attachment shape) which is
+    # concatenated *before* the ``-p`` text. ``-`` reads from stdin once;
+    # repeating ``-`` is allowed but only the first stdin read returns
+    # bytes. Multiple ``-f`` invocations stack via ``action="append"``.
+    parser.add_argument(
+        "-f",
+        "--file",
+        dest="files",
+        action="append",
+        default=None,
+        metavar="PATH",
+        help=(
+            "With -p: attach a file's contents to the prompt. May be passed "
+            "multiple times to stack attachments. Use '-' to read from stdin."
+        ),
     )
     parser.add_argument(
         "--output-format",
@@ -217,6 +272,33 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
             "eventlog directory. Useful for reproducible test fixtures."
         ),
     )
+    # WHY (C1, wave 9): --resume / --continue mirror mink and the otter
+    # interactive REPL so a one-shot ``-p`` invocation can pick up where
+    # the previous run left off. ``--resume <id>`` loads the named
+    # ``~/.chimera/eventlog/otter-*`` directory; ``-c`` /
+    # ``--continue`` resolves the newest otter run for the current cwd
+    # via :func:`chimera.sessions.eventlog.find_latest_run`.
+    parser.add_argument(
+        "--resume",
+        default=None,
+        help=(
+            "Resume a persisted otter run by id (matches "
+            "~/.chimera/eventlog/<id>/). The replayed conversation is "
+            "prepended to the new turn so the agent has full context."
+        ),
+    )
+    parser.add_argument(
+        "-c",
+        "--continue",
+        dest="continue_latest",
+        action="store_true",
+        default=False,
+        help=(
+            "Resume the most-recent otter run under the current "
+            "working directory. Equivalent to "
+            "``--resume <newest-otter-id-in-cwd>``."
+        ),
+    )
     # WHY: ``--acp`` re-routes ``chimera otter serve`` to the JSON-RPC ACP
     # server (agent O6) instead of the HTTP server (agent O14). External
     # IDE / TUI clients drive the agent over stdio when this flag is set.
@@ -308,6 +390,39 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
             "and their tools attached to the otter agent."
         ),
     )
+    # WHY (C5): ``--tui`` boots a textual-based prototype frontend bound
+    # to an in-process :class:`OtterServer`. The default REPL stays
+    # readline-based; this flag is opt-in so users without the optional
+    # ``[tui]`` extra never pay the textual import cost. See
+    # ``docs/otter/tui.md`` for the install + key bindings.
+    parser.add_argument(
+        "--tui",
+        dest="tui",
+        action="store_true",
+        default=False,
+        help=(
+            "Launch the textual-based otter TUI prototype (requires "
+            "the [tui] extra: 'pip install chimera-run[tui]'). The "
+            "TUI talks to an in-process OtterServer over the same "
+            "HTTP+SSE surface a remote client would use."
+        ),
+    )
+    # WHY (O1 — wave 9): ``--user`` flips ``otter agents create`` from
+    # project-scope (``<cwd>/.opencode/agent/<name>.md``) to user-scope
+    # (``~/.opencode/agent/<name>.md``). The flag is generic enough to
+    # repurpose for any future ``--user``-vs-project agents subcommand
+    # (think ``agents delete --user reviewer``) without re-parsing.
+    parser.add_argument(
+        "--user",
+        dest="agents_user",
+        action="store_true",
+        default=False,
+        help=(
+            "With 'agents create': write the new agent file to the "
+            "user-scope directory (~/.opencode/agent/) instead of the "
+            "project-scope directory (<cwd>/.opencode/agent/)."
+        ),
+    )
     # WHY: subcommand placeholders are positionals so the orchestrator can
     # route ``chimera otter serve``, ``chimera otter sessions list``, etc.
     # without re-parsing. Other agents in the wave own the bodies; we just
@@ -337,6 +452,64 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         default=None,
         metavar="TARGET",
         help="Run/session id consumed by 'show' or 'share' actions.",
+    )
+    # WHY (W9-O2): ``mcp add <name> <command...>`` needs a variadic tail
+    # after ``sub_target`` so the entire stdio command is captured as
+    # one argv slice. ``nargs="*"`` keeps the slot optional for the
+    # other subcommands (defaults to []) so this surface is purely
+    # additive.
+    parser.add_argument(
+        "mcp_extra",
+        nargs="*",
+        default=[],
+        metavar="MCP_EXTRA",
+        help=(
+            "With 'mcp add <name>': trailing executable + args for the "
+            "stdio MCP server (ignored when --mcp-http <url> is set)."
+        ),
+    )
+    # WHY (W9-O2): ``mcp``-specific flags. The ``--user`` flag is
+    # already registered (dest ``agents_user``) so the mcp dispatcher
+    # reuses it; new flags use the ``--mcp-*`` prefix so they don't
+    # shadow flags other subcommands might want later.
+    parser.add_argument(
+        "--mcp-http",
+        dest="mcp_http",
+        default=None,
+        help=(
+            "With 'mcp add': add an HTTP MCP server at this URL "
+            "(mutually exclusive with the trailing stdio command)."
+        ),
+    )
+    parser.add_argument(
+        "--mcp-header",
+        dest="mcp_header",
+        action="append",
+        default=None,
+        help=(
+            "With 'mcp add --mcp-http': repeatable KEY=VALUE HTTP header. "
+            "Use once per header."
+        ),
+    )
+    parser.add_argument(
+        "--mcp-env",
+        dest="mcp_env",
+        action="append",
+        default=None,
+        help=(
+            "With 'mcp add' (stdio): repeatable KEY=VALUE subprocess "
+            "environment override. Use once per variable."
+        ),
+    )
+    parser.add_argument(
+        "--yes",
+        dest="mcp_yes",
+        action="store_true",
+        default=False,
+        help=(
+            "With 'mcp add': skip the interactive 'write this entry?' "
+            "y/N confirmation. Use in CI scripts."
+        ),
     )
     # WHY (O18): bench-specific flags. Kept under their own ``--bench-*``
     # prefix so ``otter bench humaneval --limit 20`` is unambiguous against
@@ -409,6 +582,31 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         help=(
             "With 'bench tau-bench': domain to evaluate "
             "(airline/retail/telecom/banking/mock; default: airline)."
+        ),
+    )
+    # WHY (server-mgmt): ``serve stop`` accepts ``--port`` (already declared
+    # above) to target one server or ``--all`` to graceful-stop every
+    # backgrounded otter server. ``--serve-timeout`` widens the SIGTERM
+    # window for slow shutdowns; default 10s matches the project
+    # graceful-shutdown rule (see CLAUDE.md).
+    parser.add_argument(
+        "--all",
+        dest="serve_stop_all",
+        action="store_true",
+        default=False,
+        help=(
+            "With 'serve stop': stop every backgrounded server of this "
+            "flavor (otter/ferret). Mutually exclusive with --port."
+        ),
+    )
+    parser.add_argument(
+        "--serve-timeout",
+        dest="serve_stop_timeout",
+        type=float,
+        default=10.0,
+        help=(
+            "With 'serve stop': seconds to wait after SIGTERM before "
+            "escalating to SIGKILL (default: 10.0)."
         ),
     )
 
@@ -892,6 +1090,70 @@ def _eventlog_root() -> Path:
     return Path.home() / ".chimera" / "eventlog"
 
 
+def _apply_resume_prefix(
+    args: argparse.Namespace,
+    *,
+    prefix: str,
+    default_prompt: str,
+) -> str:
+    """Resolve ``--resume`` / ``--continue`` and return the effective prompt.
+
+    When neither flag is set this is the identity over ``default_prompt``.
+    When either is set, the matching JSONL eventlog is replayed via
+    :func:`chimera.sessions.eventlog.resume_run` and its message history
+    is rendered as a ``<prior_conversation>`` block prepended to
+    ``default_prompt`` so the agent's new turn has the full context.
+
+    Args:
+        args: The parsed otter argparse namespace.
+        prefix: CLI-specific prefix (``"otter-"``) used by ``-c``
+            resolution.
+        default_prompt: The user's ``-p`` text. Returned unchanged when
+            no resume id is set or when the resume target is empty /
+            unreadable.
+
+    Returns:
+        The prompt to feed into ``agent.async_run`` — either the raw
+        ``-p`` text or the rendered transcript-prefixed variant.
+    """
+    from chimera.sessions.eventlog.resume_helpers import (
+        build_resume_prefix,
+        resolve_resume_id,
+        resume_run,
+    )
+
+    target_id = resolve_resume_id(
+        explicit_id=getattr(args, "resume", None),
+        continue_latest=bool(getattr(args, "continue_latest", False)),
+        prefix=prefix,
+        eventlog_root=_eventlog_root(),
+        cwd=os.path.abspath(args.cwd or os.getcwd()),
+    )
+    if target_id is None:
+        return default_prompt
+
+    try:
+        session = resume_run(target_id, eventlog_root=_eventlog_root())
+    except (ValueError, OSError) as exc:
+        print(
+            f"[otter] --resume / --continue: failed to load run "
+            f"{target_id!r}: {exc}",
+            file=sys.stderr,
+        )
+        return default_prompt
+
+    messages = list(getattr(session, "messages", []) or [])
+    if not messages:
+        return default_prompt
+
+    sys.stderr.write(
+        f"[otter] resumed run {target_id} ({len(messages)} messages)\n"
+    )
+    sys.stderr.flush()
+    transcript = build_resume_prefix(messages)
+    return f"{transcript}{default_prompt}"
+
+
 def _utc_iso8601() -> str:
     """ISO-8601 UTC timestamp with second precision and ``Z`` suffix."""
     return (
@@ -956,6 +1218,7 @@ def _write_run_summary(
     prompt: str,
     result: Any,
     cwd: str,
+    title: str | None = None,
 ) -> Path:
     """Write a ``summary.json`` next to the eventlog for quick inspection.
 
@@ -963,10 +1226,23 @@ def _write_run_summary(
     ``chimera mink runs list`` viewer (and any future otter equivalent)
     can read both flavors with the same parser.
 
+    Args:
+        run_dir: Directory in which to write ``summary.json``.
+        run_id: Stable id for this run (also used as ``session_id``).
+        started_at: ISO-8601 UTC start timestamp.
+        ended_at: ISO-8601 UTC end timestamp.
+        model: Provider model name actually used.
+        prompt: User prompt that drove the run.
+        result: AgentResult-like object with steps/tool_calls_total/etc.
+        cwd: Working directory the run executed in.
+        title: Optional hand-authored label (``--title`` flag). When
+            ``None`` the field is omitted; ``sessions list`` falls back
+            to the prompt for the displayed title.
+
     Returns:
         The path to the written ``summary.json``.
     """
-    payload = {
+    payload: dict[str, Any] = {
         "run_id": run_id,
         "started_at": started_at,
         "ended_at": ended_at,
@@ -981,6 +1257,8 @@ def _write_run_summary(
         "total_tokens": 0,
         "error": getattr(result, "error", None),
     }
+    if title is not None and str(title).strip():
+        payload["title"] = str(title)
     summary_path = run_dir / "summary.json"
     summary_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     return summary_path
@@ -1029,6 +1307,167 @@ def _build_provider(model: str) -> Any:
     from chimera.otter.providers import build_provider as _bp
 
     return _bp(argparse.Namespace(model=model))
+
+# ---------------------------------------------------------------------------
+# File attachment helpers (O3-W9) -- ``-f/--file`` for ``chimera otter -p``
+# ---------------------------------------------------------------------------
+
+
+_FILE_ATTACHMENT_PER_FILE_WARN_BYTES = 100 * 1024
+"""Per-file size at/above which a ``[otter]`` warning is emitted to stderr.
+
+WHY: 100 KB is a generous source-file ceiling -- most modern CLI files
+clock in well under that. Crossing it usually means the user attached a
+data dump or a transcript by accident. We *warn* but still attach so the
+caller stays in control; truncation only kicks in past the cumulative
+total cap below.
+"""
+
+_FILE_ATTACHMENT_TOTAL_CAP_BYTES = 500 * 1024
+"""Cumulative byte cap across all ``-f`` attachments.
+
+WHY: 500 KB is roughly the prompt budget where even long-context models
+start paying real latency / cost penalties. Past this we truncate the
+*current* file (not previous ones) and emit a one-line stderr warning so
+the user can re-run with smaller attachments if they need full content.
+"""
+
+_FILE_ATTACHMENT_TRUNCATION_MARKER = "<!-- truncated -->"
+"""Sentinel appended to a truncated file body so the model knows there's more.
+
+Kept verbatim (no surrounding whitespace) so test assertions can match
+the substring deterministically.
+"""
+
+
+def _read_attachment(
+    path: str, *, stdin: Any | None = None,
+) -> tuple[str, str, int]:
+    """Read one ``-f/--file`` attachment and return ``(label, content, size)``.
+
+    WHY: factored out of :func:`_format_file_attachments` so tests can
+    drive a single read deterministically (in particular the ``-`` /
+    stdin path) without rebuilding the namespace + asyncio scaffolding
+    of :func:`_run_print_mode`.
+
+    Args:
+        path: User-supplied path. ``"-"`` reads from *stdin*.
+        stdin: Optional override for :data:`sys.stdin` (test seam).
+
+    Returns:
+        Tuple ``(label, content, byte_size)`` where ``label`` is the
+        path string used in the ``<file path=...>`` opener (``"<stdin>"``
+        for the ``-`` case) and ``byte_size`` is the UTF-8 byte length of
+        ``content`` *before* any truncation. Raises :class:`OSError` on
+        unreadable real paths so the caller can surface a usage error.
+    """
+    if path == "-":
+        source = stdin if stdin is not None else sys.stdin
+        # ``sys.stdin.read()`` returns ``str`` already; decode-ish work
+        # is a no-op. Empty stdin yields ``""``.
+        content = source.read()
+        if not isinstance(content, str):  # defensive: bytes-mode stdin
+            content = content.decode("utf-8", errors="replace")
+        return ("<stdin>", content, len(content.encode("utf-8")))
+    p = Path(path)
+    raw = p.read_bytes()
+    content = raw.decode("utf-8", errors="replace")
+    return (str(p), content, len(raw))
+
+
+def _format_file_attachments(
+    paths: list[str] | None,
+    *,
+    stdin: Any | None = None,
+    stderr: Any | None = None,
+) -> str:
+    """Read each ``-f`` path and format them as ``<file>``-tagged blocks.
+
+    Each attachment lands as::
+
+        <file path="X" lines="N">
+        <full content>
+        </file>
+
+    Blocks are joined by a single blank line and the whole bundle is
+    returned ready to be concatenated *before* the ``-p`` prompt. A
+    trailing blank line keeps the prompt readable when the caller
+    appends the user's prompt directly afterwards.
+
+    Size policy (per-file 100 KB / cumulative 500 KB) is enforced here:
+    we *warn* on the per-file ceiling and *truncate* the current file
+    when the cumulative cap would be exceeded, appending the
+    ``<!-- truncated -->`` marker before ``</file>``.
+
+    Args:
+        paths: Raw list of ``-f`` values (may include ``"-"``). ``None``
+            or empty returns ``""``.
+        stdin: Optional :data:`sys.stdin` override (test seam).
+        stderr: Optional :data:`sys.stderr` override (test seam). Used
+            for size-cap warnings.
+
+    Returns:
+        The formatted attachment bundle, or ``""`` when no paths were
+        supplied. Never raises on size overflow -- it always truncates.
+    """
+    if not paths:
+        return ""
+    err = stderr if stderr is not None else sys.stderr
+
+    blocks: list[str] = []
+    cumulative = 0
+    for raw_path in paths:
+        try:
+            label, content, size = _read_attachment(raw_path, stdin=stdin)
+        except OSError as exc:
+            err.write(f"[otter] -f {raw_path!r}: {exc}\n")
+            err.flush()
+            continue
+
+        if size >= _FILE_ATTACHMENT_PER_FILE_WARN_BYTES:
+            err.write(
+                f"[otter] -f {label!r}: {size} bytes exceeds "
+                f"{_FILE_ATTACHMENT_PER_FILE_WARN_BYTES}-byte per-file "
+                "soft cap (attaching anyway)\n"
+            )
+            err.flush()
+
+        truncated = False
+        if cumulative + size > _FILE_ATTACHMENT_TOTAL_CAP_BYTES:
+            remaining = max(0, _FILE_ATTACHMENT_TOTAL_CAP_BYTES - cumulative)
+            # Truncate by encoded-byte budget so the cumulative cap is a
+            # hard byte ceiling. ``errors="ignore"`` makes us safely cut
+            # off mid-multi-byte char without raising.
+            encoded = content.encode("utf-8")
+            content = encoded[:remaining].decode("utf-8", errors="ignore")
+            size = len(content.encode("utf-8"))
+            truncated = True
+            err.write(
+                f"[otter] -f {label!r}: cumulative attachments would "
+                f"exceed {_FILE_ATTACHMENT_TOTAL_CAP_BYTES}-byte cap; "
+                "truncating\n"
+            )
+            err.flush()
+
+        cumulative += size
+        line_count = content.count("\n") + (
+            0 if (not content or content.endswith("\n")) else 1
+        )
+        body = content
+        if truncated:
+            # Marker on its own line so it's easy to grep / assert.
+            sep = "" if body.endswith("\n") else "\n"
+            body = f"{body}{sep}{_FILE_ATTACHMENT_TRUNCATION_MARKER}\n"
+        else:
+            if not body.endswith("\n"):
+                body = f"{body}\n"
+        blocks.append(
+            f'<file path="{label}" lines="{line_count}">\n{body}</file>'
+        )
+
+    if not blocks:
+        return ""
+    return "\n\n".join(blocks) + "\n\n"
 
 
 # ---------------------------------------------------------------------------
@@ -1131,6 +1570,25 @@ def _run_print_mode(args: argparse.Namespace) -> int:
 
     agent = Agent(provider=provider, tools=tools, loop=loop, prompt=prompt)
 
+    # WHY (C1, wave 9): when ``--resume <id>`` or ``-c`` / ``--continue``
+    # is set we replay the prior run via :func:`resume_run` and prepend
+    # its rendered transcript to ``args.print_mode`` so the new turn
+    # has full context. ``_apply_resume_prefix`` is a no-op when
+    # neither flag is supplied.
+    effective_prompt = _apply_resume_prefix(
+        args, prefix="otter-", default_prompt=args.print_mode,
+    )
+    # WHY (O3-W9): prepend each ``-f``/``--file`` attachment
+    # (formatted as a ``<file>`` block) to the resolved prompt
+    # so the model sees attachments + (optional resume
+    # transcript) + user prompt in that order. The bundle
+    # is empty when no ``-f`` flags were passed.
+    _otter_attachments = _format_file_attachments(
+        getattr(args, "files", None),
+    )
+    if _otter_attachments:
+        effective_prompt = f"{_otter_attachments}{effective_prompt}"
+
     save_enabled = not getattr(args, "no_save", False)
     run_id: str | None = None
     run_dir: Path | None = None
@@ -1139,13 +1597,13 @@ def _run_print_mode(args: argparse.Namespace) -> int:
     if save_enabled:
         run_id = getattr(args, "run_id", None) or _make_run_id()
         log, run_dir = _open_run_log(run_id)
-        _append_user_message(log, args.print_mode)
+        _append_user_message(log, effective_prompt)
 
     if args.output_format == "stream-json":
         return _run_stream_json(
             agent,
             env,
-            args.print_mode,
+            effective_prompt,
             cancel,
             log=log,
             run_id=run_id,
@@ -1153,11 +1611,12 @@ def _run_print_mode(args: argparse.Namespace) -> int:
             started_at=started_at,
             model=provider.model_name,
             cwd=cwd,
+            title=getattr(args, "session_title", None),
         )
 
     result: Any = None
     try:
-        result = asyncio.run(agent.async_run(args.print_mode, env=env))
+        result = asyncio.run(agent.async_run(effective_prompt, env=env))
     except KeyboardInterrupt:
         cancel.cancel()
         print("\n[cancelled]", file=sys.stderr)
@@ -1177,6 +1636,7 @@ def _run_print_mode(args: argparse.Namespace) -> int:
             prompt=args.print_mode,
             result=result if result is not None else _EmptyResult(),
             cwd=cwd,
+            title=getattr(args, "session_title", None),
         )
         _announce_saved_run(run_id, run_dir)
 
@@ -1211,6 +1671,7 @@ def _run_stream_json(
     started_at: str | None = None,
     model: str = "",
     cwd: str = "",
+    title: str | None = None,
 ) -> int:
     """Stream one JSON line per ``LoopEvent`` to stdout.
 
@@ -1299,6 +1760,7 @@ def _run_stream_json(
             prompt=prompt,
             result=result if result is not None else _EmptyResult(),
             cwd=cwd,
+            title=title,
         )
         _announce_saved_run(run_id, run_dir)
     return rc
@@ -1326,14 +1788,118 @@ def _safe_event_data(data: Any) -> Any:
 
 
 def _dispatch_serve(args: argparse.Namespace) -> int:
-    """Dispatch ``chimera otter serve`` to ACP (O6) or HTTP (O14).
+    """Dispatch ``chimera otter serve`` to ACP, HTTP, or management commands.
 
-    When ``--acp`` is set, run the stdio JSON-RPC ACP server. Otherwise
-    boot the HTTP + SSE server defined in :mod:`chimera.otter.server`.
+    Routing precedence:
+
+    1. ``otter serve status`` / ``otter serve stop`` — pidfile-based
+       management subcommands (server-mgmt). These don't bind a socket;
+       they read ``~/.chimera/run/otter-*.pid`` and dispatch SIGTERM (then
+       SIGKILL on timeout) per the graceful-shutdown rule in CLAUDE.md.
+    2. ``--acp`` — run the stdio JSON-RPC ACP server.
+    3. Default — boot the HTTP + SSE server defined in
+       :mod:`chimera.otter.server`.
     """
+    sub_action = getattr(args, "sub_action", None)
+    if sub_action in ("status", "stop"):
+        return _dispatch_serve_management(args, action=sub_action, prefix="otter")
     if getattr(args, "acp", False):
         return _dispatch_serve_acp(args)
     return _dispatch_serve_http(args)
+
+
+def _dispatch_serve_management(
+    args: argparse.Namespace,
+    *,
+    action: str,
+    prefix: str,
+) -> int:
+    """Run ``serve status`` / ``serve stop`` — both flavors share the impl.
+
+    The dispatcher is shared between otter and ferret because the pidfile
+    layout (``~/.chimera/run/<prefix>-<port>.pid``) only differs in the
+    filename prefix. Imports stay inside the function so ``--help`` stays
+    cheap.
+
+    Args:
+        args: The parsed namespace. Reads ``port``, ``serve_stop_all``,
+            ``serve_stop_timeout``.
+        action: ``"status"`` or ``"stop"``.
+        prefix: ``"otter"`` or ``"ferret"``.
+
+    Returns:
+        ``0`` on success, ``1`` when ``stop`` couldn't terminate every
+        targeted process, ``2`` on usage error (e.g. ``stop`` without
+        ``--port`` or ``--all`` when multiple servers are running).
+    """
+    from chimera.otter import server_pidfile
+
+    if action == "status":
+        records = server_pidfile.list_pidfiles(prefix=prefix)
+        if not records:
+            print(f"No backgrounded {prefix} servers found.")
+            return 0
+        for rec in records:
+            auth = "yes" if rec.get("auth_token_hash") else "no"
+            alive = "yes" if rec.get("alive") else "no (stale)"
+            print(
+                f"{prefix} port={rec.get('port')} pid={rec.get('pid')} "
+                f"alive={alive} scheme={rec.get('scheme', 'http')} "
+                f"auth={auth} {rec.get('path', '')}"
+            )
+        return 0
+
+    # action == "stop"
+    port = getattr(args, "port", None)
+    stop_all = bool(getattr(args, "serve_stop_all", False))
+    timeout = float(getattr(args, "serve_stop_timeout", 10.0) or 10.0)
+
+    if port is None and not stop_all:
+        # A single matching pidfile is targeted automatically; otherwise
+        # the user must pass ``--port`` or ``--all`` explicitly.
+        records = server_pidfile.list_pidfiles(prefix=prefix)
+        if len(records) == 1:
+            port = int(records[0].get("port", 0))
+        elif not records:
+            print(f"No backgrounded {prefix} servers found.", file=sys.stderr)
+            return 0
+        else:
+            print(
+                f"error: multiple {prefix} servers running; pass --port <n> "
+                "or --all to disambiguate.",
+                file=sys.stderr,
+            )
+            return 2
+
+    results = server_pidfile.stop_all(
+        prefix=prefix,
+        port=int(port) if port is not None else None,
+        timeout=timeout,
+    )
+    if not results:
+        target = f"port {port}" if port is not None else "any"
+        print(
+            f"No matching {prefix} server (target={target}).", file=sys.stderr,
+        )
+        return 0
+    failed = 0
+    for r in results:
+        signaled = r.get("signaled", "none")
+        verb = {
+            "none": "already stopped",
+            "sigterm": "stopped (SIGTERM)",
+            "sigterm+sigkill": "stopped (SIGTERM, then SIGKILL)",
+        }.get(signaled, f"signaled={signaled}")
+        ok = "ok" if r.get("stopped") else "FAILED"
+        print(
+            f"{prefix} port={r.get('port')} pid={r.get('pid')} {ok}: {verb}"
+        )
+        if not r.get("stopped"):
+            err = r.get("error")
+            if err:
+                print(f"  error: {err}", file=sys.stderr)
+            failed += 1
+    return 0 if failed == 0 else 1
 
 
 def _dispatch_serve_http(args: argparse.Namespace) -> int:
@@ -1436,6 +2002,10 @@ def _dispatch_serve_http(args: argparse.Namespace) -> int:
         auth_token=auth_token,
         tls_cert=tls_cert,
         tls_key=tls_key,
+        # WHY (server-mgmt): write ``~/.chimera/run/otter-<port>.pid`` so a
+        # separate shell can run ``chimera otter serve status`` / ``stop``
+        # against this backgrounded process.
+        pidfile_prefix="otter",
     )
 
 
@@ -1554,6 +2124,13 @@ def _dispatch_sessions(args: argparse.Namespace) -> int:
     args.sessions_json = getattr(args, "sessions_json", False)
     args.sessions_full = getattr(args, "sessions_full", False)
     args.sessions_format = getattr(args, "sessions_format", "text") or "text"
+    # WHY (O4-W9): ``sessions rename <id> <title...>`` reuses the
+    # variadic trailing positional slot (``mcp_extra``, also used by
+    # ``mcp add`` for the stdio command tail) to capture the new title.
+    # We join with spaces inside ``cmd_sessions_rename`` so users don't
+    # have to quote multi-word titles. ``None`` when the slot wasn't
+    # registered keeps non-rename actions unaffected.
+    args.sessions_title = list(getattr(args, "mcp_extra", []) or []) or None
     rc = dispatch_sessions(args)
     return rc if rc is not None else 0
 
@@ -1574,12 +2151,18 @@ def _dispatch_share(args: argparse.Namespace) -> int:
 
 
 def _dispatch_agents(args: argparse.Namespace) -> int:
-    """Implement ``chimera otter agents [list|show <name>]``.
+    """Implement ``chimera otter agents [list|show <name>|create [<name>]]``.
 
     Delegates to :mod:`chimera.otter.agents` so the same project > user
-    > built-in chain ``--agent <name>`` walks is what gets listed/shown.
+    > built-in chain ``--agent <name>`` walks is what gets listed/shown,
+    and so ``create`` writes into the same ``.opencode/agent/`` tree the
+    discovery chain reads back.
     """
-    from chimera.otter.agents import cmd_agents_list, cmd_agents_show
+    from chimera.otter.agents import (
+        cmd_agents_create,
+        cmd_agents_list,
+        cmd_agents_show,
+    )
 
     no_color = bool(
         getattr(args, "no_color", False) or getattr(args, "no_rich", False)
@@ -1594,9 +2177,18 @@ def _dispatch_agents(args: argparse.Namespace) -> int:
         return cmd_agents_list(no_color=no_color, cwd=cwd)
     if action == "show":
         return cmd_agents_show(target, no_color=no_color, cwd=cwd)
+    if action == "create":
+        # ``target`` is the optional NAME positional; cmd_agents_create
+        # treats ``None`` as "prompt for the name" and any provided
+        # value as the prompt default.
+        return cmd_agents_create(
+            target,
+            user=bool(getattr(args, "agents_user", False)),
+            cwd=cwd,
+        )
     print(
         f"error: unknown 'agents' action: {action!r} "
-        "(supported: list, show)",
+        "(supported: list, show, create)",
         file=sys.stderr,
     )
     return 2
@@ -1615,13 +2207,110 @@ def _dispatch_bench(args: argparse.Namespace) -> int:
     return dispatch_bench(args)
 
 
+def _dispatch_mcp(args: argparse.Namespace) -> int:
+    """Late-bind ``chimera otter mcp`` to :mod:`chimera.otter.mcp_cli`.
+
+    Routes ``mcp list`` / ``mcp add`` / ``mcp auth``. The lazy import
+    keeps the auth + credential-store dependencies out of the
+    ``--help`` / ``--version`` path, symmetric with how
+    :func:`_dispatch_bench` lazy-imports the benchmark module.
+    """
+    from chimera.otter.mcp_cli import dispatch_mcp
+
+    return dispatch_mcp(args)
+
+
 _SUBCOMMAND_DISPATCH: dict[str, Any] = {
     "serve": _dispatch_serve,
     "sessions": _dispatch_sessions,
     "share": _dispatch_share,
     "agents": _dispatch_agents,
     "bench": _dispatch_bench,
+    "mcp": _dispatch_mcp,
 }
+
+
+# ---------------------------------------------------------------------------
+# TUI dispatcher (C5)
+# ---------------------------------------------------------------------------
+
+
+def _dispatch_tui(args: argparse.Namespace) -> int:
+    """Boot the textual TUI prototype against an in-process server.
+
+    Builds an :class:`OtterServer` whose ``agent_factory`` reuses the
+    same provider/loop/tools wiring as ``--print`` / ``serve`` so the
+    TUI sees the same agent surface a real client would. The server is
+    *not* bound to a socket — every TUI call goes through the in-process
+    Python API, which keeps the prototype self-contained and avoids
+    needing a free port.
+
+    Args:
+        args: Parsed CLI namespace.
+
+    Returns:
+        Process exit code. Returns ``2`` when the optional ``[tui]``
+        extra is missing so shell pipelines can detect the install gap.
+    """
+    try:
+        from chimera.otter.tui import TUIConfig, run_tui
+    except ImportError as exc:
+        sys.stderr.write(f"otter --tui: {exc}\n")
+        return 2
+
+    from chimera.core.agent import Agent
+    from chimera.core.loop import ReAct
+    from chimera.core.loop_config import LoopConfig
+    from chimera.core.prompt import Prompt
+    from chimera.core.tool_group import AGENT_TOOLS
+    from chimera.env.local import LocalEnvironment
+    from chimera.otter.server import OtterServer, OtterSessionState
+
+    cwd = os.path.abspath(args.cwd or os.getcwd())
+    model = args.model
+    max_steps = int(args.max_steps)
+    no_lsp = bool(getattr(args, "no_lsp", False))
+    no_rules = bool(getattr(args, "no_rules", False))
+    no_mcp = bool(getattr(args, "no_mcp", False))
+    no_plugins = bool(getattr(args, "no_plugins", False))
+
+    def _factory(state: OtterSessionState) -> Any:
+        provider = _build_provider(model)
+        workdir = state.working_dir or cwd
+        env = LocalEnvironment(workdir=workdir)
+        env.setup()
+        config = LoopConfig()
+        loop = ReAct(max_steps=max_steps, config=config)
+        composed = _compose_prompt(
+            "You are Otter, a Chimera coding agent driven over the local TUI.",
+            project_root=Path(workdir),
+            no_rules=no_rules,
+        )
+        prompt = Prompt.from_string(composed)
+        tools = _attach_lsp_tools(
+            list(AGENT_TOOLS), no_lsp=no_lsp, project_root=Path(workdir),
+        )
+        if not no_mcp:
+            tools = _attach_mcp_tools(tools, project_root=Path(workdir))
+        plugin_hooks: list[Any] = []
+        plugin_mcp_servers: list[Any] = []
+        _attach_plugin_extensions(
+            tools,
+            plugin_hooks,
+            agent_registry=None,
+            project_root=Path(workdir),
+            mcp_servers=plugin_mcp_servers,
+            enabled=not no_plugins,
+        )
+        plugin_emitter = _build_plugin_hook_emitter(plugin_hooks)
+        if plugin_emitter is not None and config.hook_emitter is None:
+            config.hook_emitter = plugin_emitter
+        return Agent(provider=provider, tools=tools, loop=loop, prompt=prompt)
+
+    server = OtterServer(_factory)
+    cfg = TUIConfig(model=model, working_dir=cwd)
+    return run_tui(server, cfg)
+
 
 
 # ---------------------------------------------------------------------------
@@ -1645,6 +2334,13 @@ def run(args: argparse.Namespace) -> int:
 
     if args.print_mode is not None:
         return _run_print_mode(args)
+
+    # WHY (C5): ``--tui`` boots the textual-based TUI prototype against
+    # an in-process :class:`OtterServer`. The TUI is opt-in (gated by
+    # the ``[tui]`` extra) so the readline REPL stays the default and
+    # the import cost of textual only fires when the user asks for it.
+    if bool(getattr(args, "tui", False)):
+        return _dispatch_tui(args)
 
     # No print, no subcommand — emit a brief usage hint pointing at the
     # interactive REPL placeholder (agent O2). Returning 0 here would mask

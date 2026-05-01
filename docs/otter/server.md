@@ -598,3 +598,199 @@ curl -s -H "Authorization: Bearer $OTTER_SERVER_TOKEN" \
 | 400    | `{"error": "invalid_query", "detail": …}`         | Malformed `since` / `limit`.         |
 | 401    | `{"error": "unauthorized"}`                       | Missing or wrong bearer token.       |
 | 500    | `{"error": "runs_cost_failed", "detail": …}`      | Filesystem or aggregator raised.     |
+
+## Multi-session support
+
+`chimera otter serve` is **multi-session out of the box**. A single
+server process owns many concurrent `OtterSessionState` objects in
+parallel — a TUI client, an IDE plugin, an evals harness, and a web UI
+can all drive the same server simultaneously without contending on a
+global lock.
+
+Sessions are owned by an `OtterSessionManager` (a thin layer over a
+`dict[str, OtterSessionState]` plus a `threading.Lock`). The manager's
+lock guards *only* the dict; agent runs hold no manager-wide lock, so
+two sessions running ReAct loops in parallel never wait on each other.
+
+### TTL eviction
+
+Idle sessions are reaped after `OtterSessionManager.ttl` seconds (one
+hour by default — `DEFAULT_SESSION_TTL`). Every observable activity
+bumps the session's `last_touched` timestamp:
+
+* `POST /session` — create
+* `GET /session/<id>` — state snapshot
+* `POST /session/<id>/message` — agent dispatch
+* `POST /session/<id>/cancel` — cooperative cancel
+* `GET /session/<id>/events` — SSE subscribe (full + reconnect replay)
+* every `emit_event` fan-out (server-driven activity)
+
+Eviction is opportunistic: every public mutation on the manager calls
+`evict_idle()` first, so callers don't need a background sweeper. When
+a session is evicted, its SSE subscribers receive the `None` sentinel
+(generators exit cleanly), pending permission gates are released, and
+its cancellation token is flipped so any in-flight agent thread halts
+on its next yield.
+
+To disable TTL eviction (interactive REPL clients that may sit idle
+overnight), pass `session_ttl=None` when instantiating the server, or
+inject a manager built with `OtterSessionManager(ttl=None)`.
+
+### `GET /sessions`
+
+Multi-session listing — returns metadata for every active session,
+newest-touched first:
+
+```json
+{
+  "sessions": [
+    {
+      "session_id": "9c1...",
+      "working_dir": "/path/to/project",
+      "created_at": 1745000000.0,
+      "last_touched": 1745000123.0,
+      "event_count": 42
+    }
+  ]
+}
+```
+
+```bash
+curl -s -H "Authorization: Bearer $OTTER_SERVER_TOKEN" \
+  http://127.0.0.1:5173/sessions \
+  | jq '.sessions[] | {id: .session_id, idle: (now - .last_touched)}'
+```
+
+`GET /session` (singular) still returns the bare-id list for
+back-compat with existing clients.
+
+### `DELETE /session/<id>`
+
+Explicit teardown. Returns `204 No Content` on hit, `404` on miss.
+Wakes SSE subscribers, releases pending permission gates, cancels any
+in-flight agent run, and removes the session from the manager:
+
+```bash
+curl -s -X DELETE \
+  -H "Authorization: Bearer $OTTER_SERVER_TOKEN" \
+  http://127.0.0.1:5173/session/9c1...
+```
+
+| Status | Body                                | Cause                       |
+|--------|-------------------------------------|-----------------------------|
+| 204    | (empty)                             | Session torn down.          |
+| 404    | `{"error": "session_not_found"}`    | Unknown session id.         |
+| 401    | `{"error": "unauthorized"}`         | Missing/wrong bearer token. |
+
+### Per-session SSE replay buffer
+
+Every session owns an independent `state.events` list — the SSE replay
+buffer for `GET /session/<id>/events`. Two concurrent sessions
+therefore have entirely disjoint event histories: a `Last-Event-ID`
+reconnect on session A only ever replays A's frames, and `emit_event`
+on B never reaches A's subscribers. This is asserted end-to-end by
+`tests/otter/test_server_multi_session.py`.
+
+### Configuring multi-session behaviour
+
+`OtterServer` accepts:
+
+* `session_manager: OtterSessionManager | None` — inject a shared
+  manager (handy in tests with a deterministic clock, or to share a
+  manager across an HTTP and ACP front-end on the same process).
+* `session_ttl: float | None` — TTL for the auto-built manager when
+  `session_manager` is `None`. Defaults to `DEFAULT_SESSION_TTL`
+  (3600s). `None` or `0` disables eviction.
+
+```python
+from chimera.otter.server import OtterServer, OtterSessionManager
+
+# Custom 10-minute idle TTL.
+srv = OtterServer(agent_factory=..., session_ttl=600.0)
+
+# Or inject a manager directly.
+mgr = OtterSessionManager(ttl=600.0)
+srv = OtterServer(agent_factory=..., session_manager=mgr)
+```
+
+## Managing backgrounded servers (`serve status` / `serve stop`)
+
+When `chimera otter serve` is launched in the background (e.g. `&` in a
+shell, a `tmux` pane, or a launchd job), the running PID, port, and a
+SHA-256 of the auth token are recorded in
+`~/.chimera/run/otter-<port>.pid`. Two subcommands consume that on-disk
+record so a separate shell can list and graceful-stop those servers
+without hand-rolling `ps` / `lsof` parsing.
+
+### `chimera otter serve status`
+
+Lists every backgrounded otter server discovered under
+`~/.chimera/run/`. One line per pidfile:
+
+```text
+otter port=5173 pid=12345 alive=yes scheme=https auth=yes /Users/you/.chimera/run/otter-5173.pid
+otter port=5183 pid=88888 alive=no (stale) scheme=http auth=no /Users/you/.chimera/run/otter-5183.pid
+```
+
+`alive=no (stale)` flags a pidfile whose process has exited without a
+clean shutdown — `serve stop` will reap it idempotently.
+
+### `chimera otter serve stop [--port N | --all] [--serve-timeout N]`
+
+Gracefully terminates one or every running otter server.
+
+- **No arguments**: if exactly one otter pidfile exists, stop it. If
+  more than one is running, exit 2 with a "disambiguate" error.
+- **`--port N`**: target only the matching `otter-<N>.pid` record.
+- **`--all`**: stop every backgrounded otter server.
+- **`--serve-timeout N`**: seconds to wait between SIGTERM and the
+  SIGKILL escalation. Default `10.0`.
+
+The shutdown sequence is **graceful first**, per the project rule
+(`CLAUDE.md`): `SIGTERM` → wait up to `--serve-timeout` seconds → only
+escalate to `SIGKILL` when the process is still alive after the wait.
+`SIGKILL` is never the first signal sent.
+
+Exit codes: `0` on every targeted process stopping (or no pidfiles to
+match — idempotent), `1` when at least one process refused both signals,
+`2` on a usage error (`stop` with multiple servers and no
+`--port` / `--all`).
+
+### Pidfile schema
+
+```json
+{
+  "pid": 12345,
+  "host": "127.0.0.1",
+  "port": 5173,
+  "prefix": "otter",
+  "auth_token_hash": "sha256:9c…",
+  "started_at": 1714500000.0,
+  "scheme": "https"
+}
+```
+
+`auth_token_hash` is `null` when the server runs without `--auth-token`.
+Storing only the SHA-256 keeps the bearer secret off disk while still
+letting future tooling assert the caller knows the token.
+
+### Library API
+
+The same primitives are exported under `chimera.otter.server_pidfile`
+for embedders that drive the server programmatically:
+
+```python
+from chimera.otter import server_pidfile
+
+# List every running server.
+records = server_pidfile.list_pidfiles(prefix="otter")
+
+# Stop the otter server on port 5173 with a 5-second SIGTERM window.
+server_pidfile.stop_all(prefix="otter", port=5173, timeout=5.0)
+```
+
+Pidfile management is opt-in: `OtterServer(pidfile_prefix="otter")` (or
+`serve_http(pidfile_prefix="otter")`) writes the record on bind and
+removes it on graceful shutdown. With `pidfile_prefix=None` (the
+default) no pidfile is touched, which is what you want for in-process
+test harnesses and library embedders.

@@ -19,7 +19,18 @@ Path                              Method Purpose
                                          ``{"working_dir": "..."}``. Returns
                                          ``{"session_id": "..."}``.
 ``/session``                      GET    List session ids.
+``/sessions``                     GET    Multi-session listing — returns
+                                         ``{"sessions": [{session_id,
+                                         working_dir, created_at,
+                                         last_touched, event_count}, ...]}``,
+                                         newest-touched first.
 ``/session/<id>``                 GET    Return session state snapshot.
+``/session/<id>``                 DELETE Tear the session down: wake SSE
+                                         subscribers, release pending
+                                         permission gates, cancel in-flight
+                                         agent runs, and remove it from the
+                                         manager. Returns ``204 No Content``
+                                         on hit, ``404`` on miss.
 ``/session/<id>/message``         POST   Send a user prompt
                                          (``{"text": "..."}``). Returns the
                                          message id; agent runs in the
@@ -92,12 +103,21 @@ from chimera.core.cancellation import CancellationToken
 
 __all__ = [
     "OtterServer",
+    "OtterSessionManager",
     "OtterSessionState",
     "AgentFactory",
     "serve_http",
     "DEFAULT_HOST",
     "DEFAULT_PORT",
+    "DEFAULT_SESSION_TTL",
 ]
+
+
+#: Default idle TTL (seconds) before :class:`OtterSessionManager` evicts a
+#: session. One hour matches the upstream open-source coding agent's
+#: default and keeps long-running interactive sessions alive while still
+#: reaping abandoned ones in multi-session deployments.
+DEFAULT_SESSION_TTL = 3600.0
 
 
 #: Default bind host. We default to localhost — the server has no auth by
@@ -169,6 +189,7 @@ class OtterSessionState:
     pending_permissions: dict[str, "_PermissionGate"] = field(default_factory=dict)
     lock: threading.Lock = field(default_factory=threading.Lock)
     created_at: float = field(default_factory=time.time)
+    last_touched: float = field(default_factory=time.time)
     cancel: CancellationToken = field(default_factory=CancellationToken)
 
 
@@ -226,6 +247,215 @@ class _PermissionGate:
 
 
 # ---------------------------------------------------------------------------
+# Session manager (multi-session bookkeeping, TTL eviction)
+# ---------------------------------------------------------------------------
+
+
+class OtterSessionManager:
+    """Owns the live :class:`OtterSessionState` map for an :class:`OtterServer`.
+
+    The manager is a thin layer over a ``dict[str, OtterSessionState]``
+    plus a coarse :class:`threading.Lock` that guards *only* the dict
+    itself — never an agent run. This means many sessions can drive
+    their own background ReAct loops in parallel without ever waiting on
+    the manager's lock; the lock is held only long enough to insert,
+    look up, or delete a session by id.
+
+    TTL eviction reaps sessions that have been idle for more than *ttl*
+    seconds. ``last_touched`` is bumped whenever a session is created,
+    looked up, emits an event, or accepts a subscriber — i.e. any
+    observable activity over the HTTP surface. Eviction itself is
+    opportunistic: every public mutation (``create``, ``get``, ``delete``)
+    runs :meth:`evict_idle` first so callers don't have to schedule a
+    background sweeper. Tests can also call :meth:`evict_idle` directly.
+
+    Args:
+        ttl: Idle time (seconds) before a session is evicted by
+            :meth:`evict_idle`. ``None`` or ``0`` disables eviction
+            entirely (useful for tests that pin wall-clock time).
+            Defaults to :data:`DEFAULT_SESSION_TTL` (one hour).
+        clock: Callable returning the current wall-clock time. Defaults
+            to :func:`time.time`. Tests inject a deterministic clock so
+            TTL behaviour can be asserted without sleeping.
+    """
+
+    def __init__(
+        self,
+        *,
+        ttl: float | None = DEFAULT_SESSION_TTL,
+        clock: Callable[[], float] = time.time,
+    ) -> None:
+        self._ttl = ttl
+        self._clock = clock
+        self._sessions: dict[str, OtterSessionState] = {}
+        self._lock = threading.Lock()
+
+    @property
+    def ttl(self) -> float | None:
+        """Configured idle TTL in seconds (``None``/``0`` disables)."""
+        return self._ttl
+
+    @property
+    def sessions(self) -> dict[str, OtterSessionState]:
+        """Snapshot view of the current session map.
+
+        Returns a *copy* so iteration is safe without holding the lock.
+        For mutation use :meth:`create`, :meth:`delete`, or :meth:`clear`.
+        """
+        with self._lock:
+            return dict(self._sessions)
+
+    def create(self, *, working_dir: str = "") -> OtterSessionState:
+        """Create + register a fresh :class:`OtterSessionState`.
+
+        Args:
+            working_dir: Working directory the agent should operate in.
+
+        Returns:
+            The newly registered :class:`OtterSessionState`. The caller
+            holds no lock when this returns; subsequent agent runs do
+            not synchronise on the manager.
+        """
+        self.evict_idle()
+        now = self._clock()
+        state = OtterSessionState(
+            session_id=uuid.uuid4().hex,
+            working_dir=working_dir,
+            created_at=now,
+            last_touched=now,
+        )
+        with self._lock:
+            self._sessions[state.session_id] = state
+        return state
+
+    def get(
+        self,
+        session_id: str,
+        *,
+        touch: bool = True,
+    ) -> OtterSessionState | None:
+        """Return the session, optionally bumping ``last_touched``.
+
+        Args:
+            session_id: Target session id.
+            touch: When ``True`` (default) update ``last_touched`` to
+                the current clock time so an active session is not
+                reaped by :meth:`evict_idle`. Pass ``False`` to read
+                the session without resetting its idle timer (used by
+                eviction itself and by some introspection paths).
+
+        Returns:
+            The :class:`OtterSessionState` or ``None`` on miss.
+        """
+        self.evict_idle()
+        with self._lock:
+            state = self._sessions.get(session_id)
+            if state is not None and touch:
+                state.last_touched = self._clock()
+        return state
+
+    def touch(self, session_id: str) -> None:
+        """Bump ``last_touched`` for *session_id* if present (no-op on miss).
+
+        Cheap variant of :meth:`get` used by hot-paths that already hold
+        a reference to the state but want to mark activity (e.g.
+        :meth:`OtterServer.emit_event`).
+        """
+        with self._lock:
+            state = self._sessions.get(session_id)
+            if state is not None:
+                state.last_touched = self._clock()
+
+    def delete(self, session_id: str) -> OtterSessionState | None:
+        """Remove + return the session, or ``None`` on miss.
+
+        Wakes any SSE subscribers attached to the doomed session so
+        their generators exit promptly. Pending permission gates are
+        also released so a thread blocked in
+        :meth:`OtterServer.request_permission` unwinds with
+        ``approved=False``.
+        """
+        with self._lock:
+            state = self._sessions.pop(session_id, None)
+        if state is not None:
+            self._tear_down(state)
+        return state
+
+    def list_active(self) -> list[dict[str, Any]]:
+        """Return ``[{session_id, last_touched, created_at, ...}, ...]``.
+
+        Newest-touched first. The returned dicts are JSON-friendly so
+        they can be served directly as the body of ``GET /sessions``.
+        """
+        self.evict_idle()
+        with self._lock:
+            states = list(self._sessions.values())
+        states.sort(key=lambda s: s.last_touched, reverse=True)
+        return [
+            {
+                "session_id": s.session_id,
+                "working_dir": s.working_dir,
+                "created_at": s.created_at,
+                "last_touched": s.last_touched,
+                "event_count": len(s.events),
+            }
+            for s in states
+        ]
+
+    def list_ids(self) -> list[str]:
+        """Snapshot of registered session ids (insertion order)."""
+        with self._lock:
+            return list(self._sessions.keys())
+
+    def evict_idle(self) -> list[str]:
+        """Drop sessions whose ``last_touched`` is older than ``ttl``.
+
+        Returns the list of evicted ids (empty when nothing aged out or
+        TTL is disabled). Eviction wakes SSE subscribers and releases
+        permission gates exactly as :meth:`delete` does.
+        """
+        if not self._ttl:
+            return []
+        cutoff = self._clock() - self._ttl
+        evicted: list[OtterSessionState] = []
+        with self._lock:
+            for sid in list(self._sessions.keys()):
+                state = self._sessions[sid]
+                if state.last_touched < cutoff:
+                    evicted.append(self._sessions.pop(sid))
+        for state in evicted:
+            self._tear_down(state)
+        return [s.session_id for s in evicted]
+
+    def clear(self) -> None:
+        """Drop every session. Used by :meth:`OtterServer.shutdown`."""
+        with self._lock:
+            states = list(self._sessions.values())
+            self._sessions.clear()
+        for state in states:
+            self._tear_down(state)
+
+    @staticmethod
+    def _tear_down(state: OtterSessionState) -> None:
+        """Wake subscribers + release permission gates on a doomed session."""
+        with state.lock:
+            for q in state.subscribers:
+                try:
+                    q.put_nowait(None)
+                except queue.Full:  # pragma: no cover - unbounded queues today
+                    pass
+            state.subscribers.clear()
+            for gate in state.pending_permissions.values():
+                gate.event.set()
+            state.pending_permissions.clear()
+        # Cancel any in-flight agent run so its background thread unwinds.
+        try:
+            state.cancel.cancel()
+        except Exception:  # noqa: BLE001 - best-effort
+            pass
+
+
+# ---------------------------------------------------------------------------
 # Server
 # ---------------------------------------------------------------------------
 
@@ -260,9 +490,21 @@ class OtterServer:
             per-call). Tests inject a ``tmp_path`` containing synthetic
             ``mink-*`` / ``otter-*`` summary fixtures so the routes
             don't depend on the developer's real ``~/.chimera/eventlog``.
+        session_manager: Optional :class:`OtterSessionManager` to share
+            across :class:`OtterServer` instances (or inject in tests).
+            ``None`` (default) builds a fresh manager with the default
+            TTL. The manager owns the live session map and TTL eviction
+            so many concurrent sessions can be created, messaged, and
+            observed without serialising on a single global lock.
+        session_ttl: Idle TTL (seconds) passed to the auto-built
+            manager when ``session_manager`` is ``None``. Ignored when
+            an explicit manager is supplied. Defaults to
+            :data:`DEFAULT_SESSION_TTL`.
 
     Attributes:
         sessions: Live :class:`OtterSessionState` objects keyed by id.
+            Backed by the manager; mutating it directly is unsupported —
+            use :meth:`create_session` / :meth:`delete_session` instead.
 
     Raises:
         ValueError: When exactly one of ``tls_cert`` / ``tls_key`` is
@@ -280,11 +522,27 @@ class OtterServer:
         tls_key: Path | str | None = None,
         commands_cwd: Path | str | None = None,
         eventlog_root: Path | str | None = None,
+        session_manager: OtterSessionManager | None = None,
+        session_ttl: float | None = DEFAULT_SESSION_TTL,
+        pidfile_prefix: str | None = None,
+        pidfile_dir: Path | str | None = None,
     ) -> None:
         self._agent_factory = agent_factory
         self._host = host
         self._port = port
         self._auth_token = auth_token
+        # WHY (server-mgmt): persistent pidfile lets ``serve status`` /
+        # ``serve stop`` discover backgrounded servers across shells.
+        # ``pidfile_prefix=None`` opts the server out of writing one
+        # (default for tests / library embedders that don't want
+        # ``~/.chimera/run`` touched). The CLI dispatcher passes
+        # ``"otter"`` / ``"ferret"`` so the two flavors get distinct
+        # filenames.
+        self._pidfile_prefix: str | None = pidfile_prefix
+        self._pidfile_dir: Path | None = (
+            Path(pidfile_dir) if pidfile_dir is not None else None
+        )
+        self._pidfile_path: Path | None = None
         # Normalize to ``Path`` so callers can pass plain strings (CLI flag
         # plumbing) or pre-built ``Path`` objects (tests) interchangeably.
         self._tls_cert: Path | None = Path(tls_cert) if tls_cert else None
@@ -309,8 +567,15 @@ class OtterServer:
         self._eventlog_root: Path | None = (
             Path(eventlog_root) if eventlog_root is not None else None
         )
-        self.sessions: dict[str, OtterSessionState] = {}
-        self._sessions_lock = threading.Lock()
+        # Multi-session bookkeeping: the manager owns the dict + lock +
+        # TTL eviction. The server delegates every session lookup to it
+        # and never holds the manager's lock during an agent run, so
+        # concurrent sessions don't serialise on session bookkeeping.
+        self._session_manager: OtterSessionManager = (
+            session_manager
+            if session_manager is not None
+            else OtterSessionManager(ttl=session_ttl)
+        )
         self._httpd: ThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
 
@@ -348,16 +613,58 @@ class OtterServer:
             )
             httpd.socket = context.wrap_socket(httpd.socket, server_side=True)
         self._httpd = httpd
+        # WHY (server-mgmt): write the pidfile *after* the socket is bound
+        # so ``self._port`` reflects the real (possibly OS-chosen) port.
+        # Failures here are non-fatal — a missing pidfile only degrades
+        # ``serve status`` / ``serve stop`` discoverability, never the
+        # serving path. The graceful-shutdown branch removes it.
+        self._maybe_write_pidfile()
         if blocking:
             try:
                 httpd.serve_forever()
             finally:
                 httpd.server_close()
+                self._maybe_remove_pidfile()
             return None
         thread = threading.Thread(target=httpd.serve_forever, daemon=True)
         thread.start()
         self._thread = thread
         return httpd
+
+    def _maybe_write_pidfile(self) -> None:
+        """Best-effort pidfile write. ``pidfile_prefix=None`` is a no-op."""
+        if self._pidfile_prefix is None:
+            return
+        try:
+            from chimera.otter.server_pidfile import write_pidfile
+
+            scheme = "https" if (self._tls_cert and self._tls_key) else "http"
+            self._pidfile_path = write_pidfile(
+                prefix=self._pidfile_prefix,
+                host=self._host,
+                port=self._port,
+                auth_token=self._auth_token,
+                scheme=scheme,
+                base_dir=self._pidfile_dir,
+            )
+        except Exception:  # noqa: BLE001 — pidfile write must never crash serve
+            self._pidfile_path = None
+
+    def _maybe_remove_pidfile(self) -> None:
+        """Best-effort pidfile removal on graceful shutdown. Idempotent."""
+        if self._pidfile_prefix is None:
+            return
+        try:
+            from chimera.otter.server_pidfile import remove_pidfile
+
+            remove_pidfile(
+                prefix=self._pidfile_prefix,
+                port=self._port,
+                base_dir=self._pidfile_dir,
+            )
+        except Exception:  # noqa: BLE001 — never crash on cleanup
+            pass
+        self._pidfile_path = None
 
     def shutdown(self) -> None:
         """Shut the server down and join the background thread.
@@ -371,19 +678,34 @@ class OtterServer:
         if self._thread is not None:
             self._thread.join(timeout=2.0)
             self._thread = None
-        # Wake any SSE subscribers so they exit their generators.
-        with self._sessions_lock:
-            sessions = list(self.sessions.values())
-        for state in sessions:
-            with state.lock:
-                for q in state.subscribers:
-                    q.put(None)
-                state.subscribers.clear()
+        # WHY (server-mgmt): remove pidfile here too so a non-blocking
+        # ``start(blocking=False)`` followed by ``shutdown()`` (the test
+        # harness path) cleans up. The blocking path already removes the
+        # pidfile in the ``finally`` block of :meth:`start`.
+        self._maybe_remove_pidfile()
+        # Wake every SSE subscriber + cancel in-flight runs across all
+        # sessions. The manager performs the per-session tear-down.
+        self._session_manager.clear()
 
     @property
     def port(self) -> int:
         """Actual bound port (resolved after :meth:`start`)."""
         return self._port
+
+    @property
+    def session_manager(self) -> OtterSessionManager:
+        """The :class:`OtterSessionManager` owning the live session map."""
+        return self._session_manager
+
+    @property
+    def sessions(self) -> dict[str, OtterSessionState]:
+        """Snapshot of the live session map keyed by id.
+
+        Backed by :attr:`session_manager`. Returns a *copy* so callers
+        can iterate without holding the manager's lock; mutate via
+        :meth:`create_session` / :meth:`delete_session` instead.
+        """
+        return self._session_manager.sessions
 
     # ------------------------------------------------------------------
     # Session bookkeeping (used by handlers; safe to call directly in tests)
@@ -397,13 +719,13 @@ class OtterServer:
         bottom-of-stack to roll back to. Per-turn snaps fire from
         :meth:`_drive_agent_streaming` (and the legacy ``async_run``
         fallback) once each assistant turn finalizes.
+
+        Multi-session: delegates to :class:`OtterSessionManager` so the
+        manager's lock is held only for the dict insert, not for the
+        slash-module snapshot. Concurrent sessions never serialise on a
+        global agent lock.
         """
-        state = OtterSessionState(
-            session_id=uuid.uuid4().hex,
-            working_dir=working_dir,
-        )
-        with self._sessions_lock:
-            self.sessions[state.session_id] = state
+        state = self._session_manager.create(working_dir=working_dir)
         # Best-effort baseline snap — keyed by ``id(state)`` inside the
         # slash module's ``_UNDO_STATES`` registry, so distinct HTTP
         # sessions get distinct undo stacks. The slash module degrades to
@@ -419,14 +741,36 @@ class OtterServer:
         return state
 
     def get_session(self, session_id: str) -> OtterSessionState | None:
-        """Return the session by id, or ``None`` if unknown."""
-        with self._sessions_lock:
-            return self.sessions.get(session_id)
+        """Return the session by id, or ``None`` if unknown.
+
+        Looking a session up bumps its ``last_touched`` timestamp so an
+        active client keeps the session alive against TTL eviction.
+        """
+        return self._session_manager.get(session_id)
 
     def list_session_ids(self) -> list[str]:
         """Return a snapshot of registered session ids."""
-        with self._sessions_lock:
-            return list(self.sessions.keys())
+        return self._session_manager.list_ids()
+
+    def list_sessions(self) -> list[dict[str, Any]]:
+        """Return JSON-friendly per-session bookkeeping for ``GET /sessions``.
+
+        Each entry carries ``session_id``, ``working_dir``,
+        ``created_at``, ``last_touched``, and ``event_count`` — enough
+        for a multi-session client to render an active-session table
+        without having to ``GET /session/<id>`` for every id.
+        """
+        return self._session_manager.list_active()
+
+    def delete_session(self, session_id: str) -> bool:
+        """Tear down *session_id* and return ``True`` on hit, ``False`` on miss.
+
+        Wakes SSE subscribers, releases pending permission gates, and
+        cancels any in-flight agent run so the session's background
+        threads unwind promptly. Idempotent — a second call against the
+        same id returns ``False``.
+        """
+        return self._session_manager.delete(session_id) is not None
 
     # ------------------------------------------------------------------
     # Event fan-out
@@ -454,6 +798,11 @@ class OtterServer:
         with state.lock:
             state.events.append(envelope)
             subscribers = list(state.subscribers)
+        # Activity bump: every emit keeps the session alive against TTL
+        # eviction. Touching the manager (rather than mutating
+        # ``state.last_touched`` directly) avoids racing with eviction
+        # threads that hold the manager lock.
+        self._session_manager.touch(state.session_id)
         for q in subscribers:
             try:
                 q.put_nowait(envelope)
@@ -486,6 +835,14 @@ class OtterServer:
             # Replay any history so a late-attaching subscriber catches up.
             # When ``last_event_id`` is set, skip frames the client has
             # already seen so reconnects don't replay everything.
+            #
+            # Per-session replay buffer: ``state.events`` is the *only*
+            # backing store for SSE history, scoped to a single
+            # :class:`OtterSessionState`. Two concurrent sessions
+            # therefore have entirely independent replay queues — no
+            # cross-contamination is possible because ``emit_event`` only
+            # appends to and ``subscribe`` only reads from the
+            # ``state.events`` list of the session passed in.
             for envelope in state.events:
                 if last_event_id is not None:
                     try:
@@ -496,6 +853,10 @@ class OtterServer:
                         continue
                 q.put_nowait(envelope)
             state.subscribers.append(q)
+        # Subscribing is observable activity — bump the manager clock so
+        # an SSE client that's listening but not posting still keeps the
+        # session alive against TTL eviction.
+        self._session_manager.touch(state.session_id)
         return q
 
     def unsubscribe(
@@ -1182,6 +1543,14 @@ class OtterServer:
                 if path == "/session":
                     self._send_json(200, {"sessions": outer.list_session_ids()})
                     return
+                if path == "/sessions":
+                    # Multi-session listing — returns the same fields as
+                    # ``GET /session/<id>`` plus ``last_touched`` for
+                    # every active session, newest-touched first.
+                    self._send_json(
+                        200, {"sessions": outer.list_sessions()}
+                    )
+                    return
                 if path == "/commands":
                     return self._handle_commands_list()
                 if path == "/runs":
@@ -1218,6 +1587,17 @@ class OtterServer:
                     #   parts == ["", "commands", "<name>", "invoke"]
                     if len(parts) == 4 and parts[3] == "invoke" and parts[2]:
                         return self._handle_command_invoke(parts[2])
+                self._send_json(404, {"error": "not_found", "path": path})
+
+            def do_DELETE(self) -> None:  # noqa: N802 - stdlib API
+                if not self._check_auth():
+                    return
+                path = self.path.split("?", 1)[0]
+                if path.startswith("/session/"):
+                    parts = path.split("/")
+                    # /session/<id>   parts == ["", "session", "<id>"]
+                    if len(parts) == 3 and parts[2]:
+                        return self._handle_session_delete(parts[2])
                 self._send_json(404, {"error": "not_found", "path": path})
 
             # ------- POST /session --------------------------------------
@@ -1275,6 +1655,19 @@ class OtterServer:
                 if length > 0:
                     self.rfile.read(length)
                 if not outer.cancel_session(session_id):
+                    self._send_json(404, {"error": "session_not_found"})
+                    return
+                self._send_status(204)
+
+            # ------- DELETE /session/<id> -------------------------------
+            def _handle_session_delete(self, session_id: str) -> None:
+                """Tear down *session_id*: remove from manager, wake SSE."""
+                # Drain (and discard) any body so urllib clients don't
+                # sit blocked waiting for it to be consumed.
+                length = int(self.headers.get("Content-Length", "0") or "0")
+                if length > 0:
+                    self.rfile.read(length)
+                if not outer.delete_session(session_id):
                     self._send_json(404, {"error": "session_not_found"})
                     return
                 self._send_status(204)
@@ -1531,6 +1924,8 @@ def serve_http(
     tls_key: Path | str | None = None,
     commands_cwd: Path | str | None = None,
     eventlog_root: Path | str | None = None,
+    pidfile_prefix: str | None = None,
+    pidfile_dir: Path | str | None = None,
 ) -> int:
     """Start :class:`OtterServer` in blocking mode and return an exit code.
 
@@ -1551,6 +1946,12 @@ def serve_http(
             and ``GET /runs/cost``. Defaults to
             :func:`chimera.mink.runs.default_eventlog_root` resolved
             per-call.
+        pidfile_prefix: When set (``"otter"`` / ``"ferret"``), the server
+            writes ``~/.chimera/run/<prefix>-<port>.pid`` after binding so
+            ``chimera <prefix> serve status`` / ``stop`` can discover and
+            gracefully terminate the process. ``None`` (default) opts out.
+        pidfile_dir: Override the pidfile directory. Defaults to
+            ``~/.chimera/run`` honoring the live ``Path.home()``.
 
     Returns:
         ``0`` on graceful shutdown (Ctrl-C). The function blocks until
@@ -1565,6 +1966,8 @@ def serve_http(
         tls_key=tls_key,
         commands_cwd=commands_cwd,
         eventlog_root=eventlog_root,
+        pidfile_prefix=pidfile_prefix,
+        pidfile_dir=pidfile_dir,
     )
     try:
         server.start(blocking=True)

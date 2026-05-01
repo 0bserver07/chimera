@@ -38,10 +38,29 @@ Method                        Purpose
                               text.
 ``session/cancel``            Cooperatively cancel an in-flight
                               ``session/message`` for a given session.
+``session/resume``            Replay ``session/update`` notifications a
+                              client missed across a disconnect. Accepts
+                              ``{sessionId, sinceEventId}`` and replays
+                              every notification whose monotonic
+                              ``eventId`` is strictly greater than the
+                              cursor. Mirrors the SSE
+                              ``Last-Event-ID`` resume flow used by the
+                              HTTP server (``chimera/otter/server.py``).
 ``tool/approve``              Reply to a pending tool-permission request
                               (``approve`` / ``deny``). Mirrors the
                               upstream ``requestPermission`` flow.
 ============================  ==============================================
+
+Resume / event ids
+------------------
+
+Every ``session/update`` notification carries a monotonic per-session
+``eventId`` (1-based) plus the standard ``sessionId``. The server keeps
+a bounded history (``ACPSessionState.event_history``) so a reconnecting
+client can call ``session/resume`` with the last id it saw and pick up
+exactly where it left off. ACP runs over stdio (no TCP/TLS surface to
+secure), so transport security is delegated to whatever wrapper the
+client uses to spawn the subprocess.
 
 Design notes
 ------------
@@ -87,7 +106,14 @@ __all__ = [
 
 #: Wire-level protocol version reported by ``initialize``. Bumped when the
 #: server's request/response shape changes in a way clients must notice.
-OTTER_ACP_PROTOCOL_VERSION = 1
+#: ``2`` adds per-notification ``eventId`` plus the ``session/resume`` method.
+OTTER_ACP_PROTOCOL_VERSION = 2
+
+#: Default cap on retained ``session/update`` notifications per session.
+#: Older entries are evicted FIFO so a long-lived session doesn't grow
+#: unbounded. Clients that drop further behind than this lose replay —
+#: which matches the SSE reconnect semantics on the HTTP server.
+OTTER_ACP_DEFAULT_HISTORY_SIZE = 1024
 
 #: Name reported in ``initialize.agentInfo.name``. Trademark-clean.
 OTTER_ACP_AGENT_NAME = "otter"
@@ -140,6 +166,14 @@ class ACPSessionState:
         turn_lock: Async lock serializing per-session turn execution.
         pending_permissions: Permission-id → resolved-future map. The
             bridge fills the future when ``tool/approve`` arrives.
+        last_event_id: Monotonic counter for ``session/update`` events
+            emitted on this session. Starts at ``0``; the first emitted
+            event is tagged ``eventId=1``.
+        event_history: Bounded FIFO buffer of recent ``session/update``
+            notifications, used by ``session/resume`` to replay
+            notifications a reconnecting client missed.
+        history_limit: Maximum number of notifications retained in
+            :attr:`event_history`. Older entries are evicted FIFO.
     """
 
     session_id: str
@@ -149,6 +183,9 @@ class ACPSessionState:
     active_turn: bool = False
     turn_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     pending_permissions: dict[str, asyncio.Future[bool]] = field(default_factory=dict)
+    last_event_id: int = 0
+    event_history: list[dict[str, JsonValue]] = field(default_factory=list)
+    history_limit: int = OTTER_ACP_DEFAULT_HISTORY_SIZE
 
 
 # ---------------------------------------------------------------------------
@@ -189,6 +226,7 @@ class OtterACPServer:
         protocol_version: int = OTTER_ACP_PROTOCOL_VERSION,
         agent_name: str = OTTER_ACP_AGENT_NAME,
         agent_version: str = "0.0.0",
+        history_limit: int = OTTER_ACP_DEFAULT_HISTORY_SIZE,
     ) -> None:
         self._agent_factory = agent_factory
         self._reader: _LineReader = reader or _StdinLineReader()
@@ -196,6 +234,7 @@ class OtterACPServer:
         self._protocol_version = protocol_version
         self._agent_name = agent_name
         self._agent_version = agent_version
+        self._history_limit = history_limit
 
         self.sessions: dict[str, ACPSessionState] = {}
         self.initialized: bool = False
@@ -206,6 +245,7 @@ class OtterACPServer:
             "session/new": self._handle_session_new,
             "session/message": self._handle_session_message,
             "session/cancel": self._handle_session_cancel,
+            "session/resume": self._handle_session_resume,
             "tool/approve": self._handle_tool_approve,
         }
 
@@ -286,8 +326,12 @@ class OtterACPServer:
             },
             "agentCapabilities": {
                 "promptCapabilities": {"text": True},
-                "sessionCapabilities": {"cancel": True},
+                "sessionCapabilities": {
+                    "cancel": True,
+                    "resume": True,
+                },
                 "toolApproval": True,
+                "eventIds": True,
             },
             "clientProtocolVersion": client_protocol,
         }
@@ -299,7 +343,11 @@ class OtterACPServer:
         if isinstance(params, dict):
             cwd = str(params.get("cwd") or params.get("working_dir") or ".")
         session_id = f"otter-{uuid.uuid4().hex[:12]}"
-        state = ACPSessionState(session_id=session_id, working_dir=cwd)
+        state = ACPSessionState(
+            session_id=session_id,
+            working_dir=cwd,
+            history_limit=self._history_limit,
+        )
         self.sessions[session_id] = state
         return {"sessionId": session_id, "cwd": cwd}
 
@@ -421,6 +469,83 @@ class OtterACPServer:
         state.cancel_event.set()
         return {"sessionId": session_id, "cancelled": True}
 
+    async def _handle_session_resume(self, params: JsonValue) -> JsonValue:
+        """Replay buffered ``session/update`` notifications past a cursor.
+
+        ACP's stdio transport doesn't carry HTTP-style ``Last-Event-ID``
+        headers, so we expose the same semantics as a method call. The
+        client supplies the highest ``eventId`` it has already processed
+        and the server re-emits every retained notification with a
+        strictly larger id, in original order. Replayed notifications go
+        out as plain ``session/update`` frames (same wire shape as the
+        live stream) so client handlers don't need a separate code path.
+
+        Args:
+            params: ``{"sessionId": str, "sinceEventId": int}``.
+                ``sinceEventId`` defaults to ``0`` (replay everything we
+                still have buffered). Negative values are clamped to
+                ``0``.
+
+        Returns:
+            ``{"sessionId", "replayed", "lastEventId", "truncated"}``
+            where ``replayed`` is the count of notifications re-emitted,
+            ``lastEventId`` is the current monotonic counter, and
+            ``truncated`` is ``True`` when the cursor is older than the
+            oldest retained notification (so the client may have missed
+            events that fell out of the bounded buffer).
+        """
+        self._require_initialized()
+        if not isinstance(params, dict):
+            raise _ACPError(-32602, "session/resume: params must be an object")
+        session_id = params.get("sessionId") or params.get("session_id")
+        if not isinstance(session_id, str) or session_id not in self.sessions:
+            raise _ACPError(-32602, f"Unknown sessionId: {session_id!r}")
+        raw_cursor = params.get("sinceEventId")
+        if raw_cursor is None:
+            raw_cursor = params.get("since_event_id")
+        if raw_cursor is None:
+            raw_cursor = params.get("lastEventId")
+        try:
+            cursor = int(raw_cursor) if raw_cursor is not None else 0
+        except (TypeError, ValueError):
+            cursor = 0
+        if cursor < 0:
+            cursor = 0
+
+        state = self.sessions[session_id]
+        # Snapshot to avoid races with a live emit during replay.
+        history_snapshot = list(state.event_history)
+        oldest_retained = (
+            int(history_snapshot[0].get("eventId", 0))
+            if history_snapshot
+            else state.last_event_id
+        )
+        truncated = bool(history_snapshot) and cursor < oldest_retained - 1
+
+        replayed = 0
+        for envelope in history_snapshot:
+            try:
+                eid = int(envelope.get("eventId", 0))
+            except (TypeError, ValueError):
+                continue
+            if eid <= cursor:
+                continue
+            await self._write(
+                {
+                    "jsonrpc": "2.0",
+                    "method": "session/update",
+                    "params": envelope,
+                }
+            )
+            replayed += 1
+
+        return {
+            "sessionId": session_id,
+            "replayed": replayed,
+            "lastEventId": state.last_event_id,
+            "truncated": truncated,
+        }
+
     async def _handle_tool_approve(self, params: JsonValue) -> JsonValue:
         """Resolve a pending permission future for a session.
 
@@ -534,6 +659,31 @@ class OtterACPServer:
         )
 
     async def _notify(self, method: str, params: JsonValue) -> None:
+        """Send a JSON-RPC notification, tagging session updates with an id.
+
+        ``session/update`` notifications carry a per-session monotonic
+        ``eventId`` so a reconnecting client can call ``session/resume``
+        with the last id it processed and receive only the events that
+        followed. The id is stamped onto ``params`` in-place; the
+        envelope is also appended to the session's bounded
+        :attr:`ACPSessionState.event_history` for replay. Other
+        notification methods (or updates without a resolvable
+        ``sessionId``) pass through unchanged.
+        """
+        if method == "session/update" and isinstance(params, dict):
+            session_id = params.get("sessionId") or params.get("session_id")
+            if isinstance(session_id, str):
+                state = self.sessions.get(session_id)
+                if state is not None:
+                    state.last_event_id += 1
+                    params["eventId"] = state.last_event_id
+                    state.event_history.append(params)
+                    # Bound the buffer FIFO so long-lived sessions don't
+                    # leak. Slicing once when we cross the threshold
+                    # amortizes to O(1) per emit.
+                    if len(state.event_history) > state.history_limit:
+                        overflow = len(state.event_history) - state.history_limit
+                        del state.event_history[:overflow]
         await self._write({"jsonrpc": "2.0", "method": method, "params": params})
 
     async def _write(self, payload: JsonValue) -> None:

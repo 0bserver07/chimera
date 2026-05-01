@@ -37,9 +37,11 @@ __all__ = [
     "format_session_detail",
     "default_eventlog_root",
     "parse_since",
+    "rename_session",
     "cmd_sessions_list",
     "cmd_sessions_show",
     "cmd_sessions_cost",
+    "cmd_sessions_rename",
     "dispatch_sessions",
 ]
 
@@ -69,6 +71,9 @@ class SessionRecord:
         tool_calls: Total number of tool calls dispatched.
         path: Absolute path to the session's eventlog directory.
         error: Optional error string from ``summary.json`` (None on success).
+        title: Optional hand-authored label from ``--title`` /
+            ``sessions rename``. ``None`` falls back to the prompt for
+            display purposes.
     """
 
     session_id: str
@@ -82,6 +87,18 @@ class SessionRecord:
     tool_calls: int
     path: Path
     error: str | None = None
+    title: str | None = None
+
+    def display_title(self) -> str:
+        """Return the user-facing title.
+
+        Returns ``title`` when set (via ``--title`` or
+        ``sessions rename``); otherwise falls back to ``prompt`` so the
+        existing truncated-prompt heuristic continues to work.
+        """
+        if self.title and self.title.strip():
+            return self.title
+        return self.prompt
 
     def to_dict(self) -> dict[str, Any]:
         """Render as a JSON-serializable dict for ``--json`` output."""
@@ -91,6 +108,7 @@ class SessionRecord:
             "ended_at": self.ended_at,
             "model": self.model,
             "prompt": self.prompt,
+            "title": self.title,
             "success": self.success,
             "cost_usd": self.cost_usd,
             "steps": self.steps,
@@ -148,6 +166,8 @@ def _read_summary(session_dir: Path) -> dict[str, Any] | None:
 
 def _summary_to_record(session_dir: Path, summary: dict[str, Any]) -> SessionRecord:
     """Convert a ``summary.json`` dict into a :class:`SessionRecord`."""
+    raw_title = summary.get("title")
+    title = str(raw_title) if isinstance(raw_title, str) and raw_title.strip() else None
     return SessionRecord(
         session_id=str(summary.get("session_id") or summary.get("run_id") or session_dir.name),
         started_at=str(summary.get("started_at") or ""),
@@ -160,6 +180,7 @@ def _summary_to_record(session_dir: Path, summary: dict[str, Any]) -> SessionRec
         tool_calls=int(summary.get("tool_calls_total", 0) or 0),
         path=session_dir,
         error=summary.get("error"),
+        title=title,
     )
 
 
@@ -415,6 +436,12 @@ def format_session_table(
     if limit > 0:
         rows = rows[:limit]
 
+    # WHY (O4-W9): TITLE column surfaces a hand-authored label written
+    # by ``chimera otter -p --title "..."`` (see
+    # :func:`chimera.otter.cli._write_run_summary`) or set after-the-fact
+    # via ``sessions rename``. When ``title`` is unset on a record we
+    # fall back to the prompt for back-compat with existing fixtures —
+    # both routes go through :meth:`SessionRecord.display_title`.
     header_cols = (
         ("SESSION_ID", 38),
         ("DATE", 16),
@@ -422,6 +449,7 @@ def format_session_table(
         ("STEPS", 5),
         ("COST", 8),
         ("OK", 3),
+        ("TITLE", 40),
         ("PROMPT", 60),
     )
     header_line = "  ".join(
@@ -441,6 +469,7 @@ def format_session_table(
             ok_str, _GREEN if r.success else _RED, enable=enable,
         )
         cost_str = f"${r.cost_usd:.4f}"
+        title_cell = _short(r.display_title(), 40)
         line = "  ".join(
             [
                 r.session_id.ljust(38),
@@ -449,6 +478,7 @@ def format_session_table(
                 str(r.steps).rjust(5),
                 cost_str.rjust(8),
                 ok_styled,
+                title_cell.ljust(40),
                 _short(r.prompt, 60),
             ]
         )
@@ -479,6 +509,9 @@ def format_session_detail(
     out.append(_color(f"Session: {detail.session_id}", _BOLD, enable=enable))
     out.append(f"  path:        {detail.path}")
     out.append(f"  model:       {s.get('model', '')}")
+    title_val = s.get("title")
+    if isinstance(title_val, str) and title_val.strip():
+        out.append(f"  title:       {title_val}")
     out.append(f"  started:     {s.get('started_at', '')}")
     out.append(f"  ended:       {s.get('ended_at', '')}")
     out.append(f"  cwd:         {s.get('cwd', '')}")
@@ -728,6 +761,119 @@ def cmd_sessions_cost(args: argparse.Namespace) -> int:
     return 0
 
 
+def rename_session(
+    session_id: str,
+    title: str,
+    *,
+    eventlog_root: Path | None = None,
+) -> Path:
+    """Update the ``title`` field of one session's ``summary.json``.
+
+    Used by :func:`cmd_sessions_rename` to back the
+    ``chimera otter sessions rename <id> <title>`` subcommand. The write
+    is in-place: the existing ``summary.json`` is loaded, the ``title``
+    key is upserted (an empty / whitespace-only ``title`` *removes* the
+    key — round-trips with the ``--title`` heuristic), and the file is
+    re-serialized.
+
+    Args:
+        session_id: Session directory name
+            (e.g. ``otter-20260424T051001-71032a5e``).
+        title: New title. Empty / whitespace-only clears the field.
+        eventlog_root: Override ``~/.chimera/eventlog/`` for tests.
+
+    Returns:
+        Absolute path to the rewritten ``summary.json``.
+
+    Raises:
+        FileNotFoundError: When the session directory or its
+            ``summary.json`` does not exist.
+        ValueError: When ``summary.json`` is malformed (not a JSON object).
+    """
+    root = eventlog_root or default_eventlog_root()
+    session_dir = root / session_id
+    if not session_dir.exists() or not session_dir.is_dir():
+        raise FileNotFoundError(f"session not found: {session_id}")
+    summary_path = session_dir / "summary.json"
+    if not summary_path.exists():
+        raise FileNotFoundError(
+            f"session {session_id!r} has no summary.json "
+            "(did the session abort early?)"
+        )
+    try:
+        data = json.loads(summary_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(
+            f"session {session_id!r} summary.json is malformed: {exc}"
+        ) from exc
+    if not isinstance(data, dict):
+        raise ValueError(
+            f"session {session_id!r} summary.json is not a JSON object"
+        )
+    cleaned = title.strip() if isinstance(title, str) else ""
+    if cleaned:
+        data["title"] = cleaned
+    else:
+        data.pop("title", None)
+    summary_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    return summary_path
+
+
+def cmd_sessions_rename(args: argparse.Namespace) -> int:
+    """Implement ``chimera otter sessions rename <id> <title>``.
+
+    Args:
+        args: Parsed argparse namespace. Recognized attributes:
+            ``sessions_target`` (the SESSION_ID positional),
+            ``sessions_title`` (the new title positional, joined with
+            spaces if argparse supplied a list).
+
+    Returns:
+        Exit code: ``0`` on success, ``2`` on missing args / unknown id /
+        malformed summary.
+    """
+    session_id = getattr(args, "sessions_target", None)
+    if not session_id:
+        print(
+            "error: 'otter sessions rename' requires SESSION_ID and TITLE "
+            "(usage: 'chimera otter sessions rename <id> <title>').",
+            file=sys.stderr,
+        )
+        return 2
+    raw_title = getattr(args, "sessions_title", None)
+    if raw_title is None:
+        print(
+            "error: 'otter sessions rename' requires a TITLE argument "
+            "(pass an empty string '' to clear an existing title).",
+            file=sys.stderr,
+        )
+        return 2
+    if isinstance(raw_title, list):
+        title = " ".join(str(p) for p in raw_title)
+    else:
+        title = str(raw_title)
+    try:
+        path = rename_session(str(session_id), title)
+    except FileNotFoundError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        print(
+            "hint: list available sessions with "
+            "'chimera otter sessions list' "
+            f"(eventlog root: {default_eventlog_root()})",
+            file=sys.stderr,
+        )
+        return 2
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    cleaned = title.strip()
+    if cleaned:
+        print(f"renamed {session_id} -> {cleaned!r} ({path})")
+    else:
+        print(f"cleared title for {session_id} ({path})")
+    return 0
+
+
 def dispatch_sessions(args: argparse.Namespace) -> int | None:
     """Top-level entry called by O1's CLI.
 
@@ -739,7 +885,7 @@ def dispatch_sessions(args: argparse.Namespace) -> int | None:
         args: Parsed argparse namespace. Looks at
             ``args.sessions_command`` (must equal ``"sessions"`` to engage)
             and ``args.sessions_action`` (``"list"``, ``"show"``,
-            ``"cost"``, or ``None`` -> default to ``list``).
+            ``"cost"``, ``"rename"``, or ``None`` -> default to ``list``).
 
     Returns:
         Exit code, or ``None`` when this dispatcher does not apply.
@@ -753,9 +899,11 @@ def dispatch_sessions(args: argparse.Namespace) -> int | None:
         return cmd_sessions_show(args)
     if action == "cost":
         return cmd_sessions_cost(args)
+    if action == "rename":
+        return cmd_sessions_rename(args)
     print(
         f"error: unknown 'sessions' action: {action!r} "
-        "(supported: list, show, cost)",
+        "(supported: list, show, cost, rename)",
         file=sys.stderr,
     )
     return 2

@@ -27,9 +27,10 @@ trademark hygiene for details.
 """
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Iterator
+from typing import Any, Iterable, Iterator
 
 from chimera.agents.config import AgentConfig
 
@@ -44,6 +45,7 @@ __all__ = [
     "format_agent_detail",
     "cmd_agents_list",
     "cmd_agents_show",
+    "cmd_agents_create",
 ]
 
 
@@ -420,8 +422,6 @@ def cmd_agents_show(
         Exit code: ``0`` on success, ``2`` when the name is missing or
         unresolved.
     """
-    import sys
-
     if not name:
         print(
             "error: 'otter agents show' requires an AGENT_NAME argument "
@@ -442,4 +442,322 @@ def cmd_agents_show(
         return 2
 
     print(format_agent_detail(record, no_color=no_color))
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# Interactive scaffolder — ``otter agents create``
+# ---------------------------------------------------------------------------
+
+
+_DEFAULT_MODEL_CHAIN = "anthropic/claude-sonnet-4-6"
+"""Default ``model:`` value suggested when the user accepts the chain.
+
+WHY: keeps a concrete, working default in the prompt so users hitting
+``Enter`` don't end up with an agent file that crashes provider routing.
+The string mirrors the ``provider/model`` form documented in
+``docs/otter/agents.md``.
+"""
+
+
+def _agent_tool_names() -> list[str]:
+    """Return the canonical tool names available to a markdown agent.
+
+    Wrapper around :data:`chimera.core.tool_group.AGENT_TOOLS` so the
+    interactive scaffolder doesn't import the heavy tool registry at
+    module-import time.
+
+    Returns:
+        Sorted list of tool names (e.g. ``["bash", "edit_file", ...]``).
+    """
+    from chimera.core.tool_group import AGENT_TOOLS
+
+    return sorted(t.name for t in AGENT_TOOLS)
+
+
+def _resolve_create_target(
+    name: str,
+    *,
+    user: bool,
+    cwd: Path,
+) -> Path:
+    """Resolve the destination ``.md`` path for a new otter agent.
+
+    Args:
+        name: Agent name (becomes ``<name>.md``).
+        user: When ``True``, resolve against ``~/.opencode/agent/``;
+            otherwise project scope (``<cwd>/.opencode/agent/``).
+        cwd: Project root anchor (only used in project scope).
+
+    Returns:
+        Absolute path to ``<scope>/.opencode/agent/<name>.md``.
+    """
+    base = (Path.home() / OTTER_USER_AGENT_DIR) if user else (cwd / OTTER_PROJECT_AGENT_DIR)
+    return base / f"{name}.md"
+
+
+def _prompt(
+    message: str,
+    *,
+    default: str | None = None,
+    input_fn: Any = None,
+) -> str:
+    """Prompt for a single line of input with optional default.
+
+    Args:
+        message: Prompt label (no trailing colon required).
+        default: Value returned when the user submits an empty line.
+            ``None`` means "no default" (empty input returns ``""``).
+        input_fn: Override for stdlib :func:`input` (used by tests).
+            ``None`` resolves to :func:`builtins.input` at call time so
+            ``monkeypatch.setattr("builtins.input", ...)`` works.
+
+    Returns:
+        The user's input, or ``default`` when input is empty/whitespace.
+    """
+    if input_fn is None:
+        import builtins
+        input_fn = builtins.input
+    suffix = f" [{default}]" if default else ""
+    raw = input_fn(f"{message}{suffix}: ")
+    text = (raw or "").strip()
+    if not text and default is not None:
+        return default
+    return text
+
+
+def _prompt_multiline(
+    message: str,
+    *,
+    sentinel: str = ".",
+    input_fn: Any = None,
+) -> str:
+    """Prompt for a multi-line block terminated by ``sentinel`` on its own line.
+
+    Mirrors the ``mailx`` / ``ed`` convention so the scaffolder stays
+    stdlib-only (no readline-multiline gymnastics, no editor spawn).
+
+    Args:
+        message: Prompt label printed once before the block.
+        sentinel: Single-character line that terminates the block. The
+            sentinel line itself is NOT included in the returned text.
+        input_fn: Override for stdlib :func:`input` (used by tests).
+            ``None`` resolves to :func:`builtins.input` at call time.
+
+    Returns:
+        The collected lines joined by ``"\\n"``. May be empty.
+    """
+    if input_fn is None:
+        import builtins
+        input_fn = builtins.input
+    print(f"{message}")
+    print(f"  (end with a single '{sentinel}' on its own line)")
+    lines: list[str] = []
+    while True:
+        try:
+            line = input_fn("  ")
+        except EOFError:
+            break
+        if line.strip() == sentinel:
+            break
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def _prompt_tools(
+    available: list[str],
+    *,
+    input_fn: Any = None,
+) -> list[str]:
+    """Prompt for a comma-separated tool list, validated against ``available``.
+
+    Empty input returns ``[]`` which means "inherit AGENT_TOOLS at build
+    time" (matches :class:`AgentConfig` semantics).
+
+    Args:
+        available: The full list of valid tool names.
+        input_fn: Override for stdlib :func:`input` (used by tests).
+            ``None`` resolves to :func:`builtins.input` at call time.
+
+    Returns:
+        Validated list of tool names. Unknown names are dropped with a
+        warning printed to stdout.
+    """
+    if input_fn is None:
+        import builtins
+        input_fn = builtins.input
+    print("Available tools: " + ", ".join(available))
+    raw = input_fn(
+        "Tools (comma-separated; empty = all default tools): "
+    )
+    text = (raw or "").strip()
+    if not text:
+        return []
+    wanted = [n.strip() for n in text.split(",") if n.strip()]
+    valid = []
+    valid_set = set(available)
+    for name in wanted:
+        if name in valid_set:
+            valid.append(name)
+        else:
+            print(f"  (skipping unknown tool: {name!r})")
+    return valid
+
+
+def _render_agent_md(
+    *,
+    name: str,
+    description: str,
+    model: str,
+    tools: list[str],
+    system_prompt: str,
+) -> str:
+    """Render the markdown body for a new otter agent file.
+
+    The output is the canonical schema consumed by
+    :meth:`AgentConfig.from_markdown`: a YAML-ish frontmatter block
+    delimited by ``---`` markers, followed by the system prompt body.
+
+    Args:
+        name: Agent name (frontmatter ``name:``).
+        description: One-line description (frontmatter ``description:``).
+        model: Model identifier (frontmatter ``model:``); empty string
+            omits the key entirely.
+        tools: Tool names; empty list omits the key entirely.
+        system_prompt: Markdown body appended after the closing ``---``.
+
+    Returns:
+        The full markdown string ready to write to disk.
+    """
+    lines = ["---", f"name: {name}"]
+    if description:
+        # WHY: quote the description so a trailing colon or comma in user
+        # input doesn't accidentally break the frontmatter parser.
+        safe = description.replace('"', '\\"')
+        lines.append(f'description: "{safe}"')
+    if model:
+        lines.append(f"model: {model}")
+    if tools:
+        lines.append("tools: [" + ", ".join(tools) + "]")
+    lines.append("---")
+    lines.append("")
+    body = system_prompt.strip()
+    if body:
+        lines.append(body)
+        lines.append("")
+    return "\n".join(lines)
+
+
+def cmd_agents_create(
+    name: str | None,
+    *,
+    user: bool = False,
+    cwd: Path | None = None,
+    input_fn: Any = None,
+    confirm: bool = True,
+) -> int:
+    """Implement ``chimera otter agents create [<name>]``.
+
+    Interactive scaffolder that prompts for the standard agent fields
+    (name, description, model, tools, system prompt) and writes the
+    resulting markdown to ``<scope>/.opencode/agent/<name>.md``. Defaults
+    to project scope; pass ``user=True`` for ``~/.opencode/agent/``.
+
+    The function is stdlib-only — no curses, no readline gymnastics —
+    so tests can drive it via ``monkeypatch.setattr(builtins.input, ...)``.
+
+    Args:
+        name: Pre-filled agent name from the CLI. ``None`` prompts.
+        user: When ``True``, write to user scope instead of project.
+        cwd: Project root anchor for project scope. Defaults to
+            :func:`Path.cwd`.
+        input_fn: Override for stdlib :func:`input` (used by tests).
+        confirm: When ``True``, ask for ``y/n`` before writing the file.
+            Tests pass ``confirm=False`` to skip the final gate.
+
+    Returns:
+        Exit code: ``0`` on success, ``1`` on user abort, ``2`` on
+        validation error (empty name, target already exists).
+    """
+    cwd = cwd or Path.cwd()
+    if input_fn is None:
+        # Resolve at call time so monkeypatch.setattr("builtins.input", ...)
+        # in tests reaches the prompt path. (Default-bound argument captures
+        # the original ``input`` reference at function-definition time and
+        # short-circuits the patch.)
+        import builtins
+        input_fn = builtins.input
+
+    # 1. Name — required. Use the CLI-provided value as default if any.
+    resolved_name = _prompt(
+        "Agent name", default=name, input_fn=input_fn,
+    )
+    if not resolved_name:
+        print("error: agent name is required.", file=sys.stderr)
+        return 2
+    # Sanity-check: bare slug-ish names only. The frontmatter ``name:``
+    # parser is permissive but downstream registries key on this string.
+    if any(ch in resolved_name for ch in ("/", "\\", " ", "\t", "\n")):
+        print(
+            f"error: agent name {resolved_name!r} contains invalid "
+            "characters (no spaces or path separators).",
+            file=sys.stderr,
+        )
+        return 2
+
+    # 2. Resolve target path early so we can fail fast on collision.
+    target = _resolve_create_target(resolved_name, user=user, cwd=cwd)
+    if target.exists():
+        print(
+            f"error: {target} already exists; refusing to overwrite. "
+            "Edit the file in-place or pick a different name.",
+            file=sys.stderr,
+        )
+        return 2
+
+    # 3. Description.
+    description = _prompt(
+        "Description", default="", input_fn=input_fn,
+    )
+
+    # 4. Model — default to the documented chain so Enter-through gives
+    #    a working agent.
+    model = _prompt(
+        "Model",
+        default=_DEFAULT_MODEL_CHAIN,
+        input_fn=input_fn,
+    )
+
+    # 5. Tools — multi-select-ish via comma list, validated against
+    #    AGENT_TOOLS.
+    tools = _prompt_tools(_agent_tool_names(), input_fn=input_fn)
+
+    # 6. System prompt — multi-line block.
+    system_prompt = _prompt_multiline(
+        "System prompt", input_fn=input_fn,
+    )
+
+    # 7. Render + confirm.
+    rendered = _render_agent_md(
+        name=resolved_name,
+        description=description,
+        model=model,
+        tools=tools,
+        system_prompt=system_prompt,
+    )
+    print("")
+    print(f"About to write {target}:")
+    print("---")
+    print(rendered)
+    print("---")
+    if confirm:
+        answer = input_fn("Write this file? [y/N]: ").strip().lower()
+        if answer not in ("y", "yes"):
+            print("aborted; no file written.", file=sys.stderr)
+            return 1
+
+    # 8. Write.
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(rendered, encoding="utf-8")
+    print(f"wrote {target}")
     return 0

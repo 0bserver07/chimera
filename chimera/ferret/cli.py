@@ -53,13 +53,32 @@ _VALID_SUBCOMMANDS = (
     "bench",
     "bridge",
 )
-_VALID_SUB_ACTIONS = (None, "list", "show", "humaneval", "tau-bench")
+_VALID_SUB_ACTIONS = (
+    None,
+    "list",
+    "show",
+    "humaneval",
+    "tau-bench",
+    # WHY (server-mgmt): ``serve status`` / ``serve stop`` reuse the
+    # ``sub_action`` slot; declared here so argparse choices validation
+    # accepts them across every ferret subcommand.
+    "status",
+    "stop",
+)
 _VALID_SANDBOX_MODES = (
     "read-only",
     "workspace-write",
     "workspace-write-network",
 )
 _VALID_APPROVAL_PRESETS = ("read-only", "auto", "full")
+_VALID_OS_SANDBOX_FLAGS = ("auto", "on", "off")
+# WHY (P1, wave 9): pluggable execution backend for ferret tool calls.
+# ``local`` is the historic default (LocalEnvironment + ferret sandbox
+# wrapper). ``modal`` provisions an ephemeral Modal container per
+# session via :class:`chimera.env.modal_sandbox.ModalSandboxEnvironment`.
+# Adding a backend here is a one-liner: extend the tuple, then teach
+# ``_run_print_mode`` how to construct it.
+_VALID_SANDBOX_BACKENDS = ("local", "modal")
 
 
 def _resolve_version() -> str:
@@ -184,6 +203,32 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
             "eventlog directory. Useful for reproducible test fixtures."
         ),
     )
+    # WHY (C1, wave 9): --resume / --continue mirror mink's flag pair so
+    # one-shot ``-p`` invocations can pick up where the previous ferret
+    # run left off. ``--resume <id>`` loads the named
+    # ``~/.chimera/eventlog/ferret-*`` directory; ``-c`` resolves the
+    # newest ferret run for the current cwd.
+    parser.add_argument(
+        "--resume",
+        default=None,
+        help=(
+            "Resume a persisted ferret run by id (matches "
+            "~/.chimera/eventlog/<id>/). The replayed conversation is "
+            "prepended to the new turn so the agent has full context."
+        ),
+    )
+    parser.add_argument(
+        "-c",
+        "--continue",
+        dest="continue_latest",
+        action="store_true",
+        default=False,
+        help=(
+            "Resume the most-recent ferret run under the current "
+            "working directory. Equivalent to "
+            "``--resume <newest-ferret-id-in-cwd>``."
+        ),
+    )
     # WHY (FF2): sandbox-first execution. The default is the safest mode
     # (read-only); opting up requires explicit selection. Sibling FF2 owns
     # the runner that consumes this flag.
@@ -195,6 +240,40 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
             "Sandbox mode for shell-style tools (default: read-only). "
             "'workspace-write' allows writes inside the project; "
             "'workspace-write-network' adds outbound network access."
+        ),
+    )
+    # WHY (F1, wave 9): OS-level sandboxing for ferret. Wraps every
+    # bash invocation with seatbelt (macOS) or Landlock (Linux) when
+    # the platform supports it. ``auto`` (default) engages the
+    # primitive opportunistically; ``on`` forces it (and warns when
+    # absent); ``off`` disables it entirely. See
+    # :mod:`chimera.ferret.os_sandbox`.
+    parser.add_argument(
+        "--os-sandbox",
+        dest="os_sandbox",
+        choices=list(_VALID_OS_SANDBOX_FLAGS),
+        default="auto",
+        help=(
+            "OS-level sandbox layer for shell tools (default: auto). "
+            "'auto' engages seatbelt (macOS) or Landlock (Linux) if "
+            "supported; 'on' forces it; 'off' disables it."
+        ),
+    )
+    # WHY (P1, wave 9): execution backend for tool calls. ``local`` uses
+    # ``LocalEnvironment`` (current default). ``modal`` provisions an
+    # ephemeral Modal sandbox container; requires the ``[modal-sandbox]``
+    # extra. Falls back to ``local`` with a stderr warning when modal
+    # isn't importable so we never crash on a misconfigured host.
+    parser.add_argument(
+        "--sandbox-backend",
+        dest="sandbox_backend",
+        choices=list(_VALID_SANDBOX_BACKENDS),
+        default="local",
+        help=(
+            "Execution backend for tool calls (default: local). "
+            "'local' runs inside the current cwd via LocalEnvironment. "
+            "'modal' provisions an ephemeral Modal container per session "
+            "(requires `pip install 'chimera-run[modal-sandbox]'`)."
         ),
     )
     # WHY (FF3): approval preset is a single-flag selection that maps to a
@@ -331,6 +410,31 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         metavar="TARGET",
         help="Run/session id consumed by 'show' or 'share' actions.",
     )
+    # WHY (server-mgmt): ``serve stop`` accepts ``--port`` (already declared
+    # above) to target one server or ``--all`` to graceful-stop every
+    # backgrounded ferret server. ``--serve-timeout`` widens the SIGTERM
+    # window for slow shutdowns; default 10s matches the project
+    # graceful-shutdown rule (see CLAUDE.md).
+    parser.add_argument(
+        "--all",
+        dest="serve_stop_all",
+        action="store_true",
+        default=False,
+        help=(
+            "With 'serve stop': stop every backgrounded ferret server. "
+            "Mutually exclusive with --port."
+        ),
+    )
+    parser.add_argument(
+        "--serve-timeout",
+        dest="serve_stop_timeout",
+        type=float,
+        default=10.0,
+        help=(
+            "With 'serve stop': seconds to wait after SIGTERM before "
+            "escalating to SIGKILL (default: 10.0)."
+        ),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -421,15 +525,32 @@ def _build_provider(model: str) -> Any:
 
 
 def _dispatch_serve(args: argparse.Namespace) -> int:
-    """Dispatch ``chimera ferret serve`` to ACP (default) or HTTP (``--http``).
+    """Dispatch ``chimera ferret serve`` to ACP, HTTP, or management commands.
 
-    FF4 owns the IDE-first ACP schema; the HTTP variant is opt-in. The
-    real ACP server is reached via :func:`chimera.ferret.ide.maybe_serve_ide_acp`
-    (late-bound). When ``--http`` is set, F1/W8 wires the HTTP + SSE
-    server by delegating to :func:`chimera.otter.server.serve_http` with
-    a ferret-flavored agent factory (provider via FF6, sandbox via FF2,
-    approval via FF3).
+    Routing precedence:
+
+    1. ``ferret serve status`` / ``ferret serve stop`` — pidfile-based
+       management subcommands (server-mgmt). These don't bind a socket;
+       they read ``~/.chimera/run/ferret-*.pid`` and dispatch SIGTERM (then
+       SIGKILL on timeout) per the graceful-shutdown rule in CLAUDE.md.
+    2. ``--http`` — boot the HTTP + SSE server.
+    3. Default — run the IDE-first ACP server via
+       :func:`chimera.ferret.ide.maybe_serve_ide_acp`.
+
+    FF4 owns the IDE-first ACP schema; the HTTP variant is opt-in. When
+    ``--http`` is set, F1/W8 wires the HTTP + SSE server by delegating
+    to :func:`chimera.otter.server.serve_http` with a ferret-flavored
+    agent factory (provider via FF6, sandbox via FF2, approval via FF3).
     """
+    sub_action = getattr(args, "sub_action", None)
+    if sub_action in ("status", "stop"):
+        # Reuse the otter management dispatcher — pidfile layout is shared
+        # across flavors (only the prefix differs).
+        from chimera.otter.cli import _dispatch_serve_management
+
+        return _dispatch_serve_management(
+            args, action=sub_action, prefix="ferret",
+        )
     if not getattr(args, "http", False):
         # WHY: ACP is the IDE-first default. Late-bind so cli.py loads even
         # if FF4 hasn't shipped, and so ``--help`` stays cheap.
@@ -485,6 +606,8 @@ def _dispatch_serve_http(args: argparse.Namespace) -> int:
     from chimera.core.prompt import Prompt
     from chimera.core.tool_group import AGENT_TOOLS
     from chimera.env.local import LocalEnvironment
+    from chimera.events.base import EventBus
+    from chimera.ferret.ide import IDENotificationEmitter, ide_emit_for_state
     from chimera.otter.server import (
         DEFAULT_HOST,
         OtterSessionState,
@@ -512,6 +635,14 @@ def _dispatch_serve_http(args: argparse.Namespace) -> int:
 
     sandbox_value = getattr(args, "sandbox", "read-only") or "read-only"
     approval_value = getattr(args, "approval", "read-only") or "read-only"
+    # WHY (F2/W9): the IDE-friendly notification kinds (``code/diff``,
+    # ``editor/open_file``, ``terminal/output``, ``progress/step``) are
+    # ferret-specific. The same ``--ide-schema`` flag the ACP transport
+    # honors flips them on/off here too — when ``False`` we still build
+    # an :class:`EventBus` for any other listener but skip wiring the
+    # IDE translator, so HTTP-only relays that don't speak the rich
+    # schema see only the otter base ``loop_event`` / ``result`` shapes.
+    ide_schema = bool(getattr(args, "ide_schema", True))
 
     def _factory(state: OtterSessionState) -> Any:
         # Provider — late-bind FF6 so the factory uses the ferret chain
@@ -531,7 +662,11 @@ def _dispatch_serve_http(args: argparse.Namespace) -> int:
             from chimera.ferret import sandbox as _sandbox_mod
 
             mode = _sandbox_mod.parse_sandbox_mode(sandbox_value)
-            env = _sandbox_mod.SandboxedEnvironment(base_env, mode=mode)
+            env = _sandbox_mod.SandboxedEnvironment(
+                base_env,
+                mode=mode,
+                os_sandbox=getattr(args, "os_sandbox", "auto") or "auto",
+            )
         except Exception:  # noqa: BLE001 - keep base env on missing/error
             env = base_env
 
@@ -546,7 +681,22 @@ def _dispatch_serve_http(args: argparse.Namespace) -> int:
         except Exception:  # noqa: BLE001 - default LoopConfig on miss
             permissions = None
 
-        config = LoopConfig(permissions=permissions)
+        # WHY (F2/W9): per-session :class:`EventBus` carries
+        # :class:`ToolCallEvent` / :class:`ToolResultEvent` published by
+        # the loop. The :class:`IDENotificationEmitter` subscribes to
+        # those and fans them out as IDE-shaped SSE frames on ``state``'s
+        # event stream — same JSON shape the ACP transport already
+        # ships, just delivered over HTTP+SSE. Wiring the bus on
+        # :class:`LoopConfig.event_bus` is the documented hook; an
+        # explicit instance keeps each session's translation state
+        # (pending tool calls, terminal sequence numbers) isolated.
+        event_bus = EventBus()
+        emitter = IDENotificationEmitter(
+            ide_emit_for_state(state),
+            ide_schema=ide_schema,
+        )
+        emitter.attach(event_bus)
+        config = LoopConfig(permissions=permissions, event_bus=event_bus)
         loop = ReAct(max_steps=max_steps, config=config)
         prompt = Prompt.from_string(
             "You are Ferret, a Chimera coding agent driven over HTTP."
@@ -580,6 +730,10 @@ def _dispatch_serve_http(args: argparse.Namespace) -> int:
         auth_token=auth_token,
         tls_cert=tls_cert,
         tls_key=tls_key,
+        # WHY (server-mgmt): write ``~/.chimera/run/ferret-<port>.pid`` so a
+        # separate shell can run ``chimera ferret serve status`` / ``stop``
+        # against this backgrounded process.
+        pidfile_prefix="ferret",
     )
 
 
@@ -802,8 +956,29 @@ def _run_print_mode(args: argparse.Namespace) -> int:
         provider = create_provider(model=getattr(args, "model", None))
 
     # 2. Environment + sandbox (FF2) — wrap LocalEnvironment when available.
-    base_env = LocalEnvironment(workdir=cwd)
-    base_env.setup()
+    # WHY (P1, wave 9): ``--sandbox-backend modal`` swaps LocalEnvironment
+    # for :class:`chimera.env.modal_sandbox.ModalSandboxEnvironment`. When
+    # the optional ``modal`` extra isn't installed we warn once and fall
+    # back to local so the run still proceeds.
+    sandbox_backend = getattr(args, "sandbox_backend", "local") or "local"
+    base_env: Any
+    if sandbox_backend == "modal":
+        try:
+            from chimera.env.modal_sandbox import ModalSandboxEnvironment
+
+            base_env = ModalSandboxEnvironment(workdir=cwd)
+            base_env.setup()
+        except ImportError as exc:
+            print(
+                f"[ferret] --sandbox-backend modal requested but modal is "
+                f"unavailable ({exc}); falling back to local.",
+                file=sys.stderr,
+            )
+            base_env = LocalEnvironment(workdir=cwd)
+            base_env.setup()
+    else:
+        base_env = LocalEnvironment(workdir=cwd)
+        base_env.setup()
     env: Any = base_env
     _sandbox_mod: Any = None
     try:
@@ -815,7 +990,11 @@ def _run_print_mode(args: argparse.Namespace) -> int:
             mode = _sandbox_mod.parse_sandbox_mode(
                 getattr(args, "sandbox", "read-only")
             )
-            env = _sandbox_mod.SandboxedEnvironment(base_env, mode=mode)
+            env = _sandbox_mod.SandboxedEnvironment(
+                base_env,
+                mode=mode,
+                os_sandbox=getattr(args, "os_sandbox", "auto") or "auto",
+            )
         except Exception as exc:  # noqa: BLE001 — keep base env on parse error.
             print(
                 f"[ferret] --sandbox {getattr(args, 'sandbox', None)!r} "
@@ -869,8 +1048,14 @@ def _run_print_mode(args: argparse.Namespace) -> int:
         prompt=chimera_prompt,
     )
 
+    # WHY (C1, wave 9): apply ``--resume`` / ``-c`` before dispatching to
+    # the agent. Either flag prepends a ``<prior_conversation>`` block
+    # rendered from the resumed eventlog so the agent's first turn has
+    # the full prior context. No-op when neither flag is set.
+    effective_prompt = _apply_ferret_resume_prefix(args, default_prompt=prompt_text)
+
     try:
-        result = asyncio.run(agent.async_run(prompt_text, env=env))
+        result = asyncio.run(agent.async_run(effective_prompt, env=env))
     except KeyboardInterrupt:
         cancel.cancel()
         print("\n[cancelled]", file=sys.stderr)
@@ -893,6 +1078,65 @@ def _run_print_mode(args: argparse.Namespace) -> int:
         if out:
             print(out)
     return 0 if getattr(result, "success", False) else 1
+
+
+def _apply_ferret_resume_prefix(
+    args: argparse.Namespace,
+    *,
+    default_prompt: str,
+) -> str:
+    """Resolve ``--resume`` / ``--continue`` for ferret.
+
+    Symmetric helper to otter's ``_apply_resume_prefix`` — see that
+    docstring for the broader rationale. Prefix is hard-coded to
+    ``ferret-`` because each CLI carries its own.
+
+    Args:
+        args: The parsed ferret argparse namespace.
+        default_prompt: The user's ``-p`` text. Returned unchanged when
+            no resume id resolves.
+
+    Returns:
+        Either ``default_prompt`` unchanged or the rendered transcript
+        prefix concatenated with it.
+    """
+    from chimera.sessions.eventlog.resume_helpers import (
+        build_resume_prefix,
+        default_eventlog_root,
+        resolve_resume_id,
+        resume_run,
+    )
+
+    target_id = resolve_resume_id(
+        explicit_id=getattr(args, "resume", None),
+        continue_latest=bool(getattr(args, "continue_latest", False)),
+        prefix="ferret-",
+        eventlog_root=default_eventlog_root(),
+        cwd=os.path.abspath(getattr(args, "cwd", None) or os.getcwd()),
+    )
+    if target_id is None:
+        return default_prompt
+
+    try:
+        session = resume_run(target_id)
+    except (ValueError, OSError) as exc:
+        print(
+            f"[ferret] --resume / --continue: failed to load run "
+            f"{target_id!r}: {exc}",
+            file=sys.stderr,
+        )
+        return default_prompt
+
+    messages = list(getattr(session, "messages", []) or [])
+    if not messages:
+        return default_prompt
+
+    sys.stderr.write(
+        f"[ferret] resumed run {target_id} ({len(messages)} messages)\n"
+    )
+    sys.stderr.flush()
+    transcript = build_resume_prefix(messages)
+    return f"{transcript}{default_prompt}"
 
 
 # ---------------------------------------------------------------------------

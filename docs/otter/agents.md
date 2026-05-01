@@ -128,18 +128,54 @@ Switching mid-session preserves the conversation history and the
 working-directory file tracker; only the system prompt, tool group,
 and permission ruleset are swapped out.
 
-## Agent generation (deferred)
+## Agent generation
 
-The upstream open-source coding agent ships `agent create` for
-interactive agent scaffolding. Otter wave-1 ships `agents list` and
-`agents show` only — `agents create` is tracked as a follow-up. The
-workaround is to copy an existing agent file and edit the frontmatter:
+Wave 9 wires `chimera otter agents create [<name>]` — a stdlib-only
+interactive scaffolder that prompts for the standard agent fields and
+writes a fresh `<scope>/.opencode/agent/<name>.md`:
 
 ```sh
-mkdir -p .opencode/agent
-cp ~/.opencode/agent/build.md .opencode/agent/my-agent.md
-$EDITOR .opencode/agent/my-agent.md
+# Project-scope (default): writes <cwd>/.opencode/agent/reviewer.md
+chimera otter agents create reviewer
+
+# User-scope: writes ~/.opencode/agent/reviewer.md
+chimera otter agents create reviewer --user
+
+# Skip the CLI default and answer the prompt instead:
+chimera otter agents create
 ```
+
+The scaffolder asks, in order:
+
+1. **Agent name** — required slug (no spaces or path separators). The
+   optional CLI argument prefills the prompt.
+2. **Description** — one-line summary shown by `agents list`.
+3. **Model** — the canonical `provider/model` form. Default is
+   `anthropic/claude-sonnet-4-6`; press Enter to accept.
+4. **Tools** — comma-separated subset of the live tool registry
+   (`bash, read_file, edit_file, ...`). Empty means "inherit
+   `AGENT_TOOLS` at build time". Unknown names are dropped with a
+   warning so a typo doesn't silently land in frontmatter.
+5. **System prompt** — multi-line block. Type the body line-by-line
+   and end with a single `.` on its own line (the `mailx` / `ed`
+   convention; no editor spawn, no readline gymnastics).
+
+After the last prompt the scaffolder prints the rendered file and asks
+`Write this file? [y/N]:`. Anything other than `y` / `yes` aborts with
+exit code `1` and no file written. Existing target paths are refused
+(exit `2`) — edit the file in-place or pick a different name.
+
+The output schema is the canonical YAML-ish frontmatter consumed by
+`AgentConfig.from_markdown`, so a freshly scaffolded file shows up
+immediately in `chimera otter agents list` and `chimera otter --agent
+<name>`.
+
+### Why stdlib `input()`?
+
+Tests (`tests/otter/test_agents_create.py`) drive the scaffolder by
+patching `builtins.input`, so the CLI surface stays stdlib-only — no
+curses, no readline, no editor spawn. The same posture lets the
+scaffolder run cleanly under CI (no TTY) and under remote shells.
 
 ## Subagents and delegation
 

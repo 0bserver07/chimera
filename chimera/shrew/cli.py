@@ -62,7 +62,16 @@ area so a 9B / 35B-MoE model doesn't burn context on tool selection."""
 
 _VALID_MODES = ("interactive", "print", "rpc", "sdk")
 _VALID_SUBCOMMANDS = (None, "sessions", "bench", "share")
-_VALID_SUB_ACTIONS = (None, "list", "show", "cost", "aider-polyglot", "gaia", "terminal-bench")
+_VALID_SUB_ACTIONS = (
+    None,
+    "list",
+    "show",
+    "cost",
+    "aider-polyglot",
+    "gaia",
+    "harbor",
+    "terminal-bench",
+)
 
 
 def _resolve_version() -> str:
@@ -178,8 +187,34 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
             "group."
         ),
     )
+    # WHY (C1, wave 9): --resume / --continue mirror mink's flag pair so
+    # one-shot ``-p`` invocations can pick up where the previous shrew
+    # run left off. ``--resume <id>`` loads the named
+    # ``~/.chimera/eventlog/shrew-*`` directory; ``-c`` resolves the
+    # newest shrew run for the current cwd.
+    parser.add_argument(
+        "--resume",
+        default=None,
+        help=(
+            "Resume a persisted shrew run by id (matches "
+            "~/.chimera/eventlog/<id>/). The replayed conversation is "
+            "prepended to the new turn so the agent has full context."
+        ),
+    )
+    parser.add_argument(
+        "-c",
+        "--continue",
+        dest="continue_latest",
+        action="store_true",
+        default=False,
+        help=(
+            "Resume the most-recent shrew run under the current "
+            "working directory. Equivalent to "
+            "``--resume <newest-shrew-id-in-cwd>``."
+        ),
+    )
     # WHY: shrew exposes ``sessions`` (parity with weasel) and ``bench``
-    # (S4 benchmark harness — Aider Polyglot / GAIA / terminal-bench).
+    # (S4 benchmark harness — Aider Polyglot / GAIA / harbor / terminal-bench).
     parser.add_argument(
         "subcommand",
         nargs="?",
@@ -188,7 +223,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         metavar="SUBCOMMAND",
         help=(
             "Optional: 'sessions' (list/show/cost), 'bench' "
-            "(aider-polyglot/gaia/terminal-bench), or 'share <id>'."
+            "(aider-polyglot/gaia/harbor/terminal-bench), or 'share <id>'."
         ),
     )
     # WHY: ``sub_action`` is intentionally free-form so ``share <id>`` can
@@ -202,8 +237,9 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         metavar="ACTION",
         help=(
             "With 'sessions': 'list', 'show <id>', or 'cost'. With "
-            "'bench': 'aider-polyglot', 'gaia', or 'terminal-bench'. "
-            "With 'share': the SESSION_ID to share (positional)."
+            "'bench': 'aider-polyglot', 'gaia', 'harbor', or "
+            "'terminal-bench'. With 'share': the SESSION_ID to share "
+            "(positional)."
         ),
     )
     parser.add_argument(
@@ -631,9 +667,15 @@ def _run_print_mode(args: argparse.Namespace) -> int:
         prompt=prompt,
     )
 
+    # WHY (C1, wave 9): apply ``--resume`` / ``-c`` before dispatching to
+    # the agent so a one-shot run can pick up the prior shrew context.
+    effective_prompt = _apply_shrew_resume_prefix(
+        args, default_prompt=args.print_mode,
+    )
+
     result: Any = None
     try:
-        result = asyncio.run(agent.async_run(args.print_mode, env=env))
+        result = asyncio.run(agent.async_run(effective_prompt, env=env))
     except KeyboardInterrupt:
         cancel.cancel()
         print("\n[cancelled]", file=sys.stderr)
@@ -656,6 +698,64 @@ def _run_print_mode(args: argparse.Namespace) -> int:
         if output:
             print(output)
     return 0 if success else 1
+
+
+def _apply_shrew_resume_prefix(
+    args: argparse.Namespace,
+    *,
+    default_prompt: str,
+) -> str:
+    """Resolve ``--resume`` / ``--continue`` for shrew.
+
+    Symmetric helper to otter / ferret / weasel's resume-prefix wrappers.
+    Prefix is hard-coded to ``shrew-``.
+
+    Args:
+        args: The parsed shrew argparse namespace.
+        default_prompt: The user's ``-p`` text. Returned unchanged when
+            no resume id resolves.
+
+    Returns:
+        Either ``default_prompt`` unchanged or the rendered transcript
+        prefix concatenated with it.
+    """
+    from chimera.sessions.eventlog.resume_helpers import (
+        build_resume_prefix,
+        default_eventlog_root,
+        resolve_resume_id,
+        resume_run,
+    )
+
+    target_id = resolve_resume_id(
+        explicit_id=getattr(args, "resume", None),
+        continue_latest=bool(getattr(args, "continue_latest", False)),
+        prefix="shrew-",
+        eventlog_root=default_eventlog_root(),
+        cwd=os.path.abspath(getattr(args, "cwd", None) or os.getcwd()),
+    )
+    if target_id is None:
+        return default_prompt
+
+    try:
+        session = resume_run(target_id)
+    except (ValueError, OSError) as exc:
+        print(
+            f"[shrew] --resume / --continue: failed to load run "
+            f"{target_id!r}: {exc}",
+            file=sys.stderr,
+        )
+        return default_prompt
+
+    messages = list(getattr(session, "messages", []) or [])
+    if not messages:
+        return default_prompt
+
+    sys.stderr.write(
+        f"[shrew] resumed run {target_id} ({len(messages)} messages)\n"
+    )
+    sys.stderr.flush()
+    transcript = build_resume_prefix(messages)
+    return f"{transcript}{default_prompt}"
 
 
 # ---------------------------------------------------------------------------

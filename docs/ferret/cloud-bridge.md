@@ -243,3 +243,50 @@ remote prompts drive the local agent directly.
   the auth token is env-var only.
 - `chimera/ferret/cloud_bridge.py` — bridge client implementation.
 - `chimera/ferret/cli.py` — CLI subparser + `_dispatch_bridge`.
+
+## Managing backgrounded servers (`serve status` / `serve stop`)
+
+When `chimera ferret serve --http` is launched in the background, the
+running PID, port, and a SHA-256 of the auth token are recorded in
+`~/.chimera/run/ferret-<port>.pid`. Two subcommands consume that record
+so a separate shell can list and graceful-stop those servers without
+parsing `ps` / `lsof` output.
+
+### `chimera ferret serve status`
+
+Lists every backgrounded ferret server. One line per pidfile:
+
+```text
+ferret port=5174 pid=44321 alive=yes scheme=http auth=yes /Users/you/.chimera/run/ferret-5174.pid
+```
+
+`alive=no (stale)` flags a pidfile whose process has exited without a
+clean shutdown — `serve stop` reaps it idempotently.
+
+### `chimera ferret serve stop [--port N | --all] [--serve-timeout N]`
+
+Gracefully terminates one or every running ferret server.
+
+- **No arguments**: if exactly one ferret pidfile exists, stop it.
+  If more than one is running, exit 2 with a "disambiguate" error.
+- **`--port N`**: target only the matching `ferret-<N>.pid` record.
+- **`--all`**: stop every backgrounded ferret server.
+- **`--serve-timeout N`**: seconds to wait between SIGTERM and the
+  SIGKILL escalation. Default `10.0`.
+
+The shutdown sequence is **graceful first**, per the project rule
+(`CLAUDE.md`): `SIGTERM` → wait up to `--serve-timeout` seconds → only
+escalate to `SIGKILL` when the process is still alive. `SIGKILL` is
+never the first signal sent.
+
+The pidfile schema and library API mirror the otter side — see the
+[Otter Server doc](../otter/server.md#managing-backgrounded-servers-serve-status--serve-stop)
+for the full shape and embedder examples. The pidfile-discovery path
+is the same module (`chimera.otter.server_pidfile`) — only the
+filename prefix (`ferret-` vs `otter-`) differs, so the two flavors
+can coexist on a single host without colliding.
+
+The status / stop subcommands only manage the **HTTP** transport
+(`ferret serve --http`). The default ACP transport already runs over
+stdio under the parent process — ACP sessions exit with the parent
+shell and never need a separate stop subcommand.

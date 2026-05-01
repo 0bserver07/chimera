@@ -163,6 +163,120 @@ there and it works), not as a brand claim. See
 ## See also
 
 - `chimera/otter/mcp.py` — loader.
+- `chimera/otter/mcp_cli.py` — `mcp list` / `mcp add` / `mcp auth` handlers.
 - `chimera/mcp/` — runtime (client, lifecycle, OAuth, transports).
 - `docs/otter/plugins.md` — plugins can also contribute MCP servers.
 - `docs/otter/parity-matrix.md` — overall parity status.
+
+## CLI surface (wave 9)
+
+`chimera otter mcp` is the write-side counterpart to the loader. Where
+the loader (`chimera/otter/mcp.py`) only reads `~/.opencode/config.json`
+and the project-level `.opencode/{config,mcp}.json` to materialize the
+agent's MCP tool group, the CLI (`chimera/otter/mcp_cli.py`) edits
+those files and runs an OAuth device flow against an HTTP MCP server.
+
+### `chimera otter mcp list`
+
+Print known MCP servers across user + project scopes:
+
+```sh
+$ chimera otter mcp list
+NAME                 TRANSPORT  CONNECT                                  SOURCE
+fs                   stdio      fs-server --root /tmp                    project
+weather              http       https://example.com/mcp                  user
+```
+
+Output is plain (no rich/colour) so it pipes cleanly into `grep` /
+`awk`. The `SOURCE` column is one of `user`, `project`, `user+project`,
+followed by `(disabled)` for `enabled: false` entries.
+
+### `chimera otter mcp add <name> <command...>`
+
+Append a new stdio MCP server entry to the chosen scope's
+`config.json`:
+
+```sh
+# Project scope (default) — writes <project>/.opencode/config.json
+$ chimera otter mcp add fs -- fs-server --root /tmp
+About to add MCP server 'fs' (project scope):
+  file:  <project>/.opencode/config.json
+  entry: {"type": "local", "command": ["fs-server", "--root", "/tmp"]}
+Write this entry? [y/N]: y
+wrote <project>/.opencode/config.json
+
+# User scope — writes ~/.opencode/config.json
+$ chimera otter mcp add fs --user -- fs-server --root /tmp
+
+# Skip confirmation (CI):
+$ chimera otter mcp add fs --yes -- fs-server
+
+# HTTP MCP server (no command):
+$ chimera otter mcp add weather \
+    --mcp-http https://example.com/mcp \
+    --mcp-header "Authorization=Bearer abc"
+
+# stdio with environment overrides:
+$ chimera otter mcp add fs --mcp-env LOG=1 --mcp-env QUIET=true -- fs-server
+```
+
+Notes:
+
+- The `--` separator is recommended whenever the trailing `<command...>`
+  contains its own flags, so argparse doesn't try to consume them as
+  otter flags.
+- Adding a name that already exists in the chosen scope's file is
+  refused — remove it manually before re-adding.
+- The write is atomic (`tmp` + rename) and the file is `chmod 0o600`.
+
+### `chimera otter mcp auth <name>`
+
+Initiate an OAuth device flow against an HTTP MCP server:
+
+```sh
+$ chimera otter mcp auth secured
+Starting OAuth device flow for MCP server 'secured'.
+  device endpoint: https://issuer.example/device
+  token endpoint:  https://issuer.example/token
+
+Visit: https://issuer.example/device
+Enter code: ABCD-1234
+
+saved credential for mcp:secured to credential store.
+```
+
+Resolution order:
+
+1. Look up `<name>` via `load_mcp_servers` (project + user merge).
+2. Reject the call if the entry is not HTTP transport — stdio MCP
+   servers authenticate via per-process env vars, not OAuth.
+3. If the entry has an `oauth` block carrying `client_id`,
+   `device_authorization_endpoint` (or `device_auth_url`), and
+   `token_endpoint` (or `token_url`), hand it to
+   `chimera.auth.OAuthDeviceFlow` and persist the resulting
+   `Credential` under `mcp:<name>` in
+   `~/.chimera/credentials.json` (`0o600`).
+4. Otherwise, fall back to a manual "open this URL, paste the token
+   back" UX.
+
+### Argparse layout
+
+`mcp` is registered as a top-level subcommand alongside `serve`,
+`sessions`, `share`, `agents`, `bench`. The shared positional layout is:
+
+| slot         | dest          | example                              |
+|--------------|---------------|--------------------------------------|
+| SUBCOMMAND   | `subcommand`  | `mcp`                                |
+| ACTION       | `sub_action`  | `list` / `add` / `auth`              |
+| TARGET       | `sub_target`  | server name (`add` / `auth`)         |
+| MCP_EXTRA    | `mcp_extra`   | trailing executable + args (`add`)   |
+
+Flags (all optional; defaults cover the common case):
+
+| flag              | dest          | meaning                                  |
+|-------------------|---------------|------------------------------------------|
+| `--user`          | `agents_user` | write to `~/.opencode` instead of `<project>` |
+| `--mcp-http URL`  | `mcp_http`    | http transport (mutually exclusive with command) |
+| `--mcp-header K=V`| `mcp_header`  | repeatable HTTP header                   |
+| `--mcp-env K=V`   | `mcp_env`     | repeatable subprocess env override       |
+| `--yes`           | `mcp_yes`     | skip the y/N confirmation                |

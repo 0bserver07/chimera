@@ -135,6 +135,32 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         default=50,
         help="Maximum agent steps per turn (default: 50).",
     )
+    # WHY (C1, wave 9): --resume / --continue mirror mink's flag pair so
+    # one-shot ``-p`` invocations can pick up where the previous weasel
+    # run left off. ``--resume <id>`` loads the named
+    # ``~/.chimera/eventlog/weasel-*`` directory; ``-c`` resolves the
+    # newest weasel run for the current cwd.
+    parser.add_argument(
+        "--resume",
+        default=None,
+        help=(
+            "Resume a persisted weasel run by id (matches "
+            "~/.chimera/eventlog/<id>/). The replayed conversation is "
+            "prepended to the new turn so the agent has full context."
+        ),
+    )
+    parser.add_argument(
+        "-c",
+        "--continue",
+        dest="continue_latest",
+        action="store_true",
+        default=False,
+        help=(
+            "Resume the most-recent weasel run under the current "
+            "working directory. Equivalent to "
+            "``--resume <newest-weasel-id-in-cwd>``."
+        ),
+    )
     # WHY (sessions placeholder): weasel's only subcommand is ``sessions``
     # (list/show). Everything else stays out of the surface deliberately.
     parser.add_argument(
@@ -225,6 +251,36 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
             "(round-trips with ``sessions show --json``)."
         ),
     )
+    # WHY (W2, wave 9): theme + prompt-template registries are core
+    # extension surfaces — themes restyle the REPL prompt prefixes,
+    # prompt-templates swap the agent's system prompt without editing
+    # source. Both flags resolve via the user/project loaders defined
+    # in :mod:`chimera.weasel.themes` /
+    # :mod:`chimera.weasel.prompt_templates`. Unknown ids fall back to
+    # ``default`` rather than erroring, mirroring the loader's
+    # never-raise policy.
+    parser.add_argument(
+        "--theme",
+        dest="theme",
+        default=os.environ.get("WEASEL_THEME") or None,
+        help=(
+            "Theme name. Resolved from built-ins (``default``, "
+            "``dark``, ``solarized``) plus on-disk JSON files under "
+            "``<cwd>/.weasel/themes/`` and ``~/.weasel/themes/``. "
+            "Defaults to $WEASEL_THEME or ``default``."
+        ),
+    )
+    parser.add_argument(
+        "--prompt-template",
+        dest="prompt_template",
+        default=os.environ.get("WEASEL_PROMPT_TEMPLATE") or None,
+        help=(
+            "Prompt-template name. Resolved from the built-in "
+            "``default`` plus on-disk markdown files under "
+            "``<cwd>/.weasel/prompts/`` and ``~/.weasel/prompts/``. "
+            "Defaults to $WEASEL_PROMPT_TEMPLATE or ``default``."
+        ),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -307,6 +363,77 @@ def _activate_extensions(cwd: str) -> tuple[list[Any], list[Any]]:
     return tools, hooks
 
 
+def _resolve_prompt_template(args: argparse.Namespace, cwd: str) -> Any:
+    """Resolve ``--prompt-template`` to a :class:`PromptTemplate`.
+
+    Walks the user/project prompt-template roots via
+    :func:`chimera.weasel.prompt_templates.load_prompt_templates` and
+    returns the named entry. Unknown / missing names fall back to the
+    built-in ``default`` template so the print path always has a
+    usable system prompt.
+
+    Args:
+        args: Parsed weasel CLI namespace; ``prompt_template`` is read
+            off it as a ``str | None``.
+        cwd: Project root used as the project-scope discovery anchor.
+
+    Returns:
+        A :class:`chimera.weasel.prompt_templates.PromptTemplate`.
+    """
+    from pathlib import Path
+
+    from chimera.weasel.prompt_templates import (
+        get_prompt_template,
+        load_prompt_templates,
+    )
+
+    try:
+        registry = load_prompt_templates(Path(cwd))
+    except Exception as exc:  # noqa: BLE001 — never crash the print path
+        print(
+            f"weasel: prompt-template discovery failed; using built-in "
+            f"default: {exc}",
+            file=sys.stderr,
+        )
+        registry = None
+
+    name = getattr(args, "prompt_template", None)
+    return get_prompt_template(name, registry=registry)
+
+
+def _resolve_theme(args: argparse.Namespace, cwd: str) -> Any:
+    """Resolve ``--theme`` to a :class:`Theme`.
+
+    Walks the user/project theme roots via
+    :func:`chimera.weasel.themes.load_themes` and returns the named
+    entry. Unknown / missing names fall back to the built-in
+    ``default`` theme so callers always get a populated palette.
+
+    Args:
+        args: Parsed weasel CLI namespace; ``theme`` is read off it
+            as a ``str | None``.
+        cwd: Project root used as the project-scope discovery anchor.
+
+    Returns:
+        A :class:`chimera.weasel.themes.Theme`.
+    """
+    from pathlib import Path
+
+    from chimera.weasel.themes import get_theme, load_themes
+
+    try:
+        registry = load_themes(Path(cwd))
+    except Exception as exc:  # noqa: BLE001 — never crash the print path
+        print(
+            f"weasel: theme discovery failed; using built-in default: {exc}",
+            file=sys.stderr,
+        )
+        registry = None
+
+    name = getattr(args, "theme", None)
+    return get_theme(name, registry=registry)
+
+
 def _run_print_mode(args: argparse.Namespace) -> int:
     """Execute a single turn and emit results in the requested format.
 
@@ -361,10 +488,13 @@ def _run_print_mode(args: argparse.Namespace) -> int:
 
     config = LoopConfig(cancellation=cancel)
     loop = ReAct(max_steps=int(args.max_steps), config=config)
-    prompt = Prompt.from_string(
-        "You are Weasel, a minimal Chimera coding agent. "
-        "Use tools to inspect and modify the user's repo. Be concise."
-    )
+    # WHY (W2, wave 9): resolve --prompt-template (or $WEASEL_PROMPT_TEMPLATE)
+    # before building the system prompt so users can override the stock
+    # weasel instructions without editing source. Unknown / missing names
+    # fall through to the built-in default template, whose body matches
+    # the literal that used to live here verbatim.
+    template = _resolve_prompt_template(args, cwd)
+    prompt = Prompt.from_string(template.system_prompt)
 
     tools = list(AGENT_TOOLS) + ext_tools
     agent = Agent(
@@ -383,9 +513,34 @@ def _run_print_mode(args: argparse.Namespace) -> int:
         except Exception:  # noqa: BLE001 — defensive
             pass
 
+    # WHY (W2, wave 9): a prompt template may declare a ``user_prefix``
+    # that gets spliced in front of every user turn. We resolve it
+    # here and concatenate before the resume-prefix wrapper so the
+    # template prefix lands closest to the user's actual input.
+    effective_user = args.print_mode
+    if template.user_prefix:
+        effective_user = f"{template.user_prefix}{effective_user}"
+
+    # WHY (W2, wave 9): stash the resolved theme on the agent so
+    # downstream renderers (REPL, future styled print formatters) can
+    # introspect colors / prompt prefixes without re-resolving the
+    # flag. The print path itself is plain stdout — we don't restyle
+    # it here — but tests assert the theme propagates through.
+    theme = _resolve_theme(args, cwd)
+    try:
+        setattr(agent, "_weasel_theme", theme)
+    except Exception:  # noqa: BLE001 — defensive
+        pass
+
+    # WHY (C1, wave 9): apply ``--resume`` / ``-c`` before dispatching to
+    # the agent so a one-shot run can pick up the prior weasel context.
+    effective_prompt = _apply_weasel_resume_prefix(
+        args, default_prompt=effective_user,
+    )
+
     result: Any = None
     try:
-        result = asyncio.run(agent.async_run(args.print_mode, env=env))
+        result = asyncio.run(agent.async_run(effective_prompt, env=env))
     except KeyboardInterrupt:
         cancel.cancel()
         print("\n[cancelled]", file=sys.stderr)
@@ -408,6 +563,65 @@ def _run_print_mode(args: argparse.Namespace) -> int:
         if output:
             print(output)
     return 0 if success else 1
+
+
+def _apply_weasel_resume_prefix(
+    args: argparse.Namespace,
+    *,
+    default_prompt: str,
+) -> str:
+    """Resolve ``--resume`` / ``--continue`` for weasel.
+
+    Symmetric helper to otter / ferret's resume-prefix wrappers. See
+    :func:`chimera.sessions.eventlog.resume_helpers.resolve_resume_id`
+    for the resolution semantics.
+
+    Args:
+        args: The parsed weasel argparse namespace.
+        default_prompt: The user's ``-p`` text. Returned unchanged when
+            no resume id resolves.
+
+    Returns:
+        Either ``default_prompt`` unchanged or the rendered transcript
+        prefix concatenated with it.
+    """
+    from chimera.sessions.eventlog.resume_helpers import (
+        build_resume_prefix,
+        default_eventlog_root,
+        resolve_resume_id,
+        resume_run,
+    )
+
+    target_id = resolve_resume_id(
+        explicit_id=getattr(args, "resume", None),
+        continue_latest=bool(getattr(args, "continue_latest", False)),
+        prefix="weasel-",
+        eventlog_root=default_eventlog_root(),
+        cwd=os.path.abspath(getattr(args, "cwd", None) or os.getcwd()),
+    )
+    if target_id is None:
+        return default_prompt
+
+    try:
+        session = resume_run(target_id)
+    except (ValueError, OSError) as exc:
+        print(
+            f"[weasel] --resume / --continue: failed to load run "
+            f"{target_id!r}: {exc}",
+            file=sys.stderr,
+        )
+        return default_prompt
+
+    messages = list(getattr(session, "messages", []) or [])
+    if not messages:
+        return default_prompt
+
+    sys.stderr.write(
+        f"[weasel] resumed run {target_id} ({len(messages)} messages)\n"
+    )
+    sys.stderr.flush()
+    transcript = build_resume_prefix(messages)
+    return f"{transcript}{default_prompt}"
 
 
 # ---------------------------------------------------------------------------

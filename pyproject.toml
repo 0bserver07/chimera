@@ -38,7 +38,9 @@ mink = ["rich>=13.7", "pygments>=2.17"]
 notebook = ["nbformat>=5"]
 mcp = ["websockets>=12"]
 ssh = ["asyncssh>=2.14"]
-all = ["chimera-run[anthropic,openai,browser,remote,mink,notebook,mcp,ssh]"]
+tui = ["textual>=0.50"]
+modal-sandbox = ["modal>=0.62"]
+all = ["chimera-run[anthropic,openai,browser,remote,mink,notebook,mcp,ssh,tui,modal-sandbox]"]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
@@ -119,6 +121,7 @@ module = [
     "chimera.eval.benchmarks.humaneval_plus",
     "chimera.mcp.ws_transport",
     "chimera.mink.cost",
+    "chimera.otter.tui",
     "chimera.tools.notebook_edit",
 ]
 disable_error_code = ["import-not-found"]
@@ -128,6 +131,21 @@ disable_error_code = ["import-not-found"]
 # installed.
 [[tool.mypy.overrides]]
 module = ["asyncssh", "asyncssh.*"]
+ignore_missing_imports = true
+
+# modal ships no PEP 561 stubs. Same posture as asyncssh — keep
+# `mypy chimera/` clean whether the [modal-sandbox] extra is
+# installed or not.
+[[tool.mypy.overrides]]
+module = ["modal", "modal.*"]
+ignore_missing_imports = true
+
+# nbformat ships no PEP 561 stubs. The module-level `disable_error_code`
+# override above does not suppress missing-stub errors in mypy 1.19+, so
+# we also need this import-target override to keep `mypy chimera/` clean
+# whether the [notebook] extra is installed or not.
+[[tool.mypy.overrides]]
+module = ["nbformat", "nbformat.*"]
 ignore_missing_imports = true
 
 # WHY: benchmark grader functions cast subprocess/library outputs to bool

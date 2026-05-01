@@ -47,6 +47,7 @@ These flags apply to every entry point. Where a flag is only meaningful for one 
 | `--version` | — | Show the program's version number and exit. |
 | `--model MODEL` | `$OTTER_MODEL` or `claude-sonnet-4-6` | Model identifier. Resolved through `chimera.providers.factory.create_provider`. See [`providers.md`](providers.md) and [`models.md`](models.md). |
 | `-p, --print PRINT_MODE` | (unset) | One-shot: run a single turn with `PROMPT`, print, exit. |
+| `-f, --file PATH` | (unset, repeatable) | With `-p`: attach a file's contents to the prompt as a `<file path="X" lines="N"> ... </file>` block, prepended *before* the `-p` text. Pass multiple times to stack attachments. Use `-` to read from stdin. Per-file 100 KB / cumulative 500 KB soft caps emit a `[otter]` warning to stderr; the cumulative cap also truncates with a `<!-- truncated -->` marker. See the "File attachments" section below. |
 | `--output-format {text,json,stream-json}` | `text` | One-shot output format. `stream-json` prints one JSON line per `LoopEvent`; `json` prints a single result object on exit. |
 | `--max-steps MAX_STEPS` | `50` | Maximum agent steps per turn. |
 | `--cwd CWD` | current directory | Working directory. |
@@ -103,6 +104,37 @@ chimera otter --no-color -p "..." | tee otter.log
 `-p` runs a single turn and exits. Useful for scripting, CI, and pipes. Output is text by default; pass `--output-format json` for a single result blob, or `--output-format stream-json` for one JSON line per `LoopEvent`.
 
 See [`quickstart.md`](quickstart.md) for output shapes and [`sessions.md`](sessions.md) for the persisted run directory layout.
+
+### File attachments (`-f` / `--file`)
+
+`-f PATH` attaches the contents of a file to the one-shot prompt without copy-paste. Each attachment is wrapped in an XML-like block and prepended *before* the `-p` text:
+
+```text
+<file path="/abs/path/to/file.py" lines="42">
+<full content of the file>
+</file>
+
+<your -p text here>
+```
+
+Multiple `-f` flags stack in the order they appear:
+
+```bash
+chimera otter -p "explain the diff" -f main.py -f main_test.py
+```
+
+Pass `-` to read from stdin (consumed once):
+
+```bash
+git diff | chimera otter -p "review this diff" -f -
+```
+
+Size policy:
+
+- **Per-file soft cap:** 100 KB. Files at or above this size still attach in full, but emit a `[otter] -f '...': N bytes exceeds 102400-byte per-file soft cap` warning to stderr.
+- **Cumulative cap:** 500 KB across all `-f` attachments. The *current* file (not earlier ones) gets truncated to fit the remaining budget and the truncated body ends with a `<!-- truncated -->` marker line before `</file>`. A second `[otter]` warning is written to stderr.
+
+The effective prompt (attachments + your `-p` text) is what gets persisted to `~/.chimera/eventlog/<run_id>/`, so saved runs replay exactly what the model saw.
 
 ## `chimera otter serve`
 

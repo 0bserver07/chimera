@@ -150,6 +150,21 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         default=None,
         help="Resume a session by id (matches ~/.chimera/sessions/<id>.jsonl).",
     )
+    # WHY (C1, wave 9): -c / --continue rounds out the ``--resume`` flag
+    # so mink shares the otter / ferret / weasel / shrew flag pair. The
+    # resolver picks the newest ``mink-*`` eventlog under the current
+    # cwd and feeds its id back through the existing resume path.
+    parser.add_argument(
+        "-c",
+        "--continue",
+        dest="continue_latest",
+        action="store_true",
+        default=False,
+        help=(
+            "Resume the most-recent mink run under the current working "
+            "directory. Equivalent to ``--resume <newest-mink-id-in-cwd>``."
+        ),
+    )
     parser.add_argument(
         "--agent",
         default=None,
@@ -1564,7 +1579,34 @@ def _resolve_resume_workdir(args: argparse.Namespace) -> None:
     Sessions live at ``~/.chimera/sessions/<sha256(workdir)[:12]>.jsonl``;
     we can't reverse the hash, so we just verify the file exists and let
     ``run_code`` rebuild against the same hash from the resolved cwd.
+
+    When ``-c`` / ``--continue`` is set instead of ``--resume``, this
+    helper also resolves the newest ``mink-*`` eventlog id under the
+    current cwd and writes it back into ``args.resume`` so the existing
+    resume pipeline picks it up unchanged.
     """
+    # WHY (C1, wave 9): bridge ``--continue`` into the existing resume
+    # pipeline by promoting the newest matching id into ``args.resume``.
+    if not args.resume and bool(getattr(args, "continue_latest", False)):
+        from chimera.sessions.eventlog.resume_helpers import (
+            default_eventlog_root,
+            find_latest_run,
+        )
+
+        cwd_str = os.path.abspath(getattr(args, "cwd", None) or os.getcwd())
+        latest = find_latest_run(
+            "mink-",
+            default_eventlog_root(),
+            cwd=cwd_str,
+        )
+        if latest is None:
+            print(
+                f"[warn] --continue: no prior mink run under {cwd_str}",
+                file=sys.stderr,
+            )
+            return
+        args.resume = latest
+
     if not args.resume:
         return
     path = _resume_path(args.resume)

@@ -47,6 +47,7 @@ Written once per session by `chimera/otter/cli.py:_write_run_summary`
   "agent": "otter",
   "model": "claude-sonnet-4-6",
   "prompt": "list files then read README",
+  "title": "Investigate flaky test #4711",
   "cwd": "/Users/yad/repos/chimera",
   "started_at": "2026-04-25T09:12:01Z",
   "ended_at": "2026-04-25T09:12:14Z",
@@ -66,6 +67,9 @@ Notes:
   either (`chimera/otter/sessions.py:_summary_to_record`).
 - `agent: "otter"` lets a future cross-agent viewer (otter + mink) tell
   flavors apart with one read.
+- `title` is optional. It is written by `chimera otter -p --title "..."`
+  and `chimera otter sessions rename`. Listings fall back to the
+  truncated `prompt` when the field is absent or blank.
 - `cost_usd: 0.0` does not mean "free" — it means the provider did not
   surface pricing. See [`models.md`](models.md) for which providers
   emit cost.
@@ -231,6 +235,56 @@ Errors:
 Empty corpora return exit 0 with a zero-row totals block (text) or an
 empty `rows: []` array (json/csv) so scripts can poll without special
 casing "no sessions yet".
+
+## Naming a session
+
+By default `chimera otter sessions list` displays the truncated prompt
+in the `TITLE` column — the same heuristic mink uses. For long-lived
+sessions (or when the prompt is a generated transcript-prefix that
+isn't useful at a glance) you can attach a hand-authored label.
+
+### `--title` on a one-shot run
+
+```bash
+chimera otter -p "trace the bug in foo.py" \
+  --title "Investigate flaky test #4711"
+```
+
+The label is written into `summary.json` under the `title` key
+alongside the existing `prompt` field. `sessions list` surfaces it in
+the new `TITLE` column; `sessions show` adds a `title:` line to the
+summary block. When `--title` is unset (the default), `summary.json`
+omits the key and the listing falls back to the truncated prompt — so
+existing fixtures and pre-O4 sessions render identically.
+
+### `chimera otter sessions rename <id> <title...>`
+
+Already-saved sessions can be re-titled in place:
+
+```bash
+chimera otter sessions rename otter-20260425T091201-71032a5e \
+  Refactor the cost rollup
+```
+
+The new title can be multi-word without quoting (the variadic
+positional joins with spaces). Pass an empty string to clear the
+title and revert to the prompt-fallback heuristic:
+
+```bash
+chimera otter sessions rename otter-20260425T091201-71032a5e ""
+```
+
+Errors:
+
+- Unknown id → exit 2 with `error: session not found: <id>` plus a
+  hint to run `chimera otter sessions list`.
+- Session has no `summary.json` (aborted before write) → exit 2.
+- Malformed `summary.json` → exit 2 with the JSON parse error.
+
+The implementation is a single in-place rewrite of `summary.json`
+(`chimera/otter/sessions.py:rename_session`); no event files are
+touched and the directory name is preserved so existing share links
+and resume ids continue to work.
 
 ## REPL `/sessions` slash command
 
