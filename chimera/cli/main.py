@@ -171,9 +171,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     # ---- mink subcommand ----
+    # Purpose alias: 'tui' (TUI-first interactive coding agent).
     mink_parser = subparsers.add_parser(
         "mink",
-        help="Mink — a Chimera coding agent (Ollama Kimi K2.6 by default)",
+        aliases=["tui"],
+        help="Mink (alias: tui) — TUI-first interactive coding agent",
     )
     from chimera.mink import cli as _mink_cli
     _mink_cli.add_arguments(mink_parser)
@@ -188,36 +190,34 @@ def build_parser() -> argparse.ArgumentParser:
     _mink_cli.add_arguments(cc_alias)
 
     # ---- otter subcommand ----
-    # WHY: otter is the second Chimera coding-agent CLI, paralleling mink.
-    # Trademark hygiene: the help text never names the upstream brand.
+    # Purpose alias: 'multi' (server-first, multi-client HTTP+SSE+ACP).
     otter_parser = subparsers.add_parser(
         "otter",
-        help="Otter — a Chimera coding agent in the open-source agent tradition",
+        aliases=["multi"],
+        help="Otter (alias: multi) — server-first multi-client coding agent",
     )
     from chimera.otter import cli as _otter_cli
     _otter_cli.add_arguments(otter_parser)
 
     # ---- ferret subcommand ----
-    # WHY: ferret is the third Chimera coding-agent CLI — sandbox-first /
-    # IDE-first / OpenAI-flagship. Mirrors a different point in the
-    # design space than mink (TUI-first) or otter (server-first).
+    # Purpose alias: 'sandbox' (sandbox-first execution, IDE-flagship).
     ferret_parser = subparsers.add_parser(
         "ferret",
-        help="Ferret — a Chimera coding agent in the sandbox-first IDE tradition",
+        aliases=["sandbox"],
+        help="Ferret (alias: sandbox) — sandbox-first IDE-flagship coding agent",
     )
     try:
         from chimera.ferret import cli as _ferret_cli  # type: ignore[attr-defined]
         _ferret_cli.add_arguments(ferret_parser)
     except (ImportError, AttributeError):
-        # Scaffold not yet wired by the per-agent build; placeholder parser.
         ferret_parser.add_argument("--version", action="store_true")
 
     # ---- weasel subcommand ----
-    # WHY: weasel is the fourth Chimera coding-agent CLI — minimal harness
-    # with four operating modes (interactive / print / RPC / SDK).
+    # Purpose alias: 'mini' (minimal harness, four operating modes).
     weasel_parser = subparsers.add_parser(
         "weasel",
-        help="Weasel — a minimal Chimera coding-agent harness",
+        aliases=["mini"],
+        help="Weasel (alias: mini) — minimal harness, four operating modes",
     )
     try:
         from chimera.weasel import cli as _weasel_cli  # type: ignore[attr-defined]
@@ -226,11 +226,11 @@ def build_parser() -> argparse.ArgumentParser:
         weasel_parser.add_argument("--version", action="store_true")
 
     # ---- shrew subcommand ----
-    # WHY: shrew is the fifth Chimera coding-agent CLI — explicitly tuned
-    # for small local models (llama.cpp / Ollama). Built on top of weasel.
+    # Purpose alias: 'tiny' (tuned for small local models).
     shrew_parser = subparsers.add_parser(
         "shrew",
-        help="Shrew — a Chimera coding agent tuned for small local models",
+        aliases=["tiny"],
+        help="Shrew (alias: tiny) — coding agent tuned for small local models",
     )
     try:
         from chimera.shrew import cli as _shrew_cli  # type: ignore[attr-defined]
@@ -239,12 +239,11 @@ def build_parser() -> argparse.ArgumentParser:
         shrew_parser.add_argument("--version", action="store_true")
 
     # ---- stoat subcommand ----
-    # WHY: stoat is the sixth Chimera coding-agent CLI — shell-mode-toggle
-    # tradition (``Ctrl-X`` / ``/shell`` swaps the REPL into direct-shell
-    # mode). Trademark hygiene: never names the upstream brand.
+    # Purpose alias: 'shell' (shell-mode toggle, Kimi-tuned defaults).
     stoat_parser = subparsers.add_parser(
         "stoat",
-        help="Stoat — a Chimera coding agent with a shell-mode toggle",
+        aliases=["shell"],
+        help="Stoat (alias: shell) — coding agent with a shell-mode toggle",
     )
     try:
         from chimera.stoat import cli as _stoat_cli  # type: ignore[attr-defined]
@@ -253,18 +252,28 @@ def build_parser() -> argparse.ArgumentParser:
         stoat_parser.add_argument("--version", action="store_true")
 
     # ---- badger subcommand ----
-    # WHY: badger is the seventh Chimera coding-agent CLI — harness-rewrite
-    # posture with a parity-tracker subcommand and rerun-on-failure
-    # discipline. Trademark hygiene: never names the upstream brand.
+    # Purpose alias: 'strict' (harness-rewrite posture, parity tracking).
     badger_parser = subparsers.add_parser(
         "badger",
-        help="Badger — a Chimera coding agent with a harness-rewrite posture",
+        aliases=["strict"],
+        help="Badger (alias: strict) — harness-rewrite posture, parity tracking",
     )
     try:
         from chimera.badger import cli as _badger_cli  # type: ignore[attr-defined]
         _badger_cli.add_arguments(badger_parser)
     except (ImportError, AttributeError):
         badger_parser.add_argument("--version", action="store_true")
+
+    # ---- agents (top-level discovery) ----
+    # WHY: distinct from each CLI's own ``agents`` subcommand. This one
+    # lists all 7 codenames + aliases + inspirations so users can pick
+    # which CLI to use without grepping the README.
+    agents_parser = subparsers.add_parser(
+        "agents",
+        help="List all 7 coding-agent CLIs with aliases + inspirations",
+    )
+    from chimera.cli import agents_discovery as _agents_discovery
+    _agents_discovery.add_arguments(agents_parser)
 
     # ---- review subcommand ----
     review_parser = subparsers.add_parser(
@@ -1120,7 +1129,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     elif args.command == "code":
         from chimera.cli.code import run_code
         return run_code(args)
-    elif args.command == "mink":
+    elif args.command in ("mink", "tui"):
         from chimera.mink import cli as _mink_cli
         return _mink_cli.run(args)
     elif args.command == "cc":
@@ -1132,38 +1141,41 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         from chimera.mink import cli as _mink_cli
         return _mink_cli.run(args)
-    elif args.command == "otter":
+    elif args.command in ("otter", "multi"):
         from chimera.otter import cli as _otter_cli
         return _otter_cli.run(args)
-    elif args.command == "ferret":
+    elif args.command in ("ferret", "sandbox"):
         try:
             from chimera.ferret import cli as _ferret_cli  # type: ignore[attr-defined]
             return _ferret_cli.run(args)
         except (ImportError, AttributeError) as exc:
             print(f"chimera ferret: scaffold not yet built ({exc})", file=sys.stderr)
             return 2
-    elif args.command == "weasel":
+    elif args.command in ("weasel", "mini"):
         try:
             from chimera.weasel import cli as _weasel_cli  # type: ignore[attr-defined]
             return _weasel_cli.run(args)
         except (ImportError, AttributeError) as exc:
             print(f"chimera weasel: scaffold not yet built ({exc})", file=sys.stderr)
             return 2
-    elif args.command == "shrew":
+    elif args.command in ("shrew", "tiny"):
         try:
             from chimera.shrew import cli as _shrew_cli  # type: ignore[attr-defined]
             return _shrew_cli.run(args)
         except (ImportError, AttributeError) as exc:
             print(f"chimera shrew: scaffold not yet built ({exc})", file=sys.stderr)
             return 2
-    elif args.command == "stoat":
+    elif args.command in ("stoat", "shell"):
         try:
             from chimera.stoat import cli as _stoat_cli  # type: ignore[attr-defined]
             return _stoat_cli.run(args)
         except (ImportError, AttributeError) as exc:
             print(f"chimera stoat: scaffold not yet built ({exc})", file=sys.stderr)
             return 2
-    elif args.command == "badger":
+    elif args.command == "agents":
+        from chimera.cli import agents_discovery as _agents_discovery
+        return _agents_discovery.run(args)
+    elif args.command in ("badger", "strict"):
         try:
             from chimera.badger import cli as _badger_cli  # type: ignore[attr-defined]
             return _badger_cli.run(args)

@@ -134,6 +134,8 @@ The plugin honors a `settings.json` schema for ecosystem interop, so the same ho
 
 [Setup guide](docs/playbooks/00-quick-start.md) — install in 2 minutes.
 
+> **Discoverability note:** Each of the 7 coding-agent CLIs has a purpose alias for tab-friendly invocation: `chimera tui` ≡ `chimera mink`, `chimera multi` ≡ `chimera otter`, `chimera sandbox` ≡ `chimera ferret`, `chimera mini` ≡ `chimera weasel`, `chimera tiny` ≡ `chimera shrew`, `chimera shell` ≡ `chimera stoat`, `chimera strict` ≡ `chimera badger`. Run `chimera agents` to list all seven with one-liner pitches and the upstream tool that inspired each. See [docs/inspirations.md](docs/inspirations.md).
+
 ### Otter — server-first coding agent
 
 `chimera otter` is the second coding-agent CLI. Where `chimera mink` mirrors a TUI-first agent, otter mirrors a server-first / multi-client open-source coding agent: a single ReAct loop you can drive from a one-shot CLI, an interactive REPL, an HTTP server with SSE streaming, or an ACP JSON-RPC transport — all backed by the same `LoopConfig`, tool registry, and event-sourced session store the rest of Chimera uses.
