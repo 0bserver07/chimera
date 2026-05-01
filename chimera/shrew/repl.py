@@ -261,6 +261,12 @@ def _build_run_code_namespace(args: argparse.Namespace) -> argparse.Namespace:
         # branches on a truthy preset, so leaving it ``None`` keeps the
         # default code path active.
         preset=None,
+        # WHY (G3, wave 10): bare ``chimera code`` defaults to the new
+        # CodingAgent stack. Shrew tunes for small local models on top of
+        # the legacy rich REPL (skills + extensions wired via
+        # ``_post_session_init``). Pin legacy_react=True so the default
+        # flip can't regress shrew's small-model harness.
+        legacy_react=True,
     )
     if post_init is not None:
         # WHY: ``run_code`` reads ``_post_session_init`` via ``getattr``

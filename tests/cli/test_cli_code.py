@@ -58,7 +58,17 @@ class TestCodeModule:
         inputs = iter(["/exit"])
         monkeypatch.setattr("builtins.input", lambda prompt: next(inputs))
 
-        args = argparse.Namespace(model="test", workdir=str(tmp_path), max_steps=10)
+        # WHY (G3, wave 10): bare ``chimera code`` now defaults to the new
+        # CodingAgent stack. These tests exercise the legacy ReAct + Session
+        # REPL semantics (``input()`` mocking, /exit handling), so opt back
+        # in via ``legacy_react=True``. The new-stack default has its own
+        # coverage in ``test_code_default_codingagent.py``.
+        args = argparse.Namespace(
+            model="test",
+            workdir=str(tmp_path),
+            max_steps=10,
+            legacy_react=True,
+        )
         result = run_code(args)
         assert result == 0
 
@@ -76,7 +86,17 @@ class TestCodeModule:
         monkeypatch.setattr("chimera.cli.code.create_provider", lambda **kw: mock_provider)
         monkeypatch.setattr("builtins.input", lambda prompt: (_ for _ in ()).throw(EOFError))
 
-        args = argparse.Namespace(model="test", workdir=str(tmp_path), max_steps=10)
+        # WHY (G3, wave 10): bare ``chimera code`` now defaults to the new
+        # CodingAgent stack. These tests exercise the legacy ReAct + Session
+        # REPL semantics (``input()`` mocking, /exit handling), so opt back
+        # in via ``legacy_react=True``. The new-stack default has its own
+        # coverage in ``test_code_default_codingagent.py``.
+        args = argparse.Namespace(
+            model="test",
+            workdir=str(tmp_path),
+            max_steps=10,
+            legacy_react=True,
+        )
         result = run_code(args)
         assert result == 0
 
@@ -96,6 +116,16 @@ class TestCodeModule:
         inputs = iter(["", "   ", "/exit"])
         monkeypatch.setattr("builtins.input", lambda prompt: next(inputs))
 
-        args = argparse.Namespace(model="test", workdir=str(tmp_path), max_steps=10)
+        # WHY (G3, wave 10): bare ``chimera code`` now defaults to the new
+        # CodingAgent stack. These tests exercise the legacy ReAct + Session
+        # REPL semantics (``input()`` mocking, /exit handling), so opt back
+        # in via ``legacy_react=True``. The new-stack default has its own
+        # coverage in ``test_code_default_codingagent.py``.
+        args = argparse.Namespace(
+            model="test",
+            workdir=str(tmp_path),
+            max_steps=10,
+            legacy_react=True,
+        )
         result = run_code(args)
         assert result == 0

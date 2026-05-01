@@ -125,6 +125,11 @@ def shim_badger_args(args: argparse.Namespace) -> argparse.Namespace:
         models=getattr(args, "models", "") or "",
         preset=getattr(args, "agent", None) or getattr(args, "preset", None),
         print_mode=None,
+        # WHY (G3, wave 10): bare ``chimera code`` defaults to the new
+        # CodingAgent stack. Badger's harness-rewrite posture relies on the
+        # legacy rich REPL (parity tracker + rerun discipline are layered
+        # on top of Session events). Pin legacy_react=True.
+        legacy_react=True,
     )
     return shimmed
 

@@ -484,10 +484,32 @@ def run_code(args: Any) -> int:
     if mode == "json":
         return _run_json_mode(args)
 
-    # New CodingAgent stack — activated by --preset
+    # New CodingAgent stack — activated by --preset OR by default for bare
+    # ``chimera code`` (no --preset, no --legacy-react). Wave 10 G3 flips the
+    # bare-REPL default from the legacy ReAct stack to the CodingAgent stack
+    # (preset="coding_agent"). Per-CLI shims that still rely on the rich
+    # legacy REPL (mink/otter/ferret/badger/shrew/stoat) opt back in by
+    # setting ``legacy_react=True`` on their shimmed namespace.
+    #
+    # Resolution order:
+    #   1. ``--preset NAME``     → CodingAgent(preset=NAME)
+    #   2. ``--legacy-react``    → legacy ReAct stack (this function below)
+    #   3. ``_post_session_init``→ legacy stack (rich-REPL hook marker;
+    #                              keeps otter/shrew snapshot wiring green)
+    #   4. otherwise (default)   → CodingAgent(preset="coding_agent")
     preset = getattr(args, "preset", None)
-    if preset:
+    legacy_react = bool(getattr(args, "legacy_react", False))
+    has_post_init = callable(getattr(args, "_post_session_init", None))
+    use_new_stack = preset is not None or (
+        not legacy_react and not has_post_init
+    )
+
+    if use_new_stack:
         import asyncio
+        # When the caller passed --preset NAME, honor it. Otherwise the bare
+        # REPL defaults to "coding_agent" — the canonical, most feature-
+        # complete preset (claude_code is a deprecated alias of this one).
+        effective_preset = preset or "coding_agent"
         model = getattr(args, "model", None) or os.environ.get(
             "ANTHROPIC_MODEL", "claude-sonnet-4-20250514",
         )
@@ -500,7 +522,9 @@ def run_code(args: Any) -> int:
             from chimera.core.loop_events import LoopEventType
 
             async def _print_run() -> None:
-                agent = CodingAgent(model=model, preset=preset, project_dir=cwd)
+                agent = CodingAgent(
+                    model=model, preset=effective_preset, project_dir=cwd,
+                )
                 async for event in agent.run(print_task):
                     if event.type == LoopEventType.assistant:
                         content = getattr(event.data, 'content', str(event.data))
@@ -512,7 +536,9 @@ def run_code(args: Any) -> int:
             asyncio.run(_print_run())
             return 0
 
-        asyncio.run(_run_new_stack(model=model, preset=preset, cwd=cwd))
+        asyncio.run(
+            _run_new_stack(model=model, preset=effective_preset, cwd=cwd),
+        )
         return 0
 
     workdir = os.path.abspath(getattr(args, "workdir", None) or os.getcwd())

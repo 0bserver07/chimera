@@ -182,6 +182,10 @@ def shim_ferret_args(args: argparse.Namespace) -> argparse.Namespace:
         models=getattr(args, "models", "") or "",
         preset=getattr(args, "agent", None) or getattr(args, "preset", None),
         print_mode=None,
+        # WHY (G3, wave 10): bare ``chimera code`` defaults to the new
+        # CodingAgent stack. Ferret keeps the legacy rich REPL with its
+        # sandbox-first wiring (Session/SessionTree/slash commands).
+        legacy_react=True,
     )
     return shimmed
 

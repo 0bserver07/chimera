@@ -1555,6 +1555,12 @@ def _shim_code_args(args: argparse.Namespace) -> argparse.Namespace:
         models="",
         preset=args.agent,  # WHY: --agent maps onto the CodingAgent preset slot
         print_mode=None,
+        # WHY (G3, wave 10): bare ``chimera code`` defaults to the new
+        # CodingAgent stack. Mink still relies on the legacy rich REPL
+        # (Session, SessionTree, slash commands like /checkpoint, /tree,
+        # /branch, /switch, steering thread). Pin legacy_react=True so the
+        # default flip in ``run_code`` doesn't silently regress mink users.
+        legacy_react=True,
     )
 
 

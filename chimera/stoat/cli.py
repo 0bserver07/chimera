@@ -554,6 +554,11 @@ def run(args: argparse.Namespace) -> int:
             models="",
             preset=None,
             print_mode=None,
+            # WHY (G3, wave 10): RPC mode pre-dates the CodingAgent default
+            # flip and wires its own JSON-RPC handlers on top of the legacy
+            # ReAct/Session stack. Pin legacy_react=True so the default
+            # change can't regress stoat's RPC handshake.
+            legacy_react=True,
         )
         return int(_run_code(rpc_ns))
     if mode == "print":
