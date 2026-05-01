@@ -197,6 +197,75 @@ def test_run_humaneval_dataset_path_override() -> None:
 
 
 # ---------------------------------------------------------------------------
+# run_mbpp
+# ---------------------------------------------------------------------------
+
+
+def test_run_mbpp_raises_when_dataset_missing(tmp_path) -> None:
+    """Missing MBPP dataset -> NotImplementedError with staging hint."""
+    missing = tmp_path / "no-mbpp.json"
+    with pytest.raises(NotImplementedError) as excinfo:
+        bench_mod.run_mbpp(limit=1, model="m1", dataset_path=str(missing))
+    msg = str(excinfo.value)
+    assert "MBPP dataset not staged" in msg
+    assert "CHIMERA_MBPP_PATH" in msg
+
+
+def test_run_mbpp_wires_harness_when_dataset_available(tmp_path) -> None:
+    """When the dataset is staged, MBPP + Harness are constructed."""
+    dataset = tmp_path / "mbpp.json"
+    dataset.write_text("[]")
+    expected = _fake_eval_result(name="mbpp-sanitized", passed=2, total=3)
+    fake_harness = MagicMock(name="harness")
+    fake_harness.run.return_value = expected
+
+    with (
+        patch.object(
+            bench_mod, "build_otter_agent_for_eval", return_value=MagicMock()
+        ),
+        patch("chimera.eval.benchmarks.mbpp.MBPP") as mbpp_cls,
+        patch("chimera.eval.harness.Harness", return_value=fake_harness),
+    ):
+        mbpp_cls.return_value = MagicMock(name="mbpp")
+        result = bench_mod.run_mbpp(
+            limit=3, model="m1", dataset_path=str(dataset)
+        )
+
+    assert result is expected
+    mbpp_cls.assert_called_once()
+    kwargs = mbpp_cls.call_args.kwargs
+    assert kwargs["limit"] == 3
+    assert kwargs["dataset_path"] == str(dataset)
+    assert kwargs["split"] == "sanitized"
+
+
+def test_run_mbpp_zero_limit_means_unlimited(tmp_path) -> None:
+    dataset = tmp_path / "mbpp.json"
+    dataset.write_text("[]")
+    fake_harness = MagicMock(name="harness")
+    fake_harness.run.return_value = _fake_eval_result(name="mbpp-sanitized")
+    with (
+        patch.object(
+            bench_mod, "build_otter_agent_for_eval", return_value=MagicMock()
+        ),
+        patch("chimera.eval.benchmarks.mbpp.MBPP") as mbpp_cls,
+        patch("chimera.eval.harness.Harness", return_value=fake_harness),
+    ):
+        bench_mod.run_mbpp(limit=0, model="m1", dataset_path=str(dataset))
+    assert mbpp_cls.call_args.kwargs["limit"] is None
+
+
+def test_dispatch_bench_mbpp_success(capsys) -> None:
+    expected = _fake_eval_result(name="mbpp-sanitized", passed=1, total=2)
+    with patch.object(bench_mod, "run_mbpp", return_value=expected) as run_mbpp:
+        rc = bench_mod.dispatch_bench(_ns(sub_action="mbpp", bench_limit=2))
+    assert rc == 0
+    run_mbpp.assert_called_once_with(limit=2, model="claude-sonnet-4-6")
+    out = capsys.readouterr().out
+    assert "mbpp-sanitized" in out
+
+
+# ---------------------------------------------------------------------------
 # run_tau_bench
 # ---------------------------------------------------------------------------
 

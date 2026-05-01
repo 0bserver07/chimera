@@ -39,6 +39,7 @@ if TYPE_CHECKING:
 __all__ = [
     "build_otter_agent_for_eval",
     "run_humaneval",
+    "run_mbpp",
     "run_tau_bench",
     "dispatch_bench",
     "DEFAULT_HUMANEVAL_PATH",
@@ -235,6 +236,99 @@ def run_humaneval(
 
 
 # ---------------------------------------------------------------------------
+# MBPP runner
+# ---------------------------------------------------------------------------
+
+
+def run_mbpp(
+    limit: int,
+    model: str,
+    dataset_path: str | None = None,
+    split: str = "sanitized",
+) -> "EvalResult":
+    """Run the MBPP benchmark against an otter Agent.
+
+    Mirrors :func:`run_humaneval` but targets
+    :class:`chimera.eval.benchmarks.mbpp.MBPP`. The MBPP dataset is
+    **not vendored** (footprint + license attribution); when no dataset
+    is staged, this function raises a clear :class:`NotImplementedError`
+    pointing at the staging steps. See
+    :data:`chimera.eval.benchmarks.mbpp.SETUP_HINT` and
+    :func:`chimera.eval.benchmarks.mbpp.default_dataset_path`.
+
+    The agent's output is markdown-fence-stripped (MBPP records lack a
+    ``check(<entry_point>)`` invocation — assertions are inlined — so we
+    only patch the fence stripper, not the test invocation).
+
+    Args:
+        limit: Maximum number of tasks to run. ``0`` / negative means
+            unlimited (run the full split).
+        model: Model identifier passed to
+            :func:`build_otter_agent_for_eval`.
+        dataset_path: Optional override for the MBPP JSON/JSONL dump.
+            When ``None``, :func:`default_dataset_path` is used.
+        split: Logical split name (``"sanitized"`` / ``"test"`` /
+            ``"validation"`` / ``"train"`` / ``"prompt"``). Surfaced via
+            ``MBPP.name()`` only — does not filter records.
+
+    Returns:
+        The :class:`EvalResult` aggregated across the requested tasks.
+
+    Raises:
+        NotImplementedError: When no MBPP dataset is staged. The error
+            message contains the staging steps and the
+            ``CHIMERA_MBPP_PATH`` override.
+    """
+    import tempfile
+
+    from chimera.env.local import LocalEnvironment
+    from chimera.eval.benchmarks.mbpp import (
+        MBPP,
+        SETUP_HINT,
+        dataset_available,
+        default_dataset_path,
+    )
+    from chimera.eval.harness import Harness
+
+    resolved = (
+        Path(dataset_path).expanduser() if dataset_path else default_dataset_path()
+    )
+    if not dataset_available(resolved):
+        raise NotImplementedError(
+            "MBPP dataset not staged for otter eval.\n"
+            f"  expected: {resolved}\n"
+            f"  override: CHIMERA_MBPP_PATH=/abs/path/to/file.json[l]\n\n"
+            f"{SETUP_HINT}"
+        )
+
+    effective_limit = limit if limit and limit > 0 else None
+    benchmark = MBPP(
+        dataset_path=str(resolved), split=split, limit=effective_limit
+    )
+
+    if isinstance(MBPP, type):  # not a Mock; safe to patch evaluate
+        _orig_evaluate = benchmark.evaluate
+
+        def _patched_evaluate(task: Any, agent_output: str, env: Any) -> bool:
+            """Strip markdown fences before handing output to MBPP.evaluate."""
+            cleaned = _strip_code_fences(agent_output)
+            return bool(_orig_evaluate(task, cleaned, env))
+
+        benchmark.evaluate = _patched_evaluate  # type: ignore[method-assign]
+
+    agent = build_otter_agent_for_eval(model)
+
+    def _env_factory() -> LocalEnvironment:
+        # WHY: AGENT_TOOLS expects a non-None env. Each MBPP task gets a
+        # fresh temp workdir so list_files / bash / write land safely.
+        workdir = tempfile.mkdtemp(prefix="otter-mbpp-")
+        return LocalEnvironment(workdir=workdir)
+
+    harness = Harness(benchmark=benchmark, agent=agent, env_factory=_env_factory)
+    return harness.run()
+
+
+# ---------------------------------------------------------------------------
 # tau-bench runner
 # ---------------------------------------------------------------------------
 
@@ -315,7 +409,7 @@ def run_tau_bench(
 # ---------------------------------------------------------------------------
 
 
-_VALID_BENCHES = ("humaneval", "tau-bench")
+_VALID_BENCHES = ("humaneval", "mbpp", "tau-bench")
 
 
 def _print_eval_result(result: "EvalResult") -> None:
@@ -379,6 +473,8 @@ def dispatch_bench(args: argparse.Namespace) -> int:
     try:
         if bench_name == "humaneval":
             result = run_humaneval(limit=limit, model=model)
+        elif bench_name == "mbpp":
+            result = run_mbpp(limit=limit, model=model)
         else:  # tau-bench
             domain = getattr(args, "bench_domain", None) or "airline"
             result = run_tau_bench(limit=limit, model=model, domain=domain)

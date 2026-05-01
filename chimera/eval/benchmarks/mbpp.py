@@ -12,28 +12,104 @@ zero-dependency core, so HuggingFace ``datasets`` is intentionally NOT
 imported here). Tests can be executed in-process or against an
 ``Environment`` via ``run_command``.
 
-Dataset format (one record per problem)::
+Dataset format — both upstream variants are accepted::
 
+    # 1. Original full split (mbpp.jsonl)
     {
         "task_id": 1,
         "text": "Write a function to find the minimum cost path...",
         "code": "def min_cost(...): ...",
-        "test_list": [
-            "assert min_cost(...) == 8",
-            "assert min_cost(...) == 12",
-            "assert min_cost(...) == 16",
-        ],
+        "test_list": ["assert min_cost(...) == 8", ...],
         "test_setup_code": "",
     }
+
+    # 2. Sanitized split (sanitized-mbpp.json — 427 hand-verified records)
+    {
+        "task_id": 2,
+        "source_file": "Benchmark Questions Verification V2.ipynb",
+        "prompt": "Write a function to find the shared elements...",
+        "code": "def similar_elements(...): ...",
+        "test_imports": [],
+        "test_list": ["assert set(similar_elements(...)) == set((4, 5))", ...],
+    }
+
+Setup
+-----
+
+The dataset is **not vendored** in this repo. Stage it once::
+
+    mkdir -p ~/.chimera/datasets/mbpp
+    curl -sL -o ~/.chimera/datasets/mbpp/sanitized-mbpp.json \\
+        https://raw.githubusercontent.com/google-research/google-research/\\
+master/mbpp/sanitized-mbpp.json
+
+The CLI (``python -m chimera.eval.benchmarks.mbpp --limit 3``) then picks
+this path up automatically; tests that need the dataset call
+:func:`default_dataset_path` and :func:`dataset_available`.
+
+License
+-------
+
+Upstream MBPP is published by Google Research under CC-BY-4.0
+(see <https://github.com/google-research/google-research/tree/master/mbpp>
+and <https://huggingface.co/datasets/google-research-datasets/mbpp>).
+The dataset can be redistributed with attribution, but for footprint
+reasons we leave staging to the user.
 """
 
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
 from chimera.eval.harness import Benchmark
+
+
+__all__ = [
+    "MBPP",
+    "default_dataset_path",
+    "dataset_available",
+    "SETUP_HINT",
+]
+
+
+SETUP_HINT = (
+    "MBPP dataset not staged. Run:\n"
+    "  mkdir -p ~/.chimera/datasets/mbpp\n"
+    "  curl -sL -o ~/.chimera/datasets/mbpp/sanitized-mbpp.json \\\n"
+    "    https://raw.githubusercontent.com/google-research/"
+    "google-research/master/mbpp/sanitized-mbpp.json\n"
+    "Or set CHIMERA_MBPP_PATH=/abs/path/to/file.json[l]\n"
+    "Upstream license: CC-BY-4.0 (Google Research)."
+)
+
+
+def default_dataset_path() -> Path:
+    """Return the resolved MBPP dataset path.
+
+    Resolution order:
+
+    1. ``$CHIMERA_MBPP_PATH`` (absolute path override).
+    2. ``~/.chimera/datasets/mbpp/sanitized-mbpp.json`` — the recommended
+       sanitized split (427 hand-verified problems).
+    3. ``~/.chimera/datasets/mbpp/mbpp.jsonl`` — the full split fallback.
+    """
+    env = os.environ.get("CHIMERA_MBPP_PATH")
+    if env:
+        return Path(env).expanduser()
+    base = Path.home() / ".chimera" / "datasets" / "mbpp"
+    sanitized = base / "sanitized-mbpp.json"
+    if sanitized.exists():
+        return sanitized
+    return base / "mbpp.jsonl"
+
+
+def dataset_available(path: Path | None = None) -> bool:
+    """Return True when the MBPP dataset is staged and readable."""
+    resolved = path if path is not None else default_dataset_path()
+    return resolved.exists() and resolved.is_file()
 
 
 class MBPP(Benchmark):
@@ -93,7 +169,18 @@ class MBPP(Benchmark):
         if not test_list:
             return False
 
-        setup = task.get("test_setup_code") or ""
+        # The original full split uses a single ``test_setup_code`` string;
+        # the sanitized split uses ``test_imports`` (list of import lines).
+        # Concatenate both — empty strings/lists are no-ops.
+        setup_parts: list[str] = []
+        test_imports = task.get("test_imports") or []
+        if test_imports:
+            setup_parts.extend(test_imports)
+        setup_code = task.get("test_setup_code") or ""
+        if setup_code:
+            setup_parts.append(setup_code)
+        setup = "\n".join(setup_parts)
+
         assertions = "\n".join(test_list)
         full_code = (
             f"{setup}\n{agent_output}\n{assertions}\n"
@@ -115,20 +202,33 @@ class MBPP(Benchmark):
     def _load_tasks(self) -> list[dict[str, Any]]:
         if not self._dataset_path:
             return []
-        text = Path(self._dataset_path).read_text()
+        path = Path(self._dataset_path)
+        text = path.read_text()
         records: list[dict[str, Any]] = []
-        # Accept either a JSON array, a top-level {"tasks": [...]} envelope,
-        # or JSONL (one record per line).
-        stripped = text.lstrip()
-        if stripped.startswith("[") or stripped.startswith("{"):
-            data = json.loads(text)
-            records = data if isinstance(data, list) else data.get("tasks", [])
-        else:
+
+        # Detect JSONL by file extension first (cheap, unambiguous): the
+        # full split ships as ``mbpp.jsonl``. Fall back to JSON-array /
+        # ``{"tasks": [...]}`` envelope parsing for the sanitized split
+        # and any user-supplied envelope dump.
+        suffix = path.suffix.lower()
+        if suffix == ".jsonl":
             for line in text.splitlines():
-                line = line.strip()
-                if not line:
+                stripped_line = line.strip()
+                if not stripped_line:
                     continue
-                records.append(json.loads(line))
+                records.append(json.loads(stripped_line))
+        else:
+            stripped = text.lstrip()
+            if stripped.startswith("[") or stripped.startswith("{"):
+                data = json.loads(text)
+                records = data if isinstance(data, list) else data.get("tasks", [])
+            else:
+                # Last-resort: treat as JSONL when the suffix is missing.
+                for line in text.splitlines():
+                    stripped_line = line.strip()
+                    if not stripped_line:
+                        continue
+                    records.append(json.loads(stripped_line))
 
         normalized = [self._normalize(r) for r in records]
         if self._limit:
@@ -140,12 +240,95 @@ class MBPP(Benchmark):
         """Normalize an MBPP record to the harness task shape.
 
         The harness expects ``id`` and ``prompt`` keys. MBPP records use
-        ``task_id`` and ``text``; we copy across without mutating the
-        original so ``test_list`` and ``code`` remain accessible.
+        ``task_id`` plus either ``text`` (full split) or ``prompt``
+        (sanitized split); we copy across without mutating the original
+        so ``test_list`` / ``test_imports`` / ``code`` remain accessible.
+
+        Augments the prompt with the assertion list under a "Your code
+        should pass these tests:" header. This matches the standard
+        MBPP evaluation protocol (the upstream Google Research notebook
+        and the BigCode harness both feed assertions to the model so it
+        can infer the canonical function name and signature). Without
+        this, models invent plausible-but-wrong names like
+        ``shared_elements`` instead of ``similar_elements``.
         """
         task_id = record.get("task_id", record.get("id", "unknown"))
-        prompt = record.get("text") or record.get("prompt", "")
+        base_prompt = record.get("text") or record.get("prompt", "")
+        test_list = record.get("test_list") or []
+        if test_list and "Your code should pass these tests" not in base_prompt:
+            sample = "\n".join(test_list[:3])
+            full_prompt = (
+                f"{base_prompt}\n\nYour code should pass these tests:\n{sample}"
+            )
+        else:
+            full_prompt = base_prompt
         out = dict(record)
         out.setdefault("id", f"Mbpp/{task_id}")
-        out.setdefault("prompt", prompt)
+        out["prompt"] = full_prompt
         return out
+
+
+# ---------------------------------------------------------------------------
+# CLI entry point
+# ---------------------------------------------------------------------------
+
+
+def _cli(argv: list[str] | None = None) -> int:
+    """``python -m chimera.eval.benchmarks.mbpp --limit N --model M``.
+
+    Loads MBPP from :func:`default_dataset_path` (or the
+    ``--dataset-path`` override), constructs an otter Agent via
+    :func:`chimera.otter.benchmarks.build_otter_agent_for_eval`, and runs
+    the benchmark through :class:`chimera.eval.harness.Harness`. Prints a
+    one-line summary plus per-task pass/fail; mirrors the otter
+    ``run_mbpp`` runner so ``--model glm-5.1:cloud`` smoke runs are a
+    one-liner.
+    """
+    import argparse
+    import sys
+
+    parser = argparse.ArgumentParser(
+        prog="python -m chimera.eval.benchmarks.mbpp",
+        description="Run the MBPP benchmark against an otter Agent.",
+    )
+    parser.add_argument("--limit", type=int, default=3)
+    parser.add_argument("--model", type=str, default=None)
+    parser.add_argument("--dataset-path", type=str, default=None)
+    parser.add_argument(
+        "--split",
+        type=str,
+        default="sanitized",
+        help="Logical split label surfaced via name() (does not filter).",
+    )
+    args = parser.parse_args(argv)
+
+    dataset = (
+        Path(args.dataset_path).expanduser()
+        if args.dataset_path
+        else default_dataset_path()
+    )
+    if not dataset_available(dataset):
+        print(SETUP_HINT, file=sys.stderr)
+        return 3
+
+    # Lazy import to keep ``import chimera.eval.benchmarks.mbpp`` cheap.
+    from chimera.otter.benchmarks import run_mbpp
+
+    result = run_mbpp(
+        limit=args.limit,
+        model=args.model or "",
+        dataset_path=str(dataset),
+        split=args.split,
+    )
+    print(
+        f"{result.benchmark}: passed={result.passed}/{result.total} "
+        f"rate={result.pass_rate:.1%} cost=${result.total_cost:.4f}"
+    )
+    for task_result in result.results:
+        status = "PASS" if task_result.passed else "FAIL"
+        print(f"  {status} {task_result.task_id} steps={task_result.steps}")
+    return 0 if result.passed > 0 else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(_cli())
