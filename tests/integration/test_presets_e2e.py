@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import os
 import tempfile
+import warnings
 from unittest.mock import MagicMock
 
 
@@ -267,3 +268,56 @@ def test_swe_agent_has_minimal_tools():
     swe = AgentPreset.SWE_AGENT.build(provider)
     codex = AgentPreset.CODEX.build(provider)
     assert len(swe.tools) < len(codex.tools)
+
+
+# -------------------------------------------------------------------
+# Deprecation: AgentPreset.build() now emits DeprecationWarning
+# -------------------------------------------------------------------
+
+def test_build_emits_deprecation_warning():
+    """AgentPreset.build() must emit a DeprecationWarning, not FutureWarning.
+
+    The warning class was upgraded to DeprecationWarning so the removal path
+    is unambiguous. The message must reference v0.7.0 and the canonical
+    replacement in chimera.assembly.coding_agent.CodingAgent.from_preset().
+    """
+    provider = _mock_provider("ok")
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        AgentPreset.SWE_AGENT.build(provider)
+
+    deprecations = [w for w in caught if issubclass(w.category, DeprecationWarning)]
+    assert deprecations, (
+        "Expected a DeprecationWarning from AgentPreset.build(); "
+        f"got categories {[w.category.__name__ for w in caught]}"
+    )
+    # Reject the old FutureWarning explicitly so a regression is loud.
+    futures = [
+        w for w in caught
+        if w.category is FutureWarning  # not a subclass of DeprecationWarning
+    ]
+    assert not futures, "AgentPreset.build() should no longer emit FutureWarning"
+
+    msg = str(deprecations[0].message)
+    assert "v0.7.0" in msg, f"Warning message missing removal version: {msg!r}"
+    assert "CodingAgent.from_preset" in msg, (
+        f"Warning message missing canonical replacement: {msg!r}"
+    )
+
+
+def test_build_deprecation_warning_for_all_presets():
+    """Every preset's build() emits the DeprecationWarning consistently."""
+    provider = _mock_provider("ok", "ok", "ok", "ok")
+    for preset in [
+        AgentPreset.SWE_AGENT,
+        AgentPreset.CODEX,
+        AgentPreset.AIDER,
+        AgentPreset.CLINE,
+    ]:
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            preset.build(provider)
+        kinds = [w.category for w in caught]
+        assert any(issubclass(c, DeprecationWarning) for c in kinds), (
+            f"{preset.name} did not emit DeprecationWarning; got {kinds}"
+        )
