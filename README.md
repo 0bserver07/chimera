@@ -219,6 +219,34 @@ chimera shrew --model anthropic/claude-haiku-4-5 -p "..."  # cloud fallback
 
 See the [Shrew quickstart](docs/shrew/quickstart.md) for the small-model setup walkthrough and benchmark harness.
 
+### Stoat — shell-mode-toggle coding agent
+
+`chimera stoat` is the sixth coding-agent CLI. Where the first five each ship rich opinionated postures, stoat's distinguishing ergonomic is the **shell-mode toggle**: in the same REPL, each line either feeds the LLM agent or runs as a direct shell command, and the user flips between the two with `/shell` (or `--shell-mode` on boot). Stoat is for users who live in their terminal and want one buffer for both `ls -la` and "explain this repo". The provider chain is Kimi-first via `$MOONSHOT_API_KEY` (`kimi-k2.6` on `api.moonshot.ai/v1`), with Anthropic / OpenAI / OpenRouter / Ollama fallthroughs.
+
+```bash
+uv sync --extra dev --extra anthropic
+export MOONSHOT_API_KEY=...
+chimera stoat -p "summarize TODO comments in src/"   # one-shot
+chimera stoat                                        # interactive REPL — toggle with /shell
+chimera stoat --shell-mode                           # boot directly into shell mode
+```
+
+In the REPL, `stoat>` is agent mode, `stoat$` is shell mode; `/shell` toggles. Mode-tagged history (`/history` renders `>` and `$` markers) keeps both modes visible inline. See the [Stoat quickstart](docs/stoat/quickstart.md) for the full shell-mode walkthrough.
+
+### Badger — harness-rewrite coding agent
+
+`chimera badger` is the seventh coding-agent CLI. Where stoat's headline is ergonomic, badger's is **harness discipline**: tighter step budget (`--max-steps` defaults to 25 vs 50 for the other six), rerun-on-failure as a first-class flag (`--rerun-on-failure --max-reruns 2`), and a parity-tracker subcommand (`chimera badger parity --against PARITY.md`) that diffs a declared schema against the live agent's defaults. The provider chain is Anthropic-first.
+
+```bash
+uv sync --extra dev --extra anthropic
+export ANTHROPIC_API_KEY=sk-ant-...
+chimera badger -p "Refactor src/util.py to remove duplicated string formatting"
+chimera badger -p "fix the failing tests" --rerun-on-failure --max-reruns 3
+chimera badger parity --against PARITY.json          # rc=0 on match, rc=1 on diff
+```
+
+The rerun-on-failure detector is a conservative marker list (pytest summaries, Python tracebacks, Rust E0xxx, syntax errors, explicit `BUILD FAILED`). When fired, the refined-prompt directive names the markers and asks the agent to verify before reporting done. See the [Badger quickstart](docs/badger/quickstart.md) for the rationale and full surface.
+
 ## How It's Organized
 
 Chimera is an 8-layer stack. Each layer has a documented API boundary; swap any provider, tool, env, or strategy without touching the rest.
@@ -284,13 +312,15 @@ Use Chimera if you want to:
 ## Links
 
 - [Quick Start](docs/playbooks/00-quick-start.md) — hooks, MCP servers, skills
-- [Coding Agents Overview](docs/coding-agents.md) — comparative tour of mink, otter, ferret, weasel, shrew
+- [Coding Agents Overview](docs/coding-agents.md) — comparative tour of the seven-strong family (mink, otter, ferret, weasel, shrew, stoat, badger)
 - [Mink Quickstart](docs/mink/quickstart.md) — `chimera mink` REPL, runs/agents subcommands
 - [Mink Providers](docs/mink/providers.md) — backend matrix, env vars, troubleshooting
 - [Otter Quickstart](docs/otter/quickstart.md) — `chimera otter` one-shot, REPL, HTTP+SSE, ACP
 - [Ferret Quickstart](docs/ferret/quickstart.md) — `chimera ferret` sandbox + approval presets, ACP-default `serve`, cloud bridge
 - [Weasel Quickstart](docs/weasel/quickstart.md) — `chimera weasel` four modes (REPL / print / RPC / SDK), extensions
 - [Shrew Quickstart](docs/shrew/quickstart.md) — `chimera shrew` small-model defaults, llama.cpp setup, benchmark harness
+- [Stoat Quickstart](docs/stoat/quickstart.md) — `chimera stoat` shell-mode toggle, Kimi-first provider chain
+- [Badger Quickstart](docs/badger/quickstart.md) — `chimera badger` harness discipline, rerun-on-failure, parity-tracker
 - [Build Your Own Agent](docs/playbooks/08-building-agents.md) — full library guide
 - [All Playbooks](docs/playbooks/) — 13 guides covering every feature
 - [Examples](examples/) — 28 curated runnable scripts across 7 categories

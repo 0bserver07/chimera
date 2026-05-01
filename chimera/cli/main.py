@@ -224,6 +224,34 @@ def build_parser() -> argparse.ArgumentParser:
     except (ImportError, AttributeError):
         shrew_parser.add_argument("--version", action="store_true")
 
+    # ---- stoat subcommand ----
+    # WHY: stoat is the sixth Chimera coding-agent CLI — shell-mode-toggle
+    # tradition (``Ctrl-X`` / ``/shell`` swaps the REPL into direct-shell
+    # mode). Trademark hygiene: never names the upstream brand.
+    stoat_parser = subparsers.add_parser(
+        "stoat",
+        help="Stoat — a Chimera coding agent with a shell-mode toggle",
+    )
+    try:
+        from chimera.stoat import cli as _stoat_cli  # type: ignore[attr-defined]
+        _stoat_cli.add_arguments(stoat_parser)
+    except (ImportError, AttributeError):
+        stoat_parser.add_argument("--version", action="store_true")
+
+    # ---- badger subcommand ----
+    # WHY: badger is the seventh Chimera coding-agent CLI — harness-rewrite
+    # posture with a parity-tracker subcommand and rerun-on-failure
+    # discipline. Trademark hygiene: never names the upstream brand.
+    badger_parser = subparsers.add_parser(
+        "badger",
+        help="Badger — a Chimera coding agent with a harness-rewrite posture",
+    )
+    try:
+        from chimera.badger import cli as _badger_cli  # type: ignore[attr-defined]
+        _badger_cli.add_arguments(badger_parser)
+    except (ImportError, AttributeError):
+        badger_parser.add_argument("--version", action="store_true")
+
     # ---- review subcommand ----
     review_parser = subparsers.add_parser(
         "review",
@@ -345,21 +373,125 @@ def build_parser() -> argparse.ArgumentParser:
     from chimera.mink import team as _team_cli
     _team_cli.register(subparsers)
 
+    # ---- completion subcommand ----
+    # WHY: ship shell-completion scripts for bash/zsh/fish. The generator
+    # walks this very parser at runtime, so newly-registered subcommands
+    # show up automatically without a manual sync step.
+    from chimera.cli import completion as _completion_cli
+    completion_parser = subparsers.add_parser(
+        "completion",
+        help="Generate a shell-completion script (bash | zsh | fish).",
+    )
+    _completion_cli.add_arguments(completion_parser)
+
     # ---- plugins subcommand ----
     plugins_parser = subparsers.add_parser(
         "plugins",
-        help="Manage plugins (search, install, uninstall)",
+        help="Manage plugins (search, install, uninstall, list)",
     )
     plugins_parser.add_argument(
         "action",
-        choices=["search", "install", "uninstall"],
+        choices=["search", "install", "uninstall", "list"],
         help="Plugin action",
     )
     plugins_parser.add_argument(
         "query",
         nargs="?",
         default="",
-        help="Plugin name or search query",
+        help="Plugin name or search query (omit for `list`)",
+    )
+    plugins_parser.add_argument(
+        "--cli",
+        choices=[
+            "mink", "otter", "ferret", "weasel", "shrew", "stoat", "badger",
+        ],
+        default="otter",
+        help=(
+            "Per-CLI plugin directory selector for install/uninstall/list "
+            "(default: otter)"
+        ),
+    )
+    plugins_parser.add_argument(
+        "--scope",
+        choices=["user", "project"],
+        default="user",
+        help="Install scope: user (~/.<cli>/plugin) or project (./.<cli>/plugin)",
+    )
+    plugins_parser.add_argument(
+        "--index",
+        default=None,
+        help=(
+            "Override registry index URL or local path "
+            "(or set $CHIMERA_PLUGIN_INDEX)"
+        ),
+    )
+    plugins_parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Replace an existing installation",
+    )
+    plugins_parser.add_argument(
+        "--legacy-entrypoints",
+        action="store_true",
+        help=(
+            "Use the legacy entry-point-based plugin discovery instead of the "
+            "marketplace (search/list only)"
+        ),
+    )
+
+    # ---- auth subcommand ----
+    # OAuth device-flow login + credential management. Stdlib-only.
+    auth_parser = subparsers.add_parser(
+        "auth",
+        help="Manage authentication credentials (login, logout, status).",
+    )
+    auth_sub = auth_parser.add_subparsers(dest="auth_command", help="auth action")
+
+    auth_login = auth_sub.add_parser(
+        "login",
+        help="Run OAuth device flow for a provider.",
+    )
+    auth_login.add_argument(
+        "provider",
+        choices=["openrouter", "xai", "anthropic", "openai"],
+        help="Which provider to authenticate against.",
+    )
+    auth_login.add_argument(
+        "--client-id",
+        default=None,
+        help="Override the OAuth client_id (required for placeholder providers).",
+    )
+    auth_login.add_argument(
+        "--device-url",
+        default=None,
+        help="Override the device-authorization URL.",
+    )
+    auth_login.add_argument(
+        "--token-url",
+        default=None,
+        help="Override the token URL.",
+    )
+    auth_login.add_argument(
+        "--scope",
+        action="append",
+        default=None,
+        help="Override scopes (repeatable).",
+    )
+    auth_login.add_argument(
+        "--no-clipboard",
+        action="store_true",
+        help="Do not copy the user_code to the clipboard.",
+    )
+
+    auth_logout = auth_sub.add_parser(
+        "logout",
+        help="Remove a stored credential.",
+    )
+    auth_logout.add_argument("provider", help="Provider name to log out from.")
+
+    auth_sub.add_parser(
+        "status",
+        help="Show currently configured providers.",
     )
 
     return parser
@@ -736,78 +868,204 @@ def run_migrate(args: argparse.Namespace) -> int:
 
 
 def run_plugins(args: argparse.Namespace) -> int:
-    """Execute the plugins command.
+    """Execute the ``chimera plugins`` command.
 
-    Plugins are Python packages registered via the ``chimera.plugins`` entry
-    point group — installation goes through pip/uv like any other dep.
-    This command lists/searches what's currently installed; it does not run
-    a remote marketplace.
+    Two backends:
+
+    - **Marketplace** (default): a JSON registry index at
+      ``$CHIMERA_PLUGIN_INDEX`` (or :data:`DEFAULT_INDEX_URL`)
+      describes downloadable plugins; installs land in
+      ``~/.<cli>/plugin/<name>/`` (user scope) or
+      ``./.<cli>/plugin/<name>/`` (project scope).
+    - **Legacy entry points** (``--legacy-entrypoints``): inspects
+      Python packages registered via the ``chimera.plugins`` entry
+      point group. Useful for environments where pip-installed plugins
+      coexist with marketplace ones.
     """
-    from chimera.plugins.manager import PluginManager
+    from chimera.plugins.marketplace import (
+        MarketplaceClient,
+        MarketplaceError,
+        fetch_index,
+        list_installed,
+        uninstall_plugin,
+    )
 
-    manager = PluginManager()
-    try:
-        discovered = manager.discover()
-    except Exception as exc:
-        print(f"Error discovering plugins: {exc}", file=sys.stderr)
+    cli_name: str = args.cli
+    scope: str = args.scope
+    index_override: str | None = args.index
+
+    # ---- legacy entry-point path ----
+    if getattr(args, "legacy_entrypoints", False):
+        from chimera.plugins.manager import PluginManager
+
+        manager = PluginManager()
+        try:
+            discovered = manager.discover()
+        except Exception as exc:
+            print(f"Error discovering plugins: {exc}", file=sys.stderr)
+            return 1
+        if args.action in ("search", "list"):
+            query = (args.query or "").lower().strip()
+            matches = (
+                discovered
+                if not query
+                else [n for n in discovered if query in n.lower()]
+            )
+            if not matches:
+                print("No matching entry-point plugins installed.")
+                return 0
+            for name in matches:
+                print(f"  {name}")
+            return 0
+        print(
+            "--legacy-entrypoints only supports `search` and `list`. "
+            "Use pip/uv to install or remove entry-point plugins.",
+            file=sys.stderr,
+        )
         return 1
 
-    if args.action == "search":
-        query = (args.query or "").lower().strip()
-        if not query:
-            # Empty query = list everything
-            matches = discovered
-        else:
-            matches = [name for name in discovered if query in name.lower()]
-        if not matches:
-            if discovered:
-                print(f"No plugins match '{args.query}'. Installed: {', '.join(discovered)}")
-            else:
-                print(
-                    "No plugins installed.\n"
-                    "Chimera plugins ship as Python packages registered via the\n"
-                    "`chimera.plugins` entry point group. Install with:\n"
-                    "  pip install chimera-plugin-<name>\n"
-                    "  # or\n"
-                    "  uv pip install chimera-plugin-<name>"
-                )
+    # ---- marketplace path ----
+    if args.action == "list":
+        installed = list_installed(cli_name, scope=scope)
+        if not installed:
+            print(
+                f"No plugins installed under {cli_name} ({scope} scope)."
+            )
             return 0
-        for name in matches:
+        print(f"Plugins installed for {cli_name} ({scope} scope):")
+        for name in installed:
             print(f"  {name}")
+        return 0
+
+    if args.action == "search":
+        try:
+            registry = fetch_index(index_override)
+        except MarketplaceError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        client = MarketplaceClient(registry)
+        results = client.search(args.query or "")
+        if not results:
+            print(f"No plugins match {args.query!r}.")
+            return 0
+        for info in results:
+            tags = f" [{', '.join(info.tags)}]" if info.tags else ""
+            print(f"  {info.name} {info.version}{tags} — {info.description}")
         return 0
 
     if args.action == "install":
         if not args.query:
             print("Error: install requires a plugin name", file=sys.stderr)
             return 1
-        print(
-            f"Chimera doesn't run its own installer — plugins are Python packages.\n"
-            f"To install '{args.query}':\n"
-            f"  pip install {args.query}\n"
-            f"  # or\n"
-            f"  uv pip install {args.query}\n"
-            f"Then verify with: chimera plugins search {args.query}",
-            file=sys.stderr,
-        )
-        return 1
+        try:
+            registry = fetch_index(index_override)
+        except MarketplaceError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        client = MarketplaceClient(registry)
+        try:
+            dest = client.install(
+                args.query,
+                cli_name,
+                scope=scope,
+                overwrite=args.overwrite,
+            )
+        except MarketplaceError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        print(f"Installed {args.query} -> {dest}")
+        return 0
 
     if args.action == "uninstall":
         if not args.query:
             print("Error: uninstall requires a plugin name", file=sys.stderr)
             return 1
-        if args.query not in discovered:
-            print(f"Plugin '{args.query}' is not installed.", file=sys.stderr)
+        try:
+            removed = uninstall_plugin(args.query, cli_name, scope=scope)
+        except MarketplaceError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
             return 1
-        print(
-            f"Chimera doesn't run its own uninstaller — use pip/uv:\n"
-            f"  pip uninstall {args.query}\n"
-            f"  # or\n"
-            f"  uv pip uninstall {args.query}",
-            file=sys.stderr,
-        )
-        return 1
+        if not removed:
+            print(
+                f"Plugin {args.query!r} is not installed under "
+                f"{cli_name} ({scope} scope).",
+                file=sys.stderr,
+            )
+            return 1
+        print(f"Uninstalled {args.query} from {cli_name} ({scope} scope).")
+        return 0
 
     return 1
+
+
+def run_auth(args: argparse.Namespace) -> int:
+    """Execute the auth command (login / logout / status)."""
+    from chimera.auth.oauth_device import (
+        PROVIDER_PRESETS,
+        DeviceFlowError,
+        login as oauth_login,
+    )
+    from chimera.auth.store import CredentialStore
+
+    sub = getattr(args, "auth_command", None)
+    store = CredentialStore()
+
+    if sub is None or sub == "status":
+        providers = store.list_providers()
+        if not providers:
+            print("No stored credentials. Run 'chimera auth login <provider>'.")
+            return 0
+        print("Stored credentials:")
+        for name in providers:
+            cred = store.get(name)
+            if cred is None:
+                continue
+            preview = (cred.token[:6] + "..") if cred.token else "<empty>"
+            expiry = "no expiry"
+            if cred.expires_at is not None:
+                expiry = "expired" if cred.is_expired else "valid"
+            print(f"  {name}: {preview} ({expiry})")
+        return 0
+
+    if sub == "logout":
+        existing = store.get(args.provider)
+        if existing is None:
+            print(f"No stored credential for '{args.provider}'.")
+            return 0
+        store.delete(args.provider)
+        print(f"Removed credential for '{args.provider}'.")
+        return 0
+
+    if sub == "login":
+        provider = args.provider
+        if provider not in PROVIDER_PRESETS:
+            print(
+                f"Unknown provider '{provider}'. "
+                f"Known: {sorted(PROVIDER_PRESETS)}",
+                file=sys.stderr,
+            )
+            return 2
+        try:
+            cred = oauth_login(
+                provider,
+                client_id=args.client_id,
+                device_url=args.device_url,
+                token_url=args.token_url,
+                scopes=args.scope,
+                store=store,
+                clipboard=not args.no_clipboard,
+            )
+        except DeviceFlowError as exc:
+            print(f"chimera auth: {exc}", file=sys.stderr)
+            return 1
+        except TimeoutError as exc:
+            print(f"chimera auth: {exc}", file=sys.stderr)
+            return 1
+        print(f"Authenticated as '{cred.provider}'. Token stored.")
+        return 0
+
+    print(f"Unknown auth command: {sub}", file=sys.stderr)
+    return 2
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -864,6 +1122,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         except (ImportError, AttributeError) as exc:
             print(f"chimera shrew: scaffold not yet built ({exc})", file=sys.stderr)
             return 2
+    elif args.command == "stoat":
+        try:
+            from chimera.stoat import cli as _stoat_cli  # type: ignore[attr-defined]
+            return _stoat_cli.run(args)
+        except (ImportError, AttributeError) as exc:
+            print(f"chimera stoat: scaffold not yet built ({exc})", file=sys.stderr)
+            return 2
+    elif args.command == "badger":
+        try:
+            from chimera.badger import cli as _badger_cli  # type: ignore[attr-defined]
+            return _badger_cli.run(args)
+        except (ImportError, AttributeError) as exc:
+            print(f"chimera badger: scaffold not yet built ({exc})", file=sys.stderr)
+            return 2
     elif args.command == "review":
         return run_review(args)
     elif args.command == "ci-fix":
@@ -876,8 +1148,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         return run_testgen(args)
     elif args.command == "migrate":
         return run_migrate(args)
+    elif args.command == "completion":
+        from chimera.cli import completion as _completion_cli
+        return _completion_cli.run(args)
     elif args.command == "plugins":
         return run_plugins(args)
+    elif args.command == "auth":
+        return run_auth(args)
     elif args.command == "fs":
         rc: int = args.func(args)
         return rc

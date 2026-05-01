@@ -224,6 +224,62 @@ export default defineConfig({
 					],
 				},
 				{
+					label: 'Stoat',
+					collapsed: true,
+					items: [
+						{
+							label: 'Core',
+							items: [
+								{ label: 'Quickstart', slug: 'stoat/quickstart' },
+								{ label: 'Shell Mode', slug: 'stoat/shell-mode' },
+								{ label: 'Providers', slug: 'stoat/providers' },
+								{ label: 'Sessions', slug: 'stoat/sessions' },
+							],
+						},
+						{
+							label: 'Per-Area',
+							items: [
+								{ label: 'Slash Commands', slug: 'stoat/slash-commands' },
+								{ label: 'Parity Matrix', slug: 'stoat/parity-matrix' },
+							],
+						},
+						{
+							label: 'Policy',
+							items: [
+								{ label: 'Security and Trademarks', slug: 'stoat/security-and-trademarks' },
+							],
+						},
+					],
+				},
+				{
+					label: 'Badger',
+					collapsed: true,
+					items: [
+						{
+							label: 'Core',
+							items: [
+								{ label: 'Quickstart', slug: 'badger/quickstart' },
+								{ label: 'Providers', slug: 'badger/providers' },
+							],
+						},
+						{
+							label: 'Per-Area',
+							items: [
+								{ label: 'Harness Discipline', slug: 'badger/harness-discipline' },
+								{ label: 'Parity', slug: 'badger/parity' },
+								{ label: 'Rerun on Failure', slug: 'badger/rerun-on-failure' },
+								{ label: 'Parity Matrix', slug: 'badger/parity-matrix' },
+							],
+						},
+						{
+							label: 'Policy',
+							items: [
+								{ label: 'Security and Trademarks', slug: 'badger/security-and-trademarks' },
+							],
+						},
+					],
+				},
+				{
 					label: 'Releases',
 					collapsed: true,
 					items: [

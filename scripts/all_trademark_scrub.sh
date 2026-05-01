@@ -25,7 +25,7 @@ cd "${REPO_ROOT}"
 
 # Codenames in the canonical order.  Add new codenames here as they
 # come online (each must ship its own `scripts/<codename>_trademark_scrub.sh`).
-CODENAMES=(mink otter ferret weasel shrew)
+CODENAMES=(mink otter ferret weasel shrew stoat badger)
 
 PASSED=()
 FAILED=()

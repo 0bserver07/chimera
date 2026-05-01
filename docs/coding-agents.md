@@ -1,11 +1,11 @@
 ---
 title: Coding Agents Overview
-description: Comparative tour of the five Chimera coding-agent CLIs — mink, otter, ferret, weasel, shrew — when to pick which, and how their provider chains differ.
+description: Comparative tour of the seven Chimera coding-agent CLIs — mink, otter, ferret, weasel, shrew, stoat, badger — when to pick which, and how their provider chains differ.
 ---
 
 # Coding Agents Overview
 
-Chimera ships five coding-agent CLIs, each modeled on a different style of
+Chimera ships seven coding-agent CLIs, each modeled on a different style of
 upstream coding agent. They share the same library substrate — one
 `AgentLoop`, one tool registry, one event-sourced session store, one set of
 provider adapters — but each one has its own opinionated surface: REPL
@@ -26,10 +26,14 @@ The family, in one sentence each:
   RPC / SDK), almost no chrome, an auto-discovered extensions directory.
 - **shrew** — small-local-model agent, layered on weasel, llama.cpp
   defaults, restricted tool set, MoE-aware context sizing, benchmark harness.
+- **stoat** — shell-mode-toggle agent, one buffer for both `bash -c <cmd>`
+  and "explain this repo", Kimi-first provider chain.
+- **badger** — harness-rewrite agent, tighter step budget (max-steps=25),
+  rerun-on-failure as a first-class flag, parity-tracker subcommand.
 
-All five honor `~/.claude/settings.json` and the standard ecosystem hooks /
-MCP / skills conventions, all five persist runs under
-`~/.chimera/eventlog/<agent>-<utc>-<uuid>/`, and all five accept any
+All seven honor `~/.claude/settings.json` and the standard ecosystem hooks /
+MCP / skills conventions, all seven persist runs under
+`~/.chimera/eventlog/<agent>-<utc>-<uuid>/`, and all seven accept any
 provider Chimera supports (Anthropic, OpenAI, Google, Ollama, Modal,
 OpenRouter, llama.cpp, any OpenAI-compatible endpoint). What differs is the
 posture, the defaults, and the I/O envelope.
@@ -53,6 +57,8 @@ to that agent's quickstart.
 | Sandbox-first; safe-by-default; single-flag approval presets; IDE plugin via ACP; optional remote-driven sessions | **ferret** | Sandbox modes block at the OS level, approval presets block at the policy level — two flags compose. `serve` is ACP-by-default, HTTP is opt-in. |
 | Minimal harness; you want to embed in your own Python app, or drive the agent from another tool over JSON-RPC, with no chrome in the way | **weasel** | Four operating modes share one loop and one session store; almost no slash commands; `from chimera.weasel.sdk import Agent` for embedding. |
 | You want to run a coding agent against a small *local* model (Qwen3.5-9B, Qwen3.6-35B-A3B MoE, etc.) on llama.cpp / Ollama and benchmark it | **shrew** | Defaults pinned to `qwen3.6-35b-a3b` on llama.cpp; restricted `Read,Write,Edit,Bash` toolkit; MoE-aware context sizing; built-in Aider Polyglot / GAIA / terminal-bench harness. |
+| You live in your terminal; you want one buffer for both `bash -c <cmd>` and "explain this repo"; you want to flip between an LLM agent and a direct shell without leaving the prompt | **stoat** | `/shell` toggles the REPL between agent mode (`stoat>`) and shell mode (`stoat$`). Mode-tagged history. Kimi-first provider chain. |
+| Harness discipline matters more than chrome — tighter step budget, opt-in rerun-on-failure with refined-prompt directives, parity-tracker that diffs a declared schema against the live agent's defaults | **badger** | `--max-steps` defaults to 25 (vs 50 for the other six); `--rerun-on-failure --max-reruns 2`; `chimera badger parity --against PARITY.md` returns rc=0 / 1 / 2. |
 | Reproducing benchmark numbers (HumanEval, SWE-bench, AIMO) | **otter** for cloud frontier models; **shrew bench** for small local models | Otter has the cleanest one-shot mode for HumanEval-style runs; shrew's bench harness is tuned for small-model latency / loop-detection profiles. |
 | Building your *own* coding agent on top of Chimera primitives | (any of them — start with the closest posture, then peel back) | Every agent is a thin CLI over `chimera.assembly.coding_agent.CodingAgent`; the quickstarts are the best on-ramp into the library. |
 
@@ -61,22 +67,23 @@ to that agent's quickstart.
 What each CLI ships, side by side. Read top-to-bottom for one agent or
 left-to-right for one feature.
 
-| Surface | mink | otter | ferret | weasel | shrew |
-|---|---|---|---|---|---|
-| One-shot (`-p`) | yes | yes | yes | yes | yes |
-| Interactive REPL | rich TUI | streaming + slash palette | streaming + sandbox/approval slash commands | streaming, sparse slash commands | streaming, weasel parity |
-| HTTP server | no | `serve --port` (HTTP+SSE) | `serve --http` (opt-in) | no (use RPC mode) | no |
-| ACP / JSON-RPC | no | `serve --acp` (stdio) | `serve` is ACP-default (stdio) | `--mode rpc` (stdio JSON-RPC) | inherited from weasel |
-| Embeddable SDK | via `chimera.assembly` | via `chimera.assembly` | via `chimera.assembly` | `from chimera.weasel.sdk import Agent` | inherits weasel SDK |
-| Slash-command palette | 19 | 26 | weasel + `/sandbox`, `/approval`, `/bridge` | 7 (sparse on purpose) | weasel parity |
-| Permissions model | `~/.claude/settings.json` rules | `~/.claude/settings.json` rules | `--sandbox` × `--approval` (compose) | host-defined (no built-in presets) | weasel + restricted tool default |
-| Default tool set | full agent group | full agent group | full agent group | full agent group | `Read,Write,Edit,Bash` |
-| Default `--max-steps` | 50 | 50 | 50 | 50 | 30 |
-| Sub-agents / plan mode | yes | yes | yes | no (by design) | inherits from weasel |
-| Auto-discovered extensions dir | no | no | no | `.weasel/extensions/` | `chimera/shrew/skills/` + `~/.shrew/skills/` |
-| Cloud bridge | no | no | `chimera ferret bridge` | no | no |
-| Built-in benchmark harness | no | (use top-level eval CLI) | no | no | `chimera shrew bench …` |
-| Session prefix on disk | `mink-<utc>-<uuid>` | `otter-<utc>-<uuid>` | `ferret-<utc>-<uuid>` | `weasel-<utc>-<uuid>` | `shrew-<utc>-<uuid>` |
+| Surface | mink | otter | ferret | weasel | shrew | stoat | badger |
+|---|---|---|---|---|---|---|---|
+| One-shot (`-p`) | yes | yes | yes | yes | yes | yes | yes |
+| Interactive REPL | rich TUI | streaming + slash palette | streaming + sandbox/approval slash commands | streaming, sparse slash commands | streaming, weasel parity | streaming, shell-mode toggle | streaming, harness palette |
+| HTTP server | no | `serve --port` (HTTP+SSE) | `serve --http` (opt-in) | no (use RPC mode) | no | partial (Tier-2) | partial (Tier-2) |
+| ACP / JSON-RPC | no | `serve --acp` (stdio) | `serve` is ACP-default (stdio) | `--mode rpc` (stdio JSON-RPC) | inherited from weasel | partial (Tier-2) | partial (Tier-2) |
+| Embeddable SDK | via `chimera.assembly` | via `chimera.assembly` | via `chimera.assembly` | `from chimera.weasel.sdk import Agent` | inherits weasel SDK | via `chimera.assembly` | via `chimera.assembly` |
+| Slash-command palette | 19 | 26 | weasel + `/sandbox`, `/approval`, `/bridge` | 7 (sparse on purpose) | weasel parity | 7 (`/shell` is the headline) | shared + `/parity`, `/rerun` |
+| Permissions model | `~/.claude/settings.json` rules | `~/.claude/settings.json` rules | `--sandbox` × `--approval` (compose) | host-defined (no built-in presets) | weasel + restricted tool default | shared (`~/.claude/settings.json`) | shared + harness-tight defaults |
+| Default tool set | full agent group | full agent group | full agent group | full agent group | `Read,Write,Edit,Bash` | full agent group | full agent group |
+| Default `--max-steps` | 50 | 50 | 50 | 50 | 30 | 50 | **25** |
+| Sub-agents / plan mode | yes | yes | yes | no (by design) | inherits from weasel | yes | yes |
+| Auto-discovered extensions dir | no | no | no | `.weasel/extensions/` | `chimera/shrew/skills/` + `~/.shrew/skills/` | no | no |
+| Cloud bridge | no | no | `chimera ferret bridge` | no | no | no | no |
+| Built-in benchmark harness | no | (use top-level eval CLI) | no | no | `chimera shrew bench …` | partial (Tier-2) | partial (Tier-2) |
+| Headline ergonomic | TUI chrome | server-first transports | sandbox + approval | minimal-harness, four modes | small-local-model defaults | shell-mode toggle (`/shell`) | harness discipline (rerun + parity) |
+| Session prefix on disk | `mink-<utc>-<uuid>` | `otter-<utc>-<uuid>` | `ferret-<utc>-<uuid>` | `weasel-<utc>-<uuid>` | `shrew-<utc>-<uuid>` | `stoat-<utc>-<uuid>` | `badger-<utc>-<uuid>` |
 
 ## Provider chain comparison
 
@@ -86,21 +93,24 @@ the same in all five (CLI flag → agent env var → provider env var → friend
 error), but the *order* of the provider env vars differs based on the
 posture each agent is mirroring.
 
-| Step | mink | otter | ferret | weasel | shrew |
-|---|---|---|---|---|---|
-| 1 | `--model` | `--model` | `--model` | `--model` | `--model` |
-| 2 | `$MINK_MODEL` | `$OTTER_MODEL` | `$FERRET_MODEL` | `$WEASEL_MODEL` | `$SHREW_MODEL` |
-| 3 | Ollama-on-`:11434` → `kimi-k2.6:cloud` | Anthropic / OpenAI / OpenRouter / Ollama (in that order) | `$OPENAI_API_KEY` → `gpt-5` (fallback `gpt-4o`) | `$ANTHROPIC_API_KEY` → `claude-sonnet-4-6` | llama.cpp on `127.0.0.1:8888` → `qwen3.6-35b-a3b` |
-| 4 | `$ANTHROPIC_API_KEY` → `claude-sonnet-4-6` | (continues through the rest of the chain) | `$ANTHROPIC_API_KEY` → `claude-sonnet-4-6` | `$OPENAI_API_KEY` → `gpt-4o` | Ollama on `:11434` → first installed tag |
-| 5 | `$OPENAI_API_KEY` → `gpt-4o` | — | `$OPENROUTER_API_KEY` → `openai/gpt-5` | `$OPENROUTER_API_KEY` → `anthropic/claude-sonnet-4` | cloud fallback via `--model vendor/name` (`anthropic/claude-haiku-4-5`, `openai/gpt-4o-mini`, etc.) |
-| 6 | friendly error | friendly error | friendly error | Ollama on `:11434` → first installed tag, then friendly error | friendly error |
+| Step | mink | otter | ferret | weasel | shrew | stoat | badger |
+|---|---|---|---|---|---|---|---|
+| 1 | `--model` | `--model` | `--model` | `--model` | `--model` | `--model` | `--model` |
+| 2 | `$MINK_MODEL` | `$OTTER_MODEL` | `$FERRET_MODEL` | `$WEASEL_MODEL` | `$SHREW_MODEL` | `$STOAT_MODEL` | `$BADGER_MODEL` |
+| 3 | Ollama-on-`:11434` → `kimi-k2.6:cloud` | Anthropic / OpenAI / OpenRouter / Ollama (in that order) | `$OPENAI_API_KEY` → `gpt-5` (fallback `gpt-4o`) | `$ANTHROPIC_API_KEY` → `claude-sonnet-4-6` | llama.cpp on `127.0.0.1:8888` → `qwen3.6-35b-a3b` | `$MOONSHOT_API_KEY` → `kimi-k2.6` (`api.moonshot.ai/v1`) | `$ANTHROPIC_API_KEY` → `claude-sonnet-4-6` |
+| 4 | `$ANTHROPIC_API_KEY` → `claude-sonnet-4-6` | (continues through the rest of the chain) | `$ANTHROPIC_API_KEY` → `claude-sonnet-4-6` | `$OPENAI_API_KEY` → `gpt-4o` | Ollama on `:11434` → first installed tag | `$ANTHROPIC_API_KEY` → `claude-sonnet-4-6` | `$OPENAI_API_KEY` → `gpt-4o` |
+| 5 | `$OPENAI_API_KEY` → `gpt-4o` | — | `$OPENROUTER_API_KEY` → `openai/gpt-5` | `$OPENROUTER_API_KEY` → `anthropic/claude-sonnet-4` | cloud fallback via `--model vendor/name` (`anthropic/claude-haiku-4-5`, `openai/gpt-4o-mini`, etc.) | `$OPENAI_API_KEY` → `gpt-4o` | `$OPENROUTER_API_KEY` → `anthropic/claude-sonnet-4` |
+| 6 | friendly error | friendly error | friendly error | Ollama on `:11434` → first installed tag, then friendly error | friendly error | `$OPENROUTER_API_KEY` → `moonshot/kimi-k2.6`, then `$OLLAMA_API_KEY` → `qwen3.5:cloud`, then friendly error | `$OLLAMA_API_KEY` → first installed tag, then friendly error |
 
 The takeaway: **mink** prefers Ollama-local first (matches its TUI-daily-driver
 posture), **otter** is provider-agnostic with no strong opinion, **ferret**
 prefers OpenAI-flagship models (matches its IDE-flagship posture), **weasel**
-prefers Anthropic but happily falls through to anything else, and **shrew**
+prefers Anthropic but happily falls through to anything else, **shrew**
 prefers a llama.cpp server on the loopback (matches its small-local-model
-posture). All five accept `--model vendor/name` to override.
+posture), **stoat** prefers Moonshot-Kimi via OpenAI-compat (matches its
+shell-mode-toggle posture which is tuned for Kimi K2.6), and **badger**
+prefers Anthropic to match the harness-rewrite tradition's roots. All seven
+accept `--model vendor/name` to override.
 
 For the full provider matrix per agent — including auth env vars, base-URL
 overrides, and Ollama/llama.cpp specifics — see each quickstart's
@@ -112,6 +122,8 @@ overrides, and Ollama/llama.cpp specifics — see each quickstart's
 - [`docs/weasel/providers.md`](weasel/providers.md)
 - (Shrew's provider matrix is documented inline in `docs/shrew/quickstart.md`
   alongside the small-model-setup walkthrough.)
+- [`docs/stoat/providers.md`](stoat/providers.md)
+- [`docs/badger/providers.md`](badger/providers.md)
 
 ## When to pick which
 
@@ -163,9 +175,34 @@ cloud frontier. Cloud fallbacks (`anthropic/claude-haiku-4-5`,
 `openai/gpt-4o-mini`) work via `--model vendor/name` so you can A/B against
 a known frontier model without leaving shrew.
 
+**Pick stoat** when you live in your terminal and want one buffer for
+both `bash -c <cmd>` and "explain this repo". Stoat's headline is the
+shell-mode toggle: in the same REPL, `/shell` flips between agent mode
+(`stoat>`) and shell mode (`stoat$`); each shell input runs as a fresh
+`bash -c <input>` subprocess. Mode-tagged history lets `/history` render
+both modes inline with `>` and `$` markers. The provider chain is
+Kimi-first via `$MOONSHOT_API_KEY` (`kimi-k2.6` on `api.moonshot.ai/v1`)
+because the upstream shell-mode-toggle harness is tuned for Kimi K2.6
+chat models; Anthropic / OpenAI / OpenRouter / Ollama fallthroughs work
+without ceremony. Pick stoat when "one buffer for both modes" matters
+more than the long-tail of slash commands the bigger CLIs ship.
+
+**Pick badger** when harness discipline matters more than chrome.
+Badger's three load-bearing moves: tighter step budget (`--max-steps`
+defaults to **25**, vs 50 for the other six CLIs), rerun-on-failure as
+a first-class flag (`--rerun-on-failure --max-reruns 2`, with a
+conservative marker list — pytest summaries, Python tracebacks, Rust
+E0xxx, syntax errors, explicit `BUILD FAILED`), and a parity-tracker
+subcommand (`chimera badger parity --against PARITY.md`) that diffs a
+declared schema against the live agent's defaults. The schema can be
+JSON, YAML-ish, or a fenced Markdown block; the diff is asymmetric so
+live extras are informational and only declared fields fail the check.
+Pick badger when "agent didn't admit it failed" is the failure mode
+you keep hitting and you want the harness to push back.
+
 ## How they relate underneath
 
-All five CLIs are thin wrappers over the same library:
+All seven CLIs are thin wrappers over the same library:
 
 ```
 chimera/<agent>/cli.py        ← argparse + small per-agent defaults
@@ -183,7 +220,7 @@ chimera/sessions/eventlog (file-locking, gap-detection, crash-recovery)
 
 Anything you change in the library — a new tool, a new compaction strategy,
 a new provider adapter, a new permission backend — flows through to all
-five CLIs at once. That's why we ship five thin agents instead of one
+seven CLIs at once. That's why we ship seven thin agents instead of one
 opinionated mega-agent: pick the posture, inherit the substrate.
 
 If you want to build your own coding agent in this style — same substrate,
@@ -200,6 +237,8 @@ Per-agent quickstarts (each has its own `providers.md`,
 - [Ferret quickstart](ferret/quickstart.md) — IDE-flagship sandbox-first
 - [Weasel quickstart](weasel/quickstart.md) — minimal harness, four modes
 - [Shrew quickstart](shrew/quickstart.md) — small-local-model
+- [Stoat quickstart](stoat/quickstart.md) — shell-mode toggle
+- [Badger quickstart](badger/quickstart.md) — harness-rewrite discipline
 
 Adjacent reading:
 
