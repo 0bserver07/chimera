@@ -489,16 +489,19 @@ def test_dispatch_unknown_name_returns_2(capsys: pytest.CaptureFixture) -> None:
     assert "unknown benchmark" in err
 
 
-def test_dispatch_terminal_bench_not_wired(
+def test_dispatch_terminal_bench_dataset_absent_returns_3(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture,
 ) -> None:
-    """``terminal-bench`` is reserved but not wired in this scaffold."""
+    """Terminal-Bench: missing dataset → exit 3 + setup hint on stderr."""
     from chimera.shrew.benchmarks.cli import dispatch_bench
 
+    monkeypatch.setenv("CHIMERA_TERMINAL_BENCH_PATH", str(tmp_path))
     rc = dispatch_bench(_make_args(sub_action="terminal-bench"))
     assert rc == 3
     err = capsys.readouterr().err
-    assert "not yet wired" in err
+    assert "not staged" in err
 
 
 def test_dispatch_aider_dataset_absent_returns_3(

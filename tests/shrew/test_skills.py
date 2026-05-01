@@ -23,15 +23,25 @@ EXPECTED_BUNDLED: dict[str, str] = {
     "scaffold-model-fit": "knowledge",
     "escalation-signals": "knowledge",
     "python-idioms": "knowledge",
+    "loop-detection-signals": "knowledge",
+    "tool-budget-vs-prose-budget": "knowledge",
+    "git-aware-context": "knowledge",
     # protocols
     "edit-before-write": "protocols",
     "test-first-python": "protocols",
     "one-focused-question": "protocols",
     "error-recovery": "protocols",
+    "bisect-on-failure": "protocols",
+    "dry-run-before-commit": "protocols",
+    "read-tests-before-fixing": "protocols",
+    "incremental-edits": "protocols",
     # tools
     "core-tools": "tools",
     "grep-vs-ls": "tools",
     "multi-file-edits": "tools",
+    "bash-pipelines-with-care": "tools",
+    "find-vs-grep-vs-rg": "tools",
+    "python-subprocess-vs-bash": "tools",
 }
 
 
@@ -60,8 +70,11 @@ def test_discover_returns_expected_set() -> None:
 
 def test_skill_count_within_spec_bounds() -> None:
     skills = discover_shrew_skills()
-    # Spec calls for 8-12 skills total.
-    assert 8 <= len(skills) <= 12, f"got {len(skills)} skills, spec says 8-12"
+    # Curated set: at least 21 skills after wave-9 expansion (knowledge,
+    # protocols, tools combined). Upper bound stays loose so future waves
+    # can extend without churning the test.
+    assert len(skills) >= 21, f"got {len(skills)} skills, expected at least 21"
+    assert len(skills) <= 40, f"got {len(skills)} skills, suspiciously many"
 
 
 def test_each_skill_has_well_formed_frontmatter() -> None:

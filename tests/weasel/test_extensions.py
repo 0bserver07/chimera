@@ -627,10 +627,16 @@ def test_inline_slash_command_takes_precedence_over_markdown(
 # ---------------------------------------------------------------------------
 
 
-def test_typescript_extension_recognised_but_not_executed(
+def test_typescript_extension_without_tools_field_indexes_cleanly(
     project_root: Path, user_root: Path
 ) -> None:
-    """TS extensions are indexed; their tools wait on a follow-up wave."""
+    """TS extension lacking a manifest ``tools`` list contributes nothing.
+
+    Wave 9 wires JS/TS extensions through a Node subprocess (see
+    ``test_node_executor.py``), but a manifest that doesn't *declare*
+    any tools still indexes successfully — language is recognised and
+    no spurious load error is recorded.
+    """
     plugin_dir = user_root / "ts-ext"
     _write_manifest(plugin_dir, {"name": "ts-ext", "main": "index.ts"})
     (plugin_dir / "index.ts").write_text("// stub\n", encoding="utf-8")
@@ -640,7 +646,8 @@ def test_typescript_extension_recognised_but_not_executed(
     assert isinstance(e, WeaselExtension)
     assert e.language == "typescript"
     assert e.tools == []
-    assert any("not yet supported" in msg for msg in e.load_errors)
+    # No "not yet supported" error: JS/TS is now a first-class runtime.
+    assert not any("not yet supported" in msg for msg in e.load_errors)
 
 
 # ---------------------------------------------------------------------------

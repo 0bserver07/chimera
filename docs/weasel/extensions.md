@@ -229,6 +229,107 @@ hosts TS extensions can `require` from `node_modules` if you ship a
 `package.json` next to your extension. Weasel does not (yet) ship a
 marketplace; install is `mv` or `git clone`.
 
+## Node subprocess bridge (Wave 9)
+
+Wave 9 (issue W1) wires JS/TS extensions into the agent's toolbelt
+through a Node subprocess. Each tool declared on a JS/TS manifest is
+wrapped in a `NodeExtensionTool` that, on call, spawns:
+
+```bash
+node <plugin_dir>/<entry>.js --tool <name> --args '<json-args>'
+```
+
+…and parses a single JSON object off stdout.
+
+### Wire protocol
+
+The Node side reads `--tool` and `--args` from `process.argv` and
+prints exactly one JSON object to stdout. Two response shapes are
+recognised:
+
+```json
+{ "output": "result string", "metadata": { "k": "v" } }   // success
+{ "error":  "explanation" }                                // failure
+```
+
+Anything else (non-JSON, top-level array/scalar, missing keys, empty
+stdout with non-zero exit) is surfaced as a `ToolResult` with a clear
+`error` and the raw `stdout` / `stderr` / `exit_code` captured in
+`metadata` so the failure is debuggable from the agent transcript.
+
+### Manifest shape for JS/TS tools
+
+```json
+{
+  "name": "review",
+  "version": "0.2.1",
+  "main": "index.js",
+  "language": "javascript",
+  "tools": [
+    {
+      "name": "review_diff",
+      "description": "Review a diff against the codebase.",
+      "parameters": {
+        "type": "object",
+        "properties": { "diff": { "type": "string" } }
+      },
+      "timeout": 60
+    },
+    "review_file"
+  ]
+}
+```
+
+`tools` may be a list of bare strings (uses the permissive default
+schema and 30s timeout) or full descriptor dicts. Duplicate names
+collapse to one wrapper.
+
+### CommonJS vs. ESM
+
+Both shapes are supported. The bridge inspects `package.json` for
+`"type": "module"`; either way Node 14+ runs the entry via `node
+<file>` without a flag. ESM extensions ship `index.mjs`, CommonJS
+ships `index.js`. Authors writing TypeScript ship a build artifact —
+the bridge never transpiles `.ts` itself.
+
+### Failure modes
+
+- **Node not on PATH** — the loader records a single explanatory load
+  error; tool wrappers still build but each call returns a
+  `ToolResult(error="Node is not installed...")`. Fail-open.
+- **No JS entry point** — manifest declared `tools` but neither
+  `manifest.main` nor an `index.{js,mjs,cjs}` exists. Same posture:
+  loader-level error, runtime errors at call time.
+- **Subprocess timeout** — per-tool `timeout` field (defaults to 30s)
+  surfaces a clean `timed out` error rather than hanging the agent.
+- **Crash inside JS** — non-zero exit with stderr captured in
+  `metadata.stderr`; `error` says "exited N with no stdout".
+
+### Minimal Node fixture
+
+A self-contained `index.js` (no `node_modules`, no transpiler) that
+satisfies the wire protocol:
+
+```js
+'use strict';
+function getArg(name) {
+  const i = process.argv.indexOf(name);
+  return i >= 0 ? process.argv[i + 1] : null;
+}
+const tool = getArg('--tool');
+const args = JSON.parse(getArg('--args') || '{}');
+
+function emit(o) { process.stdout.write(JSON.stringify(o)); }
+
+if (tool === 'echo') emit({ output: String(args.text || '') });
+else                 emit({ error: 'unknown tool: ' + tool });
+```
+
+Pair with a `package.json` declaring
+`"language": "javascript"` and `"tools": ["echo"]` and the loader
+will index it, build a `NodeExtensionTool("echo")`, and the agent
+can call it like any other tool.
+
 ## See also
 
 - [`modes.md`](modes.md) — the four modes share one extension surface.

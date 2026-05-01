@@ -187,6 +187,56 @@ session is reachable from both transports simultaneously, so an IDE
 plugin and a CI bot can attach to one ferret process at the same
 time.
 
+### IDE-shaped notifications over SSE
+
+The four IDE-friendly notification kinds documented above
+(`code/diff`, `editor/open_file`, `terminal/output`, `progress/step`)
+also flow through the HTTP+SSE event stream. Subscribe at
+`GET /session/<id>/events`; each kind arrives as one SSE frame whose
+`event:` field is the kind name and whose JSON payload is the same
+`session/update.update` shape the ACP transport ships.
+
+Worked example — a single `write_file` produces two `progress/step`
+frames bracketing one `code/diff`:
+
+```text
+event: progress/step
+data: {"sessionUpdate":"progress/step","phase":"tool_call","step":1,"detail":"write_file"}
+
+event: code/diff
+data: {"sessionUpdate":"code/diff","path":"/repo/hello.py","changeKind":"add","unifiedDiff":"--- /repo/hello.py\n+++ /repo/hello.py\n@@ ...\n+print('hi')\n"}
+
+event: progress/step
+data: {"sessionUpdate":"progress/step","phase":"response","step":2,"detail":"ok"}
+```
+
+A `bash` tool call produces a `terminal/output` frame whose `chunk`
+carries the captured output and whose `processId` is the tool
+call id (so an IDE can bucket interleaved bash sessions correctly):
+
+```text
+event: terminal/output
+data: {"sessionUpdate":"terminal/output","processId":"call_42","stream":"stdout","chunk":"hi\n","sequence":1,"capReached":false}
+```
+
+Wire-level mechanics:
+
+- The HTTP server attaches an
+  `chimera.ferret.ide.IDENotificationEmitter` per session. The emitter
+  subscribes to `ToolCallEvent` / `ToolResultEvent` on the per-session
+  `LoopConfig.event_bus` and translates them into the SSE frames
+  above. Plain otter `loop_event` and `result` frames continue to fan
+  out alongside them — the IDE schema is additive.
+- `--ide-schema false` disables translation on the HTTP transport
+  too, so a strict otter-shaped relay sees only `loop_event` /
+  `result`.
+- Frame ordering: a `tool_call` `progress/step` always precedes the
+  `code/diff` (or `terminal/output`) it brackets, and a `response`
+  `progress/step` always follows it.
+- Each session's translator carries its own pending-call map and
+  terminal sequence counter, so multiple sessions cannot
+  cross-contaminate each other's frames.
+
 ## Cloud bridge
 
 For driving ferret from a remote UI (a web dashboard, a phone, a

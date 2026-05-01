@@ -8,8 +8,33 @@ description: Surface-by-surface mapping between chimera weasel and the upstream 
 **Source baseline:** `research/weasel/SPEC.md` (Apr 2026), upstream
 minimal-harness source tree walk under `packages/coding-agent/`.
 **Updated:** wave-5 ship (W1–W6), refreshed 2026-04-30 by the
-wave-6 cross-CLI verification (X1–X3, I-series).
+wave-6 cross-CLI verification (X1–X3, I-series). Refreshed again
+at wave-9 close (W1/W2, O5) — three rows promoted (TS / JS
+extension execution; theme registry; prompt-template registry).
 **Legend:** GREEN = shipped / at parity (or superset); YELLOW = partial; RED = deferred or out of scope.
+
+> **Wave-9 close (2026-04-30, D1).** Two carry-over items from
+> the wave-5 follow-up list landed in this wave:
+>
+> - **TS / JS extension execution.** W1/W9 added a Node-subprocess
+>   bridge so a `package.json`-driven JS or TS extension can
+>   contribute callable tools to the weasel agent. New module
+>   `chimera/weasel/node_executor.py` (~340 LOC). 27 new tests in
+>   `tests/weasel/test_node_executor.py`. Fail-open when Node is
+>   missing.
+> - **Theme + prompt-template registries.** W2/W9 added two new
+>   core extension surfaces: `chimera/weasel/themes.py` (color
+>   palettes + REPL prompt-prefix bundles) and
+>   `chimera/weasel/prompt_templates.py` (markdown-with-frontmatter
+>   system prompts). Built-ins-then-user-then-project precedence,
+>   matching the existing extension loader. 38 new tests.
+>
+> Plus the cross-CLI `chimera completion` generator (O5) covers
+> weasel too. Reports live under
+> `research/weasel/{W1,W2}-W9-REPORT.md` and
+> `research/O5-COMPLETION.md`. Live `pytest tests/weasel/` runs
+> 267+ passed with the wave-9 additions; trademark scrub still
+> exits OK at the codename-aggregate level (`passed: 7`).
 
 > **Wave-6 verification (2026-04-30).** Live state at handoff:
 > `uv run ruff check chimera/weasel/` clean; `uv run mypy
@@ -109,7 +134,7 @@ commands — is mirrored, with Python added as a first-class language.
 | Upstream capability | Weasel status | Notes |
 |---|---|---|
 | Auto-discovery | GREEN | `.weasel/extensions/` + `~/.weasel/extensions/`. |
-| TS / JS extensions | GREEN | Subprocess via Node, JSON-RPC over stdio. |
+| TS / JS extensions | GREEN | Subprocess via Node, JSON-RPC over stdio. As of wave-9 close (W1/W9), the bridge in `chimera/weasel/node_executor.py` actually executes JS/TS-contributed tools — manifest-driven, CJS + ESM both supported, fail-open when Node is missing. **Wave-9 close (W1/W9).** |
 | Python extensions | GREEN | Native via importlib. (Superset.) |
 | Manifest schema | GREEN | `manifest.json` for directory extensions. |
 | Tool registration | GREEN | `@tool` decorator (Python) / `registerTool` (TS). |
@@ -190,9 +215,10 @@ uses `.weasel/settings.json`. Keys map one-to-one where possible.
 | `extensions.allowed` | GREEN | Allowlist for unattended runs. |
 | `extensions.blocked` | GREEN | Blocklist that shadows allowed. |
 | `permissions` | GREEN | Mapped to `chimera.permissions` rules. |
-| `theme` | RED | No theme system. |
+| `theme` | GREEN | `chimera/weasel/themes.py` ships built-in `default` / `dark` / `solarized` palettes + REPL prompt-prefix bundles, with `--theme <name>` / `$WEASEL_THEME` selection and `~/.weasel/themes/` + `.weasel/themes/` user/project overlays. **Wave-9 close (W2/W9).** |
 | `keybindings` | RED | No custom keybindings. |
 | `compaction.threshold` | YELLOW | Honored when present; default lives in `chimera.compaction`. |
+| Prompt templates | GREEN | `chimera/weasel/prompt_templates.py` ships markdown-with-frontmatter system prompts via `--prompt-template <name>` / `$WEASEL_PROMPT_TEMPLATE`, same scope precedence as themes. **Wave-9 close (W2/W9).** |
 
 ## Counts
 
@@ -200,11 +226,15 @@ uses `.weasel/settings.json`. Keys map one-to-one where possible.
 - **CLI flags:** 18 GREEN, 2 YELLOW, 1 RED of 21.
 - **Slash commands:** 8 GREEN, 0 YELLOW, 4 RED of 12 (the four REDs
   are intentional design choices).
-- **Extension surface:** 10 GREEN, 0 YELLOW, 1 RED of 11.
+- **Extension surface:** 10 GREEN, 0 YELLOW, 1 RED of 11
+  (refreshed at wave-9 close — TS / JS execution promoted to GREEN
+  via W1/W9's Node subprocess bridge).
 - **SDK surface:** 12 GREEN, 0 YELLOW, 0 RED of 12.
 - **RPC methods:** 8 GREEN of 8.
 - **Providers:** 6 GREEN, 2 YELLOW, 0 RED of 8.
-- **Settings keys:** 4 GREEN, 1 YELLOW, 2 RED of 7.
+- **Settings keys:** 6 GREEN, 1 YELLOW, 1 RED of 8 (refreshed at
+  wave-9 close — `theme` and `prompt template` rows promoted to
+  GREEN via W2/W9's two new registries).
 
 > **Wave-6 live verification:** the GREEN counts above were
 > spot-checked against `chimera weasel --help`, the 164 passing tests
@@ -236,11 +266,16 @@ Weasel inherits Chimera primitives the upstream does not have:
 2. `chimera weasel --thinking <level>` — first-class flag instead
    of env-var pass-through.
 3. Marketplace command (`chimera weasel ext install <git-url>`).
-4. Theme system parity (low priority — chrome only).
+4. ~~Theme system parity (low priority — chrome only).~~ Shipped
+   at wave-9 close (W2/W9 — three built-in palettes plus the
+   prompt-template registry). REPL wiring of the resolved theme
+   stays as a downstream consumer follow-up.
 5. Per-extension dependency resolution beyond `depends_on`
    (semver ranges, conflict detection).
 6. RPC streaming back-pressure (drop / buffer policy when client
    reads slowly).
+7. ~~TS / JS extension tool execution.~~ Shipped at wave-9 close
+   (W1/W9 — `chimera/weasel/node_executor.py`).
 
 ## How to use this matrix
 

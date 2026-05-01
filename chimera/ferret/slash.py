@@ -226,17 +226,83 @@ def _cycle(current: str, sequence: tuple[str, ...]) -> str:
     return sequence[0]
 
 
-def cmd_sandbox(session: Any, _env: Any, args: str, out: PrintFn) -> None:
-    """Show or cycle the active sandbox mode.
+def _resolve_sandbox_env(session: Any, env: Any) -> Any:
+    """Locate a :class:`SandboxedEnvironment` reachable from the session.
+
+    Tries, in priority order: the explicit ``env`` argument, then
+    ``session.env``, then ``session.agent.env``. Returns the first object
+    that has a ``mode_holder`` attribute (the swappable
+    :class:`~chimera.ferret.sandbox.MutableSandboxMode`) or a ``set_mode``
+    method. Returns ``None`` when no live sandbox env is reachable —
+    callers fall back to the session-attribute path so the slash command
+    still updates the visible state.
+    """
+    candidates = [env]
+    candidates.append(getattr(session, "env", None))
+    agent = getattr(session, "agent", None)
+    if agent is not None:
+        candidates.append(getattr(agent, "env", None))
+    for candidate in candidates:
+        if candidate is None:
+            continue
+        if hasattr(candidate, "mode_holder") or hasattr(candidate, "set_mode"):
+            return candidate
+    return None
+
+
+def _resolve_permission_proxy(session: Any) -> Any:
+    """Locate the :class:`MutablePermissionPolicy` for *session*.
+
+    Walks the standard surfaces an agent exposes its loop config under:
+
+    * ``session.permissions`` — short-circuit if the REPL stashed the
+      proxy directly on the session.
+    * ``session.agent.loop.config.permissions`` — the canonical home; the
+      ferret CLI installs the proxy onto the live :class:`LoopConfig` so
+      the next tool call sees the swap.
+    * ``session.config.permissions`` — fallback for sessions that hold a
+      LoopConfig directly.
+
+    Returns the proxy when found, or ``None`` when the session predates
+    proxy installation. The caller falls back to the visible-state-only
+    path in that case.
+    """
+    direct = getattr(session, "permissions", None)
+    if direct is not None and hasattr(direct, "set_inner"):
+        return direct
+    agent = getattr(session, "agent", None)
+    loop = getattr(agent, "loop", None) if agent is not None else None
+    config = getattr(loop, "config", None) if loop is not None else None
+    if config is not None:
+        perms = getattr(config, "permissions", None)
+        if perms is not None and hasattr(perms, "set_inner"):
+            return perms
+    config = getattr(session, "config", None)
+    if config is not None:
+        perms = getattr(config, "permissions", None)
+        if perms is not None and hasattr(perms, "set_inner"):
+            return perms
+    return None
+
+
+def cmd_sandbox(session: Any, env: Any, args: str, out: PrintFn) -> None:
+    """Show or cycle the active sandbox mode and rewire the env.
 
     Usage:
         ``/sandbox`` — print the current mode and cycle to the next.
         ``/sandbox <mode>`` — set the mode explicitly. Valid values:
         ``read-only``, ``workspace-write``, ``workspace-write-network``.
 
-    The session's current mode lives at :attr:`session.sandbox_mode`; if
-    the attribute is missing we treat ``read-only`` as the default
-    (matching the spec's sandbox-first posture).
+    The handler operates on two surfaces:
+
+    1. **Visible state** — :attr:`session.sandbox_mode` is updated so
+       slash commands and the REPL display agree on the current mode.
+    2. **Live env** — when a :class:`~chimera.ferret.sandbox.SandboxedEnvironment`
+       is reachable from the session (``session.env`` /
+       ``session.agent.env``), its :class:`MutableSandboxMode` holder is
+       swapped via :meth:`SandboxedEnvironment.set_mode` so the next
+       tool call sees the new policy. The wrap is atomic; concurrent
+       agent turns never observe a torn read.
     """
     current = getattr(session, "sandbox_mode", SANDBOX_MODES[0]) or SANDBOX_MODES[0]
     requested = args.strip()
@@ -258,20 +324,40 @@ def cmd_sandbox(session: Any, _env: Any, args: str, out: PrintFn) -> None:
         out(f"/sandbox: cannot persist mode on session ({type(session).__name__})")
         return
 
+    sandbox_env = _resolve_sandbox_env(session, env)
+    if sandbox_env is not None:
+        try:
+            setter = getattr(sandbox_env, "set_mode", None)
+            if callable(setter):
+                setter(new_mode)
+            else:
+                holder = getattr(sandbox_env, "mode_holder", None)
+                if holder is not None and hasattr(holder, "set"):
+                    holder.set(new_mode)
+        except Exception as exc:  # noqa: BLE001 — surface, never crash REPL
+            out(f"/sandbox: live env swap failed: {exc}")
+            return
+
     out(f"/sandbox: {current} -> {new_mode}")
 
 
-def cmd_approval(session: Any, _env: Any, args: str, out: PrintFn) -> None:
-    """Show or cycle the active approval preset.
+def cmd_approval(session: Any, env: Any, args: str, out: PrintFn) -> None:
+    """Show or cycle the active approval preset and rewire LoopConfig.
 
     Usage:
         ``/approval`` — print the current preset and cycle to the next.
         ``/approval <preset>`` — set explicitly. Valid: ``read-only``,
         ``auto``, ``full``.
 
-    The session's current preset lives at
-    :attr:`session.approval_preset`; absent attribute defaults to
-    ``read-only`` for the safest posture.
+    The handler operates on two surfaces:
+
+    1. **Visible state** — :attr:`session.approval_preset` is updated.
+    2. **Live LoopConfig** — when the session's agent was built with a
+       :class:`~chimera.ferret.approval.MutablePermissionPolicy` proxy
+       at ``LoopConfig.permissions``, the proxy's inner policy is
+       swapped via :meth:`MutablePermissionPolicy.set_inner`. The next
+       tool call's permission evaluation hits the new policy without
+       any agent rebuild.
     """
     current = (
         getattr(session, "approval_preset", APPROVAL_PRESETS[0])
@@ -296,6 +382,20 @@ def cmd_approval(session: Any, _env: Any, args: str, out: PrintFn) -> None:
             f"({type(session).__name__})"
         )
         return
+
+    proxy = _resolve_permission_proxy(session)
+    if proxy is not None:
+        try:
+            from chimera.ferret.approval import (
+                policy_for_preset,
+                preset_from_string,
+            )
+
+            new_policy = policy_for_preset(preset_from_string(new_preset))
+            proxy.set_inner(new_policy)
+        except Exception as exc:  # noqa: BLE001 — surface, never crash REPL
+            out(f"/approval: live policy swap failed: {exc}")
+            return
 
     out(f"/approval: {current} -> {new_preset}")
 

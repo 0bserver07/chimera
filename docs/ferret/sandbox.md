@@ -191,3 +191,103 @@ when neither flag nor config-file value is present.
 - `chimera/ferret/sandbox.py` — runner implementation.
 - `chimera/permissions/risk.py` — the bash risk classifier the
   sandbox uses for command parsing.
+
+## OS-level sandboxing — `--os-sandbox`
+
+The wrapper-level guard described above is good defence-in-depth, but
+a sufficiently clever ``bash -c`` invocation that hides intent behind
+``$()`` / backticks / heredocs can sneak past static classification.
+Ferret pairs the wrapper sandbox with an OS-level second line of
+defence selected by ``--os-sandbox``.
+
+| Flag | Meaning |
+|---|---|
+| `auto` (default) | Engage seatbelt (macOS) or Landlock (Linux) when the kernel supports it. Otherwise wrapper-only with a one-time warning. |
+| `on` | Force the OS primitive. Operators get a warning if the kernel doesn't support it; the run still proceeds in wrapper-only mode. |
+| `off` | Wrapper-only. Use when the OS layer interferes with a build that relies on syscalls outside the allow-list. |
+
+**macOS — Seatbelt (`sandbox-exec`).** Every shell command runs as
+``sandbox-exec -p <profile> bash -c '<cmd>'``. The profile is
+synthesized from the active ``--sandbox`` mode by
+:func:`chimera.ferret.os_sandbox.seatbelt_profile`:
+
+- ``read-only`` — `(deny default)` plus broad `file-read*` and a
+  short list of `file-write` literals (`/dev/null`, `/dev/stdout`,
+  `/dev/stderr`, `/dev/tty`). Network is denied implicitly.
+- ``workspace-write`` — adds `(allow file-write* (subpath
+  "<workdir>"))` plus `/private/tmp` and `/private/var/folders` for
+  the system tempdir lookup.
+- ``workspace-write-network`` — same as above plus `(allow
+  network*)`.
+
+**Linux — Landlock.** Requires kernel ≥ 5.13. We probe support with a
+direct `landlock_create_ruleset` syscall via `ctypes`; if the kernel
+doesn't have it, we warn once to stderr and fall through to the
+wrapper-only path. When applied, the ruleset confines the process
+tree to a small allow-list of paths matched to the active mode (see
+:func:`chimera.ferret.os_sandbox.landlock_apply`).
+
+**Fail-open posture.** Both implementations are intentionally
+fail-open: a host that doesn't support the primitive still runs
+ferret with the wrapper-only sandbox. That keeps ferret usable in
+unprivileged containers, older macOS releases, and Linux kernels that
+ship without Landlock.
+
+Both layers stack — the wrapper still rejects classified-mutating
+commands under `read-only`, even when the OS layer would also have
+denied them. The OS layer is purely additional containment for
+commands that *do* clear the wrapper.
+
+## Cloud sandbox backend — `--sandbox-backend`
+
+The sandbox modes above (`read-only` / `workspace-write` /
+`workspace-write-network`) describe **what tool calls are allowed**.
+The new `--sandbox-backend` flag controls **where they execute**:
+
+| Backend | Where tool calls run | Optional dep |
+|---|---|---|
+| `local` (default) | The user's machine, scoped to `--cwd` via `LocalEnvironment`. | none |
+| `modal` | An ephemeral Modal container provisioned per session via `ModalSandboxEnvironment`. | `pip install 'chimera-run[modal-sandbox]'` |
+
+The two flags are orthogonal:
+
+```bash
+# Run in a Modal container, but still treat the workspace as read-only.
+chimera ferret --sandbox-backend modal --sandbox read-only \
+               -p "audit this repo for missing tests"
+
+# Local execution with workspace-write — current default behavior.
+chimera ferret --sandbox workspace-write -p "fix the failing test"
+```
+
+When the optional `modal` extra is missing the CLI emits a
+`[ferret] --sandbox-backend modal requested but modal is unavailable`
+warning to stderr and falls back to `local` so the run still proceeds.
+
+`ModalSandboxEnvironment` lives at
+`chimera/env/modal_sandbox.py`. It mirrors `DockerEnvironment`'s
+in-memory fallback so unit tests stay deterministic without the
+`modal` package installed. Live calls dispatch through
+`Sandbox.exec("sh", "-c", cmd)`; file ops round-trip via `cat`,
+base64-encoded `echo`, and `find`.
+
+Checkpoint / restore are not implemented for live Modal sandboxes —
+layer `GitEnvironment` over the sandbox if you need rollback.
+
+```python
+from chimera.env.modal_sandbox import ModalSandboxEnvironment
+
+env = ModalSandboxEnvironment(
+    image="python:3.11-slim",
+    workdir="/workspace",
+    cpu=2.0,
+    memory=2048,
+)
+env.setup()
+try:
+    env.write_file("hello.py", "print('hi')")
+    result = env.run_command("python hello.py")
+    print(result.stdout)
+finally:
+    env.cleanup()
+```

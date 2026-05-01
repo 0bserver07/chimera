@@ -21,9 +21,18 @@ Mapping:
 The CLI wires this via late-binding (``cli.py`` imports
 :func:`policy_for_preset` lazily) so this module can land before ferret's
 argparse front-end does. Stdlib + ``chimera.permissions`` only.
+
+This module also exposes :class:`MutablePermissionPolicy` — a thin proxy
+whose inner policy can be hot-swapped at runtime without rebuilding the
+agent's :class:`~chimera.core.loop_config.LoopConfig`. The ferret REPL's
+``/approval`` slash command uses this proxy so a mid-session preset change
+is picked up by the very next tool-call evaluation. The proxy is
+thread-safe: ``set_inner`` and ``evaluate`` share a :class:`threading.Lock`
+so a concurrent agent turn never sees a torn read.
 """
 from __future__ import annotations
 
+import threading
 from enum import Enum
 from typing import Any
 
@@ -37,6 +46,7 @@ from chimera.permissions.presets import (
 __all__ = [
     "ApprovalPreset",
     "AutoApprovalPolicy",
+    "MutablePermissionPolicy",
     "policy_for_preset",
     "preset_from_string",
 ]
@@ -108,6 +118,82 @@ def policy_for_preset(preset: ApprovalPreset) -> PermissionPolicy:
     if preset is ApprovalPreset.FULL:
         return AutoApprove()
     raise ValueError(f"Unknown approval preset: {preset!r}")
+
+
+class MutablePermissionPolicy(PermissionPolicy):
+    """Hot-swappable proxy around an inner :class:`PermissionPolicy`.
+
+    The ferret REPL builds its :class:`~chimera.core.loop_config.LoopConfig`
+    once at agent creation, but the ``/approval`` slash command lets the
+    user change the active preset mid-session. Rather than rebuild the
+    agent (risky during a concurrent turn), we install one of these
+    proxies as ``LoopConfig.permissions``. ``/approval`` then calls
+    :meth:`set_inner` to swap the underlying policy; the next tool-call
+    evaluation sees the new stance.
+
+    The proxy is thread-safe — the executor in
+    :mod:`chimera.core.tool_executor` may be running on a worker thread
+    while the REPL handles the slash command on the main thread, so
+    reads and writes funnel through a :class:`threading.Lock`.
+
+    Args:
+        inner: Initial policy to delegate to.
+
+    Attributes:
+        inner: The currently-active inner policy. Read via
+            :meth:`get_inner` (locked) when concurrency matters.
+    """
+
+    def __init__(self, inner: PermissionPolicy) -> None:
+        self._inner = inner
+        self._lock = threading.Lock()
+
+    @property
+    def inner(self) -> PermissionPolicy:
+        """Return the currently-active inner policy.
+
+        Reads are locked so a concurrent ``set_inner`` cannot publish a
+        half-constructed reference.
+        """
+        with self._lock:
+            return self._inner
+
+    def get_inner(self) -> PermissionPolicy:
+        """Locked accessor for the current inner policy."""
+        with self._lock:
+            return self._inner
+
+    def set_inner(self, policy: PermissionPolicy) -> PermissionPolicy:
+        """Atomically replace the inner policy.
+
+        Args:
+            policy: The new :class:`PermissionPolicy` to delegate to.
+
+        Returns:
+            The previous inner policy (handy for tests / undo flows).
+
+        Raises:
+            TypeError: If *policy* is not a :class:`PermissionPolicy`.
+        """
+        if not isinstance(policy, PermissionPolicy):
+            raise TypeError(
+                f"set_inner requires a PermissionPolicy, got {type(policy).__name__}"
+            )
+        with self._lock:
+            previous = self._inner
+            self._inner = policy
+            return previous
+
+    def evaluate(self, tool_name: str, args: dict[str, Any]) -> PermissionAction:
+        """Delegate to the live inner policy.
+
+        Snapshot the inner reference under the lock then evaluate
+        outside the critical section so a slow inner policy never
+        blocks a concurrent ``set_inner``.
+        """
+        with self._lock:
+            inner = self._inner
+        return inner.evaluate(tool_name, args)
 
 
 def preset_from_string(value: str) -> ApprovalPreset:

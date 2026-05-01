@@ -643,13 +643,24 @@ def _build_extension(plugin_dir: Path, scope: str) -> WeaselExtension | None:
     entry_points: list[str] = []
     if language == "python":
         tools, entry_points = _load_python_tools(plugin_dir, name, manifest, errors)
+    elif language in {"javascript", "typescript"}:
+        # Wave 9 (W1): wire JS/TS extensions through a Node subprocess.
+        # Local import keeps node_executor's optional-by-design subprocess
+        # plumbing out of the loader's import graph for pure-Python users.
+        from chimera.weasel.node_executor import build_node_tools
+
+        tools, entry_points = build_node_tools(
+            plugin_dir=plugin_dir,
+            plugin_name=name,
+            manifest=manifest,
+            errors=errors,
+        )
     else:
-        # Non-Python extensions are recognised but not executed in this
-        # wave. Surface a single explanatory error so callers can render
-        # a clear "needs JS bridge" message later.
+        # Truly unknown languages still surface a clear error so callers
+        # can render a "needs runtime" message instead of failing silently.
         errors.append(
             f"language '{language}' not yet supported; "
-            "Python-only extensions execute in this wave",
+            "Python and Node (JS/TS) extensions execute in this wave",
         )
 
     hooks = _load_hooks(plugin_dir, manifest)

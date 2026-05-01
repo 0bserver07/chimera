@@ -8,8 +8,34 @@ description: Surface-by-surface mapping between chimera shrew and the upstream s
 **Source baseline:** `research/shrew/SPEC.md` (Apr 2026), upstream
 small-model coding agent source-tree walk.
 **Updated:** wave-5 ship (S1–S6), refreshed 2026-04-30 by the
-wave-6 cross-CLI verification (X1–X3, I-series).
+wave-6 cross-CLI verification (X1–X3, I-series). Refreshed again
+at wave-9 close (S1/S2, O5) — skill catalogue grew from 11 to 21,
+small-model-fit extension toolkit grew from 3 to 10.
 **Legend:** GREEN = shipped / at parity (or superset); YELLOW = partial; RED = deferred or out of scope.
+
+> **Wave-9 close (2026-04-30, D1).** Two carry-over items from
+> the wave-5 follow-up list landed in this wave:
+>
+> - **Skill catalogue expansion (11 → 21).** S1/W9 added 10 new
+>   markdown skills under `chimera/shrew/skills/{knowledge,
+>   protocols, tools}/` covering loop awareness, budgeting, git
+>   context, debugging protocols, and tool-pick reasoning. Tuned
+>   for small local models (9B–35B); follows the existing voice /
+>   format.
+> - **Small-model-fit extension toolkit (3 → 10).** S2/W9 added 7
+>   new pure-function extensions under
+>   `chimera/shrew/extensions/`: `output_truncation`,
+>   `repeat_detection`, `error_simplifier`, `turn_budgeter`,
+>   `file_chunker`, `hint_injector`, `quiet_thinking`. Each is
+>   stdlib-only, exposes 1–3 pure functions, and is composable as
+>   a hook (no global state).
+>
+> Plus the cross-CLI `chimera completion` generator (O5) covers
+> shrew too. Reports live under
+> `research/shrew/{S1,S2}-W9-REPORT.md` and
+> `research/O5-COMPLETION.md`. Live `pytest tests/shrew/` runs
+> 292+ passed with the wave-9 additions; trademark scrub still
+> exits OK at the codename-aggregate level (`passed: 7`).
 
 > **Wave-6 verification (2026-04-30).** Live state at handoff:
 > `uv run ruff check chimera/shrew/` clean; `uv run mypy
@@ -117,9 +143,9 @@ adjustment. Shrew ships a curated subset.
 
 | Upstream skill category | Shrew status | Files |
 |---|---|---|
-| `knowledge/` | GREEN | 4 files: `scaffold_model_fit`, `context_window_discipline`, `escalation_signals`, `python_idioms` |
-| `protocols/` | GREEN | 4 files: `edit_before_write`, `error_recovery`, `one_focused_question`, `test_first_python` |
-| `tools/` | GREEN | 3 files: `core_tools`, `grep_vs_ls`, `multi_file_edits` |
+| `knowledge/` | GREEN | 7 files (was 4 pre-wave-9): the original four (`scaffold_model_fit`, `context_window_discipline`, `escalation_signals`, `python_idioms`) plus three S1/W9 additions (`loop_detection_signals`, `tool_budget_vs_prose_budget`, `git_aware_context`). |
+| `protocols/` | GREEN | 8 files (was 4 pre-wave-9): the original four (`edit_before_write`, `error_recovery`, `one_focused_question`, `test_first_python`) plus four S1/W9 additions (`bisect_on_failure`, `dry_run_before_commit`, `read_tests_before_fixing`, `incremental_edits`). |
+| `tools/` | GREEN | 6 files (was 3 pre-wave-9): the original three (`core_tools`, `grep_vs_ls`, `multi_file_edits`) plus three S1/W9 additions (`bash_pipelines_with_care`, `find_vs_grep_vs_rg`, `python_subprocess_vs_bash`). |
 | Per-language idiom skills (Rust, Go, TS) | YELLOW | Python-only today; pattern is in place to add others. |
 | User overlay (`~/.shrew/skills/`) | GREEN | Honored in `discover_shrew_skills(extra_search_paths=...)`. |
 | Project overlay (`.shrew/skills/`) | GREEN | Honored when shrew is run from a project that ships them. |
@@ -138,6 +164,13 @@ extensions in shrew. Each is independent and pure-functional.
 | Tool-list filtering for tiny models | GREEN | `extensions/tool_filter.py` | `filter_tools_for_model()`; threshold 9B. |
 | `--no-scaffold` flag | RED | n/a | Disable via running a frontier model; flag deferred. |
 | Catalogue-driven model size lookup | GREEN | `model_size_billions()` in `tool_filter` + MoE catalog. |
+| Output truncation (`output_truncation.py`) | GREEN | **Wave-9 close (S2/W9).** Soft 1200-char cap, snaps to last sentence in second half of budget; sentinel suffix flags truncation. |
+| Repeat-loop detection (`repeat_detection.py`) | GREEN | **Wave-9 close (S2/W9).** O(n*window) scan over the tail; cycle lengths 1–4, `min_repeats=2`. |
+| Error simplifier (`error_simplifier.py`) | GREEN | **Wave-9 close (S2/W9).** 12 regex rules (FileNotFound / ModuleNotFound / Permission / Syntax / NameError / AttributeError / TypeError / "command not found" / timeout) with traceback-tail fallback. |
+| Turn budgeter (`turn_budgeter.py`) | GREEN | **Wave-9 close (S2/W9).** 4-chars-per-token heuristic; status `"ok" \| "warn" \| "exceeded"`. |
+| File chunker (`file_chunker.py`) | GREEN | **Wave-9 close (S2/W9).** Splits on `\n` boundaries, never breaks mid-line; emits `Chunk(index, total, start_line, end_line, text)`. |
+| Hint injector (`hint_injector.py`) | GREEN | **Wave-9 close (S2/W9).** Predicate over `Attempt` records; six error-string flavours; returns `(modified_prompt, hint_used)`. |
+| Quiet-thinking strip (`quiet_thinking.py`) | GREEN | **Wave-9 close (S2/W9).** Strips closed `<thinking>` / `<scratchpad>` / `<reasoning>` blocks; handles unclosed openers; collapses runs of 3+ blank lines. |
 
 ## Benchmarks
 
@@ -173,8 +206,12 @@ Shrew reuses Chimera's event-sourced session store directly.
 - **Surfaces:** 9 GREEN, 1 YELLOW, 1 RED of 11.
 - **CLI flags:** 13 GREEN, 1 YELLOW, 1 RED of 15.
 - **Providers:** 6 GREEN, 1 YELLOW, 0 RED of 7.
-- **Skills:** 6 GREEN, 1 YELLOW, 1 RED of 8.
-- **Extensions:** 4 GREEN, 0 YELLOW, 1 RED of 5.
+- **Skills:** 6 GREEN, 1 YELLOW, 1 RED of 8 (refreshed at wave-9
+  close — catalogue grew from 11 to 21 files; rows themselves
+  unchanged).
+- **Extensions:** 11 GREEN, 0 YELLOW, 1 RED of 12 (refreshed at
+  wave-9 close — toolkit grew from 3 to 10 modules; the seven
+  S2/W9 additions are listed above).
 - **Benchmarks:** 6 GREEN, 0 YELLOW, 2 RED of 8.
 - **Sessions:** 6 GREEN of 6.
 
@@ -212,6 +249,13 @@ Shrew inherits Chimera primitives the upstream does not have:
    get the small-model defaults without re-deriving them.
 6. Auto-fire skill bodies based on the frontmatter `triggers`
    field, instead of relying on the model recalling skills by name.
+7. ~~Skill catalogue expansion (loop-detection, budgeting, git
+   context, debugging protocols, tool-pick reasoning).~~ Shipped
+   at wave-9 close (S1/W9 — catalogue grew 11 → 21).
+8. ~~Small-model-fit extension toolkit expansion (output
+   truncation, repeat detection, error simplifier, turn
+   budgeter, file chunker, hint injector, quiet-thinking strip).~~
+   Shipped at wave-9 close (S2/W9 — toolkit grew 3 → 10).
 
 ## How to use this matrix
 

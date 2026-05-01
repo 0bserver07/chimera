@@ -29,10 +29,36 @@ Public surface (what S1's ``cli.py`` imports late):
 """
 from __future__ import annotations
 
+from chimera.shrew.extensions.error_simplifier import (
+    is_known_error,
+    simplify_error,
+)
+from chimera.shrew.extensions.file_chunker import (
+    Chunk,
+    chunk_text,
+    format_chunk_header,
+)
+from chimera.shrew.extensions.hint_injector import (
+    Attempt,
+    build_hint,
+    inject_hint,
+    should_inject_hint,
+)
 from chimera.shrew.extensions.moe_offload import (
     MOE_MODEL_CATALOG,
     MoEModelProfile,
     compute_optimal_context_window,
+)
+from chimera.shrew.extensions.output_truncation import (
+    truncate_output,
+)
+from chimera.shrew.extensions.quiet_thinking import (
+    has_thinking,
+    strip_thinking,
+)
+from chimera.shrew.extensions.repeat_detection import (
+    detect_short_loop,
+    should_short_circuit,
 )
 from chimera.shrew.extensions.scaffold_fit import (
     SMALL_MODEL_THRESHOLD_B,
@@ -44,15 +70,37 @@ from chimera.shrew.extensions.tool_filter import (
     filter_tools_for_model,
     model_size_billions,
 )
+from chimera.shrew.extensions.turn_budgeter import (
+    check_budget,
+    estimate_tokens,
+    format_budget_warning,
+)
 
 __all__ = [
     "MOE_MODEL_CATALOG",
-    "MoEModelProfile",
     "SMALL_MODEL_THRESHOLD_B",
     "TINY_MODEL_THRESHOLD_B",
     "TOOLS_TO_DROP_FOR_TINY",
+    "Attempt",
+    "Chunk",
+    "MoEModelProfile",
+    "build_hint",
+    "check_budget",
+    "chunk_text",
     "compute_optimal_context_window",
+    "detect_short_loop",
+    "estimate_tokens",
     "filter_tools_for_model",
+    "format_budget_warning",
+    "format_chunk_header",
+    "has_thinking",
+    "inject_hint",
+    "is_known_error",
     "model_size_billions",
+    "should_inject_hint",
+    "should_short_circuit",
+    "simplify_error",
+    "strip_thinking",
+    "truncate_output",
     "wrap_for_small_model",
 ]

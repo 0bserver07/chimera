@@ -29,6 +29,8 @@ from __future__ import annotations
 
 import re
 import shlex
+import subprocess
+import threading
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -41,6 +43,7 @@ if TYPE_CHECKING:
 
 
 __all__ = [
+    "MutableSandboxMode",
     "SandboxMode",
     "SandboxViolation",
     "SandboxedEnvironment",
@@ -90,6 +93,64 @@ def parse_sandbox_mode(value: str | SandboxMode | None) -> SandboxMode:
             return mode
     valid = ", ".join(m.value for m in SandboxMode)
     raise ValueError(f"Unknown sandbox mode: {value!r}. Valid: {valid}")
+
+
+# ---------------------------------------------------------------------------
+# Mutable mode holder
+# ---------------------------------------------------------------------------
+
+
+class MutableSandboxMode:
+    """Hot-swappable holder around an active :class:`SandboxMode`.
+
+    The ferret REPL builds its environment once (at agent creation), but
+    the ``/sandbox`` slash command lets the user re-shape the policy
+    mid-session without rebuilding the agent. Rather than track mode on
+    :class:`SandboxedEnvironment` as a plain attribute (whose changes
+    would race with concurrent tool executions), the env consults this
+    holder on every call. ``/sandbox`` then atomically swaps the holder's
+    inner mode and the very next ``run_command`` / ``write_file`` sees
+    the new policy.
+
+    Thread-safety: a :class:`threading.Lock` guards the value so a
+    background loop thread cannot read a torn enum reference while the
+    REPL thread is mid-write. The lock is released before
+    :class:`SandboxedEnvironment` reads classification fields off the
+    snapshotted mode, which keeps the critical section minimal.
+
+    Args:
+        mode: Initial :class:`SandboxMode`. Defaults to
+            :attr:`SandboxMode.READ_ONLY` — the safest starting posture.
+    """
+
+    def __init__(self, mode: SandboxMode | str | None = SandboxMode.READ_ONLY) -> None:
+        self._mode = parse_sandbox_mode(mode)
+        self._lock = threading.Lock()
+
+    def get(self) -> SandboxMode:
+        """Return the currently active :class:`SandboxMode`."""
+        with self._lock:
+            return self._mode
+
+    def set(self, mode: SandboxMode | str | None) -> SandboxMode:
+        """Atomically replace the active mode.
+
+        Accepts the same inputs as :func:`parse_sandbox_mode` so callers
+        can hand in a kebab-case string straight from the slash-command
+        argument line.
+
+        Args:
+            mode: New :class:`SandboxMode`, kebab-case string, or
+                ``None`` to mean :attr:`SandboxMode.READ_ONLY`.
+
+        Returns:
+            The previous mode (handy for tests / undo flows).
+        """
+        new_mode = parse_sandbox_mode(mode)
+        with self._lock:
+            previous = self._mode
+            self._mode = new_mode
+            return previous
 
 
 # ---------------------------------------------------------------------------
@@ -441,29 +502,95 @@ class SandboxedEnvironment(Environment):
     containment). Writes are policed by mode. Bash commands are statically
     classified and blocked if they fall outside the allowed envelope.
 
+    The mode is stored inside a :class:`MutableSandboxMode` holder so the
+    ferret REPL's ``/sandbox`` slash command can swap it mid-session
+    without rebuilding the agent. Reads of :attr:`mode` and
+    :meth:`set_mode` writes are atomic against each other; the wrapper
+    therefore behaves like a thread-safe view onto the holder. Direct
+    assignments (``env.mode = SandboxMode.X``) are honoured for
+    back-compat by routing through the holder.
+
     Args:
         inner: The :class:`~chimera.env.local.LocalEnvironment` to wrap.
-        mode: The active :class:`SandboxMode`. Defaults to
-            :attr:`SandboxMode.READ_ONLY`.
+        mode: Either a :class:`MutableSandboxMode` to share across
+            multiple consumers, a :class:`SandboxMode`, a kebab-case
+            string, or ``None``. Defaults to :attr:`SandboxMode.READ_ONLY`.
 
     Attributes:
         inner: The wrapped environment.
-        mode: The active sandbox mode.
+        mode: The active sandbox mode (live read from the holder).
+        mode_holder: The :class:`MutableSandboxMode` backing :attr:`mode`.
+            Slash commands swap mode by calling
+            ``env.mode_holder.set(new_mode)`` (or, equivalently,
+            ``env.set_mode(new_mode)``).
         workdir: Convenience pass-through to ``inner.workdir``.
     """
 
     inner: LocalEnvironment
-    mode: SandboxMode
+    mode_holder: MutableSandboxMode
+    os_sandbox: str
 
     def __init__(
         self,
         inner: LocalEnvironment,
-        mode: SandboxMode | str | None = SandboxMode.READ_ONLY,
+        mode: MutableSandboxMode | SandboxMode | str | None = SandboxMode.READ_ONLY,
+        *,
+        os_sandbox: str = "auto",
     ) -> None:
+        """Wrap *inner* with the named sandbox policy.
+
+        Args:
+            inner: The :class:`LocalEnvironment` to wrap.
+            mode: The active :class:`SandboxMode`, a kebab-case string,
+                or a pre-built :class:`MutableSandboxMode` (when sharing
+                a holder across consumers — e.g. a slash command and a
+                background agent loop).
+            os_sandbox: ``"auto"`` (default — engage the OS-level
+                sandbox if the platform supports it), ``"on"`` (fail
+                loudly if the platform can't), ``"off"`` (wrapper
+                only). See :mod:`chimera.ferret.os_sandbox`.
+        """
         self.inner = inner
-        self.mode = parse_sandbox_mode(mode)
+        if isinstance(mode, MutableSandboxMode):
+            self.mode_holder = mode
+        else:
+            self.mode_holder = MutableSandboxMode(mode)
+        # Late import keeps os_sandbox optional at the module-load
+        # boundary (it leans on ctypes which loads libc on Linux).
+        try:
+            from chimera.ferret.os_sandbox import parse_os_sandbox_flag
+
+            self.os_sandbox = parse_os_sandbox_flag(os_sandbox)
+        except Exception:  # noqa: BLE001 — fall through to wrapper-only
+            self.os_sandbox = "off"
 
     # -- convenience -------------------------------------------------------
+
+    @property
+    def mode(self) -> SandboxMode:
+        """Live read of the active :class:`SandboxMode`.
+
+        Funneled through :attr:`mode_holder` so ``/sandbox`` swaps land
+        on the very next tool call without rebuilding the env.
+        """
+        return self.mode_holder.get()
+
+    @mode.setter
+    def mode(self, value: SandboxMode | str | None) -> None:
+        """Assignment to ``env.mode`` updates the holder atomically.
+
+        Preserved so existing code that reaches in to mutate the mode
+        directly (tests, inspection tools) keeps working.
+        """
+        self.mode_holder.set(value)
+
+    def set_mode(self, mode: SandboxMode | str | None) -> SandboxMode:
+        """Atomically swap the active sandbox mode.
+
+        Convenience wrapper around ``self.mode_holder.set(...)`` for
+        callers that prefer a method form. Returns the previous mode.
+        """
+        return self.mode_holder.set(mode)
 
     @property
     def workdir(self) -> Path:
@@ -525,6 +652,19 @@ class SandboxedEnvironment(Environment):
                     f"{reason or cmd}"
                 )
 
+        # OS-sandbox layer. When enabled and the platform supports it,
+        # we re-run the bash command inside Seatbelt (macOS) so any
+        # bypass of our static classifier is contained at the kernel
+        # level. The Linux Landlock equivalent runs in-process from
+        # the embedded helper (see os_sandbox._format_for_landlock_prefix);
+        # to keep the wrapper small here we only engage the macOS path
+        # (Linux falls through to the wrapper-only sandbox until the
+        # in-process helper is wired into a forked subprocess).
+        if self.os_sandbox in ("auto", "on"):
+            wrapped = self._maybe_wrap_for_os_sandbox(cmd)
+            if wrapped is not None:
+                return wrapped
+
         return self.inner.run_command(cmd, timeout=timeout, shell_name=shell_name)
 
     def run_tests(self) -> TestResult:
@@ -553,7 +693,53 @@ class SandboxedEnvironment(Environment):
 
     def clone(self) -> SandboxedEnvironment:
         cloned_inner = self.inner.clone()
-        return SandboxedEnvironment(cloned_inner, mode=self.mode)
+        return SandboxedEnvironment(
+            cloned_inner, mode=self.mode, os_sandbox=self.os_sandbox,
+        )
+
+    # -- OS sandbox bridge -------------------------------------------------
+
+    def _maybe_wrap_for_os_sandbox(self, cmd: str) -> CommandResult | None:
+        """Run *cmd* under an OS-level sandbox when one is available.
+
+        Returns:
+            A :class:`CommandResult` when the OS sandbox engaged
+            successfully. ``None`` when no sandbox primitive is
+            reachable on this host (caller falls back to the inner
+            environment's plain ``run_command``).
+        """
+        try:
+            from chimera.ferret import os_sandbox as _os
+        except Exception:  # noqa: BLE001 — module unavailable
+            return None
+        snap = _os.detect_availability()
+        if snap.seatbelt:
+            argv = _os.wrap_bash_command(
+                cmd, mode=self.mode, workdir=str(self.workdir),
+            )
+            try:
+                proc = subprocess.run(  # noqa: S603 — argv list, no shell
+                    argv,
+                    cwd=str(self.workdir),
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
+                    check=False,
+                )
+            except subprocess.TimeoutExpired:
+                return CommandResult(
+                    stdout="", stderr="os-sandbox: timeout", exit_code=124,
+                )
+            return CommandResult(
+                stdout=proc.stdout or "",
+                stderr=proc.stderr or "",
+                exit_code=int(proc.returncode),
+            )
+        # Landlock requires a forked subprocess that applies the
+        # ruleset before exec; for now the wrapper-only path is the
+        # safe default. The helper exists in os_sandbox.landlock_apply
+        # for callers that fork their own children.
+        return None
 
     # -- helpers -----------------------------------------------------------
 

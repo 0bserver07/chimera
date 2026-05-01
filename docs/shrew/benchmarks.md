@@ -1,19 +1,22 @@
 ---
 title: Shrew benchmarks
-description: Run Aider Polyglot and GAIA evaluations against a shrew Agent — dataset staging, command-line shape, exit codes, and how to wire your own.
+description: Run Aider Polyglot, GAIA, Harbor, and Terminal-Bench evaluations against a shrew Agent — dataset staging, command-line shape, exit codes, and how to wire your own.
 ---
 
 # Benchmarks
 
 Shrew ships a small benchmark harness for evaluating small-model
-coding capability. Two benchmarks are wired today:
+coding capability. Four benchmarks are wired today:
 
 - **Aider Polyglot** — per-language code-edit tasks scored by
   diff-match or test-pass.
 - **GAIA** — research-task Q&A scored by GAIA-style answer match.
+- **Harbor** — maritime / logistics reasoning tasks scored by
+  GAIA-style answer match (see below).
+- **Terminal-Bench** — command-line tasks scored by per-task
+  verify-command exit code (see below).
 
-A third (terminal-bench) is reserved by the parser for forward
-compat but not yet wired. The harness lives in
+The harness lives in
 [`chimera/shrew/benchmarks/`](https://github.com/0bserver07/chimera/tree/master/chimera/shrew/benchmarks).
 
 ## Why these two
@@ -37,6 +40,8 @@ toolbox, real tasks, deterministic scoring.
 ```bash
 chimera shrew bench aider-polyglot --bench-limit 5
 chimera shrew bench gaia --bench-limit 5
+chimera shrew bench harbor --bench-limit 5
+chimera shrew bench terminal-bench --bench-limit 5
 ```
 
 Flags:
@@ -221,13 +226,136 @@ gaia: passed=2/5 rate=40.0% cost=$0.0089
 Per-task event streams persist to
 `~/.chimera/eventlog/shrew-<id>/` like any other shrew session.
 
-## terminal-bench
+## Staging Harbor
 
-Reserved by the parser for parity with otter / mink. Currently
-returns a friendly "not yet wired" message and exit code `3`. The
-adapter is on the roadmap; the polyglot + GAIA pair is the
-smallest useful surface for shrew's small-model focus, so they
-shipped first.
+Harbor is a maritime / logistics reasoning suite — short prompts
+asking the agent to compute arrival times, sum manifests, identify
+container IDs, and similar deterministic-answer logistics
+questions. Like the other shrew benchmarks, shrew **does not**
+vendor the dataset.
+
+### Default location
+
+```
+~/.chimera/datasets/harbor/
+    tasks.json
+```
+
+Override via `$CHIMERA_HARBOR_PATH=/abs/path/to/dir`.
+
+### `tasks.json` schema
+
+```json
+[
+  {
+    "task_id": "harbor-001",
+    "prompt": "Vessel A arrives at 14:00 and unloads in 30 minutes. When does unloading finish?",
+    "answer": "14:30",
+    "category": "scheduling",
+    "difficulty": 1
+  }
+]
+```
+
+| Key | Required | Meaning |
+|---|---|---|
+| `task_id` (or `id`) | yes | Used as task id; should be unique. |
+| `prompt` (or `question`) | yes | Agent prompt body. |
+| `answer` (or `final_answer` / `gold`) | yes | Gold answer (string / number / list). |
+| `category` | no | Filter slot (e.g. `scheduling`, `manifest`). |
+| `difficulty` | no | Informational; accepts `1` / `2` / `3`. |
+
+### Scoring
+
+Harbor reuses the GAIA scorer so the answer-extraction and
+normalisation rules stay in lockstep. The agent is instructed to
+end its reply with `Answer: <value>` on its own line; the scorer
+extracts that line and compares to the gold using the same
+case / accent / punctuation / article folding plus list-set and
+numeric-tolerance branches that GAIA uses.
+
+### Run it
+
+```bash
+chimera shrew bench harbor --bench-limit 5
+```
+
+When the dataset is missing, shrew prints a setup hint with the
+expected path, the env-var override, and a reminder of the schema,
+then exits with code `3`.
+
+## Staging Terminal-Bench
+
+Terminal-Bench is a suite of command-line tasks: short
+instructions asking the agent to set up a tool, fix a config, or
+write a shell pipeline inside a fresh working directory. Tasks are
+scored by running a per-task **verify** shell command after the
+agent finishes — exit code `0` means pass.
+
+The shrew flavour is stdlib-only by design and **does not** depend
+on the upstream `terminal-bench` Python package (which pulls
+Docker and asciinema). Shrew runs the verify command directly with
+`subprocess`. License-respect is the same as every other shrew
+benchmark: we do not vendor the dataset.
+
+### Default location
+
+```
+~/.chimera/datasets/terminal-bench/
+    tasks.json
+    tasks/<task-id>/    # optional per-task working tree
+        ...             # files referenced by the task instruction
+```
+
+Override via `$CHIMERA_TERMINAL_BENCH_PATH=/abs/path/to/dir`.
+
+### `tasks.json` schema
+
+```json
+[
+  {
+    "task_id": "tb-001",
+    "instruction": "Find the largest file under /tmp and write its name to result.txt.",
+    "verify_command": "test -f result.txt && grep -q '/tmp/' result.txt",
+    "task_dir": "tb-001",
+    "timeout_s": 60
+  }
+]
+```
+
+| Key | Required | Meaning |
+|---|---|---|
+| `task_id` (or `id`) | yes | Used as task id; should be unique. |
+| `instruction` (or `prompt`) | yes | Agent prompt body. |
+| `verify_command` (or `verify`) | yes | Shell command run after the agent; pass on exit code 0. |
+| `task_dir` | no | Subdir under `tasks/` to run the verify command from. |
+| `timeout_s` | no | Verify timeout in seconds (default 60). |
+
+### Scoring
+
+Exit-code-based. The agent's `output` is **not** parsed —
+terminal-bench is side-effect grading. After the agent finishes,
+the verify command runs in (in priority order):
+
+1. `env.workdir` if the harness exposes one (the agent's actual
+   working tree),
+2. `<dataset_root>/tasks/<task_dir>/` if staged,
+3. `Path.cwd()` as a last resort.
+
+Pass = exit code `0`. Fail = anything else (non-zero exit, OS
+error, or timeout).
+
+### Run it
+
+```bash
+chimera shrew bench terminal-bench --bench-limit 5
+```
+
+When the dataset is missing, shrew prints a setup hint with the
+expected path, the env-var override, and a reminder of the schema,
+then exits with code `3`. The legacy "not yet wired" message is
+gone — the adapter is wired as of the small-model agent's wave-9
+ship.
 
 ## Wiring your own benchmark
 

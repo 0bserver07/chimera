@@ -8,9 +8,38 @@ description: Surface-by-surface parity status for chimera ferret versus the upst
 **Source baseline:** `research/ferret/SPEC.md` and the upstream
 source-tree audit recorded under `research/ferret/`.
 **Updated:** 2026-04-30, after wave-5 ship (FF1–FF8) and wave-6
-cross-CLI verification (X1–X3, I-series).
+cross-CLI verification (X1–X3, I-series). Refreshed at wave-9 close
+(F1/F2/F3, O5) — three YELLOW rows promoted to GREEN.
 **Legend:** GREEN = shipped / at parity (or superset); YELLOW =
 partial; RED = deferred.
+
+> **Wave-9 close (2026-04-30, D1).** Three carry-over items from
+> the wave-5 follow-up list landed in this wave:
+>
+> - **OS-level sandbox hooks.** F1/W9 added Seatbelt
+>   (`sandbox-exec`) on macOS and Landlock on Linux as a second
+>   line of defence behind the wrapper-only sandbox. New module
+>   `chimera/ferret/os_sandbox.py` + `--os-sandbox auto|on|off`
+>   flag. Fail-open posture; one stderr warning per process when
+>   neither primitive loads.
+> - **IDE-friendly notification kinds over HTTP+SSE.** F2/W9
+>   lifted the four `code/diff` / `editor/open_file` /
+>   `terminal/output` / `progress/step` notification kinds from the
+>   ACP stdio transport onto the HTTP+SSE transport so HTTP-bound
+>   IDE plugins consume the exact same JSON payloads through
+>   `GET /session/<id>/events`.
+> - **Mid-session `/sandbox` and `/approval` slash toggles.**
+>   F3/W9 wired `MutablePermissionPolicy` and `MutableSandboxMode`
+>   so the slash commands actually re-shape the next tool call
+>   (lock-guarded swap inside the `LoopConfig.permissions` proxy
+>   and the `SandboxedEnvironment.mode_holder`).
+>
+> Plus the cross-CLI `chimera completion` generator (O5) covers
+> ferret too. Reports live under
+> `research/ferret/{F1,F2,F3}-W9-REPORT.md` and
+> `research/O5-COMPLETION.md`. Live `pytest tests/ferret/` runs
+> 375+ passed with the wave-9 additions; trademark scrub still
+> exits OK at the codename-aggregate level (`passed: 7`).
 
 > **Wave-6 verification (2026-04-30).** Live state at handoff:
 > `uv run ruff check chimera/ferret/` clean; `uv run mypy
@@ -53,7 +82,7 @@ Chimera.
 | `models` | GREEN | `chimera/ferret/providers.py` | `--model provider/model` everywhere, `FERRET_MODEL` env var pinned. |
 | `auth login` (provider) | YELLOW | env vars + `chimera.auth` | Device-flow OAuth ridden via `chimera.auth`; per-provider login UX deferred. |
 | `upgrade` / `uninstall` | RED | `pip install -U chimera-run` | Use the upstream packaging story. |
-| `completion` | RED | n/a | Shell-completion script generation deferred. |
+| `completion` | GREEN | `chimera/cli/completion.py` (`chimera completion bash\|zsh\|fish`) | Cross-CLI shell-completion generator (`--cli all\|<animal>`); covers ferret too. **Wave-9 close (O5).** |
 
 ## `run` (and `chimera ferret -p`) flag map
 
@@ -105,8 +134,8 @@ entries.
 | `/status` | GREEN | shared |
 | `/config` | GREEN | shared |
 | `/mcp` (`/mcps`) | GREEN | shared |
-| `/sandbox` | GREEN | **ferret-only**: print current sandbox mode. |
-| `/approval` | GREEN | **ferret-only**: print or change the preset. |
+| `/sandbox` | GREEN | **ferret-only**: print or change the current sandbox mode. As of wave-9 close (F3/W9), the toggle re-shapes the *next* tool call live via `MutableSandboxMode` (lock-guarded inside `SandboxedEnvironment.mode_holder`). |
+| `/approval` | GREEN | **ferret-only**: print or change the preset. As of wave-9 close (F3/W9), the toggle re-shapes the *next* tool call live via `MutablePermissionPolicy` (lock-guarded swap inside `LoopConfig.permissions`). |
 | `/bridge` | GREEN | **ferret-only**: cloud-bridge status. |
 | `/edit`, `/undo`, `/redo` | YELLOW | shared stubs (carry-over from otter) |
 | `/themes` | YELLOW | shared stub |
@@ -145,6 +174,7 @@ Ferret's ACP server is a strict superset of otter's. See
 | `sandbox_violation` | GREEN (ferret extension) |
 | `approval_changed` | GREEN (ferret extension) |
 | `notice` | GREEN |
+| `code/diff` / `editor/open_file` / `terminal/output` / `progress/step` over HTTP+SSE | GREEN | **Wave-9 close (F2/W9).** Previously ACP-stdio only; the four IDE-friendly notification kinds now ride the HTTP+SSE transport too via `IDENotificationEmitter` so HTTP-bound IDE plugins consume the same payloads. |
 
 ## Sandbox modes
 
@@ -154,7 +184,7 @@ Ferret's ACP server is a strict superset of otter's. See
 | `workspace-write` | GREEN | Writes inside cwd; no network. |
 | `workspace-write-network` | GREEN | Writes inside cwd + network. |
 | `off` | GREEN | Bypass; recommended only inside disposable container. |
-| OS-level kernel sandbox (sandbox-exec / bubblewrap) | YELLOW | Realpath enforcement shipped; OS-syscall enforcement uses `chimera.permissions` heuristics; native kernel hooks deferred. |
+| OS-level kernel sandbox (sandbox-exec / bubblewrap) | GREEN | Seatbelt (`sandbox-exec`) on macOS + Landlock on Linux land in `chimera/ferret/os_sandbox.py` behind `--os-sandbox auto\|on\|off`. Fail-open when the platform primitive is unavailable. macOS path is fully wired through `SandboxedEnvironment.run_command`; Linux Landlock requires forked-child invocation (helper exists). **Wave-9 close (F1/W9).** |
 
 ## Approval presets
 
@@ -187,14 +217,18 @@ and ignores keys that drive upstream-only chrome.
 
 ## Counts
 
-- **Top-level CLI subcommands:** 8 GREEN, 4 YELLOW, 2 RED of the 14
-  reviewed.
+- **Top-level CLI subcommands:** 9 GREEN, 4 YELLOW, 1 RED of the 14
+  reviewed (refreshed at wave-9 close — `completion` promoted to
+  GREEN via the cross-CLI generator).
 - **`run` flags:** 12 GREEN, 5 YELLOW, 1 RED of the 18 reviewed.
-- **Slash commands:** 17 GREEN (3 ferret-only), 4 YELLOW, 2 RED of
-  the 23 reviewed.
+- **Slash commands:** 17 GREEN (3 ferret-only, with `/sandbox` and
+  `/approval` now live-wired via wave-9 F3), 4 YELLOW, 2 RED of the
+  23 reviewed.
 - **ACP methods:** 9 GREEN (2 ferret extensions), 1 YELLOW.
-- **Notification kinds:** 10 GREEN (4 ferret extensions).
-- **Sandbox modes:** 4 GREEN, 1 YELLOW.
+- **Notification kinds:** 11 GREEN (4 ferret extensions, plus the
+  HTTP+SSE row added at wave-9 close).
+- **Sandbox modes:** 5 GREEN, 0 YELLOW (wave-9 close — OS-level
+  kernel sandbox promoted to GREEN via `os_sandbox.py`).
 - **Approval presets:** 3 GREEN.
 - **Config keys:** 7 GREEN, 1 YELLOW, 4 RED of the 12 reviewed.
 
@@ -230,16 +264,25 @@ The four pieces that are unique to ferret in this wave:
 ## Follow-up issues to file (or already filed)
 
 1. `chimera ferret --continue` / `--session <id>` (one-shot resume).
-2. Native OS sandbox hooks (sandbox-exec on macOS, bubblewrap on
-   Linux) replacing the heuristic enforcement.
+2. ~~Native OS sandbox hooks (sandbox-exec on macOS, bubblewrap on
+   Linux) replacing the heuristic enforcement.~~ Shipped at wave-9
+   close (F1/W9 — Seatbelt fully wired, Landlock helper).
 3. `chimera ferret agents create` (interactive agent scaffolder).
 4. `chimera ferret session delete <id>` (currently `rm -rf` the
    eventlog dir).
 5. Image / audio attachment flags for one-shot prompts.
 6. Profile switcher (`--profile <name>`) reading
    `~/.codex/config.toml` `[profiles.<name>]` blocks.
-7. `chimera ferret completion` (shell-completion script).
+7. ~~`chimera ferret completion` (shell-completion script).~~
+   Shipped at wave-9 close as the cross-CLI `chimera completion`
+   generator (O5; `--cli ferret` filters to ferret-only output).
 8. Per-provider `auth login` UX wiring `chimera.auth` device-flow.
+9. ~~Mid-session `/sandbox` and `/approval` toggle that re-shapes
+   the next tool call live.~~ Shipped at wave-9 close (F3/W9 —
+   `MutablePermissionPolicy` + `MutableSandboxMode`).
+10. ~~Lift the four IDE-friendly notification kinds onto the
+    HTTP+SSE transport.~~ Shipped at wave-9 close (F2/W9 —
+    `IDENotificationEmitter`).
 
 ## How to use
 

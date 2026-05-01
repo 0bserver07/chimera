@@ -4,23 +4,31 @@ Late-bound by :func:`chimera.shrew.cli._dispatch_bench` so the shrew
 scaffold's ``--help`` / ``--version`` paths don't import the eval
 harness or the provider factory.
 
-Two benchmarks are wired:
+Four benchmarks are wired:
 
 * ``aider-polyglot`` — :class:`~chimera.shrew.benchmarks.aider_polyglot.
   AiderPolyglot`. Per-language code-edit tasks scored by diff-match or
   test-pass.
 * ``gaia`` — :class:`~chimera.shrew.benchmarks.gaia.GAIA`. Research-task
   Q&A scored by GAIA-style answer-match.
+* ``harbor`` — :class:`~chimera.shrew.benchmarks.harbor.HarborBench`.
+  Maritime / logistics reasoning tasks scored by GAIA-style answer match.
+* ``terminal-bench`` — :class:`~chimera.shrew.benchmarks.terminal_bench.
+  TerminalBench`. Command-line tasks scored by per-task verify-command
+  exit code.
 
-Both adapters skip cleanly with a friendly setup hint when the staged
-dataset is absent (``CHIMERA_AIDER_POLYGLOT_PATH`` /
-``CHIMERA_GAIA_PATH`` overrides honored). The setup hint is printed to
-stderr and the dispatcher returns exit code ``3`` so an outer CI script
-can treat "needs staging" distinctly from "ran but nothing passed".
+All four adapters skip cleanly with a friendly setup hint when the
+staged dataset is absent (``CHIMERA_AIDER_POLYGLOT_PATH`` /
+``CHIMERA_GAIA_PATH`` / ``CHIMERA_HARBOR_PATH`` /
+``CHIMERA_TERMINAL_BENCH_PATH`` overrides honored). The setup hint is
+printed to stderr and the dispatcher returns exit code ``3`` so an
+outer CI script can treat "needs staging" distinctly from "ran but
+nothing passed".
 
 Trademark hygiene: this module names third-party benchmarks
-(``Aider Polyglot``, ``GAIA``) but never names the upstream small-model
-coding agent in source / docs / help text.
+(``Aider Polyglot``, ``GAIA``, ``Harbor``, ``Terminal-Bench``) but
+never names the upstream small-model coding agent in source / docs /
+help text.
 """
 from __future__ import annotations
 
@@ -39,11 +47,18 @@ __all__ = [
     "build_shrew_agent_for_eval",
     "run_aider_polyglot",
     "run_gaia",
+    "run_harbor",
+    "run_terminal_bench",
     "dispatch_bench",
 ]
 
 
-VALID_BENCHES: tuple[str, ...] = ("aider-polyglot", "gaia")
+VALID_BENCHES: tuple[str, ...] = (
+    "aider-polyglot",
+    "gaia",
+    "harbor",
+    "terminal-bench",
+)
 """Benchmark names accepted by :func:`dispatch_bench`."""
 
 
@@ -211,6 +226,108 @@ def run_gaia(
     return harness.run()
 
 
+def run_harbor(
+    limit: int,
+    model: str,
+    dataset_path: str | None = None,
+    category: str | None = None,
+    difficulty: int | None = None,
+    agent_factory: Callable[[str], "Agent"] | None = None,
+) -> "EvalResult":
+    """Run the Harbor benchmark against a shrew Agent.
+
+    Args:
+        limit: Maximum number of tasks (``0`` / negative → unlimited).
+        model: Model identifier passed to the agent factory.
+        dataset_path: Optional override for the dataset root.
+        category: Optional category filter (e.g. ``"scheduling"``).
+        difficulty: Optional difficulty filter (``1`` / ``2`` / ``3``).
+        agent_factory: Optional callable returning an :class:`Agent`.
+            When ``None``, :func:`build_shrew_agent_for_eval` is used.
+
+    Returns:
+        The :class:`~chimera.eval.harness.EvalResult` for the run.
+
+    Raises:
+        FileNotFoundError: When the dataset is not staged.
+    """
+    from pathlib import Path
+
+    from chimera.eval.harness import Harness
+    from chimera.shrew.benchmarks.harbor import (
+        HarborBench,
+        dataset_available,
+        default_dataset_path,
+        setup_hint,
+    )
+
+    resolved = (
+        Path(dataset_path).expanduser() if dataset_path else default_dataset_path()
+    )
+    if not dataset_available(resolved):
+        raise FileNotFoundError(setup_hint(resolved))
+
+    effective_limit = limit if limit and limit > 0 else None
+    benchmark = HarborBench(
+        dataset_path=str(resolved),
+        limit=effective_limit,
+        category=category,
+        difficulty=difficulty,
+    )
+    factory = agent_factory or build_shrew_agent_for_eval
+    agent = factory(model)
+    harness = Harness(benchmark=benchmark, agent=agent)
+    return harness.run()
+
+
+def run_terminal_bench(
+    limit: int,
+    model: str,
+    dataset_path: str | None = None,
+    agent_factory: Callable[[str], "Agent"] | None = None,
+) -> "EvalResult":
+    """Run the Terminal-Bench benchmark against a shrew Agent.
+
+    Args:
+        limit: Maximum number of tasks (``0`` / negative → unlimited).
+        model: Model identifier passed to the agent factory.
+        dataset_path: Optional override for the dataset root.
+        agent_factory: Optional callable returning an :class:`Agent`.
+            When ``None``, :func:`build_shrew_agent_for_eval` is used.
+
+    Returns:
+        The :class:`~chimera.eval.harness.EvalResult` for the run.
+
+    Raises:
+        FileNotFoundError: When the dataset is not staged.
+    """
+    from pathlib import Path
+
+    from chimera.eval.harness import Harness
+    from chimera.shrew.benchmarks.terminal_bench import (
+        TerminalBench,
+        dataset_available,
+        default_dataset_path,
+        setup_hint,
+    )
+
+    resolved = (
+        Path(dataset_path).expanduser() if dataset_path else default_dataset_path()
+    )
+    if not dataset_available(resolved):
+        raise FileNotFoundError(setup_hint(resolved))
+
+    effective_limit = limit if limit and limit > 0 else None
+    benchmark = TerminalBench(
+        dataset_path=str(resolved),
+        limit=effective_limit,
+    )
+    factory = agent_factory or build_shrew_agent_for_eval
+    agent = factory(model)
+    harness = Harness(benchmark=benchmark, agent=agent)
+    return harness.run()
+
+
 # ---------------------------------------------------------------------------
 # Pretty-printing
 # ---------------------------------------------------------------------------
@@ -230,12 +347,10 @@ def _print_eval_result(result: "EvalResult") -> None:
 
 
 def dispatch_bench(args: argparse.Namespace) -> int:
-    """Implement ``chimera shrew bench [aider-polyglot|gaia]``.
+    """Implement ``chimera shrew bench [aider-polyglot|gaia|harbor|terminal-bench]``.
 
     Args slots used:
-        * ``sub_action`` — benchmark name. ``terminal-bench`` is
-          accepted by the parser for forward-compat but currently
-          surfaces a ``not yet wired`` message + exit code 3.
+        * ``sub_action`` — benchmark name (one of :data:`VALID_BENCHES`).
         * ``model`` — model identifier (already populated by
           :func:`chimera.shrew.cli.add_arguments`).
         * ``bench_limit`` — optional integer limit; default 5.
@@ -257,17 +372,6 @@ def dispatch_bench(args: argparse.Namespace) -> int:
         )
         return 2
 
-    if bench_name == "terminal-bench":
-        # Reserved by the parser for parity with otter / mink. Not yet
-        # wired in this scaffold — the polyglot + GAIA pair is the
-        # smallest useful surface to ship for shrew's small-model focus.
-        print(
-            "shrew bench terminal-bench: not yet wired in this scaffold "
-            "(see research/shrew/SPEC.md, agent S4).",
-            file=sys.stderr,
-        )
-        return 3
-
     if bench_name not in VALID_BENCHES:
         print(
             f"error: unknown benchmark {bench_name!r}. "
@@ -284,11 +388,18 @@ def dispatch_bench(args: argparse.Namespace) -> int:
         # the user just wants to smoke-test the wiring.
         limit = 5
 
-    runner: Callable[..., Any]
-    if bench_name == "aider-polyglot":
-        runner = run_aider_polyglot
-    else:  # gaia
-        runner = run_gaia
+    # Map names to runners. Each runner shares the same
+    # ``(limit, model, agent_factory=...)`` core surface; runner-specific
+    # filters (language, level, category) are accepted via the runner's
+    # signature but not surfaced on the dispatcher's own argv (the CLI
+    # parser already advertises ``--bench-limit`` only for now).
+    runners: dict[str, Callable[..., Any]] = {
+        "aider-polyglot": run_aider_polyglot,
+        "gaia": run_gaia,
+        "harbor": run_harbor,
+        "terminal-bench": run_terminal_bench,
+    }
+    runner = runners[bench_name]
 
     try:
         result = runner(limit=limit, model=model)
