@@ -252,6 +252,30 @@ features (snapshot hooks, slash commands, session trees) stay green
 through the default flip. Weasel has its own REPL and is unaffected.
 Stoat's RPC handshake also pins `legacy_react=True`.
 
+## Quick resume
+
+Each per-CLI agent already exposes `--resume <id>` and `-c` / `--continue`
+(wave 9, C1). Wave 11 (B12) adds a top-level dispatcher that auto-detects
+which CLI minted the session, so you don't need to remember the codename:
+
+```bash
+# Resume a specific run by id — prefix detects the originating CLI
+chimera resume otter-20260430T101501-71032a5e
+
+# Resume the most recent run across ALL CLIs (mink/otter/ferret/...)
+chimera resume
+
+# Pass-through extra args land on the underlying CLI verbatim
+chimera resume mink-20260430T120000-deadbeef -p "next prompt"
+```
+
+Under the hood, `chimera resume <id>` parses the prefix segment
+(`otter-`, `mink-`, `ferret-`, `weasel-`, `shrew-`, `stoat-`, `badger-`)
+and dispatches to `chimera <cli> --resume <id>` via subprocess. The
+zero-arg form scans `~/.chimera/eventlog/` and picks the newest run by
+UTC timestamp regardless of which CLI saved it. Run ids that don't match
+a known codename surface a clear error rather than guessing.
+
 ## Cross-links
 
 Per-agent quickstarts (each has its own `providers.md`,

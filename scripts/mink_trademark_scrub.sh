@@ -58,11 +58,18 @@ PATTERN='Claude Code|claude-code|CC parity|Claude-Code-like'
 # exit code.
 ALLOW='cc-clone|claude-code-acp|~/\.claude|\.claude/'
 
+# Skip files that legitimately reference the upstream brand for
+# discoverability (the public inspirations map + the agents_discovery
+# command that surfaces it). These are factual references to upstream
+# tools, not brand claims about Chimera. See docs/<cli>/security-and-
+# trademarks.md for the per-CLI policy.
+SKIP_FILES='^(docs/inspirations\.md|chimera/cli/agents_discovery\.py):'
+
 # `git grep` exits 1 when there are no matches; tolerate that.
 HITS="$(git grep -nE "${PATTERN}" -- "${PATHS[@]}" || true)"
 
-# Filter out the allowed filesystem-fact references.
-FILTERED="$(printf '%s\n' "${HITS}" | grep -vE "${ALLOW}" || true)"
+# Filter out the allowed filesystem-fact references AND the discoverability files.
+FILTERED="$(printf '%s\n' "${HITS}" | grep -vE "${ALLOW}" | grep -vE "${SKIP_FILES}" || true)"
 
 # Drop empty lines so we can detect "no real hits" reliably.
 FILTERED="$(printf '%s\n' "${FILTERED}" | sed '/^$/d')"

@@ -29,6 +29,8 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from chimera.errors import friendly_errors
+
 # WHY: only stdlib + chimera at import time. Provider deps (httpx, anthropic,
 # openai SDKs) are pulled in lazily inside ``_build_provider`` so importing
 # ``chimera.otter.cli`` for ``--help`` / ``--version`` stays cheap.
@@ -2318,6 +2320,7 @@ def _dispatch_tui(args: argparse.Namespace) -> int:
 # ---------------------------------------------------------------------------
 
 
+@friendly_errors
 def run(args: argparse.Namespace) -> int:
     """Entry point invoked by ``chimera otter``.
 

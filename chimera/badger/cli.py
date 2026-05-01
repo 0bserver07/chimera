@@ -20,6 +20,8 @@ import os
 import sys
 from typing import Any
 
+from chimera.errors import friendly_errors
+
 # WHY: only stdlib + chimera at import time. Heavy provider deps load
 # lazily inside _build_provider so ``--help`` / ``--version`` stay cheap.
 
@@ -564,6 +566,7 @@ def _run_print_mode(args: argparse.Namespace) -> int:
 # ---------------------------------------------------------------------------
 
 
+@friendly_errors
 def run(args: argparse.Namespace) -> int:
     """Entry point invoked by ``chimera badger``.
 

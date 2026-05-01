@@ -26,6 +26,8 @@ import os
 import sys
 from typing import Any
 
+from chimera.errors import friendly_errors
+
 # WHY: only stdlib + chimera at import time. Provider deps (httpx, anthropic,
 # openai SDKs) are pulled in lazily inside ``_build_provider`` so importing
 # ``chimera.ferret.cli`` for ``--help`` / ``--version`` stays cheap. The
@@ -1144,6 +1146,7 @@ def _apply_ferret_resume_prefix(
 # ---------------------------------------------------------------------------
 
 
+@friendly_errors
 def run(args: argparse.Namespace) -> int:
     """Entry point invoked by ``chimera ferret``.
 

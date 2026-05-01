@@ -264,6 +264,22 @@ def build_parser() -> argparse.ArgumentParser:
     except (ImportError, AttributeError):
         badger_parser.add_argument("--version", action="store_true")
 
+    # ---- resume (top-level dispatcher) ----
+    # WHY (B12, wave 11): each CLI already exposes ``--resume <id>`` via
+    # wave-9 C1, but you need to know which CLI minted the session to
+    # invoke it. ``chimera resume <id>`` auto-detects the originating
+    # codename from the run-id prefix and forwards. ``chimera resume``
+    # (no id) picks the newest run across all CLIs.
+    resume_parser = subparsers.add_parser(
+        "resume",
+        help=(
+            "Resume a prior run by id (auto-detects which CLI saved it). "
+            "Omit the id to resume the most recent run across all CLIs."
+        ),
+    )
+    from chimera.cli import resume_cmd as _resume_cmd
+    _resume_cmd.add_arguments(resume_parser)
+
     # ---- agents (top-level discovery) ----
     # WHY: distinct from each CLI's own ``agents`` subcommand. This one
     # lists all 7 codenames + aliases + inspirations so users can pick
@@ -392,6 +408,11 @@ def build_parser() -> argparse.ArgumentParser:
     from chimera.cli import fs as _fs_cli
     _fs_cli.register(subparsers)
 
+    # ---- config subcommand ----
+    # Persistent CLI defaults in ~/.chimera/config.toml. Stdlib only.
+    from chimera.cli import config_cmd as _config_cmd
+    _config_cmd.register(subparsers)
+
     # ---- team subcommand (experimental, gated by CHIMERA_EXPERIMENTAL_AGENT_TEAMS) ----
     from chimera.mink import team as _team_cli
     _team_cli.register(subparsers)
@@ -461,6 +482,23 @@ def build_parser() -> argparse.ArgumentParser:
             "marketplace (search/list only)"
         ),
     )
+
+    # ---- doctor subcommand ----
+    # WHY: late-bind the import so a broken doctor.py never breaks the
+    # whole CLI. Falls back to a stub parser that prints a friendly error.
+    try:
+        from chimera.cli.doctor import add_arguments as _doctor_add_arguments
+        doctor_parser = subparsers.add_parser(
+            "doctor",
+            help="Diagnose your chimera setup (API keys, daemons, extras).",
+        )
+        _doctor_add_arguments(doctor_parser)
+    except Exception:  # noqa: BLE001
+        doctor_parser = subparsers.add_parser(
+            "doctor",
+            help="Diagnose your chimera setup (unavailable in this build).",
+        )
+        doctor_parser.add_argument("--format", default="text")
 
     # ---- auth subcommand ----
     # OAuth device-flow login + credential management. Stdlib-only.
@@ -1175,6 +1213,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     elif args.command == "agents":
         from chimera.cli import agents_discovery as _agents_discovery
         return _agents_discovery.run(args)
+    elif args.command == "resume":
+        from chimera.cli import resume_cmd as _resume_cmd
+        return _resume_cmd.run(args)
     elif args.command in ("badger", "strict"):
         try:
             from chimera.badger import cli as _badger_cli  # type: ignore[attr-defined]
@@ -1199,11 +1240,21 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _completion_cli.run(args)
     elif args.command == "plugins":
         return run_plugins(args)
+    elif args.command == "doctor":
+        try:
+            from chimera.cli.doctor import run as _doctor_run
+        except Exception as exc:  # noqa: BLE001
+            print(f"chimera doctor: unavailable ({exc})", file=sys.stderr)
+            return 2
+        return _doctor_run(args)
     elif args.command == "auth":
         return run_auth(args)
     elif args.command == "fs":
         rc: int = args.func(args)
         return rc
+    elif args.command == "config":
+        from chimera.cli import config_cmd as _config_cmd
+        return _config_cmd.run(args)
     elif args.command == "team":
         rc2: int = args.func(args)
         return rc2

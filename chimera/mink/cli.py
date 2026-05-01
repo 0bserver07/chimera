@@ -28,6 +28,8 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from chimera.errors import friendly_errors
+
 # WHY: only stdlib + chimera at import time so `from chimera.cli import cc`
 # stays cheap; httpx is pulled in lazily inside ``_build_provider``.
 
@@ -2126,6 +2128,7 @@ def _dispatch_runs(args: argparse.Namespace) -> int | None:
     return 2
 
 
+@friendly_errors
 def run(args: argparse.Namespace) -> int:
     """Entry point invoked by ``chimera mink``.
 

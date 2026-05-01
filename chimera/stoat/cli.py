@@ -34,6 +34,8 @@ import os
 import sys
 from typing import Any
 
+from chimera.errors import friendly_errors
+
 # WHY: stdlib + chimera at import time. Provider deps (anthropic, openai,
 # httpx) and the REPL/sessions stack lazy-import inside their dispatch
 # helpers so ``chimera stoat --help`` and ``chimera stoat --version`` stay
@@ -508,6 +510,7 @@ _SUBCOMMAND_DISPATCH: dict[str, Any] = {
 # ---------------------------------------------------------------------------
 
 
+@friendly_errors
 def run(args: argparse.Namespace) -> int:
     """Entry point invoked by ``chimera stoat``.
 

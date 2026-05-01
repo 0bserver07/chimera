@@ -32,6 +32,8 @@ import os
 import sys
 from typing import Any
 
+from chimera.errors import friendly_errors
+
 # WHY: stdlib only at import time. The interactive path delegates to
 # :mod:`chimera.shrew.repl` which itself lazy-imports providers — so
 # ``chimera shrew --help`` / ``--version`` stays cheap even when the
@@ -857,6 +859,7 @@ _SUBCOMMAND_DISPATCH: dict[str, Any] = {
 # ---------------------------------------------------------------------------
 
 
+@friendly_errors
 def run(args: argparse.Namespace) -> int:
     """Entry point invoked by ``chimera shrew``.
 

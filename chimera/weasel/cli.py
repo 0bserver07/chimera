@@ -28,6 +28,8 @@ import os
 import sys
 from typing import Any
 
+from chimera.errors import friendly_errors
+
 # WHY: stdlib only at import time. The interactive path delegates to
 # ``chimera.cli.code.run_code`` which itself lazy-imports providers — so
 # ``chimera weasel --help`` / ``--version`` stays cheap even when the
@@ -714,6 +716,7 @@ _SUBCOMMAND_DISPATCH: dict[str, Any] = {
 # ---------------------------------------------------------------------------
 
 
+@friendly_errors
 def run(args: argparse.Namespace) -> int:
     """Entry point invoked by ``chimera weasel``.
 
