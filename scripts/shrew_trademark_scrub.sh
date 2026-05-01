@@ -49,9 +49,10 @@ PATTERN='little-coder|itayinbarr'
 # `.shrew/agents/...`.  Anything else flips the exit code.
 ALLOW='~/\.shrew|\.shrew/|\.shrew\b'
 
-# Skip the policy doc itself — it has to quote the regex + a sample
-# failure line to document the rule.  This is the canonical exception.
-SKIP_FILES='^docs/shrew/trademark-policy\.md:'
+# Skip files that legitimately have to quote the brand to document or
+# enforce the rule (policy docs + the meta-test that ASSERTS cli.py
+# stays brand-clean).  These are the canonical exceptions.
+SKIP_FILES='^(docs/shrew/(trademark-policy|security-and-trademarks)\.md|tests/shrew/test_cli\.py):'
 
 # `git grep` exits 1 when there are no matches; tolerate that.
 HITS="$(git grep -nE "${PATTERN}" -- "${PATHS[@]}" || true)"

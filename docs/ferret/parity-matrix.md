@@ -7,9 +7,22 @@ description: Surface-by-surface parity status for chimera ferret versus the upst
 
 **Source baseline:** `research/ferret/SPEC.md` and the upstream
 source-tree audit recorded under `research/ferret/`.
-**Updated:** 2026-04-30, after wave-5 ship (FF1–FF8).
+**Updated:** 2026-04-30, after wave-5 ship (FF1–FF8) and wave-6
+cross-CLI verification (X1–X3, I-series).
 **Legend:** GREEN = shipped / at parity (or superset); YELLOW =
 partial; RED = deferred.
+
+> **Wave-6 verification (2026-04-30).** Live state at handoff:
+> `uv run ruff check chimera/ferret/` clean; `uv run mypy
+> chimera/ferret/` clean (part of the 36-source-file mypy run that
+> covers ferret + weasel + shrew); `uv run pytest tests/ferret/ -q`
+> = 303 passed in ~8.1s. Trademark scrub passes on all live source
+> and 6 of 8 docs (the 2 hits are inside
+> `docs/ferret/security-and-trademarks.md` quoting the regex itself
+> — pre-existing, tracked as `F-FIX-1` in
+> `research/ferret/HANDOFF.md`). `chimera ferret 0.5.0` boots,
+> `--help` is brand-clean, and the 8 user docs total 1,729 lines.
+> Ferret is now Tier 1 alongside mink and otter.
 
 > **Trademark hygiene.** Throughout this document the upstream
 > project is referred to as "the upstream" or "the IDE-first
@@ -184,6 +197,12 @@ and ignores keys that drive upstream-only chrome.
 - **Sandbox modes:** 4 GREEN, 1 YELLOW.
 - **Approval presets:** 3 GREEN.
 - **Config keys:** 7 GREEN, 1 YELLOW, 4 RED of the 12 reviewed.
+
+> **Wave-6 live verification:** the GREEN counts above were spot-checked
+> against `chimera ferret --help`, the 303 passing tests under
+> `tests/ferret/`, and the 13 source modules under `chimera/ferret/`.
+> No row was downgraded by the wave-6 audit; ferret meets every
+> contract above at the black-box level.
 
 ## Chimera-only capabilities (do not regress)
 

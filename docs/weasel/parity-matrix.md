@@ -7,8 +7,19 @@ description: Surface-by-surface mapping between chimera weasel and the upstream 
 
 **Source baseline:** `research/weasel/SPEC.md` (Apr 2026), upstream
 minimal-harness source tree walk under `packages/coding-agent/`.
-**Updated:** wave-1 ship.
+**Updated:** wave-5 ship (W1–W6), refreshed 2026-04-30 by the
+wave-6 cross-CLI verification (X1–X3, I-series).
 **Legend:** GREEN = shipped / at parity (or superset); YELLOW = partial; RED = deferred or out of scope.
+
+> **Wave-6 verification (2026-04-30).** Live state at handoff:
+> `uv run ruff check chimera/weasel/` clean; `uv run mypy
+> chimera/weasel/` clean (part of the 36-source-file mypy run that
+> covers ferret + weasel + shrew); `uv run pytest tests/weasel/ -q`
+> = 164 passed in ~0.5s. `bash scripts/weasel_trademark_scrub.sh`
+> exits 0 on the full live source / docs / test scope.
+> `chimera weasel 0.5.0` boots, `--help` is brand-clean, and the
+> four-mode dispatcher routes interactive / print / rpc / sdk
+> end-to-end. Weasel is now Tier 1 alongside mink and otter.
 
 > **Trademark hygiene.** Throughout this document the upstream
 > project is referred to as "the minimal harness" or "the upstream".
@@ -194,6 +205,14 @@ uses `.weasel/settings.json`. Keys map one-to-one where possible.
 - **RPC methods:** 8 GREEN of 8.
 - **Providers:** 6 GREEN, 2 YELLOW, 0 RED of 8.
 - **Settings keys:** 4 GREEN, 1 YELLOW, 2 RED of 7.
+
+> **Wave-6 live verification:** the GREEN counts above were
+> spot-checked against `chimera weasel --help`, the 164 passing tests
+> under `tests/weasel/`, the 9 source modules under
+> `chimera/weasel/`, and the JSON-RPC round-trip + SDK demo at
+> `examples/weasel_sdk_quickstart.py`. No row was downgraded by the
+> wave-6 audit; weasel meets every contract above at the black-box
+> level.
 
 ## Chimera-only capabilities (do not regress)
 

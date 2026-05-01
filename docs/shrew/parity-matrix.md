@@ -7,8 +7,23 @@ description: Surface-by-surface mapping between chimera shrew and the upstream s
 
 **Source baseline:** `research/shrew/SPEC.md` (Apr 2026), upstream
 small-model coding agent source-tree walk.
-**Updated:** wave-5 ship.
+**Updated:** wave-5 ship (S1–S6), refreshed 2026-04-30 by the
+wave-6 cross-CLI verification (X1–X3, I-series).
 **Legend:** GREEN = shipped / at parity (or superset); YELLOW = partial; RED = deferred or out of scope.
+
+> **Wave-6 verification (2026-04-30).** Live state at handoff:
+> `uv run ruff check chimera/shrew/` clean; `uv run mypy
+> chimera/shrew/` clean (part of the 36-source-file mypy run that
+> covers ferret + weasel + shrew); `uv run pytest tests/shrew/ -q`
+> = 193 passed in ~0.4s. Trademark scrub passes on docs and skill
+> markdowns; the 6 hits in `chimera/shrew/cli.py` /
+> `tests/shrew/test_cli.py` are inside docstring + scrub-policy
+> commentary (pre-existing from S1, tracked as `S-FIX-1` in
+> `research/shrew/HANDOFF.md`). `chimera shrew 0.5.0` boots,
+> `--help` is brand-clean, and the bundled 11 skill markdowns +
+> three small-model extensions + Aider Polyglot / GAIA bench
+> harness load end-to-end. Shrew is now Tier 1 alongside mink and
+> otter.
 
 > **Trademark hygiene.** Throughout this document the upstream
 > project is referred to as "the small-model coding agent" or "the
@@ -162,6 +177,14 @@ Shrew reuses Chimera's event-sourced session store directly.
 - **Extensions:** 4 GREEN, 0 YELLOW, 1 RED of 5.
 - **Benchmarks:** 6 GREEN, 0 YELLOW, 2 RED of 8.
 - **Sessions:** 6 GREEN of 6.
+
+> **Wave-6 live verification:** the GREEN counts above were
+> spot-checked against `chimera shrew --help`, `chimera shrew
+> --list-models`, the 193 passing tests under `tests/shrew/`, the
+> 11 skill markdowns under `chimera/shrew/skills/`, and the three
+> small-model extensions under `chimera/shrew/extensions/`. No row
+> was downgraded by the wave-6 audit; shrew meets every contract
+> above at the black-box level.
 
 ## Chimera-only capabilities (do not regress)
 

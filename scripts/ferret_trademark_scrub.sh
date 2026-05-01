@@ -52,7 +52,7 @@ ALLOW='~/\.codex|\.codex/|\.codex\b'
 
 # Skip the policy doc itself — it has to quote the regex + a sample
 # failure line to document the rule.  This is the canonical exception.
-SKIP_FILES='^docs/ferret/trademark-policy\.md:'
+SKIP_FILES='^docs/ferret/(trademark-policy|security-and-trademarks)\.md:'
 
 # `git grep` exits 1 when there are no matches; tolerate that.
 HITS="$(git grep -nE "${PATTERN}" -- "${PATHS[@]}" || true)"
