@@ -32,6 +32,7 @@ import os
 import sys
 from typing import Any
 
+from chimera.cli.help_long import register_argument
 from chimera.errors import friendly_errors
 
 # WHY: stdlib only at import time. The interactive path delegates to
@@ -39,7 +40,7 @@ from chimera.errors import friendly_errors
 # ``chimera shrew --help`` / ``--version`` stays cheap even when the
 # Anthropic / OpenAI SDKs aren't installed.
 
-_VERSION = "0.5.0"
+_VERSION = "0.6.0"
 """Shrew scaffold version. Independent of the chimera package version
 because shrew is a per-CLI release line that mirrors weasel's cadence."""
 
@@ -173,7 +174,7 @@ def _resolve_version() -> str:
     """Return the shrew scaffold version string for ``--version``.
 
     Returns:
-        ``"0.5.0"`` (the per-CLI release line) — independent of the
+        ``"0.6.0"`` (the per-CLI release line) — independent of the
         ``chimera-run`` package version. Mirrors weasel's per-CLI release
         cadence so the two CLIs version-bump in lockstep until shrew
         diverges.
@@ -216,84 +217,109 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     persistence = parser.add_argument_group("Persistence")
 
     # WHY: env precedence is --model > $SHREW_MODEL > _DEFAULT_MODEL.
-    core.add_argument(
+    # W14-9: routed through ``register_argument`` so future verbose
+    # ``help=`` strings auto-promote to ``_LONG_HELP`` and stay below the
+    # 50-line ceiling on ``chimera shrew --help``.
+    register_argument(
+        core,
         "--model",
         default=os.environ.get("SHREW_MODEL") or _DEFAULT_MODEL,
         metavar="MODEL",
+        long_help=_LONG_HELP,
         help=f"Model id (default: $SHREW_MODEL or {_DEFAULT_MODEL}).",
     )
     # WHY: shrew inherits weasel's four-mode philosophy verbatim.
-    core.add_argument(
+    register_argument(
+        core,
         "--mode",
         choices=list(_VALID_MODES),
         default="interactive",
         metavar="MODE",
+        long_help=_LONG_HELP,
         help="interactive | print | rpc | sdk (default: interactive).",
     )
-    core.add_argument(
+    register_argument(
+        core,
         "-p",
         "--print",
         dest="print_mode",
         default=None,
         metavar="PROMPT",
+        long_help=_LONG_HELP,
         help="One-shot: run PROMPT, print, exit.",
     )
-    output.add_argument(
+    register_argument(
+        output,
         "--json",
         dest="json_output",
         action="store_true",
         default=False,
+        long_help=_LONG_HELP,
         help="With -p: emit JSON envelope instead of text.",
     )
-    output.add_argument(
+    register_argument(
+        output,
         "--list-models",
         dest="list_models",
         action="store_true",
         default=False,
+        long_help=_LONG_HELP,
         help="List recognised model ids and exit.",
     )
-    core.add_argument(
+    register_argument(
+        core,
         "--cwd",
         default=None,
+        long_help=_LONG_HELP,
         help="Working directory (default: cwd).",
     )
     # WHY: 30 instead of 50 — small models don't benefit from long horizons.
-    behavior.add_argument(
+    register_argument(
+        behavior,
         "--max-steps",
         type=int,
         default=_DEFAULT_MAX_STEPS,
         metavar="N",
+        long_help=_LONG_HELP,
         help=f"Max agent steps per turn (default: {_DEFAULT_MAX_STEPS}).",
     )
     # WHY: restricted-by-default tool set — Read/Write/Edit/Bash.
-    behavior.add_argument(
+    register_argument(
+        behavior,
         "--allowed-tools",
         default=_DEFAULT_ALLOWED_TOOLS,
         metavar="LIST",
+        long_help=_LONG_HELP,
         help=f"Comma allowlist (default: {_DEFAULT_ALLOWED_TOOLS}).",
     )
     # WHY (C1, wave 9): --resume / --continue mirror mink's flag pair.
-    persistence.add_argument(
+    register_argument(
+        persistence,
         "--resume",
         default=None,
         metavar="ID",
+        long_help=_LONG_HELP,
         help="Resume a persisted shrew run by id.",
     )
-    persistence.add_argument(
+    register_argument(
+        persistence,
         "-c",
         "--continue",
         dest="continue_latest",
         action="store_true",
         default=False,
+        long_help=_LONG_HELP,
         help="Resume the newest shrew run under cwd.",
     )
     # WHY: shrew exposes ``sessions`` (parity with weasel) and ``bench``.
-    parser.add_argument(
+    register_argument(
+        parser,
         "subcommand",
         nargs="?",
         default=None,
         choices=list(_VALID_SUBCOMMANDS),
         metavar="SUBCOMMAND",
+        long_help=_LONG_HELP,
         help="sessions | bench | share.",
     )
     parser.add_argument(
@@ -311,68 +337,84 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         help="Session id for sessions show.",
     )
     # WHY: cost subcommand flags. Mirror ``mink runs cost``.
-    persistence.add_argument(
+    register_argument(
+        persistence,
         "--since",
         dest="cost_since",
         default=None,
         metavar="WINDOW",
+        long_help=_LONG_HELP,
         help="sessions cost: cutoff (e.g. 7d / ISO).",
     )
-    persistence.add_argument(
+    register_argument(
+        persistence,
         "--cost-model",
         dest="cost_model",
         default=None,
         metavar="STR",
+        long_help=_LONG_HELP,
         help="sessions cost: model substring filter.",
     )
-    persistence.add_argument(
+    register_argument(
+        persistence,
         "--cost-format",
         dest="cost_format",
         choices=("text", "json", "csv"),
         default=None,
         metavar="FMT",
+        long_help=_LONG_HELP,
         help="sessions cost: text | json | csv.",
     )
-    persistence.add_argument(
+    register_argument(
+        persistence,
         "--cost-limit",
         dest="cost_limit",
         type=int,
         default=None,
         metavar="N",
+        long_help=_LONG_HELP,
         help="sessions cost: row cap (newest first).",
     )
     # WHY: share subcommand flags. Mirror weasel's share surface.
-    persistence.add_argument(
+    register_argument(
+        persistence,
         "--share-sink",
         dest="share_sink",
         choices=("file", "stdout"),
         default=None,
         metavar="SINK",
+        long_help=_LONG_HELP,
         help="share: file (default) | stdout.",
     )
-    persistence.add_argument(
+    register_argument(
+        persistence,
         "--share-format",
         dest="share_format",
         choices=("json", "md"),
         default=None,
         metavar="FMT",
+        long_help=_LONG_HELP,
         help="share: json (default) | md.",
     )
     # WHY (S4): bench-specific flag.
-    behavior.add_argument(
+    register_argument(
+        behavior,
         "--bench-limit",
         dest="bench_limit",
         type=int,
         default=5,
         metavar="N",
+        long_help=_LONG_HELP,
         help="bench: max tasks (default: 5; 0 = full run).",
     )
     # B9-W11: cross-CLI session listing.
-    persistence.add_argument(
+    register_argument(
+        persistence,
         "--all-clis",
         dest="sessions_all_clis",
         action="store_true",
         default=False,
+        long_help=_LONG_HELP,
         help="sessions list: include every Chimera CLI's sessions.",
     )
 

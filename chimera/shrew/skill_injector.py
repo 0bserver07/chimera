@@ -57,6 +57,7 @@ __all__ = [
     "install_into_session",
     "score_error",
     "score_intent",
+    "score_knowledge",
     "score_recency",
     "score_skill",
     "tokenize",
@@ -154,11 +155,18 @@ class ScoreWeights:
     needs to be swapped in. Intent is second so a fresh user prompt
     pulls in an obviously relevant skill on turn one. Recency is the
     smallest because it's a tie-breaker, not a primary signal.
+
+    The :attr:`knowledge` axis (W14-6) adds a fourth signal: how much
+    a skill's body overlaps with the most recent retrieved knowledge
+    snippet (e.g. a RAG passage). It defaults to ``0.4`` — strong
+    enough to nudge a relevant cheat-sheet into the picked set but not
+    so strong that it overrides a clear error signal.
     """
 
     error: float = 1.0
     intent: float = 0.6
     recency: float = 0.25
+    knowledge: float = 0.4
 
 
 DEFAULT_WEIGHTS: Final[ScoreWeights] = ScoreWeights()
@@ -173,12 +181,19 @@ class ScoreBreakdown:
     debugging / event logging can inspect *why* a skill was picked.
     The ``total`` field is the weighted sum the ranker actually sorts
     on.
+
+    The :attr:`knowledge` axis defaults to ``0.0`` so older
+    test-suites and integrators that still construct
+    :class:`ScoreBreakdown` with three positional axes keep working —
+    the field is keyword-only by virtue of having a default while the
+    other axes don't.
     """
 
     error: float
     intent: float
     recency: float
     total: float
+    knowledge: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -197,12 +212,16 @@ class TurnContext:
         last_used: ``skill_name -> turn_index`` map of the most recent
             turn each skill was *injected*. Skills missing from the map
             pay no recency penalty.
+        knowledge_snippet: Most recently retrieved knowledge snippet
+            (e.g. a RAG passage from the planned ``knowledge_inject``
+            extension). Empty string disables the knowledge axis.
     """
 
     prompt: str
     last_error: str = ""
     turn_index: int = 0
     last_used: dict[str, int] = field(default_factory=dict)
+    knowledge_snippet: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -352,13 +371,62 @@ def score_recency(
     return -(window - age) / window
 
 
+def score_knowledge(skill: SkillLike, snippet: str) -> float:
+    """Score the *knowledge* axis: skill body vs. retrieved snippet overlap.
+
+    Built for the W14-6 RAG-style hook: when an upstream retrieval
+    step (e.g. the planned ``knowledge_inject`` extension or any
+    third-party RAG plugin) fetches a knowledge passage, the skill
+    injector boosts skills whose **bodies** contain the same vocabulary
+    as the passage. This is different from :func:`score_intent` (which
+    matches name + triggers against the *prompt*) — the knowledge axis
+    looks at the skill's *content* against an external retrieval result.
+
+    Returns a value in ``[0.0, 1.0]``. Empty snippet, empty body, or
+    zero overlap return 0.0. The score saturates: one matching token
+    scores ``min(1.0, 1/8) = 0.125``; eight or more matching tokens
+    saturate at 1.0. The denominator (``8``) is intentionally larger
+    than the intent denominator (``4``) because skill bodies are
+    longer and we want at least a couple of co-occurring tokens before
+    the axis pulls a skill into the picked set.
+
+    Args:
+        skill: The skill to score.
+        snippet: The retrieved knowledge text. Tokenised the same way
+            as the prompt / error inputs (lowercase, identifier-shaped,
+            stop-words removed).
+
+    Returns:
+        Float overlap score in ``[0.0, 1.0]``.
+    """
+    if not snippet:
+        return 0.0
+    body = skill.body or ""
+    if not body:
+        return 0.0
+    snip_tokens = set(tokenize(snippet))
+    if not snip_tokens:
+        return 0.0
+    body_tokens = set(tokenize(body))
+    if not body_tokens:
+        return 0.0
+    overlap = snip_tokens & body_tokens
+    if not overlap:
+        return 0.0
+    # Saturate at 8 matching tokens. Skill body length variance is
+    # high (some are 30 lines, some 200) so a fractional-of-body
+    # denominator would over-weight short cheat-sheets. A flat cap
+    # gives every skill the same "good signal" threshold.
+    return min(1.0, len(overlap) / 8.0)
+
+
 def score_skill(
     skill: SkillLike,
     ctx: TurnContext,
     *,
     weights: ScoreWeights = DEFAULT_WEIGHTS,
 ) -> ScoreBreakdown:
-    """Combine the three axes into a single :class:`ScoreBreakdown`.
+    """Combine the four axes into a single :class:`ScoreBreakdown`.
 
     Returns the breakdown unchanged so debug callers can introspect the
     components; :class:`SkillInjector` sorts on ``.total``.
@@ -366,10 +434,20 @@ def score_skill(
     e = score_error(skill, ctx.last_error)
     i = score_intent(skill, ctx.prompt)
     r = score_recency(skill, ctx.turn_index, ctx.last_used)
+    k = score_knowledge(skill, ctx.knowledge_snippet)
     total = (
-        weights.error * e + weights.intent * i + weights.recency * r
+        weights.error * e
+        + weights.intent * i
+        + weights.recency * r
+        + weights.knowledge * k
     )
-    return ScoreBreakdown(error=e, intent=i, recency=r, total=total)
+    return ScoreBreakdown(
+        error=e,
+        intent=i,
+        recency=r,
+        knowledge=k,
+        total=total,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -469,6 +547,7 @@ class SkillInjector:
         self._turn_index: int = 0
         self._last_used: dict[str, int] = {}
         self._last_error: str = ""
+        self._last_knowledge: str = ""
         self._last_breakdown: dict[str, ScoreBreakdown] = {}
 
     # -- introspection ------------------------------------------------
@@ -539,6 +618,7 @@ class SkillInjector:
             last_error=self._last_error,
             turn_index=self._turn_index,
             last_used=dict(self._last_used),
+            knowledge_snippet=self._last_knowledge,
         )
         scored: list[tuple[ScoreBreakdown, int, SkillLike]] = []
         breakdown: dict[str, ScoreBreakdown] = {}
@@ -577,6 +657,23 @@ class SkillInjector:
         react to recent failures, not stale ones from five turns back.
         """
         self._last_error = error or ""
+
+    def update_knowledge(self, snippet: str) -> None:
+        """Set the most recent retrieved knowledge snippet for the knowledge axis.
+
+        The shrew loop calls this whenever an upstream RAG step
+        produces a new passage (for example: the ``knowledge_inject``
+        extension fetched a cheat-sheet, or a tool like
+        ``research_protocol`` returned a summary). Subsequent calls to
+        :meth:`select` will boost skills whose bodies overlap with the
+        snippet vocabulary.
+
+        Pass ``""`` to clear the snippet so a stale passage doesn't
+        bias future turns. The injector retains only the most recent
+        snippet (no ring buffer) — the same "react to recent signal,
+        not stale signal" posture as :meth:`record_turn`.
+        """
+        self._last_knowledge = snippet or ""
 
     # -- prompt rewriting ---------------------------------------------
 

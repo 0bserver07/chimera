@@ -38,6 +38,7 @@ from chimera.shrew.skill_injector import (
     install_into_session,
     score_error,
     score_intent,
+    score_knowledge,
     score_recency,
     score_skill,
     tokenize,
@@ -741,3 +742,126 @@ class TestCustomWeights:
         # Even with an error in flight, intent dominates because we
         # tuned the weight down. So grep-vs-ls wins.
         assert picked[0].name == "grep-vs-ls"
+
+
+# ---------------------------------------------------------------------------
+# 8. Knowledge axis (W14-6) — RAG-style content overlap
+# ---------------------------------------------------------------------------
+
+
+class TestScoreKnowledge:
+    def test_empty_snippet_returns_zero(
+        self, small_skill_set: list[FakeSkill],
+    ) -> None:
+        assert score_knowledge(small_skill_set[0], "") == 0.0
+
+    def test_no_overlap_returns_zero(
+        self, small_skill_set: list[FakeSkill],
+    ) -> None:
+        # Snippet about a domain unrelated to any mounted skill body.
+        snippet = "ferromagnetic resonance spectroscopy yields hyperfine"
+        assert score_knowledge(small_skill_set[0], snippet) == 0.0
+
+    def test_body_overlap_scores_above_zero(
+        self, small_skill_set: list[FakeSkill],
+    ) -> None:
+        # error-recovery body says "When a tool fails, read the error..."
+        skill = small_skill_set[0]
+        snippet = "When a tool fails, read the error and retry"
+        assert score_knowledge(skill, snippet) > 0.0
+
+    def test_saturates_at_eight_overlap(self) -> None:
+        # Skill with nine distinct identifier-shaped body tokens; the
+        # snippet contains all nine. Score caps at 1.0 even when the
+        # actual overlap exceeds eight.
+        skill = FakeSkill(
+            name="saturation",
+            description="d",
+            category="protocols",
+            body="alpha beta gamma delta epsilon zeta eta theta iota",
+            triggers=(),
+        )
+        snippet = "alpha beta gamma delta epsilon zeta eta theta iota"
+        assert score_knowledge(skill, snippet) == 1.0
+
+    def test_empty_body_returns_zero(self) -> None:
+        skill = FakeSkill(
+            name="empty",
+            description="d",
+            category="protocols",
+            body="",
+            triggers=(),
+        )
+        assert score_knowledge(skill, "any snippet content") == 0.0
+
+    def test_score_skill_threads_knowledge(
+        self, small_skill_set: list[FakeSkill],
+    ) -> None:
+        skill = small_skill_set[0]  # error-recovery
+        ctx = TurnContext(
+            prompt="x",
+            last_error="",
+            turn_index=0,
+            knowledge_snippet="When a tool fails read the error",
+        )
+        br = score_skill(skill, ctx)
+        assert br.knowledge > 0.0
+        # Total now includes the knowledge term.
+        expected = (
+            DEFAULT_WEIGHTS.error * br.error
+            + DEFAULT_WEIGHTS.intent * br.intent
+            + DEFAULT_WEIGHTS.recency * br.recency
+            + DEFAULT_WEIGHTS.knowledge * br.knowledge
+        )
+        assert br.total == pytest.approx(expected)
+
+
+class TestKnowledgeAxisIntegration:
+    def test_update_knowledge_drives_selection(
+        self, small_skill_set: list[FakeSkill],
+    ) -> None:
+        # Tune weights so knowledge dominates: a snippet that overlaps
+        # the error-recovery body should pull error-recovery to the top
+        # even on a generic prompt.
+        weights = ScoreWeights(error=0.0, intent=0.1, recency=0.0, knowledge=2.0)
+        inj = SkillInjector(small_skill_set, top_k=1, weights=weights)
+        inj.update_knowledge(
+            "When a tool fails, read the error, hypothesise, retry once."
+        )
+        picked = inj.select("a generic prompt")
+        assert picked[0].name == "error-recovery"
+
+    def test_update_knowledge_clear_resets(
+        self, small_skill_set: list[FakeSkill],
+    ) -> None:
+        # All weights zero EXCEPT knowledge — so without a snippet,
+        # every skill scores 0 (insertion order tie-break wins).
+        weights = ScoreWeights(error=0.0, intent=0.0, recency=0.0, knowledge=1.0)
+        inj = SkillInjector(small_skill_set, top_k=1, weights=weights)
+        inj.update_knowledge(
+            "When a tool fails, read the error, hypothesise, retry once."
+        )
+        first = inj.select("anything")
+        assert first[0].name == "error-recovery"
+        # Clear the snippet — fresh injector, no knowledge boost.
+        inj2 = SkillInjector(small_skill_set, top_k=1, weights=weights)
+        inj2.update_knowledge("")
+        second = inj2.select("anything")
+        # First-inserted skill wins on a tie.
+        assert second[0].name == small_skill_set[0].name
+
+    def test_knowledge_default_weight_is_meaningful(self) -> None:
+        # Locked default — if someone changes DEFAULT_WEIGHTS.knowledge
+        # the test breaks loudly so they remember to update docs.
+        assert DEFAULT_WEIGHTS.knowledge == 0.4
+
+    def test_score_breakdown_has_knowledge_field(self) -> None:
+        # Make sure ScoreBreakdown carries the new field.
+        br = ScoreBreakdown(
+            error=0.0, intent=0.0, recency=0.0, total=0.0, knowledge=0.5,
+        )
+        assert br.knowledge == 0.5
+
+    def test_turn_context_knowledge_default_is_empty(self) -> None:
+        ctx = TurnContext(prompt="hi")
+        assert ctx.knowledge_snippet == ""
