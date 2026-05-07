@@ -36,48 +36,41 @@ CLI it shows up in first.
 
 ## Phase overview
 
-```
-    ┌──────────────────────────────────────────────────────────┐
-    │ Phase 7: Command + Skill surface                          │
-    │   slash commands, skills, flow workflows                  │
-    └──────────────────────────────────────────────────────────┘
-                             │
-    ┌──────────────────────────────────────────────────────────┐
-    │ Phase 6: Hook system                                      │
-    │   PreToolUse / PostToolUse / lifecycle / async registry   │
-    └──────────────────────────────────────────────────────────┘
-                             │
-    ┌──────────────────────────────────────────────────────────┐
-    │ Phase 5: System prompt + context assembly                 │
-    │   layered prompts, cache-safe params, tool deferral       │
-    └──────────────────────────────────────────────────────────┘
-                             │
-    ┌──────────────────────────────────────────────────────────┐
-    │ Phase 4: Permission system                                │
-    │   modes, rules, denial tracking, sandbox adapter          │
-    └──────────────────────────────────────────────────────────┘
-                             │
-    ┌──────────────────────────────────────────────────────────┐
-    │ Phase 3: State + persistence                              │
-    │   eventlog, snapshots, content replacement, file cache    │
-    └──────────────────────────────────────────────────────────┘
-                             │
-    ┌──────────────────────────────────────────────────────────┐
-    │ Phase 2: Sub-agent architecture                           │
-    │   isolation tiers, spawner, task manager, builtin agents  │
-    └──────────────────────────────────────────────────────────┘
-                             │
-    ┌──────────────────────────────────────────────────────────┐
-    │ Phase 1: Core loop                                        │
-    │   AgentLoop async generator, streaming executor, recovery │
-    └──────────────────────────────────────────────────────────┘
+The nine phases form a stack: phases 1 through 7 layer downward, each
+building on the one below; phases 8 and 9 cross-cut the stack rather than
+sitting inside it. The diagram below traces the load-bearing edges — read
+top-down, every arrow says "depends on the layer below me at runtime."
 
-    Phase 8: Production infrastructure   ── threads through all phases ──
-      auth, secrets, streaming, feature flags, MCP / LSP / ACP, plugins
+```mermaid
+graph TD
+    P7["Phase 7 — Command + Skill surface<br/>slash commands, skills, flow workflows"]
+    P6["Phase 6 — Hook system<br/>Pre/PostToolUse, lifecycle, async registry"]
+    P5["Phase 5 — System prompt + context<br/>layered prompts, cache-safe, tool deferral"]
+    P4["Phase 4 — Permission system<br/>modes, rules, denial tracking, sandbox"]
+    P3["Phase 3 — State + persistence<br/>eventlog, snapshots, content replacement"]
+    P2["Phase 2 — Sub-agent architecture<br/>isolation tiers, spawner, task manager"]
+    P1["Phase 1 — Core loop<br/>AgentLoop, streaming executor, recovery"]
 
-    Phase 9: Snapshot / format / patch   ── plugs into phases 1, 3, 4 ──
-      undo, auto-formatter, structured multi-file patching
+    P8["Phase 8 — Production infrastructure<br/>auth, secrets, MCP/LSP/ACP, plugins"]
+    P9["Phase 9 — Snapshot / format / patch<br/>undo, auto-format, structured patching"]
+
+    P7 --> P6 --> P5 --> P4 --> P3 --> P2 --> P1
+    P8 -.threads through.-> P1
+    P8 -.threads through.-> P3
+    P8 -.threads through.-> P7
+    P9 -.plugs into.-> P1
+    P9 -.plugs into.-> P3
+    P9 -.plugs into.-> P4
+
+    classDef stack fill:#2563eb,stroke:#60a5fa,color:#fff
+    classDef cross fill:#d97706,stroke:#fbbf24,color:#000
+    class P1,P2,P3,P4,P5,P6,P7 stack
+    class P8,P9 cross
 ```
+
+*Caption.* Solid edges = load-bearing call-graph dependencies. Dotted
+edges = cross-cutting attachment points (phases 8 and 9 don't sit in the
+stack — they thread through several layers at once).
 
 The dependency edges are real. Phase 2 needs Phase 1's `AbortSignal`
 to give sub-agents linked-but-cancellable children. Phase 4's permission
@@ -462,6 +455,60 @@ file.
 
 ---
 
+## Provider routing
+
+Phase 8 wires `chimera/providers/factory.create_provider()` in front of
+every loop. When the caller passes only a model id (no `provider_type`),
+the factory infers the provider family from the model-name prefix and
+local environment hints. The diagram below mirrors `_infer_provider()` in
+`chimera/providers/factory.py` exactly — same precedence, same fallback
+chain, same env-var override.
+
+```mermaid
+flowchart TD
+    Start(["model id<br/>(e.g. claude-sonnet-4, glm-5, gpt-4o)"])
+    Start --> Local{"prefix is<br/>vllm/* or sglang/*?"}
+    Local -- yes --> Compat["compatible provider<br/>(local OpenAI-compat server)"]
+    Local -- no --> EnvOverride{"ANTHROPIC_BASE_URL or<br/>ANTHROPIC_AUTH_TOKEN set?"}
+
+    EnvOverride -- yes --> NotAnth{"prefix in gpt / o1 / o3<br/>/ codex / gemini?"}
+    NotAnth -- no --> Anth["anthropic provider<br/>(routed via env URL)"]
+    NotAnth -- yes --> Prefix
+    EnvOverride -- no --> Prefix{"model prefix<br/>match?"}
+
+    Prefix -- "claude-*" --> Anth
+    Prefix -- "glm-*" --> Anth
+    Prefix -- "kimi-* / moonshot-*" --> Anth
+    Prefix -- "gpt-* / o1 / o3 / codex-*" --> OAI["openai provider"]
+    Prefix -- "gemini-*" --> Google["google provider"]
+    Prefix -- "grok-*" --> XAI["xai provider<br/>(OpenAI-compat to api.x.ai)"]
+    Prefix -- "llama* / mistral* / qwen* / phi*" --> Ollama["ollama provider"]
+    Prefix -- no match --> Catalog{"in default<br/>ProviderCatalog?"}
+
+    Catalog -- yes --> CatalogResult["catalog.provider_type"]
+    Catalog -- no --> OpenAIEnv{"OPENAI_API_KEY set?"}
+    OpenAIEnv -- yes --> OAI
+    OpenAIEnv -- no --> Err["ValueError:<br/>cannot infer provider"]
+
+    classDef terminal fill:#15803d,stroke:#86efac,color:#fff
+    classDef error fill:#b91c1c,stroke:#fecaca,color:#fff
+    classDef decision fill:#1e40af,stroke:#93c5fd,color:#fff
+    class Anth,OAI,Google,XAI,Ollama,Compat,CatalogResult terminal
+    class Err error
+    class Local,EnvOverride,NotAnth,Prefix,Catalog,OpenAIEnv decision
+```
+
+*Caption.* The first decision on `vllm/` / `sglang/` prefixes is
+unconditional — those namespaces are reserved for local self-hosted
+servers and short-circuit the rest of the chain. Env-var override wins
+over prefix-match when both apply (so a user with an Anthropic-compat
+endpoint in their environment can run `glm-5`, `kimi-k2`, and similar
+through that one URL), but `gpt-*` / `o1` / `o3` / `codex-*` / `gemini-*`
+prefixes are protected — they always go to their native provider
+regardless of env vars, because the wire formats are incompatible.
+
+---
+
 ## How the seven CLIs compose from these phases
 
 Each CLI is a thin argparse + small per-CLI defaults file over the
@@ -497,6 +544,67 @@ defaults (step budget, tool restriction, model chain), which slash
 commands are exposed, and which Phase-8 transports the CLI fronts
 (HTTP+SSE for otter, ACP-default for ferret, RPC + SDK for weasel,
 shell-mode toggle for stoat, parity tracker for badger).
+
+The composition graph below is the same idea as the table, but read as
+"which Phase-8 transport does each CLI add on top of the shared nine-phase
+core." All seven CLIs share phases 1, 3, 5, 6, 7, 9; phase 2 is on for
+six of seven (weasel disables sub-agents by design); phase 4 differs in
+preset (ferret adds OS sandbox); phase 8 is where each CLI plugs in its
+own transport surface.
+
+```mermaid
+graph LR
+    Core["Shared nine-phase core<br/>(phases 1, 3, 5, 6, 7, 9)"]
+
+    Mink["mink — TUI"]
+    Otter["otter — HTTP+SSE / ACP serve"]
+    Ferret["ferret — sandbox × approval"]
+    Weasel["weasel — RPC + embedded SDK"]
+    Shrew["shrew — small-model harness"]
+    Stoat["stoat — shell-mode toggle"]
+    Badger["badger — parity-tracker"]
+
+    Core --> Mink
+    Core --> Otter
+    Core --> Ferret
+    Core --> Weasel
+    Core --> Shrew
+    Core --> Stoat
+    Core --> Badger
+
+    P2off["Phase 2 disabled<br/>(no sub-agents)"]
+    P4sandbox["Phase 4: + sandbox adapter"]
+    P4tight["Phase 4: harness-tight defaults"]
+    P8http["Phase 8: HTTP+SSE server"]
+    P8sdk["Phase 8: RPC + embedded SDK"]
+    P8bench["Phase 8: bench harness"]
+    P8moon["Phase 8: Moonshot chain"]
+    P8parity["Phase 8: parity tracker"]
+    P8sandbox["Phase 8: cloud bridge"]
+
+    Otter --> P8http
+    Ferret --> P4sandbox
+    Ferret --> P8sandbox
+    Weasel --> P2off
+    Weasel --> P8sdk
+    Shrew --> P8bench
+    Stoat --> P8moon
+    Badger --> P4tight
+    Badger --> P8parity
+
+    classDef coreBox fill:#1e40af,stroke:#93c5fd,color:#fff
+    classDef cli fill:#7c3aed,stroke:#c4b5fd,color:#fff
+    classDef ext fill:#d97706,stroke:#fbbf24,color:#000
+    class Core coreBox
+    class Mink,Otter,Ferret,Weasel,Shrew,Stoat,Badger cli
+    class P2off,P4sandbox,P4tight,P8http,P8sdk,P8bench,P8moon,P8parity,P8sandbox ext
+```
+
+*Caption.* Solid edges from `Core` show every CLI inheriting the shared
+core. Outgoing edges from each CLI box capture the per-CLI deltas: which
+phases get new defaults (`P4: sandbox`, `P4: harness-tight`), which
+phases are disabled (`P2: off` for weasel), and which Phase-8 transports
+front the CLI (HTTP+SSE, RPC+SDK, bench harness, parity tracker, etc.).
 
 For the per-CLI quickstart and parity row, see each CLI's docs:
 

@@ -101,6 +101,66 @@ Compile natural-language specs into portable `.chi` bundles.
 - [`swe_bench_docker.py`](benchmarks/swe_bench_docker.py) — SWE-bench with
   per-instance Docker isolation.
 
+## Codename CLI quickstarts
+
+One runnable quickstart per Chimera CLI codename. Each script calls
+`chimera <cli>` via `subprocess.run` so the example mirrors what a shell
+user would actually type. All scripts skip gracefully when the
+underlying credentials or daemons are missing — they print a friendly
+message and exit 0 instead of crashing.
+
+- [`mink_quickstart.py`](mink_quickstart.py) — TUI-first CLI. One-shot
+  `-p` plus `chimera mink runs list`. Skips when no provider credential
+  is set.
+  - Run: `python examples/mink_quickstart.py --model glm-5`
+  - Output: streamed agent output, then a table of persisted runs.
+
+- [`otter_quickstart.py`](otter_quickstart.py) — Multi-session HTTP CLI.
+  One-shot `-p`, then spawns `chimera otter serve --port 5173
+  --auth-token test-token`, sends `POST /session` and
+  `POST /session/<id>/message`, and graceful-stops the server.
+  Prefers the per-session token (B8) when present, falls back to the
+  master token. Skips when no credential is set.
+  - Run: `python examples/otter_quickstart.py`
+  - Output: HTTP exchange dump + clean teardown.
+
+- [`ferret_quickstart.py`](ferret_quickstart.py) — Sandbox-first CLI.
+  Demonstrates `--sandbox` and `--approval`: a `read-only` listing then
+  a `workspace-write` no-op echo. Skips when no credential is set.
+  - Run: `python examples/ferret_quickstart.py`
+  - Output: two short transcripts showing the sandbox escalation.
+
+- [`weasel_quickstart.py`](weasel_quickstart.py) — RPC + SDK CLI. Always
+  runs `--mode sdk` (no LLM call). Adds a `-p` one-shot when a
+  credential is set. See [`weasel_sdk_quickstart.py`](weasel_sdk_quickstart.py)
+  for in-process embedding and [`weasel_live_smoke.py`](weasel_live_smoke.py)
+  for the full RPC test.
+  - Run: `python examples/weasel_quickstart.py`
+
+- [`shrew_quickstart.py`](shrew_quickstart.py) — Small-models CLI. Pins
+  `--max-steps 30` and `--allowed-tools "Read,Write,Edit,Bash"`; skills
+  are auto-discovered from `chimera/shrew/skills/` and
+  `~/.shrew/skills/` at startup. Always runs `--list-models`; the `-p`
+  demo is skipped when neither a local Ollama daemon (port 11434) nor
+  a remote credential is available.
+  - Run: `python examples/shrew_quickstart.py`
+
+- [`stoat_quickstart.py`](stoat_quickstart.py) — Shell-first CLI. Drives
+  the `-p` and `-p --json` surfaces. Documents why `--shell-mode` is
+  not exercised here (interactive REPL is hard to script reliably).
+  Skips when no credential is set.
+  - Run: `python examples/stoat_quickstart.py`
+
+- [`badger_quickstart.py`](badger_quickstart.py) — Strict / parity CLI.
+  Always runs `chimera badger parity --against PARITY.json` against a
+  temp schema (no LLM call). Adds a `-p --rerun-on-failure --max-reruns
+  1` demo when a credential is set.
+  - Run: `python examples/badger_quickstart.py`
+
+For deeper reading on any CLI, follow the corresponding doc tree:
+`docs/mink/`, `docs/otter/`, `docs/ferret/`, `docs/weasel/`,
+`docs/shrew/`, `docs/stoat/`, `docs/badger/`.
+
 ## Ollama setup notes
 
 All `ollama_*` scripts default to `kimi-k2.6` against `https://ollama.com`
