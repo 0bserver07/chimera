@@ -86,7 +86,10 @@ class _BashStub(BaseTool):
 
 
 def _build_emitter(callback) -> HookEmitter:
-    matcher = HookMatcher(hooks=[FunctionHook(callback=callback)])
+    matcher = HookMatcher(
+        hooks=[FunctionHook(callback=callback)],
+        events=["PreToolUse"],
+    )
     return HookEmitter(executor=HookExecutor(), matchers=[matcher])
 
 

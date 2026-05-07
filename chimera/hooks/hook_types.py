@@ -120,12 +120,19 @@ class FunctionHook:
 
 @dataclass
 class HookMatcher:
-    """Associates a matcher pattern with a list of hooks."""
+    """Associates a matcher pattern with a list of hooks.
+
+    The ``events`` field constrains which lifecycle events fire this matcher.
+    ``None`` matches every event (legacy behavior). A list of event names
+    (e.g. ``["PreToolUse"]``) restricts the matcher to those events.
+    Names use the upstream string form (``HookEvent.value``).
+    """
 
     hooks: list[CommandHook | PromptHook | FunctionHook]
     matcher: str | None = None
     source: str = "user"
     plugin_name: str | None = None
+    events: list[str] | None = None
 
 
 # Type alias for the three hook kinds.

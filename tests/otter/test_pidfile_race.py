@@ -249,13 +249,18 @@ def test_cross_process_lock_blocks(tmp_path: Path) -> None:
 
 
 def test_server_pidfile_swallows_locked(tmp_path: Path) -> None:
-    """:meth:`OtterServer._maybe_write_pidfile` must not crash on lock.
+    """Inner contract: :func:`write_pidfile` raises :class:`PidfileLocked`.
 
-    The server's wrapper catches every exception so a contended
-    pidfile never tanks the serving path — this test asserts the
-    contract by hammering :func:`write_pidfile` from the server-style
-    try/except envelope (the same one in
-    :mod:`chimera.otter.server`).
+    Originally (waves 9–11) the server's wrapper caught every exception
+    so a contended pidfile never tanked the serving path. Wave 13
+    (W13-E3) replaced that bare ``except`` with a
+    :class:`PidfileLocked`-specific catch that prints a stderr
+    breadcrumb and exits ``rc=2`` — see
+    ``tests/otter/test_pidfile_error_surface.py`` for the new
+    server-level behaviour. This test now only pins the *inner* invariant
+    that ``write_pidfile`` raises :class:`PidfileLocked` (and that the
+    exception is catchable as ``Exception``), which the server callsite
+    relies on.
     """
     write_pidfile(
         prefix="otter",

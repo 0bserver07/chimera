@@ -21,7 +21,75 @@ if TYPE_CHECKING:
     from chimera.core.cancellation import CancellationToken
     from chimera.core.loop_config import LoopConfig
     from chimera.core.loop_events import LoopEvent
+    from chimera.hooks.events import HookEvent as _HookEvent
     from chimera.streaming.base import StreamHandler
+
+
+def _fire_loop_hook(
+    config: "LoopConfig | None",
+    event: "_HookEvent",
+    **kwargs: object,
+) -> None:
+    """Fire a loop-lifecycle hook synchronously, never raising.
+
+    Used to emit SessionStart / SessionEnd / Stop / StopFailure /
+    UserPromptSubmit / Notification at the canonical points of
+    :class:`ReAct.iter_steps` and :meth:`ReAct.async_iter_steps`.
+
+    The emitter is reached via ``config.hook_emitter``. When no emitter
+    is configured the call is a cheap no-op so the legacy
+    zero-config posture is preserved. Exceptions raised by hooks are
+    swallowed because lifecycle emission must never break the loop.
+    """
+    if config is None or config.hook_emitter is None:
+        return
+    if not getattr(config.hook_emitter, "active", True):
+        return
+    try:
+        config.hook_emitter.emit_sync(event, **kwargs)
+    except Exception:
+        # Hook failures must never break the agent loop.
+        pass
+
+
+async def _fire_loop_hook_async(
+    config: "LoopConfig | None",
+    event: "_HookEvent",
+    **kwargs: object,
+) -> None:
+    """Async sibling of :func:`_fire_loop_hook` for ``async_iter_steps``."""
+    if config is None or config.hook_emitter is None:
+        return
+    if not getattr(config.hook_emitter, "active", True):
+        return
+    try:
+        await config.hook_emitter.emit(event, **kwargs)
+    except Exception:
+        pass
+
+
+def _last_user_prompt(context: "Context") -> str | None:
+    """Return the most recent user message text from *context*, if any."""
+    try:
+        for msg in reversed(list(context.to_messages())):
+            role = getattr(msg, "role", None)
+            if role == "user":
+                content = getattr(msg, "content", None)
+                if isinstance(content, str):
+                    return content
+                # If content is a list of blocks (Anthropic-style), join text parts.
+                if isinstance(content, list):
+                    parts: list[str] = []
+                    for block in content:
+                        if isinstance(block, dict):
+                            text = block.get("text") or block.get("content")
+                            if isinstance(text, str):
+                                parts.append(text)
+                    if parts:
+                        return "\n".join(parts)
+        return None
+    except Exception:
+        return None
 
 
 class ReAct:
@@ -88,6 +156,15 @@ class ReAct:
             from chimera.events.types import AgentStartEvent
             self.config.event_bus.publish(AgentStartEvent(max_steps=self.max_steps))
 
+        # -- Lifecycle hooks: SessionStart + UserPromptSubmit --
+        from chimera.hooks.events import HookEvent as _HE
+        _fire_loop_hook(self.config, _HE.SESSION_START)
+        _user_prompt = _last_user_prompt(context)
+        if _user_prompt is not None:
+            _fire_loop_hook(
+                self.config, _HE.USER_PROMPT_SUBMIT, user_prompt=_user_prompt,
+            )
+
         for _ in range(self.max_steps):
             # -- Cancellation check --
             if self.config and self.config.cancellation:
@@ -98,6 +175,11 @@ class ReAct:
                     if self.config and self.config.event_bus:
                         from chimera.events.types import CancellationEvent
                         self.config.event_bus.publish(CancellationEvent(at_step=steps))
+                    _fire_loop_hook(
+                        self.config, _HE.STOP_FAILURE,
+                        tool_error="Cancelled",
+                    )
+                    _fire_loop_hook(self.config, _HE.SESSION_END)
                     yield StepResult(
                         message=Message.assistant("Operation cancelled"),
                         done=True, step=steps, cost=0.0,
@@ -190,6 +272,11 @@ class ReAct:
                     if wire:
                         from chimera.wire.types import StepEnd
                         wire.send(StepEnd(step=steps))
+                    _fire_loop_hook(
+                        self.config, _HE.STOP_FAILURE,
+                        tool_error="Cost limit exceeded",
+                    )
+                    _fire_loop_hook(self.config, _HE.SESSION_END)
                     yield StepResult(
                         message=Message.assistant(response.content),
                         done=True,
@@ -228,6 +315,13 @@ class ReAct:
                 if wire:
                     from chimera.wire.types import StepEnd
                     wire.send(StepEnd(step=steps))
+                # -- Lifecycle hooks: Stop + Notification + SessionEnd --
+                _fire_loop_hook(self.config, _HE.STOP)
+                _fire_loop_hook(
+                    self.config, _HE.NOTIFICATION,
+                    tool_output=response.content,
+                )
+                _fire_loop_hook(self.config, _HE.SESSION_END)
                 yield StepResult(
                     message=Message.assistant(response.content),
                     tool_calls=[],
@@ -263,6 +357,11 @@ class ReAct:
                 if wire:
                     from chimera.wire.types import StepEnd
                     wire.send(StepEnd(step=steps))
+                _fire_loop_hook(
+                    self.config, _HE.STOP_FAILURE,
+                    tool_error="Loop detected",
+                )
+                _fire_loop_hook(self.config, _HE.SESSION_END)
                 yield StepResult(
                     message=Message.assistant(response.content),
                     tool_calls=response.tool_calls,
@@ -379,6 +478,10 @@ class ReAct:
         if wire:
             from chimera.wire.types import StepEnd
             wire.send(StepEnd(step=steps))
+        _fire_loop_hook(
+            self.config, _HE.STOP_FAILURE, tool_error="Max steps reached",
+        )
+        _fire_loop_hook(self.config, _HE.SESSION_END)
         yield StepResult(
             message=Message.assistant("Max steps reached"),
             tool_calls=[],
@@ -500,6 +603,15 @@ class ReAct:
         # (which goes through async_run → async_iter_steps, not iter_steps).
         handler: StreamHandler | None = self.config.handler if self.config else None
 
+        # -- Lifecycle hooks: SessionStart + UserPromptSubmit --
+        from chimera.hooks.events import HookEvent as _HE
+        await _fire_loop_hook_async(self.config, _HE.SESSION_START)
+        _user_prompt = _last_user_prompt(context)
+        if _user_prompt is not None:
+            await _fire_loop_hook_async(
+                self.config, _HE.USER_PROMPT_SUBMIT, user_prompt=_user_prompt,
+            )
+
         for _ in range(self.max_steps):
             # -- Cancellation check --
             if self.config and self.config.cancellation:
@@ -507,6 +619,10 @@ class ReAct:
                 try:
                     self.config.cancellation.check()
                 except OperationCancelled:
+                    await _fire_loop_hook_async(
+                        self.config, _HE.STOP_FAILURE, tool_error="Cancelled",
+                    )
+                    await _fire_loop_hook_async(self.config, _HE.SESSION_END)
                     yield StepResult(
                         message=Message.assistant("Operation cancelled"),
                         done=True, step=steps, cost=0.0,
@@ -532,6 +648,11 @@ class ReAct:
                 try:
                     self.config.cost_tracker.record(step_cost, model=provider.model_name)
                 except CostLimitExceeded:
+                    await _fire_loop_hook_async(
+                        self.config, _HE.STOP_FAILURE,
+                        tool_error="Cost limit exceeded",
+                    )
+                    await _fire_loop_hook_async(self.config, _HE.SESSION_END)
                     yield StepResult(
                         message=Message.assistant(response.content),
                         done=True,
@@ -556,6 +677,13 @@ class ReAct:
                 if event_bus:
                     from chimera.events.types import StepEvent
                     event_bus.publish(StepEvent(step_number=steps, content=response.content))
+                # -- Lifecycle hooks: Stop + Notification + SessionEnd --
+                await _fire_loop_hook_async(self.config, _HE.STOP)
+                await _fire_loop_hook_async(
+                    self.config, _HE.NOTIFICATION,
+                    tool_output=response.content,
+                )
+                await _fire_loop_hook_async(self.config, _HE.SESSION_END)
                 yield StepResult(
                     message=Message.assistant(response.content),
                     tool_calls=[],
@@ -578,6 +706,10 @@ class ReAct:
                     response.tool_calls, tool_map, context, env, self.config,
                 )
             except LoopBreak:
+                await _fire_loop_hook_async(
+                    self.config, _HE.STOP_FAILURE, tool_error="Loop detected",
+                )
+                await _fire_loop_hook_async(self.config, _HE.SESSION_END)
                 yield StepResult(
                     message=Message.assistant(response.content),
                     tool_calls=response.tool_calls,
@@ -683,6 +815,10 @@ class ReAct:
                 context.messages = compacted
 
         # Max steps
+        await _fire_loop_hook_async(
+            self.config, _HE.STOP_FAILURE, tool_error="Max steps reached",
+        )
+        await _fire_loop_hook_async(self.config, _HE.SESSION_END)
         yield StepResult(
             message=Message.assistant("Max steps reached"),
             tool_calls=[],

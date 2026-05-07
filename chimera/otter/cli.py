@@ -1072,11 +1072,17 @@ def _build_plugin_hook_emitter(plugin_hooks: list[Any]) -> Any | None:
             cwd=str(raw.working_dir) if raw.working_dir else None,
             extra_env=dict(raw.env) if raw.env else {},
         )
+        # Honour the plugin's declared event_type (e.g. "PreToolUse"). When
+        # absent, fall back to None which preserves the legacy "fire on every
+        # event" behaviour.
+        event_type = getattr(raw, "event_type", None)
+        events_filter = [str(event_type)] if event_type else None
         matchers.append(
             HookMatcher(
                 hooks=[cmd],
                 matcher=None,
                 source="plugin",
+                events=events_filter,
             ),
         )
 

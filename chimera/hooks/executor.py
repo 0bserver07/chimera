@@ -410,9 +410,22 @@ class HookExecutor:
     def _matches(matcher: HookMatcher, input_data: HookInput) -> bool:
         """Check whether this matcher applies to the given input.
 
-        ``None`` matcher matches everything; otherwise uses fnmatch
-        against the tool name.
+        Two filters apply, both optional:
+        - ``matcher.events`` (None = match all events; otherwise the input's
+          event must be in the list, compared via ``HookEvent.value``).
+        - ``matcher.matcher`` (None = match all tool names; otherwise an
+          fnmatch pattern against ``input_data.tool_name``).
         """
+        # Event filter (None means "match all events").
+        if matcher.events is not None:
+            event_val = (
+                input_data.event.value
+                if hasattr(input_data.event, "value")
+                else str(input_data.event)
+            )
+            if event_val not in matcher.events:
+                return False
+        # Tool-name filter (None means "match all tools").
         if matcher.matcher is None:
             return True
         if input_data.tool_name is None:

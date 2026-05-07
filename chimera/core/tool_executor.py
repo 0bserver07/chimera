@@ -82,6 +82,75 @@ def _fire_pre_tool_use_hook(
     return result_box["out"]
 
 
+def _fire_post_tool_use_hook(
+    tc: ToolCall,
+    output: str,
+    success: bool,
+    config: LoopConfig | None,
+) -> "HookOutput | None":
+    """Fire the PostToolUse / PostToolUseFailure hook chain synchronously.
+
+    Mirrors :func:`_fire_pre_tool_use_hook`. Picks
+    :data:`HookEvent.POST_TOOL_USE` for ``success`` and
+    :data:`HookEvent.POST_TOOL_USE_FAILURE` otherwise. Failures carry the
+    error text under ``tool_error``; successes carry the output under
+    ``tool_output``.
+
+    Returns ``None`` when no emitter is configured.
+    """
+    if config is None or config.hook_emitter is None:
+        return None
+    if not getattr(config.hook_emitter, "active", True):
+        return None
+
+    from collections.abc import Coroutine
+    from typing import Any as _Any
+
+    from chimera.hooks.events import HookEvent
+
+    emitter = config.hook_emitter
+    event = HookEvent.POST_TOOL_USE if success else HookEvent.POST_TOOL_USE_FAILURE
+
+    def coro_factory() -> Coroutine[_Any, _Any, "HookOutput | None"]:
+        if success:
+            return emitter.emit(
+                event,
+                tool_name=tc.name,
+                tool_input=dict(tc.arguments),
+                tool_output=output,
+            )
+        return emitter.emit(
+            event,
+            tool_name=tc.name,
+            tool_input=dict(tc.arguments),
+            tool_error=output,
+        )
+
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop is None:
+        return asyncio.run(coro_factory())
+
+    import threading
+
+    result_box: dict[str, "HookOutput | None"] = {"out": None}
+
+    def _runner() -> None:
+        new_loop = asyncio.new_event_loop()
+        try:
+            result_box["out"] = new_loop.run_until_complete(coro_factory())
+        finally:
+            new_loop.close()
+
+    th = threading.Thread(target=_runner, daemon=True)
+    th.start()
+    th.join()
+    return result_box["out"]
+
+
 def _apply_pre_tool_use_hook(
     tc: ToolCall, config: LoopConfig | None,
 ) -> tuple[ToolCall, HookOutput | None, str | None]:
@@ -246,6 +315,14 @@ def execute_tool_calls(
 
         context.add(Message.tool(tc.id, content))
 
+        # -- PostToolUse / PostToolUseFailure hook --
+        _fire_post_tool_use_hook(
+            tc,
+            content if result.success else str(result.error or content),
+            result.success,
+            config,
+        )
+
         # -- Audit log --
         if config and config.audit_log:
             config.audit_log.record(
@@ -360,8 +437,20 @@ def execute_tool_calls_incremental(
         if config and config.cancellation:
             config.cancellation.check()
 
-        # -- Permission check --
-        if config and config.permissions:
+        # -- PreToolUse hook (W13-G4: was missing on this code path) --
+        # Without this, the canonical Claude-Code PreToolUse contract never
+        # fires for the sync incremental executor used by ``ReAct.run`` —
+        # only the async + non-incremental siblings emitted before now.
+        tc, hook_out, hook_denial = _apply_pre_tool_use_hook(tc, config)
+        if hook_denial is not None:
+            context.add(Message.tool(tc.id, f"Blocked by hook: {hook_denial}"))
+            tr_denied = ToolResult(output="", error=f"Blocked by hook: {hook_denial}")
+            result.results.append(tr_denied)
+            continue
+        hook_decision = hook_out.permission_decision if hook_out else None
+
+        # -- Permission check (skipped iff hook returned permissionDecision) --
+        if config and config.permissions and hook_decision not in {"allow", "deny"}:
             from chimera.permissions.base import PermissionAction
 
             action = config.permissions.evaluate(tc.name, tc.arguments)
@@ -444,6 +533,14 @@ def execute_tool_calls_incremental(
         context.add(Message.tool(tc.id, content))
         result.results.append(tr)
         result.executed += 1
+
+        # -- PostToolUse / PostToolUseFailure hook --
+        _fire_post_tool_use_hook(
+            tc,
+            content if tr.success else str(tr.error or content),
+            tr.success,
+            config,
+        )
 
         # -- Wire: status update --
         if config and config.wire:
@@ -712,6 +809,14 @@ async def async_execute_tool_calls_incremental(
         context.add(Message.tool(tc.id, content))
         result.results.append(tr)
         result.executed += 1
+
+        # -- PostToolUse / PostToolUseFailure hook --
+        _fire_post_tool_use_hook(
+            tc,
+            content if tr.success else str(tr.error or content),
+            tr.success,
+            config,
+        )
 
         # -- Wire: status update --
         if config and config.wire:
