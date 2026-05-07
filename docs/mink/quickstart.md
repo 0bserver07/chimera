@@ -271,6 +271,28 @@ pipelines.
 
 Everything is local-only and plaintext. No remote telemetry.
 
+## Permission mode (5-mode standard)
+
+Mink's `--permission-mode` flag now accepts both the historical
+ecosystem-parity choices **and** the cross-CLI five-mode standard
+(shared with `chimera ferret` and `chimera badger`):
+
+| Mode         | Reads | Edits | Bash / Git | Notes                                |
+| ------------ | ----- | ----- | ---------- | ------------------------------------ |
+| `read-only`  | allow | deny  | deny       | New name for `plan`.                 |
+| `suggest`    | allow | ask   | ask        | New name for `default`.              |
+| `auto`       | allow | allow | ask        | New name for `acceptEdits`.          |
+| `yolo`       | allow | allow | allow      | New name for `bypassPermissions`.    |
+| `strict`     | ask   | ask   | ask        | Confirm every tool call.             |
+
+Both spelling families work — `--permission-mode plan` and
+`--permission-mode read-only` produce identical policies. Use whichever
+is easier to remember. The 5-mode names are recommended for new
+scripts because they match the flag values you would type at
+`chimera ferret` and `chimera badger`. See
+[`permissions.md`](permissions.md) for the full mapping table and
+[`settings.md`](settings.md) for the matching settings-file keys.
+
 ## What to do if it doesn't work
 
 If `chimera mink` errors at startup or hangs on the first call, walk

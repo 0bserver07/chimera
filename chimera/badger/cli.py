@@ -48,6 +48,12 @@ _VALID_SUBCOMMANDS = (
     "parity",
 )
 _VALID_SUB_ACTIONS = (None, "list", "show", "humaneval", "tau-bench")
+# WHY (G3, w13): the cross-CLI ``--permission-mode`` 5-mode surface.
+# ``read-only`` / ``suggest`` / ``auto`` / ``yolo`` / ``strict`` mirrors
+# the spelling the other Chimera CLIs (ferret, mink) ship. Maps onto
+# :class:`chimera.permissions.modes.ApprovalMode` and selects a preset
+# :class:`chimera.permissions.base.PermissionPolicy` via ``policy_for_mode``.
+_VALID_PERMISSION_MODES = ("read-only", "suggest", "auto", "yolo", "strict")
 
 # A10-W11: parser ref for ``--help-long`` rendering and the per-flag
 # long-form descriptions printed below the standard help.
@@ -82,6 +88,13 @@ _LONG_HELP: dict[str, str] = {
         "Comma-separated tool names to allow (case-insensitive). Empty "
         "= every tool. The harness-rewrite default is the full set; "
         "restrict here for sandbox-like discipline."
+    ),
+    "--permission-mode": (
+        "5-mode approval surface (cross-CLI standard). 'read-only' "
+        "denies all writes; 'suggest' allows reads and asks for "
+        "writes/shell; 'auto' allows reads + edits and asks for "
+        "shell; 'yolo' approves everything; 'strict' asks for every "
+        "tool call (including reads). Default: suggest."
     ),
     "--rerun-on-failure": (
         "When the agent's first attempt shows tell-tale failure markers "
@@ -259,6 +272,18 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         metavar="N",
         help="Extra attempts when --rerun-on-failure (default: 2).",
     )
+    # WHY (G3, w13): cross-CLI ``--permission-mode`` 5-mode surface.
+    # Default = ``suggest`` (allow reads, ask writes) — matches the
+    # harness-rewrite "show your work" posture without locking the
+    # agent out of side effects entirely.
+    behavior.add_argument(
+        "--permission-mode",
+        dest="permission_mode",
+        choices=list(_VALID_PERMISSION_MODES),
+        default="suggest",
+        metavar="MODE",
+        help="5-mode approval (default: suggest).",
+    )
     output.add_argument(
         "--no-rich",
         action="store_true",
@@ -425,6 +450,48 @@ def _build_provider(args: argparse.Namespace) -> Any:
 
 
 # ---------------------------------------------------------------------------
+# Permission-mode resolution (G3, w13)
+# ---------------------------------------------------------------------------
+
+
+def _resolve_badger_permissions(args: argparse.Namespace) -> Any:
+    """Resolve badger's permission policy from ``--permission-mode``.
+
+    badger only exposes the 5-mode standard surface (no legacy
+    ``--approval`` flag). Routes through
+    :func:`chimera.permissions.modes.policy_for_mode` so the live
+    :class:`~chimera.permissions.base.PermissionPolicy` matches what
+    ferret and mink produce for the same flag value.
+
+    A malformed mode degrades to ``None`` (default LoopConfig) with a
+    stderr warning rather than crashing the runner.
+
+    Args:
+        args: Parsed badger argparse namespace.
+
+    Returns:
+        A live :class:`PermissionPolicy`, or ``None`` if the resolver
+        fell through to the warning path.
+    """
+    from chimera.permissions.modes import (
+        ApprovalMode,
+        parse_mode,
+        policy_for_mode,
+    )
+
+    raw = getattr(args, "permission_mode", None) or ApprovalMode.SUGGEST.value
+    try:
+        return policy_for_mode(parse_mode(str(raw)))
+    except ValueError as exc:
+        print(
+            f"[badger] --permission-mode {raw!r} unrecognised ({exc}); "
+            "falling back to default policy.",
+            file=sys.stderr,
+        )
+        return None
+
+
+# ---------------------------------------------------------------------------
 # Subcommand dispatch
 # ---------------------------------------------------------------------------
 
@@ -583,7 +650,10 @@ def _run_print_mode(args: argparse.Namespace) -> int:
     base_env.setup()
 
     cancel = CancellationToken()
-    config = LoopConfig(cancellation=cancel)
+    # WHY (G3, w13): wire ``--permission-mode`` into LoopConfig.permissions
+    # so the badger one-shot path honours the standard 5-mode surface.
+    permissions = _resolve_badger_permissions(args)
+    config = LoopConfig(cancellation=cancel, permissions=permissions)
     loop = ReAct(
         max_steps=int(getattr(args, "max_steps", _DEFAULT_MAX_STEPS) or _DEFAULT_MAX_STEPS),
         config=config,

@@ -192,6 +192,31 @@ The remote-URL contract, auth-token format, and reconnection
 semantics live in [`cloud-bridge.md`](cloud-bridge.md). The bridge
 is optional — local ACP / HTTP servers cover the standard cases.
 
+## Permission mode (5-mode standard)
+
+In addition to the legacy three-preset `--approval` flag (kept for
+backwards compatibility), ferret now exposes the cross-CLI
+`--permission-mode` flag — the same five values that `chimera badger`
+and `chimera mink` accept:
+
+| Mode         | Reads | Edits | Bash / Git | Notes                                |
+| ------------ | ----- | ----- | ---------- | ------------------------------------ |
+| `read-only`  | allow | deny  | deny       | Equivalent to `--approval read-only`.|
+| `suggest`    | allow | ask   | ask        | "Show your work" before side effects.|
+| `auto`       | allow | allow | ask        | Pair with `--sandbox workspace-write`. |
+| `yolo`       | allow | allow | allow      | Equivalent to `--approval full`.     |
+| `strict`     | ask   | ask   | ask        | Confirm every tool call.             |
+
+```bash
+chimera ferret -p "Plan only — no writes" --permission-mode read-only
+chimera ferret -p "Refactor with confirmations" --permission-mode strict
+```
+
+When both flags are set, `--permission-mode` wins. Otherwise ferret
+maps the legacy `--approval` values onto the matching mode (`read-only`
+→ `read-only`, `auto` → `auto`, `full` → `yolo`) so existing scripts
+keep working unchanged.
+
 ## Ferret config file
 
 Ferret ingests `~/.codex/config.toml` as a filesystem fact: when the

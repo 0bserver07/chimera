@@ -46,6 +46,30 @@ Badger ships with deliberately tight defaults:
 The intent: prefer rerun discipline over runaway loops. See
 [harness-discipline.md](./harness-discipline.md) for the rationale.
 
+## Permission mode (5-mode standard)
+
+Badger exposes the cross-CLI `--permission-mode` flag (shared with
+`chimera ferret` and `chimera mink`). Pick a stance that matches the
+risk envelope of the run; the same five values work identically across
+all three CLIs.
+
+| Mode         | Reads | Edits | Bash / Git | Notes                                |
+| ------------ | ----- | ----- | ---------- | ------------------------------------ |
+| `read-only`  | allow | deny  | deny       | Pure planning / review.              |
+| `suggest`    | allow | ask   | ask        | "Show your work" — the default.      |
+| `auto`       | allow | allow | ask        | Fast iteration; pair with a sandbox. |
+| `yolo`       | allow | allow | allow      | Use only inside a sandbox.           |
+| `strict`     | ask   | ask   | ask        | Confirm every single tool call.      |
+
+```bash
+chimera badger -p "Touch nothing, just summarise" --permission-mode read-only
+chimera badger -p "Refactor util.py" --permission-mode auto
+```
+
+The default is `suggest`. Mappings to the underlying
+`PermissionPolicy` presets live in
+`chimera.permissions.modes.policy_for_mode`.
+
 ## Subcommands
 
 ```bash

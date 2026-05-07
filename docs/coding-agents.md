@@ -276,6 +276,79 @@ zero-arg form scans `~/.chimera/eventlog/` and picks the newest run by
 UTC timestamp regardless of which CLI saved it. Run ids that don't match
 a known codename surface a clear error rather than guessing.
 
+## Project instructions (`AGENTS.md` / `CLAUDE.md`)
+
+Every coding-agent CLI ingests project-root markdown files as system
+instructions on startup. The unified loader lives in
+[`chimera/cli/instruction_files.py`](../chimera/cli/instruction_files.py)
+and is consumed by both `mink` and `ferret`. Discovery order
+(root-most first, leaf-most last):
+
+| Layer | Path | Source label |
+|---|---|---|
+| User-global (Codex) | `~/.codex/AGENTS.md` | `AGENTS.md` |
+| User-global (OpenCode) | `~/.opencode/AGENTS.md`, `~/.config/opencode/AGENTS.md` | `AGENTS.md` |
+| User-global (Claude Code) | `~/.claude/CLAUDE.md` | `CLAUDE.md` |
+| Project walk-up (Codex) | `<dir>/AGENTS.md` from cwd → root | `AGENTS.md` |
+| Project walk-up (Claude Code) | `<dir>/CLAUDE.md`, `<dir>/CLAUDE.local.md`, `<dir>/.claude/CLAUDE.md` from cwd → root | `CLAUDE.md` |
+| Project (Chimera-native) | `<cwd>/.chimera/rules.md` | `rules.md` |
+
+Each discovered file is wrapped in an
+`<instructions source="..." path="...">` block before it reaches the
+system prompt so the model can attribute guidance back to its origin.
+Files larger than 256 KiB are truncated and flagged with a
+`[truncated at 256 KiB]` marker; the cap protects the system prompt
+from runaway memory files.
+
+To inspect what your current cwd contributes:
+
+```python
+from chimera.cli.instruction_files import load_instruction_files
+
+for f in load_instruction_files():
+    print(f.source, f.path, "(truncated)" if f.truncated else "")
+```
+
+The loader is late-bound and side-effect free, so importing
+`chimera.cli.instruction_files` is cheap even when no files exist.
+
+## Adding new flags (developer note)
+
+Each per-CLI `add_arguments()` is constrained by
+`tests/cli/test_help_brevity.py`: default `--help` output must stay ≤50
+lines. Long-form flag descriptions live in a per-CLI
+`_LONG_HELP: dict[str, str]` and surface via the shared `--help-long`
+flag (see `chimera/cli/help_long.py`).
+
+For new flags, prefer `register_argument()` over the bare
+`parser.add_argument()`. It auto-promotes verbose help to the long
+surface so a future contributor cannot accidentally bloat
+`chimera <cli> --help` past the ceiling:
+
+```python
+from chimera.cli.help_long import register_argument
+
+# In your CLI's add_arguments(parser):
+register_argument(
+    core,                              # the parser or argument group
+    "--my-new-flag",
+    metavar="VAL",
+    long_help=_LONG_HELP,              # the per-CLI dict
+    help_short="Short one-liner.",     # appears in --help
+    help_long=(                        # appears in --help-long
+        "Multi-paragraph rationale, "
+        "default chain, edge cases…"
+    ),
+)
+```
+
+You can also just pass a single `help=...` string. If it exceeds 60
+characters and no explicit `help_short` / `help_long` is given,
+`register_argument()` will split it automatically: the full text goes
+to `_LONG_HELP`, and a sentence-boundary-aware truncation goes to
+argparse. Tests covering this dispatch live in
+`tests/cli/test_help_brevity_auto.py`.
+
 ## Cross-links
 
 Per-agent quickstarts (each has its own `providers.md`,

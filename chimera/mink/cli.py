@@ -28,6 +28,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from chimera.cli.help_long import register_argument
 from chimera.errors import friendly_errors
 
 # WHY: only stdlib + chimera at import time so `from chimera.cli import cc`
@@ -51,9 +52,13 @@ _LONG_HELP: dict[str, str] = {
         "the primary model is unreachable."
     ),
     "--permission-mode": (
-        "Permission mode (ecosystem parity). 'default' asks for risky "
-        "ops; 'acceptEdits' auto-approves edits; 'bypassPermissions' "
-        "skips all prompts; 'plan' is read-only planning mode."
+        "Permission mode. Legacy ecosystem-parity values: 'default' "
+        "asks for risky ops; 'acceptEdits' auto-approves edits; "
+        "'bypassPermissions' skips all prompts; 'plan' is read-only. "
+        "5-mode standard (w13): 'read-only' denies writes; 'suggest' "
+        "asks for writes; 'auto' allows reads + edits and asks for "
+        "shell; 'yolo' approves everything; 'strict' asks for every "
+        "tool call (including reads)."
     ),
     "--allowed-tools": (
         "Comma-separated tool names to allow (case-insensitive). "
@@ -257,18 +262,41 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         help="Per-tool-call timeout (default: none).",
     )
     # WHY: env-var precedence is --model > $CHIMERA_MINK_MODEL > _DEFAULT_MODEL.
-    core.add_argument(
+    # Short form fits one help-screen line; full default chain lives in
+    # ``_LONG_HELP["--model"]`` and surfaces via ``--help-long``.
+    register_argument(
+        core,
         "--model",
         default=os.environ.get("CHIMERA_MINK_MODEL") or _DEFAULT_MODEL,
         metavar="MODEL",
-        help=f"Ollama tag (default: $CHIMERA_MINK_MODEL or {_DEFAULT_MODEL}).",
+        long_help=_LONG_HELP,
+        help_short="Ollama tag (env: $CHIMERA_MINK_MODEL).",
     )
+    # WHY (G3, w13): mink shipped ``--permission-mode`` first with four
+    # ecosystem-parity choices (``default`` / ``acceptEdits`` /
+    # ``bypassPermissions`` / ``plan``). Wave-13 introduces the five
+    # cross-CLI standard modes (``read-only`` / ``suggest`` / ``auto`` /
+    # ``yolo`` / ``strict``) shared with ferret and badger. Both sets
+    # are accepted; legacy choices keep their existing semantics via
+    # :func:`chimera.permissions.modes.legacy_mink_choice_to_mode`.
     behavior.add_argument(
         "--permission-mode",
-        choices=["default", "acceptEdits", "bypassPermissions", "plan"],
+        choices=[
+            # Legacy ecosystem-parity choices (kept for back-compat).
+            "default",
+            "acceptEdits",
+            "bypassPermissions",
+            "plan",
+            # 5-mode standard (G3, w13).
+            "read-only",
+            "suggest",
+            "auto",
+            "yolo",
+            "strict",
+        ],
         default="default",
         metavar="MODE",
-        help="default | acceptEdits | bypassPermissions | plan.",
+        help="legacy 4-choice + 5-mode standard (see --help-long).",
     )
     behavior.add_argument(
         "--allowed-tools",
@@ -303,11 +331,15 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         help="Working directory (default: cwd).",
     )
     # WHY (issue #127): SSH-routed tool execution.
-    core.add_argument(
+    # Short form keeps ``--help`` under the 50-line ceiling; the URL
+    # format + auth notes live in ``_LONG_HELP["--remote"]``.
+    register_argument(
+        core,
         "--remote",
         default=None,
         metavar="SSH_URL",
-        help="Run tools on remote host (ssh://user@host[:port][/path]).",
+        long_help=_LONG_HELP,
+        help_short="Run tools over SSH (see --help-long).",
     )
     core.add_argument(
         "-p",
@@ -645,35 +677,63 @@ def _resume_path(session_id: str) -> Path | None:
 
 
 def _permission_mode_to_enum(value: str) -> Any:
-    """Map the CLI flag spelling to the internal ``PermissionMode``."""
+    """Map the CLI flag spelling to the internal ``PermissionMode``.
+
+    Accepts mink's legacy four ecosystem-parity choices and the five
+    cross-CLI standard modes added in wave-13. The 5-mode entries map
+    to the legacy enum members that carry the closest semantics so
+    downstream code that pivots on :class:`PermissionMode` keeps
+    working unchanged.
+
+    Raises:
+        KeyError: When ``value`` is neither a legacy nor a 5-mode
+            spelling. The caller (``_apply_permission_mode``) treats
+            this as "leave env unchanged".
+    """
     from chimera.permissions.modes import PermissionMode
 
     return {
+        # Legacy ecosystem-parity choices.
         "default": PermissionMode.DEFAULT,
         "acceptEdits": PermissionMode.ACCEPT_EDITS,
         "bypassPermissions": PermissionMode.BYPASS,
         "plan": PermissionMode.PLAN,
+        # 5-mode standard (G3, w13). ``suggest`` is the new "default";
+        # ``auto`` keeps the accept-edits flavour; ``yolo`` collapses
+        # onto BYPASS; ``read-only`` reuses PLAN; ``strict`` reuses the
+        # ASK-everything DONT_ASK slot (closest semantic match).
+        "suggest": PermissionMode.DEFAULT,
+        "auto": PermissionMode.ACCEPT_EDITS,
+        "yolo": PermissionMode.BYPASS,
+        "read-only": PermissionMode.PLAN,
+        "strict": PermissionMode.DONT_ASK,
     }[value]
 
 
 def _policy_for_mode(value: str) -> Any:
-    # WHY: LoopConfig.permissions wants the simple PermissionPolicy ABC
-    # (sync .evaluate). The heavy multi-source PermissionChecker is interactive-
-    # REPL territory; for one-shot --print we map the CLI mode flag to the
-    # appropriate preset so tool dispatch actually works.
-    from chimera.permissions.presets import (
-        AutoApprove,
-        Interactive,
-        ReadOnly,
-    )
+    """Map ``--permission-mode`` (legacy or 5-mode) to a :class:`PermissionPolicy`.
 
-    if value == "bypassPermissions":
-        return AutoApprove()
-    if value == "plan":
-        return ReadOnly()
-    if value == "acceptEdits":
-        return AutoApprove()
-    return Interactive()
+    Routes both the legacy ecosystem-parity spellings and the new
+    cross-CLI 5-mode spellings (G3, w13) through
+    :func:`chimera.permissions.modes.policy_for_mode` so mink, ferret,
+    and badger agree on what each mode means. Falls back to the
+    historical :class:`Interactive` policy when ``value`` is unknown,
+    matching the pre-G3 default.
+    """
+    # WHY: LoopConfig.permissions wants the simple PermissionPolicy ABC
+    # (sync .evaluate). The heavy multi-source PermissionChecker is
+    # interactive-REPL territory; for one-shot --print we map the CLI
+    # mode flag to the appropriate preset so tool dispatch actually
+    # works.
+    from chimera.permissions.modes import parse_mode, policy_for_mode
+    from chimera.permissions.presets import Interactive
+
+    try:
+        return policy_for_mode(parse_mode(value))
+    except ValueError:
+        # Unknown spelling — defensive fallback (argparse ``choices=``
+        # should already have rejected it).
+        return Interactive()
 
 
 # ---------------------------------------------------------------------------
@@ -1218,6 +1278,23 @@ def _run_print_mode(args: argparse.Namespace) -> int:
             + memory_text
             + "</memory>"
         )
+    # WHY (W13-G2): merge AGENTS.md hierarchy on top of CLAUDE.md memory so
+    # mink also picks up Codex-style instructions (and the user-global
+    # ~/.claude/CLAUDE.md fallback when ``load_memory`` returns empty for
+    # any reason — e.g. cwd outside a project tree). Late-binds the loader.
+    try:
+        from chimera.cli.instruction_files import load_instruction_text
+
+        _agents_text = load_instruction_text(project_dir=Path(cwd))
+    except Exception:  # noqa: BLE001
+        _agents_text = ""
+    if _agents_text and "<instructions source=\"AGENTS.md\"" in _agents_text:
+        # Avoid duplicating CLAUDE.md content already injected above.
+        base_prompt = base_prompt + "\n\n" + _agents_text
+    elif _agents_text and not memory_text:
+        # No CLAUDE.md memory loaded — fall back to the unified text so the
+        # ~/.claude/CLAUDE.md user-global at minimum reaches the prompt.
+        base_prompt = base_prompt + "\n\n" + _agents_text
     prompt = Prompt.from_string(base_prompt)
 
     # WHY (H-6): when --agent specifies a tool list, constrain AGENT_TOOLS to

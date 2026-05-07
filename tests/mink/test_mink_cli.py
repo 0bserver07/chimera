@@ -1,13 +1,17 @@
 """Smoke tests for the ``chimera mink`` CLI and slash-command registry.
 
 Covers:
-* ``chimera cc --help`` exits 0 and advertises ``--model``,
+* ``chimera mink --help`` exits 0 and advertises ``--model``,
   ``--permission-mode``, ``--print``.
-* ``chimera cc -p ...`` one-shot mode against a live Ollama (skipped
+* ``chimera mink -p ...`` one-shot mode against a live Ollama (skipped
   unless ``OLLAMA_HOST`` is set and reachable).
 * Each command in :func:`chimera.cli.slash_commands.list_commands`
   is invoked through a stub :class:`Session` to confirm it dispatches
   without raising and that :func:`dispatch` returns ``True``.
+
+The ``chimera cc`` deprecated alias has its own dedicated coverage in
+``tests/cli/test_cc_alias_deprecation.py`` (banner, suppression env
+var, dispatch routing through to mink) and is not exercised here.
 """
 from __future__ import annotations
 

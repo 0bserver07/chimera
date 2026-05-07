@@ -303,8 +303,19 @@ def test_run_dispatches_share_subcommand(capsys) -> None:
 
 
 def test_run_dispatches_agents_subcommand(capsys) -> None:
+    # WHY: target is a name that is guaranteed not to exist in the
+    # default registry. Earlier this test used "reviewer", but reviewer
+    # is now a built-in subagent profile (chimera/agents/presets/
+    # subagents/reviewer.md) so ``cmd_agents_show`` resolves it and
+    # returns 0. The test's intent is to verify the dispatch path
+    # itself emits the "ferret agents" status line on stderr — pinning
+    # an unresolved name keeps the rc=2 assertion meaningful.
     rc = ferret_cli.run(
-        _ns(subcommand="agents", sub_action="show", sub_target="reviewer")
+        _ns(
+            subcommand="agents",
+            sub_action="show",
+            sub_target="definitely-not-an-agent-xyz",
+        )
     )
     assert rc == 2
     captured = capsys.readouterr()

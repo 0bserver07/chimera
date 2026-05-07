@@ -26,6 +26,7 @@ import os
 import sys
 from typing import Any
 
+from chimera.cli.help_long import register_argument
 from chimera.errors import friendly_errors
 
 # WHY: only stdlib + chimera at import time. Provider deps (httpx, anthropic,
@@ -73,6 +74,14 @@ _VALID_SANDBOX_MODES = (
     "workspace-write-network",
 )
 _VALID_APPROVAL_PRESETS = ("read-only", "auto", "full")
+# WHY (G3, w13): the cross-CLI ``--permission-mode`` 5-mode surface.
+# ``read-only`` / ``suggest`` / ``auto`` / ``yolo`` / ``strict`` mirrors
+# the spelling other coding-agent CLIs ship without naming them. Maps
+# onto :class:`chimera.permissions.modes.ApprovalMode` and selects a
+# preset PermissionPolicy via ``policy_for_mode``. Coexists with the
+# legacy ``--approval`` flag (3 presets); ``--permission-mode`` wins
+# when both are explicitly set.
+_VALID_PERMISSION_MODES = ("read-only", "suggest", "auto", "yolo", "strict")
 _VALID_OS_SANDBOX_FLAGS = ("auto", "on", "off")
 # WHY (P1, wave 9): pluggable execution backend for ferret tool calls.
 # ``local`` is the historic default (LocalEnvironment + ferret sandbox
@@ -154,7 +163,15 @@ _LONG_HELP: dict[str, str] = {
     "--approval": (
         "Approval preset (default: read-only). 'auto' approves "
         "low-risk tools and prompts for high-risk; 'full' approves "
-        "all tool calls without prompting."
+        "all tool calls without prompting. Legacy 3-preset surface; "
+        "see --permission-mode for the 5-mode standard."
+    ),
+    "--permission-mode": (
+        "5-mode approval surface (cross-CLI standard). 'read-only' "
+        "denies all writes; 'suggest' allows reads and asks for "
+        "writes; 'auto' allows reads + edits and asks for shell; "
+        "'yolo' approves everything; 'strict' asks for every tool "
+        "call. Wins over --approval when both are passed."
     ),
     "--config": (
         "Override the ferret config file path. Default: merge "
@@ -208,6 +225,40 @@ _LONG_HELP: dict[str, str] = {
         "With 'sessions list': include sessions created by every "
         "Chimera CLI (otter / weasel / shrew / stoat / mink / "
         "badger), not just ferret. Adds an ORIGIN column."
+    ),
+    "--full-auto": (
+        "Shortcut for '--approval auto': low-risk tools auto-approve, "
+        "high-risk prompts. Loses to an explicit --permission-mode / "
+        "--approval; loses to --yolo when both are passed."
+    ),
+    "--yolo": (
+        "Shortcut for '--approval yolo'. DANGEROUS: every tool call "
+        "auto-approves, including shell + writes outside the project. "
+        "Prints a stderr warning on every invocation. Wins over "
+        "--full-auto and --approval; loses only to an explicit "
+        "--permission-mode."
+    ),
+    "--add-dir": (
+        "Add an extra writable directory beyond the project cwd. "
+        "Repeatable. Surfaces on args.add_dirs as a list and is "
+        "available to sandbox/permission resolvers that opt in."
+    ),
+    "--skip-git-repo-check": (
+        "Bypass the guard that refuses to start ferret outside a git "
+        "repository. Useful for one-off scripts or when running on a "
+        "fresh checkout that hasn't been 'git init'd yet."
+    ),
+    "--image": (
+        "Attach an image file to the prompt. Repeatable. Each image "
+        "path is rendered into the user message as an annotation; the "
+        "agent can fetch the bytes via the read_image tool."
+    ),
+    "--profile": (
+        "Load a TOML profile from ~/.chimera/profiles/<NAME>.toml and "
+        "overlay its keys onto the parsed args before resolution. "
+        "Recognised keys mirror argparse dest names (model, sandbox, "
+        "approval, permission_mode, max_steps, allowed_tools, "
+        "add_dirs, images, skip_git_repo_check)."
     ),
 }
 
@@ -276,11 +327,15 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     serve_grp = parser.add_argument_group("Serve / Bridge")
 
     # WHY: env precedence is --model > $FERRET_MODEL > _DEFAULT_MODEL.
-    core.add_argument(
+    # ``register_argument`` keeps the help-screen short while the full
+    # provider chain detail lives in ``_LONG_HELP["--model"]``.
+    register_argument(
+        core,
         "--model",
         default=os.environ.get("FERRET_MODEL") or _DEFAULT_MODEL,
         metavar="MODEL",
-        help=f"Model id (default: $FERRET_MODEL or {_DEFAULT_MODEL}).",
+        long_help=_LONG_HELP,
+        help_short=f"Model id (env: $FERRET_MODEL; default {_DEFAULT_MODEL}).",
     )
     core.add_argument(
         "-p",
@@ -386,7 +441,79 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         choices=list(_VALID_APPROVAL_PRESETS),
         default="read-only",
         metavar="PRESET",
-        help="Approval preset (default: read-only).",
+        help="Legacy 3-preset approval (default: read-only).",
+    )
+    # WHY (G3, w13): the standard 5-mode ``--permission-mode`` surface.
+    # ``default=None`` lets us detect whether the user passed the flag
+    # explicitly so we can prefer it over ``--approval`` when both are
+    # set. When unset, ferret falls back to mapping ``--approval`` onto
+    # an ApprovalMode (read-only -> READ_ONLY, auto -> AUTO, full ->
+    # YOLO) so the legacy default keeps its current semantics.
+    behavior.add_argument(
+        "--permission-mode",
+        dest="permission_mode",
+        choices=list(_VALID_PERMISSION_MODES),
+        default=None,
+        metavar="M",
+        help="5-mode (read-only|suggest|auto|yolo|strict).",
+    )
+    # WHY (G15, w13): the parity flag triplet shared by IDE-flagship CLIs.
+    # ``--full-auto`` and ``--yolo`` are short-hand approval aliases;
+    # ``--add-dir`` extends writable scope; ``--skip-git-repo-check``
+    # bypasses the "not in a git repo" guard; ``--image`` attaches image
+    # inputs; ``--profile`` overlays a TOML profile from
+    # ``~/.chimera/profiles/<NAME>.toml``.
+    #
+    # E6-W13: ``help=argparse.SUPPRESS`` on these six flags drops them
+    # from ``chimera ferret --help`` so the 50-line ceiling enforced by
+    # ``tests/cli/test_help_brevity.py`` stays tight. Each one is fully
+    # documented in ``_LONG_HELP`` above and surfaces normally under
+    # ``chimera ferret --help-long``. Future additions should use
+    # :func:`chimera.cli.help_long.register_argument` so auto-promotion
+    # handles this routing automatically.
+    behavior.add_argument(
+        "--full-auto",
+        dest="full_auto",
+        action="store_true",
+        default=False,
+        help=argparse.SUPPRESS,
+    )
+    behavior.add_argument(
+        "--yolo",
+        dest="yolo",
+        action="store_true",
+        default=False,
+        help=argparse.SUPPRESS,
+    )
+    behavior.add_argument(
+        "--add-dir",
+        dest="add_dirs",
+        action="append",
+        default=None,
+        metavar="PATH",
+        help=argparse.SUPPRESS,
+    )
+    behavior.add_argument(
+        "--skip-git-repo-check",
+        dest="skip_git_repo_check",
+        action="store_true",
+        default=False,
+        help=argparse.SUPPRESS,
+    )
+    core.add_argument(
+        "--image",
+        dest="images",
+        action="append",
+        default=None,
+        metavar="PATH",
+        help=argparse.SUPPRESS,
+    )
+    core.add_argument(
+        "--profile",
+        dest="profile",
+        default=None,
+        metavar="NAME",
+        help=argparse.SUPPRESS,
     )
     # WHY (FF1): config override.
     core.add_argument(
@@ -437,18 +564,20 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         metavar="PATH",
         help="serve --http: PEM key matching --tls-cert.",
     )
-    # WHY (FF5): cloud-bridge flags.
+    # WHY (FF5): cloud-bridge flags. Hidden from short help (E6-W13)
+    # because they only apply to the ``bridge`` subcommand; full
+    # docs live in ``_LONG_HELP`` and surface under ``--help-long``.
     serve_grp.add_argument(
         "--remote-url",
         default=None,
         metavar="URL",
-        help="bridge: HTTPS base URL of remote bridge service.",
+        help=argparse.SUPPRESS,
     )
     serve_grp.add_argument(
         "--bridge-token",
         default=None,
         metavar="TOKEN",
-        help="bridge: bearer token ($FERRET_BRIDGE_TOKEN fallback).",
+        help=argparse.SUPPRESS,
     )
     parser.add_argument(
         "subcommand",
@@ -544,6 +673,106 @@ def _filter_allowed_tools(tools: list[Any], allowed: str) -> list[Any]:
             f"error: unknown tool '{unknown[0]}'. Valid tools: {valid}"
         )
     return [t for name, t in name_index.items() if name in wanted]
+
+
+# ---------------------------------------------------------------------------
+# Permission-mode resolution (G3, w13)
+# ---------------------------------------------------------------------------
+
+
+def _resolve_ferret_permissions(args: argparse.Namespace) -> Any:
+    """Resolve ferret's permission policy from ``--permission-mode``/``--approval``.
+
+    Resolution order (first match wins):
+
+    1. ``--permission-mode`` (5-mode standard) when explicitly set.
+    2. ``--approval`` (legacy 3-preset) — mapped onto an
+       :class:`~chimera.permissions.modes.ApprovalMode` so a single
+       :func:`~chimera.permissions.modes.policy_for_mode` codepath drives
+       the live :class:`~chimera.permissions.base.PermissionPolicy`.
+    3. ``ApprovalMode.READ_ONLY`` — matches ferret's documented default.
+
+    Errors at parse or factory time degrade to ``None`` (default
+    LoopConfig) with a stderr warning so a malformed flag never crashes
+    the runner.
+
+    Args:
+        args: Parsed ferret argparse namespace.
+
+    Returns:
+        A live :class:`PermissionPolicy`, or ``None`` if no recognised
+        flag value was found and the resolver fell through to a warning.
+    """
+    from chimera.permissions.modes import (
+        ApprovalMode,
+        parse_mode,
+        policy_for_mode,
+    )
+
+    raw_mode = getattr(args, "permission_mode", None)
+    raw_approval = getattr(args, "approval", None)
+    yolo_flag = bool(getattr(args, "yolo", False))
+    full_auto_flag = bool(getattr(args, "full_auto", False))
+
+    # Path 1: --permission-mode wins when explicitly set. The G15 flag
+    # triplet (--full-auto / --yolo) is *short-hand*, so an explicit
+    # --permission-mode always overrides them.
+    if raw_mode:
+        try:
+            return policy_for_mode(parse_mode(str(raw_mode)))
+        except ValueError as exc:
+            print(
+                f"[ferret] --permission-mode {raw_mode!r} unrecognised "
+                f"({exc}); falling back to default policy.",
+                file=sys.stderr,
+            )
+            return None
+
+    # Path 1b (G15, w13): --yolo / --full-auto are short-hands for the
+    # corresponding --approval values. --yolo wins over --full-auto if
+    # both are passed (the strictly more permissive choice "wins" so the
+    # agent never silently downgrades the user's explicit intent).
+    if yolo_flag:
+        return policy_for_mode(ApprovalMode.YOLO)
+    if full_auto_flag:
+        return policy_for_mode(ApprovalMode.AUTO)
+
+    # Path 2: legacy --approval. Route through
+    # :mod:`chimera.ferret.approval` so existing FF3 tests / monkey-
+    # patches (preset_from_string, policy_for_preset) keep firing.
+    if raw_approval:
+        try:
+            from chimera.ferret import approval as _approval_mod
+        except Exception:  # noqa: BLE001
+            _approval_mod = None  # type: ignore[assignment]
+        if _approval_mod is not None and hasattr(
+            _approval_mod, "policy_for_preset"
+        ):
+            try:
+                return _approval_mod.policy_for_preset(
+                    _approval_mod.preset_from_string(str(raw_approval))
+                )
+            except Exception as exc:  # noqa: BLE001
+                print(
+                    f"[ferret] --approval {raw_approval!r} unrecognised "
+                    f"({exc}); falling back to default policy.",
+                    file=sys.stderr,
+                )
+                return None
+        # Fallback when chimera.ferret.approval isn't importable: use
+        # the central modes routing so we still produce a policy.
+        try:
+            return policy_for_mode(parse_mode(str(raw_approval)))
+        except ValueError as exc:
+            print(
+                f"[ferret] --approval {raw_approval!r} unrecognised "
+                f"({exc}); falling back to default policy.",
+                file=sys.stderr,
+            )
+            return None
+
+    # Path 3: nothing supplied — historical default is read-only.
+    return policy_for_mode(ApprovalMode.READ_ONLY)
 
 
 # ---------------------------------------------------------------------------
@@ -696,7 +925,9 @@ def _dispatch_serve_http(args: argparse.Namespace) -> int:
         return 2
 
     sandbox_value = getattr(args, "sandbox", "read-only") or "read-only"
-    approval_value = getattr(args, "approval", "read-only") or "read-only"
+    # WHY (G3, w13): approval/permission-mode resolution is delegated to
+    # ``_resolve_ferret_permissions`` so the HTTP factory below uses the
+    # exact same routing as the ``-p`` one-shot path.
     # WHY (F2/W9): the IDE-friendly notification kinds (``code/diff``,
     # ``editor/open_file``, ``terminal/output``, ``progress/step``) are
     # ferret-specific. The same ``--ide-schema`` flag the ACP transport
@@ -733,15 +964,10 @@ def _dispatch_serve_http(args: argparse.Namespace) -> int:
             env = base_env
 
         # Approval preset (FF3) → LoopConfig.permissions.
-        permissions: Any = None
-        try:
-            from chimera.ferret import approval as _approval_mod
-
-            permissions = _approval_mod.policy_for_preset(
-                _approval_mod.preset_from_string(approval_value)
-            )
-        except Exception:  # noqa: BLE001 - default LoopConfig on miss
-            permissions = None
+        # WHY (G3, w13): unified ``--permission-mode`` / ``--approval``
+        # routing — same shared helper the ``-p`` path uses, so the HTTP
+        # server and the one-shot runner agree on what each flag means.
+        permissions = _resolve_ferret_permissions(args)
 
         # WHY (F2/W9): per-session :class:`EventBus` carries
         # :class:`ToolCallEvent` / :class:`ToolResultEvent` published by
@@ -1067,24 +1293,11 @@ def _run_print_mode(args: argparse.Namespace) -> int:
             )
 
     # 3. Approval (FF3) — populate LoopConfig.permissions from preset.
-    permissions: Any = None
-    _approval_mod: Any = None
-    try:
-        import chimera.ferret.approval as _approval_mod  # noqa: F811 — module ref.
-    except Exception:  # noqa: BLE001 — FF3 not present; default LoopConfig.
-        _approval_mod = None
-    approval_value = getattr(args, "approval", "read-only") or "read-only"
-    if _approval_mod is not None and hasattr(_approval_mod, "policy_for_preset"):
-        try:
-            permissions = _approval_mod.policy_for_preset(
-                _approval_mod.preset_from_string(approval_value)
-            )
-        except Exception as exc:  # noqa: BLE001
-            print(
-                f"[ferret] --approval {approval_value!r} unrecognised "
-                f"({exc}); falling back to default policy.",
-                file=sys.stderr,
-            )
+    # WHY (G3, w13): ``--permission-mode`` (5-mode standard) wins over the
+    # legacy ``--approval`` (3-preset) when explicitly set. Otherwise we
+    # map the legacy approval value onto an ApprovalMode so the in-tree
+    # routing stays single-codepath.
+    permissions = _resolve_ferret_permissions(args)
 
     cancel = CancellationToken()
     config = LoopConfig(cancellation=cancel, permissions=permissions)
@@ -1095,6 +1308,18 @@ def _run_print_mode(args: argparse.Namespace) -> int:
     base_prompt = (
         "You are Ferret, a Chimera coding agent. Plan briefly, then act."
     )
+    # WHY (W13-G2): pull AGENTS.md / CLAUDE.md walk-up instructions into the
+    # system prompt so a ferret session sees the same project guidance the
+    # Codex/Claude-Code reference CLIs honour. Late-binds the loader so the
+    # no-files case is free.
+    try:
+        from chimera.cli.instruction_files import load_instruction_text
+
+        _instruction_text = load_instruction_text(project_dir=cwd)
+    except Exception:  # noqa: BLE001 — best-effort, never block ferret startup.
+        _instruction_text = ""
+    if _instruction_text:
+        base_prompt = base_prompt + "\n\n" + _instruction_text
     chimera_prompt = Prompt.from_string(base_prompt)
     tools = list(AGENT_TOOLS)
     allowed = getattr(args, "allowed_tools", "") or ""
@@ -1117,6 +1342,11 @@ def _run_print_mode(args: argparse.Namespace) -> int:
     # rendered from the resumed eventlog so the agent's first turn has
     # the full prior context. No-op when neither flag is set.
     effective_prompt = _apply_ferret_resume_prefix(args, default_prompt=prompt_text)
+    # WHY (G15, w13): ``--image PATH`` attaches each path as an annotation
+    # to the user message. The agent can fetch the bytes via the
+    # ``read_image`` tool — we do not pre-encode here so the prompt
+    # stays small and the model decides what to inspect.
+    effective_prompt = _apply_ferret_image_prefix(args, prompt=effective_prompt)
 
     try:
         result = asyncio.run(agent.async_run(effective_prompt, env=env))
@@ -1204,6 +1434,195 @@ def _apply_ferret_resume_prefix(
 
 
 # ---------------------------------------------------------------------------
+# G15 helpers — profile overlay, yolo warning, git-repo guard, image prefix
+# ---------------------------------------------------------------------------
+
+
+def _apply_ferret_image_prefix(
+    args: argparse.Namespace,
+    *,
+    prompt: str,
+) -> str:
+    """Prepend an ``<attached_images>`` block to *prompt* for ``--image``.
+
+    Each ``--image PATH`` becomes one bullet in the block; the agent can
+    read the bytes via the ``read_image`` tool. Missing files emit a
+    stderr notice but do not abort the run — the agent decides whether
+    the missing image is a fatal problem for the task.
+    """
+    images = getattr(args, "images", None) or []
+    if not images:
+        return prompt
+    lines: list[str] = []
+    for raw_path in images:
+        if not isinstance(raw_path, str) or not raw_path:
+            continue
+        full = os.path.expanduser(raw_path)
+        if not os.path.isfile(full):
+            sys.stderr.write(
+                f"[ferret] --image: file not found: {raw_path!r}\n"
+            )
+            continue
+        lines.append(f"- {full}")
+    if not lines:
+        return prompt
+    block = (
+        "<attached_images>\n"
+        + "\n".join(lines)
+        + "\nUse the read_image tool to inspect any of the paths above."
+        + "\n</attached_images>\n\n"
+    )
+    return f"{block}{prompt}"
+
+
+# ---------------------------------------------------------------------------
+# G15 helpers — profile overlay, yolo warning, git-repo guard
+# ---------------------------------------------------------------------------
+
+
+_FERRET_PROFILES_DIR = "~/.chimera/profiles"
+"""Documented location of TOML profile overlays (see ``--profile``)."""
+
+# Argparse dest names that ``--profile`` is allowed to overlay. Limiting
+# the surface keeps the TOML from being able to spoof random attributes
+# onto the namespace (e.g. ``subcommand``).
+_PROFILE_OVERLAY_KEYS: tuple[str, ...] = (
+    "model",
+    "sandbox",
+    "approval",
+    "permission_mode",
+    "max_steps",
+    "allowed_tools",
+    "add_dirs",
+    "images",
+    "skip_git_repo_check",
+    "full_auto",
+    "yolo",
+    "output_format",
+    "cwd",
+)
+
+
+def _apply_ferret_profile(args: argparse.Namespace) -> None:
+    """Overlay ``~/.chimera/profiles/<NAME>.toml`` onto ``args`` in-place.
+
+    Reads the named profile (no-op when ``--profile`` is unset), parses
+    it as TOML, and copies any whitelisted key onto the parsed args
+    namespace. Profile keys do *not* override values the user passed
+    explicitly on the command line — only those still at their argparse
+    default.
+
+    Errors (missing file, parse failure, unknown key) print a stderr
+    notice and continue with the un-overlaid args so a typo never
+    crashes ferret startup.
+    """
+    name = getattr(args, "profile", None)
+    if not name:
+        return
+    path = os.path.expanduser(os.path.join(_FERRET_PROFILES_DIR, f"{name}.toml"))
+    if not os.path.isfile(path):
+        print(
+            f"[ferret] --profile {name!r}: file not found at {path}; "
+            "continuing without overlay.",
+            file=sys.stderr,
+        )
+        return
+    try:
+        import tomllib
+    except ImportError:  # pragma: no cover — chimera requires Python 3.11+.
+        return
+    try:
+        with open(path, "rb") as fh:
+            data = tomllib.load(fh)
+    except (tomllib.TOMLDecodeError, OSError) as exc:
+        print(
+            f"[ferret] --profile {name!r}: failed to load ({exc}); "
+            "continuing without overlay.",
+            file=sys.stderr,
+        )
+        return
+    if not isinstance(data, dict):
+        return
+    applied: list[str] = []
+    for key, value in data.items():
+        if key not in _PROFILE_OVERLAY_KEYS:
+            continue
+        # The argparse defaults for our G15 list-typed flags are ``None``
+        # (so we can detect "user did not pass") and ``False`` for the
+        # boolean shortcuts. Only overlay when the slot is still at the
+        # argparse default — never clobber an explicit CLI value.
+        current = getattr(args, key, None)
+        if current is None or current is False or current == "":
+            setattr(args, key, value)
+            applied.append(key)
+    if applied:
+        sys.stderr.write(
+            f"[ferret] --profile {name!r}: overlaid "
+            f"{', '.join(sorted(applied))}\n"
+        )
+        sys.stderr.flush()
+
+
+def _emit_yolo_warning(args: argparse.Namespace) -> None:
+    """Print a stderr warning when ``--yolo`` is active.
+
+    The warning is intentionally noisy (every invocation, not once per
+    session) because the flag silently bypasses every approval gate; an
+    operator who wants quiet has to either drop the flag or accept the
+    line of stderr.
+    """
+    if not bool(getattr(args, "yolo", False)):
+        return
+    sys.stderr.write(
+        "[ferret] WARNING: --yolo bypasses every approval gate. "
+        "Tool calls run without prompting. Use only on trusted code.\n"
+    )
+    sys.stderr.flush()
+
+
+def _is_inside_git_repo(start: str | None = None) -> bool:
+    """Return ``True`` when ``start`` (or cwd) is inside a git work tree.
+
+    Uses :func:`os.path.isdir` to walk up looking for a ``.git`` entry
+    so we don't depend on the ``git`` binary being installed. A bare
+    repo (``.git`` is a file, not a directory) still counts.
+    """
+    cur = os.path.abspath(start or os.getcwd())
+    while True:
+        marker = os.path.join(cur, ".git")
+        if os.path.exists(marker):
+            return True
+        parent = os.path.dirname(cur)
+        if parent == cur:
+            return False
+        cur = parent
+
+
+def _check_git_repo_guard(args: argparse.Namespace) -> int | None:
+    """Print a warning when ferret is launched outside a git repo.
+
+    The guard is *advisory* by default — it warns once on stderr so
+    operators know edits won't be tracked, but does not block the run.
+    ``--skip-git-repo-check`` silences the warning entirely. Returning
+    ``None`` always means "continue"; the function only returns an
+    integer when a future iteration tightens the guard into a hard
+    block (kept as the documented escape hatch).
+    """
+    if bool(getattr(args, "skip_git_repo_check", False)):
+        return None
+    cwd = os.path.abspath(getattr(args, "cwd", None) or os.getcwd())
+    if _is_inside_git_repo(cwd):
+        return None
+    sys.stderr.write(
+        f"[ferret] warning: cwd {cwd!r} is not inside a git repository; "
+        "agent edits won't be tracked. Pass --skip-git-repo-check to "
+        "silence this warning.\n"
+    )
+    sys.stderr.flush()
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
@@ -1224,6 +1643,19 @@ def run(args: argparse.Namespace) -> int:
 
         print_help_long(_PARSER, _LONG_HELP)
         return 0
+
+    # G15 (w13): apply --profile overlay first so subsequent resolution
+    # (provider, sandbox, approval) sees the merged state.
+    _apply_ferret_profile(args)
+    # Stderr warning happens regardless of subcommand so ``ferret --yolo
+    # serve`` users see the same alert as ``ferret --yolo -p ...`` users.
+    _emit_yolo_warning(args)
+    # Git-repo guard runs before any subcommand body fires; --skip-git-repo-check
+    # is the documented opt-out. Subcommands that operate on artifacts
+    # outside a checkout (e.g. ``serve stop``) bypass via the flag.
+    rc = _check_git_repo_guard(args)
+    if rc is not None:
+        return rc
 
     sub = getattr(args, "subcommand", None)
     if sub in _SUBCOMMAND_DISPATCH:

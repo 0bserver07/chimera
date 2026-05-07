@@ -68,6 +68,38 @@ class MinkSettings:
         enable_all_project_mcp_servers: Auto-trust project MCP servers.
         api_key_helper: Path to an executable that prints a fresh API key.
         auto_memory_enabled: If True, append observations to CLAUDE.md memory.
+        keybindings: Map of action name to key sequence
+            (e.g. ``{"submit": "ctrl-d", "cancel": "ctrl-c"}``).
+            Consumed by REPL key handling
+            (``chimera/cli/code.py`` + ``chimera/mink/cli.py``).
+        output_styles: Per-style configs keyed by style name; each value
+            mirrors CC's ``outputStyles[name]`` block (e.g.
+            ``{"theme": "monokai", "max_width": 120}``). Consumed by
+            ``chimera/cli/render.py``.
+        statusline: Custom REPL status line. ``False`` disables, ``True``
+            enables the default. A dict carries
+            ``{"command": "...", "enabled": true, "format": "..."}``
+            for the REPL bottom bar.
+        theme: Visual theme — ``"dark"`` / ``"light"`` / ``"auto"`` /
+            ``"<custom-name>"``. Consumed by ``chimera/cli/render.py``.
+        cleanup_period_days: Number of days after which transcripts /
+            session files are auto-purged.
+        include_co_authored_by: If ``True``, append ``Co-Authored-By:
+            Claude`` trailers when committing through chimera.
+        force_login_method: One of ``"oauth"`` / ``"api_key"`` /
+            ``"console"`` to lock the auth mechanism.
+        auto_updates: Whether the CLI may self-update on startup.
+        verbose: If ``True``, the CLI defaults to verbose logging.
+        install_method: How the CLI was installed
+            (``"brew"`` / ``"pipx"`` / ``"uv"`` / ``"manual"``).
+        preferred_notif_channel: Where lifecycle notifications go
+            (``"terminal"`` / ``"system"`` / ``"slack"`` / ``"webhook"``).
+        aws_auth_refresh: Optional command run to refresh AWS Bedrock
+            credentials before each session.
+        enabled_mcp_json_servers: Allow-list of ``.mcp.json`` server
+            names that auto-load.
+        disabled_mcp_json_servers: Deny-list of ``.mcp.json`` server
+            names that never load (overrides the allow-list).
     """
 
     permissions: Permissions = field(default_factory=Permissions)
@@ -80,6 +112,21 @@ class MinkSettings:
     enable_all_project_mcp_servers: bool = False
     api_key_helper: str | None = None
     auto_memory_enabled: bool = False
+    # W13-G14 — settings.json key expansion.
+    keybindings: dict[str, str] = field(default_factory=dict)
+    output_styles: dict[str, dict[str, Any]] = field(default_factory=dict)
+    statusline: bool | dict[str, Any] | None = None
+    theme: str | None = None
+    cleanup_period_days: int | None = None
+    include_co_authored_by: bool = True
+    force_login_method: str | None = None
+    auto_updates: bool = True
+    verbose: bool = False
+    install_method: str | None = None
+    preferred_notif_channel: str | None = None
+    aws_auth_refresh: str | None = None
+    enabled_mcp_json_servers: list[str] = field(default_factory=list)
+    disabled_mcp_json_servers: list[str] = field(default_factory=list)
 
     def to_chimera_loop_config(self) -> LoopConfig:
         """Build a :class:`LoopConfig` with permissions wired from this MinkSettings.
@@ -182,6 +229,14 @@ def _is_additive(path: str) -> bool:
         return True
     if path == "mcp.servers":
         return True
+    # W13-G14 — additive MCP server allow/deny lists.
+    if path in {
+        "enabledMcpjsonServers",
+        "disabledMcpjsonServers",
+        "enabled_mcp_json_servers",
+        "disabled_mcp_json_servers",
+    }:
+        return True
     return False
 
 
@@ -252,6 +307,38 @@ def _build_settings(merged: dict[str, Any]) -> MinkSettings:
         additional_directories=list(_pick(p, "additionalDirectories", "additional_directories", default=[]) or []),
         disable_bypass_permissions_mode=bool(_pick(p, "disableBypassPermissionsMode", "disable_bypass_permissions_mode", default=False)),
     )
+
+    # W13-G14 — extra CC keys.
+    raw_keybindings = _pick(merged, "keybindings", default={}) or {}
+    keybindings = {
+        str(k): str(v) for k, v in raw_keybindings.items()
+        if isinstance(v, str)
+    } if isinstance(raw_keybindings, dict) else {}
+
+    raw_output_styles = _pick(merged, "outputStyles", "output_styles", default={}) or {}
+    output_styles: dict[str, dict[str, Any]] = {}
+    if isinstance(raw_output_styles, dict):
+        for name, cfg in raw_output_styles.items():
+            if isinstance(cfg, dict):
+                output_styles[str(name)] = dict(cfg)
+
+    raw_statusline = _pick(merged, "statusline", "statuslineCommand", "statusLine", default=None)
+    statusline: bool | dict[str, Any] | None
+    if isinstance(raw_statusline, bool):
+        statusline = raw_statusline
+    elif isinstance(raw_statusline, dict):
+        statusline = dict(raw_statusline)
+    elif isinstance(raw_statusline, str):
+        # CC's statuslineCommand was a bare string; promote into the dict shape.
+        statusline = {"command": raw_statusline, "enabled": True}
+    else:
+        statusline = None
+
+    raw_enabled = _pick(merged, "enabledMcpjsonServers", "enabled_mcp_json_servers", default=[]) or []
+    raw_disabled = _pick(merged, "disabledMcpjsonServers", "disabled_mcp_json_servers", default=[]) or []
+    enabled_mcp = [str(x) for x in raw_enabled] if isinstance(raw_enabled, list) else []
+    disabled_mcp = [str(x) for x in raw_disabled] if isinstance(raw_disabled, list) else []
+
     return MinkSettings(
         permissions=perms,
         hooks=dict(merged.get("hooks") or {}),
@@ -263,6 +350,20 @@ def _build_settings(merged: dict[str, Any]) -> MinkSettings:
         enable_all_project_mcp_servers=bool(_pick(merged, "enable_all_project_mcp_servers", "enableAllProjectMcpServers", default=False)),
         api_key_helper=_pick(merged, "api_key_helper", "apiKeyHelper"),
         auto_memory_enabled=bool(_pick(merged, "auto_memory_enabled", "autoMemoryEnabled", default=False)),
+        keybindings=keybindings,
+        output_styles=output_styles,
+        statusline=statusline,
+        theme=_pick(merged, "theme"),
+        cleanup_period_days=_pick(merged, "cleanupPeriodDays", "cleanup_period_days"),
+        include_co_authored_by=bool(_pick(merged, "includeCoAuthoredBy", "include_co_authored_by", default=True)),
+        force_login_method=_pick(merged, "forceLoginMethod", "force_login_method"),
+        auto_updates=bool(_pick(merged, "autoUpdates", "auto_updates", default=True)),
+        verbose=bool(_pick(merged, "verbose", default=False)),
+        install_method=_pick(merged, "installMethod", "install_method"),
+        preferred_notif_channel=_pick(merged, "preferredNotifChannel", "preferred_notif_channel"),
+        aws_auth_refresh=_pick(merged, "awsAuthRefresh", "aws_auth_refresh"),
+        enabled_mcp_json_servers=enabled_mcp,
+        disabled_mcp_json_servers=disabled_mcp,
     )
 
 
