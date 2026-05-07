@@ -287,6 +287,12 @@ def _infer_provider(model: str) -> str:
     # 2. Prefix-based inference.
     if model_lower.startswith("claude"):
         return "anthropic"
+    # ``gpt-oss-*`` are OpenAI's open-weight models distributed via the
+    # local Ollama daemon (and Ollama's cloud passthrough). Match them
+    # BEFORE the generic ``gpt`` prefix so they don't get misrouted to
+    # OpenAI's hosted API, which doesn't serve the OSS line.
+    if model_lower.startswith("gpt-oss"):
+        return "ollama"
     if model_lower.startswith(("gpt", "o1", "o3", "codex")):
         return "openai"
     if model_lower.startswith("gemini"):
@@ -316,7 +322,10 @@ def _infer_provider(model: str) -> str:
         # ``https://api.x.ai/v1``. The xai provider wraps
         # OpenAICompatibleProvider with that base URL and ``$XAI_API_KEY``.
         return "xai"
-    if model_lower.startswith(("llama", "mistral", "qwen", "phi")):
+    if model_lower.startswith(("llama", "mistral", "qwen", "phi", "gemma")):
+        # ``gemma`` covers Google's open-weight Gemma family (gemma3-27b
+        # etc.) which is distributed through Ollama. Hosted Gemini stays
+        # on the ``gemini`` branch above.
         return "ollama"
 
     # 3. Catalog fallback: check if model is in default catalog.
@@ -341,6 +350,7 @@ def _infer_provider(model: str) -> str:
         f"  2. Pass provider_type='anthropic' | 'openai' | 'google' | "
         f"'ollama' explicitly.\n"
         f"  3. Use a prefix that matches a known provider (claude-*, gpt-*,\n"
-        f"     gemini-*, glm-*, kimi-*, grok-*, deepseek-*, llama*, qwen*,\n"
-        f"     mistral*, phi*, vllm/* (local vLLM), sglang/* (local SGLang))."
+        f"     gpt-oss-* (Ollama), gemini-*, gemma* (Ollama), glm-*,\n"
+        f"     kimi-*, grok-*, deepseek-*, llama*, qwen*, mistral*, phi*,\n"
+        f"     vllm/* (local vLLM), sglang/* (local SGLang))."
     )

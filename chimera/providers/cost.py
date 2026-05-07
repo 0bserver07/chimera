@@ -46,13 +46,26 @@ PRICING: dict[str, tuple[float, float]] = {
     "gemini-2.0-flash": (0.10, 0.40),
     "gemini-1.5-pro": (1.25, 5.00),
     "gemini-1.5-flash": (0.075, 0.30),
-    # GLM
+    # GLM. ``glm-5.1`` and ``glm-4.6`` are placeholders pending Zhipu's
+    # public rate sheet (longer prefixes win in ``calculate_cost`` so a
+    # future split is straightforward). 5.1 mirrors glm-5; 4.6 sits at
+    # glm-4 tier. TODO: confirm at
+    # https://docs.z.ai/api-reference/llm/chat-completion.
+    "glm-5.1": (2.0, 8.0),
     "glm-5": (2.0, 8.0),
+    "glm-4.6": (0.6, 2.2),
     "glm-4-plus": (1.0, 4.0),
     "glm-4-flash": (0.04, 0.04),
     # DeepSeek
     "deepseek-chat": (0.27, 1.10),
     "deepseek-reasoner": (0.55, 2.19),
+    # DeepSeek-V3.1 terminus + V3 coder. Both billed at deepseek-chat
+    # placeholder rates ($0.27 / $1.10) until V3.1/coder per-SKU rates
+    # are published. Longer prefixes ensure these match before
+    # ``deepseek-chat`` / ``deepseek-reasoner``. Source: DeepSeek pricing
+    # page — refresh on next release.
+    "deepseek-v3.1-terminus": (0.27, 1.10),
+    "deepseek-coder-v3": (0.27, 1.10),
     # DeepSeek-V4 family — pricing TODO. DeepSeek had not published a V4
     # rate sheet at integration time, so we copy the deepseek-reasoner
     # numbers ($0.55 / $2.19 per Mtok) as a placeholder. Longer prefixes
@@ -68,6 +81,25 @@ PRICING: dict[str, tuple[float, float]] = {
     "grok-3-mini": (0.30, 0.50),
     "grok-3": (3.0, 15.0),
     "grok-4": (5.0, 25.0),
+    # Kimi (Moonshot). Bare ids land on Moonshot's Anthropic-compat
+    # endpoint (api.moonshot.ai/anthropic). $0.6 / $2.5 placeholder
+    # until Moonshot publishes per-SKU rates for the 0905 preview and
+    # k2.5 line. ``:cloud`` Kimi tags are served via the Ollama daemon
+    # (free locally) and intentionally absent from this table.
+    "kimi-k2-0905-preview": (0.6, 2.5),
+    "kimi-k2.5": (0.6, 2.5),
+    # Local-only / open-weight families. Listed at $0/$0 because Ollama's
+    # ``/api/chat`` does not surface a price field — the cost is bandwidth
+    # and electricity, not API metering. These entries exist so
+    # ``calculate_cost`` returns a deterministic 0.0 instead of falling
+    # through the prefix table.
+    "qwen3-coder-30b": (0.0, 0.0),
+    "qwen3-coder": (0.0, 0.0),
+    "qwen3-32b": (0.0, 0.0),
+    "gpt-oss-120b": (0.0, 0.0),
+    "gpt-oss-20b": (0.0, 0.0),
+    "mistral-codestral-2511": (0.0, 0.0),
+    "gemma3-27b-instruct": (0.0, 0.0),
 }
 
 _pricing_lock = threading.Lock()

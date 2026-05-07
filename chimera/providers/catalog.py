@@ -86,6 +86,78 @@ _BUILTIN_ENTRIES: list[ModelConfig] = [
                 api_key_env="DEEPSEEK_API_KEY", context_window=128_000, cost=(0.55, 2.19)),
     ModelConfig("deepseek-v4-pro:cloud", "ollama", base_url_env="OLLAMA_HOST",
                 context_window=262_144, cost=(0.55, 2.19)),
+    # DeepSeek-V3.1 terminus + V3 coder. Both speak DeepSeek's hosted
+    # OpenAI-compatible API. Pricing inherits from deepseek-chat ($0.27 /
+    # $1.10 per Mtok); refresh once DeepSeek publishes per-SKU rates.
+    # Source: https://api-docs.deepseek.com/quick_start/pricing.
+    ModelConfig("deepseek-v3.1-terminus", "compatible",
+                base_url="https://api.deepseek.com/v1",
+                api_key_env="DEEPSEEK_API_KEY",
+                context_window=128_000, cost=(0.27, 1.10)),
+    ModelConfig("deepseek-coder-v3", "compatible",
+                base_url="https://api.deepseek.com/v1",
+                api_key_env="DEEPSEEK_API_KEY",
+                context_window=128_000, cost=(0.27, 1.10)),
+    # Qwen3 family (Alibaba). Bare ids land on the local Ollama daemon
+    # (``qwen-`` prefix already routes to ``ollama`` in
+    # ``_infer_provider``). Costs are $0/$0 because Ollama-served weights
+    # do not surface a price field. For DashScope API access, users set
+    # ``$DASHSCOPE_API_KEY`` and pass ``provider_type='compatible'`` plus
+    # ``base_url='https://dashscope-intl.aliyuncs.com/compatible-mode/v1'``
+    # explicitly. TODO: catalogue ``dashscope/qwen3-*`` SKUs once we have
+    # signed-off pricing.
+    ModelConfig("qwen3-coder", "ollama", base_url_env="OLLAMA_HOST",
+                context_window=131_072, cost=(0.0, 0.0)),
+    ModelConfig("qwen3-coder-30b", "ollama", base_url_env="OLLAMA_HOST",
+                context_window=131_072, cost=(0.0, 0.0)),
+    ModelConfig("qwen3-32b", "ollama", base_url_env="OLLAMA_HOST",
+                context_window=131_072, cost=(0.0, 0.0)),
+    # GLM family (Zhipu). Anthropic-compatible wire protocol via
+    # api.z.ai. Pricing for 4.6 / 5.1 is a placeholder pending Zhipu's
+    # public rate sheet; values mirror glm-5 ($2 / $8) for 5.1 and glm-4
+    # tier ($0.6 / $2.2) for 4.6. TODO: confirm against
+    # https://docs.z.ai/api-reference/llm/chat-completion once published.
+    ModelConfig("glm-4.6", "anthropic",
+                base_url="https://api.z.ai/api/anthropic",
+                api_key_env="ANTHROPIC_AUTH_TOKEN",
+                context_window=200_000, cost=(0.6, 2.2)),
+    ModelConfig("glm-5.1", "anthropic",
+                base_url="https://api.z.ai/api/anthropic",
+                api_key_env="ANTHROPIC_AUTH_TOKEN",
+                context_window=200_000, cost=(2.0, 8.0)),
+    # GPT-OSS (OpenAI open-weights). Distributed via Ollama; both 20B
+    # and 120B run locally on adequately-sized hardware. $0/$0 because
+    # local serve is free.
+    ModelConfig("gpt-oss-120b", "ollama", base_url_env="OLLAMA_HOST",
+                context_window=131_072, cost=(0.0, 0.0)),
+    ModelConfig("gpt-oss-20b", "ollama", base_url_env="OLLAMA_HOST",
+                context_window=131_072, cost=(0.0, 0.0)),
+    # Kimi (Moonshot). Bare ids speak Anthropic-compat at
+    # https://api.moonshot.ai/anthropic with $MOONSHOT_API_KEY. Pricing
+    # is a placeholder ($0.6 / $2.5) — refresh once Moonshot publishes
+    # per-SKU rates for the 0905 preview and k2.5 line. ``:cloud``
+    # variants are served by the local Ollama daemon (see kimi
+    # docs/mink/models.md), not catalogued here.
+    ModelConfig("kimi-k2-0905-preview", "anthropic",
+                base_url="https://api.moonshot.ai/anthropic",
+                api_key_env="MOONSHOT_API_KEY",
+                context_window=200_000, cost=(0.6, 2.5)),
+    ModelConfig("kimi-k2.5", "anthropic",
+                base_url="https://api.moonshot.ai/anthropic",
+                api_key_env="MOONSHOT_API_KEY",
+                context_window=200_000, cost=(0.6, 2.5)),
+    # Mistral Codestral 2511 (Mistral coder line). Routed through
+    # Ollama; the ``mistral`` prefix already maps to the ``ollama``
+    # provider in ``_infer_provider``. For Mistral's hosted API, users
+    # explicitly pass ``provider_type='compatible'`` +
+    # ``base_url='https://api.mistral.ai/v1'`` + ``$MISTRAL_API_KEY``.
+    ModelConfig("mistral-codestral-2511", "ollama",
+                base_url_env="OLLAMA_HOST",
+                context_window=256_000, cost=(0.0, 0.0)),
+    # Google Gemma 3 (open weights via Ollama). Local-only; $0/$0.
+    ModelConfig("gemma3-27b-instruct", "ollama",
+                base_url_env="OLLAMA_HOST",
+                context_window=131_072, cost=(0.0, 0.0)),
 ]
 
 

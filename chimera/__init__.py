@@ -52,6 +52,8 @@ _LAZY_ATTRS: dict[str, str] = {
     "PlanAndExecute": "chimera.core.loops",
     "Reflexion": "chimera.core.loops",
     "TreeOfThought": "chimera.core.loops",
+    # Assembly
+    "CodingAgent": "chimera.assembly.coding_agent",
     # Composition
     "Ensemble": "chimera.composition",
     "Pipeline": "chimera.composition",
