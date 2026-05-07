@@ -53,6 +53,7 @@ from typing import TYPE_CHECKING, Any, Callable
 if TYPE_CHECKING:
     from chimera.checkpoints import CheckpointInfo, CheckpointManager
     from chimera.otter.commands import CustomCommand
+    from chimera.otter.snapshot import FileSnapshotStore
 
 __all__ = [
     "COMMANDS",
@@ -63,7 +64,9 @@ __all__ = [
     "build_custom_command_handler",
     "clear_undo_state",
     "cmd_help",
+    "collect_modified_files",
     "get_command_origin",
+    "get_file_snapshot_store",
     "get_undo_state",
     "mark_origin",
     "register_custom_commands",
@@ -234,6 +237,13 @@ class _UndoState:
         initial_messages: Deep copy of the session's messages *before* any
             snapshots were taken — restored when ``/undo`` empties the
             undo stack.
+        file_store: Lazily constructed :class:`FileSnapshotStore` for the
+            session. Holds the on-disk shadow at
+            ``~/.chimera/snapshots/<session-id>/`` so ``/undo`` can rewind
+            files, not just messages.
+        file_snaps: Maps a checkpoint id to the matching file snapshot id.
+            ``None`` for checkpoints taken before the file store was
+            attached (those still rewind messages cleanly).
     """
 
     manager: CheckpointManager | None = None
@@ -241,6 +251,8 @@ class _UndoState:
     redo_stack: list[CheckpointInfo] = field(default_factory=list)
     message_snapshots: dict[str, list[Any]] = field(default_factory=dict)
     initial_messages: list[Any] | None = None
+    file_store: FileSnapshotStore | None = None
+    file_snaps: dict[str, str] = field(default_factory=dict)
 
 
 # Module-level registry. Keyed by ``id(session)`` so different sessions can
@@ -267,9 +279,140 @@ def clear_undo_state(session: Any) -> None:
     """Forget the undo/redo state for *session*.
 
     Called by ``/new`` (and by the REPL on session teardown) so a fresh
-    session doesn't inherit a stale stack from its predecessor.
+    session doesn't inherit a stale stack from its predecessor. Also
+    wipes the on-disk file shadow so blob storage doesn't leak across
+    sessions.
     """
-    _UNDO_STATES.pop(id(session), None)
+    state = _UNDO_STATES.pop(id(session), None)
+    if state is not None and state.file_store is not None:
+        try:
+            state.file_store.clear()
+        except Exception:  # noqa: BLE001 -- never crash on teardown
+            pass
+
+
+# ---------------------------------------------------------------------------
+# File-snapshot helpers
+# ---------------------------------------------------------------------------
+#
+# G5 elevates ``/undo`` from "rewind messages" to "rewind messages AND any
+# files the agent touched in that turn". The on-disk shadow lives in
+# :class:`chimera.otter.snapshot.FileSnapshotStore`; this helper layer is
+# what wires it onto the per-session :class:`_UndoState`.
+#
+# Two surfaces:
+#
+# * :func:`get_file_snapshot_store` — lazily attaches a store to the
+#   session's undo state. Honors ``session._otter_snapshot_root`` so
+#   tests can redirect the shadow under ``tmp_path``.
+# * :func:`collect_modified_files` — walks every place we might find a
+#   :class:`~chimera.core.file_tracker.FileTracker` (the loop config,
+#   the env, an explicit per-session attribute) and returns the union
+#   of paths the agent touched. Returns an empty list when no tracker
+#   is attached so message-only undo still works for tiny REPL fakes.
+
+
+def _resolve_session_id(session: Any) -> str:
+    """Return a filesystem-safe id for *session*'s shadow store.
+
+    Walks several common surfaces in priority order so the helper
+    works against:
+
+    * :class:`chimera.sessions.session.Session` (``session_id`` property)
+    * :class:`chimera.otter.server.OtterSessionState` (``session_id`` attr)
+    * Bare test fakes (falls back to ``id(session)`` hex)
+    """
+    sid = getattr(session, "session_id", None)
+    if isinstance(sid, str) and sid:
+        return sid
+    sid_method = getattr(session, "id", None)
+    if isinstance(sid_method, str) and sid_method:
+        return sid_method
+    return f"otter-{id(session):x}"
+
+
+def get_file_snapshot_store(session: Any) -> FileSnapshotStore | None:
+    """Return the on-disk file shadow store for *session*, lazily attached.
+
+    Args:
+        session: Session whose undo state owns the store.
+
+    Returns:
+        A :class:`FileSnapshotStore` rooted at
+        ``~/.chimera/snapshots/<session-id>/`` (or an override path if
+        ``session._otter_snapshot_root`` is set, which tests use to keep
+        the shadow under ``tmp_path``). ``None`` if the import of
+        :mod:`chimera.otter.snapshot` fails — keeps the slash module
+        loadable in stripped-down environments.
+    """
+    state = get_undo_state(session)
+    if state.file_store is not None:
+        return state.file_store
+    try:
+        from chimera.otter.snapshot import FileSnapshotStore as _Store
+    except Exception:  # noqa: BLE001 -- snapshot module optional
+        return None
+    root_override = getattr(session, "_otter_snapshot_root", None)
+    try:
+        state.file_store = _Store(
+            session_id=_resolve_session_id(session),
+            root=root_override,
+        )
+    except Exception:  # noqa: BLE001 -- never crash REPL on filesystem issue
+        return None
+    return state.file_store
+
+
+def collect_modified_files(session: Any, env: Any) -> list[str]:
+    """Walk known surfaces for the session's modified-file list.
+
+    Search order (first non-empty wins):
+
+    1. ``session._otter_file_tracker`` — explicit per-session override
+       used by tests and by the otter server.
+    2. ``session._agent.loop.config.file_tracker`` — the canonical
+       location for sessions built via :class:`Session`.
+    3. ``env.file_tracker`` — sometimes hung off the environment.
+    4. Empty list — no tracker found.
+
+    Returns:
+        The list of file paths reported as modified, deduplicated and
+        in deterministic order. Empty when no source is available.
+    """
+    candidates: list[Any] = []
+    explicit = getattr(session, "_otter_file_tracker", None)
+    if explicit is not None:
+        candidates.append(explicit)
+
+    agent = getattr(session, "_agent", None)
+    if agent is not None:
+        loop = getattr(agent, "loop", None)
+        if loop is not None:
+            cfg = getattr(loop, "config", None)
+            if cfg is not None:
+                tracker = getattr(cfg, "file_tracker", None)
+                if tracker is not None:
+                    candidates.append(tracker)
+
+    if env is not None:
+        env_tracker = getattr(env, "file_tracker", None)
+        if env_tracker is not None:
+            candidates.append(env_tracker)
+
+    seen: set[str] = set()
+    out: list[str] = []
+    for tracker in candidates:
+        files = getattr(tracker, "modified_files", None)
+        if not files:
+            continue
+        for f in files:
+            if not isinstance(f, str) or f in seen:
+                continue
+            seen.add(f)
+            out.append(f)
+        if out:
+            return out
+    return out
 
 
 def _snapshot_messages(session: Any) -> list[Any]:
@@ -360,6 +503,7 @@ def snapshot_after_turn(session: Any, env: Any) -> CheckpointInfo | None:
     if info is not None:
         state.message_snapshots[info.id] = msgs
         state.undo_stack.append(info)
+        active_id = info.id
     else:
         # Synthesise a sentinel so message-only undo still has a stack to
         # walk. The id is unique-per-snapshot; the manager stays ``None``.
@@ -373,26 +517,120 @@ def snapshot_after_turn(session: Any, env: Any) -> CheckpointInfo | None:
         )
         state.message_snapshots[sentinel.id] = msgs
         state.undo_stack.append(sentinel)
+        active_id = sentinel.id
 
-    # Any new turn invalidates the redo path.
+    # G5: also snap the files the agent has touched so /undo can rewind
+    # the workspace, not just messages. Best-effort — never crash the
+    # REPL on a filesystem hiccup. Collected files are cumulative across
+    # the session (the file store is content-addressed, so unchanged
+    # files cost no extra disk).
+    modified = collect_modified_files(session, env)
+    if modified:
+        store = get_file_snapshot_store(session)
+        if store is not None:
+            try:
+                file_snap = store.snap(modified)
+            except Exception:  # noqa: BLE001
+                file_snap = None
+            if file_snap is not None:
+                state.file_snaps[active_id] = file_snap.snap_id
+
+    # Any new turn invalidates the redo path. Discard the file snaps
+    # bound to the now-orphaned redo entries so storage doesn't grow
+    # without bound when the user branches the conversation often.
+    if state.redo_stack and state.file_store is not None:
+        for entry in state.redo_stack:
+            stale = state.file_snaps.pop(entry.id, None)
+            if stale is not None:
+                try:
+                    state.file_store.discard(stale)
+                except Exception:  # noqa: BLE001
+                    pass
     state.redo_stack.clear()
     return info
 
 
-def cmd_undo(session: Any, env: Any, _args: str, out: PrintFn) -> None:
-    """Roll the session back one turn.
+def _parse_steps(raw: str, *, default: int = 1) -> int:
+    """Parse the ``--steps N`` (or bare ``N``) argument for /undo and /redo.
 
-    Pops the top of the undo stack, restores the env to the next-most-recent
-    checkpoint (or the initial state if the stack is empty), and replays the
-    matching message snapshot onto :attr:`session.context`.
+    Accepts:
+      * ``""``                 -> ``default``
+      * ``"3"``                -> ``3``
+      * ``"--steps 3"``        -> ``3``
+      * ``"--steps=3"``        -> ``3``
+      * anything else / N <= 0 -> ``default`` (clamped at 1)
+
+    The handlers print a diagnostic but never raise on bad input — a
+    fat-fingered ``/undo --step 3`` should still produce a 1-step undo
+    rather than crashing the REPL.
+    """
+    cleaned = (raw or "").strip()
+    if not cleaned:
+        return max(default, 1)
+    tokens = cleaned.split()
+    candidate: str | None = None
+    if len(tokens) == 1:
+        token = tokens[0]
+        if token.startswith("--steps="):
+            candidate = token.split("=", 1)[1]
+        elif token.lstrip("-").isdigit():
+            candidate = token.lstrip("-")
+    elif tokens[0] in {"--steps", "-n"} and len(tokens) >= 2:
+        candidate = tokens[1]
+    if candidate is None:
+        return max(default, 1)
+    try:
+        n = int(candidate)
+    except ValueError:
+        return max(default, 1)
+    return max(n, 1)
+
+
+def _restore_files_for(state: _UndoState, target_id: str | None) -> int:
+    """Restore the file snap bound to *target_id* (best-effort).
+
+    Returns the number of paths actually mutated. ``0`` when there's no
+    file store, no snap recorded for the target, or the target is the
+    pre-turn-1 baseline (which has no associated file snap — see
+    :func:`snapshot_after_turn`).
+    """
+    if state.file_store is None or target_id is None:
+        return 0
+    snap_id = state.file_snaps.get(target_id)
+    if snap_id is None:
+        return 0
+    try:
+        restored = state.file_store.restore(snap_id)
+    except Exception:  # noqa: BLE001
+        return 0
+    return len(restored)
+
+
+def cmd_undo(session: Any, env: Any, args: str, out: PrintFn) -> None:
+    """Roll the session back one or more turns.
+
+    Pops up to ``--steps N`` entries off the undo stack (each pushed
+    onto the redo stack), restores the env + message snapshot for the
+    resulting top-of-stack (or the pre-turn-1 baseline if the stack
+    drains), and rewinds any per-turn file shadow so files modified in
+    the rewound turns return to their snapshotted contents.
+
+    Args:
+        args: ``""`` for a single-step rewind, ``"--steps 3"`` /
+            ``"-n 3"`` / bare ``"3"`` for a multi-step rewind. Invalid
+            arguments degrade to a 1-step undo rather than raising.
     """
     state = get_undo_state(session)
     if not state.undo_stack:
         out("/undo: nothing to undo")
         return
 
-    popped = state.undo_stack.pop()
-    state.redo_stack.append(popped)
+    steps = _parse_steps(args)
+    rewound = 0
+    while rewound < steps and state.undo_stack:
+        popped = state.undo_stack.pop()
+        state.redo_stack.append(popped)
+        rewound += 1
 
     # Determine the target checkpoint to restore: the new top-of-stack, or
     # the pre-turn-1 baseline if the stack is now empty.
@@ -409,33 +647,51 @@ def cmd_undo(session: Any, env: Any, _args: str, out: PrintFn) -> None:
         except (KeyError, Exception):  # noqa: BLE001 -- never crash REPL
             pass
 
+    files_restored = _restore_files_for(state, target.id if target else None)
+
     _restore_messages(session, target_messages)
-    out(f"/undo: rewound 1 turn ({len(state.undo_stack)} remaining)")
+    suffix = f" ({len(state.undo_stack)} remaining)"
+    word = "turn" if rewound == 1 else "turns"
+    file_note = f", {files_restored} files restored" if files_restored else ""
+    out(f"/undo: rewound {rewound} {word}{file_note}{suffix}")
 
 
-def cmd_redo(session: Any, env: Any, _args: str, out: PrintFn) -> None:
-    """Re-apply a turn previously rewound by :func:`cmd_undo`.
+def cmd_redo(session: Any, env: Any, args: str, out: PrintFn) -> None:
+    """Re-apply one or more turns previously rewound by :func:`cmd_undo`.
 
-    Pops the top of the redo stack, restores the env + messages, and pushes
-    the entry back onto the undo stack so it can be undone again.
+    Symmetric to :func:`cmd_undo` — accepts ``--steps N`` so a single
+    ``/redo --steps 3`` reapplies three turns at once. Each redone turn
+    is pushed back onto the undo stack so it can be undone again.
     """
     state = get_undo_state(session)
     if not state.redo_stack:
         out("/redo: nothing to redo")
         return
 
-    target = state.redo_stack.pop()
-    state.undo_stack.append(target)
+    steps = _parse_steps(args)
+    replayed = 0
+    target: CheckpointInfo | None = None
+    while replayed < steps and state.redo_stack:
+        target = state.redo_stack.pop()
+        state.undo_stack.append(target)
+        replayed += 1
 
-    if state.manager is not None:
+    if target is not None and state.manager is not None:
         try:
             state.manager.restore_by_id(target.id)
         except (KeyError, Exception):  # noqa: BLE001
             pass
 
-    target_messages = state.message_snapshots.get(target.id, [])
-    _restore_messages(session, target_messages)
-    out(f"/redo: replayed 1 turn ({len(state.redo_stack)} remaining)")
+    files_restored = _restore_files_for(state, target.id if target else None)
+
+    if target is not None:
+        target_messages = state.message_snapshots.get(target.id, [])
+        _restore_messages(session, target_messages)
+
+    suffix = f" ({len(state.redo_stack)} remaining)"
+    word = "turn" if replayed == 1 else "turns"
+    file_note = f", {files_restored} files restored" if files_restored else ""
+    out(f"/redo: replayed {replayed} {word}{file_note}{suffix}")
 
 
 def cmd_edit(_session: Any, _env: Any, _args: str, out: PrintFn) -> None:
@@ -504,6 +760,145 @@ def cmd_agents(session: Any, env: Any, args: str, out: PrintFn) -> None:
 def cmd_quit(session: Any, env: Any, args: str, out: PrintFn) -> None:
     """Leave the REPL (alias for ``/exit``)."""
     _cmd_exit(session, env, args, out)
+
+
+# ---------------------------------------------------------------------------
+# /permissions: declarative permission-rule management (W13 G6)
+# ---------------------------------------------------------------------------
+#
+# Late-bound import so the slash module stays loadable when the
+# permission-rules extra is missing (the loader itself uses only stdlib,
+# but defensive). The slash command exposes the three operations the
+# upstream agent's settings dialog ships:
+#
+#     /permissions list
+#     /permissions add <tool> <action> [arg_key=PAT] [-- description...]
+#     /permissions remove <index>
+#
+# Bare ``/permissions`` is a friendly alias for ``/permissions list``.
+
+
+_PERMISSIONS_HELP = (
+    "usage: /permissions [list | add <tool> <action> [arg_key=PAT] [desc...] | remove <index>]"
+)
+
+
+def cmd_permissions(session: Any, env: Any, args: str, out: PrintFn) -> None:
+    """Manage declarative permission rules persisted in ``~/.chimera/permissions.json``.
+
+    Sub-actions:
+
+    * ``list`` (default) — print the current rules with their index.
+    * ``add <tool> <action> [arg_key=PAT] [-- description]`` — append a
+      rule. ``<action>`` is one of ``allow``, ``deny``, ``ask`` (or
+      friendly aliases — ``permit`` / ``block`` / ``prompt``). The
+      optional ``arg_key=PAT`` shorthand attaches a per-argument glob
+      so e.g. ``arg_key=command "rm -rf*"`` only fires on dangerous
+      bash invocations. Anything after a literal ``--`` token becomes
+      the rule's description.
+    * ``remove <index>`` — drop the 0-based rule at *index*.
+
+    The command never crashes the REPL — bad input prints a one-line
+    diagnostic and returns.
+    """
+    try:
+        from chimera.otter import permission_rules as _pr
+    except Exception as exc:  # noqa: BLE001 -- module optional in stripped CI
+        out(f"/permissions: subsystem unavailable: {exc}")
+        return
+
+    tokens = shlex.split((args or "").strip()) if args else []
+    sub = tokens[0].lower() if tokens else "list"
+
+    if sub == "list":
+        rules = _pr.list_rules()
+        if not rules:
+            path = _pr.default_permissions_path()
+            out(f"/permissions: no rules in {path}")
+            return
+        out("/permissions:")
+        for idx, rule in enumerate(rules):
+            arg_note = ""
+            if rule.arg_key and rule.arg_pattern:
+                arg_note = f"  ({rule.arg_key} ~= {rule.arg_pattern!r})"
+            desc = f"  -- {rule.description}" if rule.description else ""
+            out(f"  [{idx}] {rule.tool} -> {rule.action}{arg_note}{desc}")
+        return
+
+    if sub == "add":
+        rest = tokens[1:]
+        if len(rest) < 2:
+            out(_PERMISSIONS_HELP)
+            return
+        tool, action = rest[0], rest[1]
+        extras = rest[2:]
+        arg_key: str | None = None
+        arg_pattern: str | None = None
+        description_parts: list[str] = []
+        # Walk extras: ``key=value`` becomes arg_key + arg_pattern; ``--``
+        # toggles description-collection mode for any remaining tokens.
+        in_description = False
+        for tok in extras:
+            if in_description:
+                description_parts.append(tok)
+                continue
+            if tok == "--":
+                in_description = True
+                continue
+            if "=" in tok and not tok.startswith("="):
+                key, _, val = tok.partition("=")
+                if not arg_key:
+                    arg_key = key.strip()
+                    arg_pattern = val
+                continue
+            # Bare token: treat as the arg_pattern when arg_key was set
+            # without a value, otherwise fold into description.
+            if arg_key and not arg_pattern:
+                arg_pattern = tok
+            else:
+                description_parts.append(tok)
+        try:
+            new_rule = _pr.OtterPermissionRule(
+                tool=tool,
+                action=action.lower(),
+                arg_key=arg_key or None,
+                arg_pattern=arg_pattern or None,
+                description=" ".join(description_parts).strip(),
+            )
+            # Validate eagerly so a bad action doesn't land on disk.
+            _pr.parse_action(new_rule.action)
+            _pr.add_rule(new_rule)
+        except _pr.PermissionRulesError as exc:
+            out(f"/permissions add: {exc}")
+            return
+        except OSError as exc:
+            out(f"/permissions add: cannot write file: {exc}")
+            return
+        path = _pr.default_permissions_path()
+        out(f"/permissions: added rule {new_rule.tool} -> {new_rule.action} (saved to {path})")
+        return
+
+    if sub == "remove":
+        if len(tokens) < 2:
+            out(_PERMISSIONS_HELP)
+            return
+        try:
+            index = int(tokens[1])
+        except ValueError:
+            out(f"/permissions remove: index must be an integer, got {tokens[1]!r}")
+            return
+        try:
+            removed = _pr.remove_rule(index)
+        except OSError as exc:
+            out(f"/permissions remove: cannot write file: {exc}")
+            return
+        if removed is None:
+            out(f"/permissions remove: no rule at index {index}")
+            return
+        out(f"/permissions: removed rule [{index}] {removed.tool} -> {removed.action}")
+        return
+
+    out(_PERMISSIONS_HELP)
 
 
 # ---------------------------------------------------------------------------
@@ -699,6 +1094,7 @@ OTTER_SLASH_COMMANDS: dict[str, SlashHandler] = {
     "compact": _cmd_compact,
     "init": _cmd_init,
     "themes": cmd_themes,
+    "permissions": cmd_permissions,
     "exit": _cmd_exit,
     "quit": cmd_quit,
     # Prompt
@@ -740,6 +1136,7 @@ OTTER_SLASH_HELP: dict[str, str] = {
     "compact": "force a HARD threshold compaction now",
     "init": "summarise the project",
     "themes": "switch the REPL theme (coming soon)",
+    "permissions": "list/add/remove declarative permission rules",
     "exit": "leave the REPL",
     "quit": "leave the REPL",
     # Prompt

@@ -106,6 +106,7 @@ import json
 import queue
 import secrets
 import ssl
+import sys
 import threading
 import time
 import urllib.parse
@@ -667,13 +668,34 @@ class OtterServer:
         return httpd
 
     def _maybe_write_pidfile(self) -> None:
-        """Best-effort pidfile write. ``pidfile_prefix=None`` is a no-op."""
+        """Pidfile write with explicit lock-contention surfacing.
+
+        ``pidfile_prefix=None`` is a no-op (library embedders, tests).
+
+        Behaviour:
+
+        * **Success:** the path is recorded on ``self._pidfile_path`` so
+          graceful shutdown can remove it.
+        * **Lock contention** (:class:`~chimera.otter.server_pidfile.PidfileLocked`,
+          another live ``chimera otter serve`` already holds the lock):
+          surface a user-facing message on ``stderr`` and exit ``rc=2``.
+          Pre-V13 this was swallowed silently, leaving the second
+          invocation racing on the bound port without any breadcrumb —
+          users got a cryptic ``EADDRINUSE`` from a future
+          serve-on-the-same-port attempt instead of "the pidfile is
+          locked". Issue: W13-E3.
+        * **Other exceptions** (disk full, permission denied, …):
+          intentionally propagate. Pre-V13 the bare ``except`` silently
+          masked them too; we now want them visible so operators can fix
+          the underlying disk / perms problem rather than discover later
+          that ``serve status`` cannot find the running server.
+        """
         if self._pidfile_prefix is None:
             return
-        try:
-            from chimera.otter.server_pidfile import write_pidfile
+        from chimera.otter.server_pidfile import PidfileLocked, write_pidfile
 
-            scheme = "https" if (self._tls_cert and self._tls_key) else "http"
+        scheme = "https" if (self._tls_cert and self._tls_key) else "http"
+        try:
             self._pidfile_path = write_pidfile(
                 prefix=self._pidfile_prefix,
                 host=self._host,
@@ -682,8 +704,29 @@ class OtterServer:
                 scheme=scheme,
                 base_dir=self._pidfile_dir,
             )
-        except Exception:  # noqa: BLE001 — pidfile write must never crash serve
-            self._pidfile_path = None
+        except PidfileLocked as exc:
+            # Render a user-facing breadcrumb. ``exc.pid`` / ``exc.port``
+            # are populated by ``write_pidfile`` when it parses the
+            # contested file; fall back to ``self._port`` and the literal
+            # "?" so we always print something useful.
+            running_pid = exc.pid or 0
+            running_port = exc.port or self._port
+            print(
+                "ERROR: chimera otter serve already running "
+                f"(pid={running_pid}) on port={running_port}. "
+                "Stop it first or use a different --port.",
+                file=sys.stderr,
+            )
+            # Close the bound socket so we don't leak a half-started
+            # listener while exiting. ``self._httpd`` was set on the
+            # caller (``start``) just before this method runs.
+            if self._httpd is not None:
+                try:
+                    self._httpd.server_close()
+                except Exception:  # noqa: BLE001 - best-effort cleanup
+                    pass
+                self._httpd = None
+            raise SystemExit(2) from exc
 
     def _maybe_remove_pidfile(self) -> None:
         """Best-effort pidfile removal on graceful shutdown. Idempotent."""

@@ -280,6 +280,66 @@ payloads as the SSE `data:` field.
 ACP does not honor `OTTER_SERVER_TOKEN` — the trust model is "the
 parent process spawned us, so the parent process is authorized."
 
+## File-level undo
+
+`chimera otter` ships true filesystem-level `/undo` and `/redo` —
+modifying a file with the `write` tool, then running `/undo`, restores
+the file to its prior on-disk contents. This is implemented by a
+content-addressed shadow store at:
+
+```
+~/.chimera/snapshots/<session-id>/
+    blobs/<sha256>                # deduplicated file payloads
+    snaps/<snap-id>/manifest.json # {abs_path: sha256 | null}
+```
+
+Set `CHIMERA_SNAPSHOT_ROOT` to redirect the shadow root (CI / sandboxed
+environments).
+
+### How it works
+
+After every assistant turn:
+
+1. The REPL drains any modified files from the active
+   [`FileTracker`](../api/core.md#filetracker) (the canonical surface
+   `Session._agent.loop.config.file_tracker`).
+2. Each modified file's current bytes are SHA-256 hashed and copied
+   into `blobs/`. Identical content across turns shares a single blob
+   (so a 1MB file edited in 10 turns costs ~1MB on disk, not 10MB).
+3. A per-snap manifest records `{abs_path: sha256 | null}`. `null`
+   means "did not exist at snap time" — `/undo` will delete the file
+   on rewind, mirroring `git checkout` semantics.
+
+### Slash commands
+
+| Command | Behavior |
+|---|---|
+| `/undo` | Rewind one turn (messages + files). |
+| `/undo --steps N` | Rewind N turns. Bare `/undo 3` works too. |
+| `/redo` | Replay one rewound turn. |
+| `/redo --steps N` | Replay N turns at once. |
+
+Each handler prints e.g. `/undo: rewound 1 turn, 2 files restored
+(0 remaining)` so the user can see what changed.
+
+### Storage limits
+
+- Files larger than 25 MiB are recorded as `null` (the shadow refuses
+  to swallow runaway logs).
+- A new turn after `/undo` invalidates the redo stack and discards the
+  orphaned redo entries' file snaps so the shadow doesn't grow without
+  bound under heavy branching.
+- `/new` (or session teardown) wipes the entire session subdirectory
+  via `FileSnapshotStore.clear()`.
+
+### HTTP / ACP transport
+
+The same hook fires whether the session is driven via the REPL, the
+HTTP `POST /sessions/<id>/turns` endpoint, or the ACP JSON-RPC stdio
+transport — `OtterServer._snap_after_turn(state)` is called once per
+finalized turn on every transport. Callers can therefore drive
+`/undo` over HTTP (forthcoming endpoint) without a forked code path.
+
 ## Operational notes
 
 - One process holds one `Provider` for its lifetime; restart to swap.
