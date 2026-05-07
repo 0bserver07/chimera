@@ -30,11 +30,19 @@ import os
 import platform
 import shutil
 import subprocess
+import tarfile
+import tempfile
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from chimera.eval.harness import Benchmark
+
+if TYPE_CHECKING:
+    from chimera.core.agent import Agent
+    from chimera.env.base import Environment
+    from chimera.types import AgentResult
 
 
 class BenchmarkSkipped(Exception):
@@ -361,6 +369,131 @@ class ProgramBench(Benchmark):
             out[inst.difficulty] = out.get(inst.difficulty, 0) + 1
         return out
 
+    # ------------------------------------------------------------------
+    # Inference loop (wave-14)
+    # ------------------------------------------------------------------
+    def run_instance(
+        self,
+        task: dict[str, Any] | ProgramBenchInstance,
+        *,
+        workspace: str | Path | None = None,
+        agent: Agent | None = None,
+        agent_factory: (
+            Callable[[ProgramBenchInstance, Path], Agent] | None
+        ) = None,
+        env: Environment | None = None,
+        pull_image: bool = True,
+        extract_artifacts: bool = True,
+        image_puller: Callable[[str], None] | None = None,
+        artifact_extractor: Callable[[str, Path], None] | None = None,
+        submission_packager: Callable[[Path, Path], None] | None = None,
+        extra_prompt: str = "",
+        runtime_check: bool = True,
+    ) -> ProgramBenchRunResult:
+        """Drive an agent through one ProgramBench instance.
+
+        The loop:
+            1. Resolves the :class:`ProgramBenchInstance` from ``task``.
+            2. Runs :func:`check_runtime_or_skip` (unless ``runtime_check=False``).
+            3. Pulls ``instance.cleanroom_image()`` (unless ``pull_image=False``).
+            4. Extracts ``/agent-workspace/_inputs`` (binary + docs) from
+               the cleanroom image into ``<workspace>/_inputs/`` (unless
+               ``extract_artifacts=False``).
+            5. Calls ``agent.run(prompt, env=env)`` with the rebuild
+               prompt. ``env`` defaults to a
+               :class:`~chimera.env.local.LocalEnvironment` rooted at
+               ``workspace``.
+            6. Packages everything in ``workspace`` (excluding
+               ``_inputs/`` and any prior ``submission.tar.gz``) into
+               ``<workspace>/submission.tar.gz``.
+
+        Args:
+            task: Either a task dict (as returned by :meth:`tasks`) or a
+                :class:`ProgramBenchInstance`.
+            workspace: Directory the agent writes into. If ``None``, a
+                temp directory is created (caller must clean up).
+            agent: Pre-built agent. Mutually exclusive with
+                ``agent_factory``.
+            agent_factory: Callable building an agent from
+                ``(instance, workspace_path)``. One of ``agent`` or
+                ``agent_factory`` is required.
+            env: Environment passed to :meth:`Agent.run`. Defaults to a
+                :class:`LocalEnvironment` rooted at ``workspace``.
+            pull_image: If ``True`` (default), invoke ``docker pull`` on
+                the cleanroom image first.
+            extract_artifacts: If ``True`` (default), copy the binary +
+                docs out of the cleanroom image into
+                ``<workspace>/_inputs/``.
+            image_puller: Override the default ``docker pull`` shell-out.
+                Receives the image reference.
+            artifact_extractor: Override the default extraction
+                (``docker create`` + ``docker cp`` + ``docker rm``).
+                Receives ``(image_ref, workspace_path)``.
+            submission_packager: Override the default tarball packager.
+                Receives ``(workspace_path, output_tar_path)``.
+            extra_prompt: Optional text appended after the rebuild
+                prompt (project-specific hints).
+            runtime_check: If ``True``, gate on
+                :func:`check_runtime_or_skip` first. Set to ``False``
+                when injecting all docker shell-outs through callables.
+
+        Returns:
+            :class:`ProgramBenchRunResult` capturing the submission tar
+            path, the agent's :class:`AgentResult`, and aggregated
+            cost/step counts.
+
+        Raises:
+            BenchmarkSkipped: If the runtime check fails (no docker /
+                non-amd64) and ``CHIMERA_PROGRAMBENCH_LIVE`` is not set.
+            ValueError: If neither ``agent`` nor ``agent_factory`` is
+                provided.
+        """
+        if runtime_check:
+            check_runtime_or_skip()
+
+        instance = _coerce_instance(task)
+
+        ws = _prepare_workspace(workspace)
+        inputs_dir = ws / "_inputs"
+        inputs_dir.mkdir(parents=True, exist_ok=True)
+
+        image_ref = instance.cleanroom_image(self._image_tag)
+        if pull_image:
+            puller = image_puller or pull_cleanroom_image
+            puller(image_ref)
+        if extract_artifacts:
+            extractor = artifact_extractor or extract_cleanroom_artifacts
+            extractor(image_ref, inputs_dir)
+
+        run_agent = _resolve_agent(instance, ws, agent, agent_factory)
+        prompt = build_rebuild_prompt(instance, ws, extra_prompt)
+
+        run_env = env
+        if run_env is None:
+            run_env = _default_local_env(ws)
+
+        agent_result: AgentResult | None = None
+        error: str | None = None
+        try:
+            agent_result = run_agent.run(prompt, env=run_env)
+        except Exception as exc:  # noqa: BLE001 — surface as a soft failure
+            error = f"{type(exc).__name__}: {exc}"
+
+        submission_tar = ws / "submission.tar.gz"
+        packager = submission_packager or package_submission
+        packager(ws, submission_tar)
+
+        return ProgramBenchRunResult(
+            instance_id=instance.instance_id,
+            submission_tar=submission_tar,
+            workspace=ws,
+            agent_result=agent_result,
+            steps=getattr(agent_result, "steps", 0) if agent_result else 0,
+            cost=getattr(agent_result, "cost", 0.0) if agent_result else 0.0,
+            success=bool(getattr(agent_result, "success", False)) if agent_result else False,
+            error=error,
+        )
+
 
 # ---------------------------------------------------------------------------
 # Module-level helpers — exposed for testing and reuse
@@ -443,12 +576,268 @@ def parse_eval_json(path: Path | str) -> dict[str, Any]:
     }
 
 
+@dataclass
+class ProgramBenchRunResult:
+    """Outcome of :meth:`ProgramBench.run_instance`.
+
+    Attributes:
+        instance_id: The task instance the agent was run against.
+        submission_tar: Path to the produced ``submission.tar.gz``
+            (the artifact the upstream ``programbench eval`` CLI
+            consumes).
+        workspace: The directory the agent wrote into. Lives until the
+            caller cleans it up.
+        agent_result: The underlying :class:`AgentResult` from
+            :meth:`Agent.run`, or ``None`` if the agent raised before
+            producing one.
+        steps: Number of agent steps consumed (mirrors
+            ``agent_result.steps`` when available).
+        cost: Aggregate provider cost in USD (mirrors
+            ``agent_result.cost`` when available).
+        success: ``True`` iff the agent reported success. Note: this
+            is the *agent's* self-report; the *benchmark* score still
+            requires :meth:`ProgramBench.evaluate` against the upstream
+            CLI.
+        error: Error string if :meth:`Agent.run` raised; otherwise
+            ``None``.
+    """
+
+    instance_id: str
+    submission_tar: Path
+    workspace: Path
+    agent_result: AgentResult | None = None
+    steps: int = 0
+    cost: float = 0.0
+    success: bool = False
+    error: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Inference helpers — exposed for testing and reuse
+# ---------------------------------------------------------------------------
+
+
+REBUILD_PROMPT_TEMPLATE = (
+    "Task: {instance_id} ({language}, difficulty={difficulty})\n"
+    "Repo: {repo}\n"
+    "\n"
+    "You are inside a fresh ProgramBench cleanroom workspace at {workspace}.\n"
+    "The original program's compiled binary and documentation are mounted\n"
+    "read-only under {workspace}/_inputs/. Your task is to **rebuild** a\n"
+    "complete source tree at the workspace root that, when graded by the\n"
+    "upstream programbench eval harness, reproduces the binary's behaviour.\n"
+    "\n"
+    "Rules:\n"
+    "  - Read everything under {workspace}/_inputs/docs/ first — it is the spec.\n"
+    "  - Treat {workspace}/_inputs/binary/ as the oracle: run it on test\n"
+    "    inputs to confirm behaviour when docs are ambiguous.\n"
+    "  - Write your rebuilt source under {workspace}/ (NOT under _inputs/).\n"
+    "  - The cleanroom container has NO internet — do not attempt fetches.\n"
+    "  - Stop when you have a runnable project; partial rebuilds count.\n"
+)
+
+
+def build_rebuild_prompt(
+    instance: ProgramBenchInstance,
+    workspace: Path,
+    extra: str = "",
+) -> str:
+    """Render the rebuild prompt for a given instance + workspace."""
+    base = REBUILD_PROMPT_TEMPLATE.format(
+        instance_id=instance.instance_id,
+        language=instance.language or "unknown",
+        difficulty=instance.difficulty or "unknown",
+        repo=instance.repo or "unknown",
+        workspace=str(workspace),
+    )
+    if extra:
+        return f"{base}\n{extra.rstrip()}\n"
+    return base
+
+
+def pull_cleanroom_image(image_ref: str) -> None:
+    """Run ``docker pull <image_ref>``.
+
+    Args:
+        image_ref: Fully-qualified image reference, e.g.
+            ``programbench/<owner>_1776_<repo>.<sha>:task_cleanroom``.
+
+    Raises:
+        BenchmarkSkipped: If the docker CLI is not on PATH.
+        subprocess.CalledProcessError: If the pull itself fails (the
+            caller usually catches and downgrades).
+    """
+    docker_path = shutil.which("docker")
+    if not docker_path:
+        raise BenchmarkSkipped(
+            "docker CLI not found on PATH; cannot pull cleanroom image."
+        )
+    subprocess.run(
+        [docker_path, "pull", image_ref],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+
+def extract_cleanroom_artifacts(image_ref: str, dest: Path) -> None:
+    """Extract ``/agent-workspace/_inputs`` from the cleanroom image.
+
+    Uses ``docker create`` + ``docker cp`` + ``docker rm`` so we don't
+    need a long-running container. The destination directory is
+    populated with whatever the upstream image puts under
+    ``/agent-workspace/_inputs``.
+
+    Args:
+        image_ref: Cleanroom image reference.
+        dest: Local directory that will contain the extracted tree
+            (created if missing). Existing contents are left in place;
+            the docker copy overlays.
+
+    Raises:
+        BenchmarkSkipped: If the docker CLI is not on PATH.
+        subprocess.CalledProcessError: On any docker command failure.
+    """
+    docker_path = shutil.which("docker")
+    if not docker_path:
+        raise BenchmarkSkipped(
+            "docker CLI not found on PATH; cannot extract cleanroom artifacts."
+        )
+    dest.mkdir(parents=True, exist_ok=True)
+    create = subprocess.run(
+        [docker_path, "create", image_ref, "true"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    container_id = create.stdout.strip()
+    if not container_id:
+        raise RuntimeError(
+            "docker create returned no container id for image "
+            f"{image_ref!r}; cannot extract artifacts."
+        )
+    try:
+        subprocess.run(
+            [
+                docker_path,
+                "cp",
+                f"{container_id}:/agent-workspace/_inputs/.",
+                str(dest),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    finally:
+        subprocess.run(
+            [docker_path, "rm", "-f", container_id],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+
+def package_submission(workspace: Path, output_tar: Path) -> None:
+    """Package ``workspace`` into ``output_tar`` (gzip tarball).
+
+    Excludes ``_inputs/`` (the agent-readable mount, supplied to the
+    agent — not part of the submission) and the output tarball itself
+    if it already lives under ``workspace``.
+
+    Args:
+        workspace: Source directory.
+        output_tar: Destination ``.tar.gz`` path.
+    """
+    workspace = Path(workspace)
+    output_tar = Path(output_tar)
+    output_tar.parent.mkdir(parents=True, exist_ok=True)
+    skip_paths = {
+        (workspace / "_inputs").resolve(),
+        output_tar.resolve(),
+    }
+
+    def _filter(tarinfo: tarfile.TarInfo) -> tarfile.TarInfo | None:
+        member = (workspace / tarinfo.name).resolve()
+        if member in skip_paths:
+            return None
+        # Skip any path that lives under _inputs/
+        for skip in skip_paths:
+            try:
+                member.relative_to(skip)
+            except ValueError:
+                continue
+            return None
+        return tarinfo
+
+    with tarfile.open(output_tar, "w:gz") as tf:
+        for child in sorted(workspace.iterdir()):
+            tf.add(child, arcname=child.name, filter=_filter)
+
+
+# ---------------------------------------------------------------------------
+# Internal coercion helpers
+# ---------------------------------------------------------------------------
+
+
+def _coerce_instance(
+    task: dict[str, Any] | ProgramBenchInstance,
+) -> ProgramBenchInstance:
+    if isinstance(task, ProgramBenchInstance):
+        return task
+    instance_id = task.get("instance_id") or task.get("id") or ""
+    return ProgramBenchInstance(
+        instance_id=instance_id,
+        repo=task.get("repo", ""),
+        commit=task.get("commit", ""),
+        language=task.get("language", ""),
+        difficulty=task.get("difficulty", ""),
+        eval_clean_hashes=list(task.get("eval_clean_hashes", []) or []),
+    )
+
+
+def _prepare_workspace(workspace: str | Path | None) -> Path:
+    if workspace is None:
+        return Path(tempfile.mkdtemp(prefix="programbench-ws-"))
+    ws = Path(workspace)
+    ws.mkdir(parents=True, exist_ok=True)
+    return ws
+
+
+def _resolve_agent(
+    instance: ProgramBenchInstance,
+    workspace: Path,
+    agent: Agent | None,
+    factory: Callable[[ProgramBenchInstance, Path], Agent] | None,
+) -> Agent:
+    if agent is not None:
+        return agent
+    if factory is None:
+        raise ValueError(
+            "ProgramBench.run_instance requires either `agent` or "
+            "`agent_factory` to be supplied."
+        )
+    return factory(instance, workspace)
+
+
+def _default_local_env(workspace: Path) -> Environment:
+    """Build a LocalEnvironment rooted at ``workspace`` (lazy import)."""
+    from chimera.env.local import LocalEnvironment
+
+    return LocalEnvironment(workdir=str(workspace))
+
+
 __all__ = [
     "BenchmarkSkipped",
     "ProgramBench",
     "ProgramBenchInstance",
+    "ProgramBenchRunResult",
+    "REBUILD_PROMPT_TEMPLATE",
+    "build_rebuild_prompt",
     "check_runtime_or_skip",
     "docker_available",
+    "extract_cleanroom_artifacts",
     "is_linux_amd64",
+    "package_submission",
     "parse_eval_json",
+    "pull_cleanroom_image",
 ]

@@ -38,7 +38,7 @@ We **do not re-implement the harness**. We:
 | Skip when Docker missing or non-`linux/amd64` host | DONE |
 | Live integration test (gated on `CHIMERA_PROGRAMBENCH_LIVE=1`) | DONE |
 | Discoverable via `chimera eval --benchmark programbench` | DONE |
-| Inference loop (call Chimera Agent inside cleanroom container) | TODO — wave-14 |
+| Inference loop (`ProgramBench.run_instance`) | DONE — wave-14 |
 
 ## Quick start
 
@@ -103,12 +103,108 @@ summary = parse_eval_json("./pb-runs/baseline/o__r.abc/o__r.abc.eval.json")
 need the `parse_eval_json` summary directly — they are not folded into
 the headline boolean.
 
+## Running inference
+
+The wave-14 inference loop is `ProgramBench.run_instance`. It pulls the
+cleanroom Docker image, extracts the binary + docs into a fresh
+workspace, drives a Chimera `Agent` against the rebuild prompt, and
+packages the workspace into the `submission.tar.gz` the upstream
+`programbench eval` CLI expects.
+
+```python
+from pathlib import Path
+
+from chimera.agents.config import AgentConfig
+from chimera.eval.benchmarks import ProgramBench
+from chimera.providers.factory import create_provider
+
+bench = ProgramBench(
+    tasks_dir="/path/to/ProgramBench/src/programbench/data/tasks",
+    language="rust",
+    limit=5,
+    run_dir="./pb-runs/baseline-glm5",
+)
+
+# Build a swe-agent-style agent for each instance.
+SWE_PRESET = AgentConfig.from_markdown(
+    "chimera/agents/presets/swe-agent.md"
+)
+
+
+def make_agent(instance, workspace):
+    provider = create_provider(model="glm-5")
+    return SWE_PRESET.build(provider)
+
+
+for task in bench.tasks():
+    result = bench.run_instance(
+        task,
+        workspace=Path(f"./pb-runs/baseline-glm5/{task['id']}/ws"),
+        agent_factory=make_agent,
+    )
+    print(task["id"], result.success, result.cost, result.submission_tar)
+
+    # Defer to upstream `programbench eval` for grading
+    bench.evaluate(task, str(result.submission_tar))
+```
+
+### What `run_instance` does
+
+1. Calls `check_runtime_or_skip()` — same skip semantics as `evaluate`.
+2. Calls `pull_cleanroom_image(image_ref)` (`docker pull <image>`).
+3. Calls `extract_cleanroom_artifacts(image_ref, workspace/_inputs)` —
+   uses `docker create` + `docker cp` + `docker rm` to copy the
+   binary and docs out of the image without keeping a container alive.
+4. Resolves an `Agent` (either the `agent=` kwarg or the
+   `agent_factory(instance, workspace)` callback).
+5. Calls `agent.run(prompt, env=LocalEnvironment(workspace))` with a
+   prompt rendered by `build_rebuild_prompt` (mentions the workspace
+   path, instance metadata, the no-internet rule, and the
+   `_inputs/`-is-spec-not-source rule).
+6. Calls `package_submission(workspace, workspace/submission.tar.gz)`
+   to gzip-tar everything in `workspace/` *except* `_inputs/` and
+   the tarball itself.
+
+### Mocking for tests
+
+Every external call is injectable:
+
+| kwarg | default | purpose |
+| --- | --- | --- |
+| `image_puller` | `pull_cleanroom_image` | swap in for a no-op in tests |
+| `artifact_extractor` | `extract_cleanroom_artifacts` | populate `_inputs/` from a fixture |
+| `submission_packager` | `package_submission` | use a custom tar layout |
+| `pull_image=False` | — | skip the docker pull entirely |
+| `extract_artifacts=False` | — | skip extraction |
+| `runtime_check=False` | — | skip the docker/amd64 gate |
+
+A live test gated on `CHIMERA_PROGRAMBENCH_LIVE=1` lives in
+`tests/eval/test_programbench_inference.py::TestLiveInference`.
+
+### Result shape
+
+`ProgramBench.run_instance` returns a `ProgramBenchRunResult`:
+
+| field | type | description |
+| --- | --- | --- |
+| `instance_id` | `str` | task id |
+| `submission_tar` | `Path` | path to `submission.tar.gz` (always produced, even on agent failure) |
+| `workspace` | `Path` | the directory the agent wrote into |
+| `agent_result` | `AgentResult \| None` | the `Agent.run` return value |
+| `steps` | `int` | mirrored from `agent_result.steps` |
+| `cost` | `float` | mirrored from `agent_result.cost` |
+| `success` | `bool` | the agent's self-reported success — *not* the benchmark score |
+| `error` | `str \| None` | exception summary if `Agent.run` raised |
+
+The benchmark score still requires `bench.evaluate(task,
+result.submission_tar)`, which shells out to the upstream CLI.
+
 ## Follow-up
 
-- Wire a Chimera-Agent-inside-cleanroom-container inference loop. The
-  container is at `programbench/<...>:task_cleanroom` and the agent must
-  produce a tarball at `submission.tar.gz` matching the upstream layout.
-  Recommended preset: a swe-agent-style preset
-  (`chimera/agents/presets/swe.py`).
-- Add a tarball helper that walks a working tree and emits the required
-  `submission.tar.gz` (mirror upstream's `mini-swe-agent` packager).
+- Optional `mode="container"` flag on `run_instance` — wire a
+  `DockerEnvironment` rooted at the cleanroom image so the agent's
+  bash/edit tools execute *inside* the container. The current default
+  uses a `LocalEnvironment` and only enters Docker for image pull
+  and artifact extraction.
+- Aggregate harness loop that feeds `bench.tasks()` through
+  `run_instance` + `evaluate` and emits a JSONL run report.

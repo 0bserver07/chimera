@@ -18,6 +18,7 @@ from chimera.eval.benchmarks.programbench import (
     BenchmarkSkipped,
     ProgramBench,
     ProgramBenchInstance,
+    ProgramBenchRunResult,
 )
 from chimera.eval.benchmarks.swe_bench import SWEBench
 from chimera.eval.benchmarks.swe_lancer import SWELancer, SWELancerTask
@@ -49,6 +50,7 @@ __all__ = [
     "NoChaInstance",
     "ProgramBench",
     "ProgramBenchInstance",
+    "ProgramBenchRunResult",
     "SWEBench",
     "SWEBenchConfig",
     "SWEBenchVerified",
