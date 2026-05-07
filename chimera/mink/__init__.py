@@ -19,6 +19,12 @@ Public surface re-exported here:
 from __future__ import annotations
 
 from chimera.mink.cli import add_arguments, run
+from chimera.mink.repl import (
+    apply_keybindings,
+    format_statusline_text,
+    render_statusline,
+    translate_key,
+)
 from chimera.mink.settings import (
     MinkSettings,
     MinkSettingsError,
@@ -33,6 +39,10 @@ __all__ = [
     "Permissions",
     "Team",
     "add_arguments",
+    "apply_keybindings",
+    "format_statusline_text",
     "load_mink_settings",
+    "render_statusline",
     "run",
+    "translate_key",
 ]

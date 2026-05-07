@@ -1195,15 +1195,6 @@ def _run_print_mode(args: argparse.Namespace) -> int:
     # spinner + collapsed tool blocks), plain ConsoleStreamHandler when piped
     # or when the user explicitly opts out via --no-rich/--no-color/$NO_COLOR.
     # JSON / stream-json modes still get None so structured output is clean.
-    handler: Any = None
-    if args.output_format == "text":
-        from chimera.cli.render import build_stream_handler
-
-        handler = build_stream_handler(
-            no_color=bool(getattr(args, "no_rich", False))
-            or bool(getattr(args, "no_color", False)),
-        )
-
     # WHY (audit B-4 first half): load .claude/settings.json so allow/ask/deny
     # rules and the default permission mode are honored by the live one-shot.
     # Explicit --permission-mode flags ALWAYS win over the settings file so
@@ -1211,8 +1202,14 @@ def _run_print_mode(args: argparse.Namespace) -> int:
     # when --permission-mode is left at its default ("default") and the file
     # actually contains rules. Hooks (audit B-4 second half) are loaded
     # unconditionally — they're orthogonal to permission-mode.
+    #
+    # WHY (W14-7): load settings BEFORE building the stream handler so the
+    # handler can apply ``settings.theme`` / ``settings.output_styles`` —
+    # without that ordering the rich handler defaults to the dark palette
+    # and ignores user-configured per-style overrides.
     settings_permissions: Any = None
     settings_hooks: dict[str, list[dict[str, Any]]] = {}
+    settings: Any = None
     user_passed_explicit_mode = args.permission_mode != "default"
     try:
         from chimera.mink.settings import load_mink_settings
@@ -1229,6 +1226,46 @@ def _run_print_mode(args: argparse.Namespace) -> int:
         print(
             f"[mink] warning: failed to load settings.json ({exc}); "
             "using --permission-mode default and no hooks",
+            file=sys.stderr,
+        )
+
+    handler: Any = None
+    if args.output_format == "text":
+        from chimera.cli.render import build_stream_handler
+
+        # WHY (W14-7): pass ``settings`` so ``theme`` / ``output_styles``
+        # apply. ``style_name`` reads from settings.output_format when it
+        # matches a defined style, falling back to defaults otherwise.
+        styles = getattr(settings, "output_styles", None) or {}
+        style_name = (
+            args.output_format if args.output_format in styles else None
+        )
+        handler = build_stream_handler(
+            no_color=bool(getattr(args, "no_rich", False))
+            or bool(getattr(args, "no_color", False)),
+            settings=settings,
+            style_name=style_name,
+        )
+
+    # WHY (W14-7): apply REPL-personality keys at startup so the user's
+    # ``~/.claude/settings.json`` keybindings + statusline take effect.
+    # Failures inside ``apply_keybindings`` are logged but never raised.
+    try:
+        from chimera.mink.repl import apply_keybindings, render_statusline
+
+        apply_keybindings(settings)
+        statusline_ctx = {
+            "cwd": str(Path(cwd)),
+            "model": effective_model,
+        }
+        render_statusline(
+            getattr(settings, "statusline", None),
+            context=statusline_ctx,
+        )
+    except Exception as exc:  # noqa: BLE001
+        # Settings application is decorative; never block REPL startup.
+        print(
+            f"[mink] warning: settings.json REPL apply failed ({exc})",
             file=sys.stderr,
         )
 

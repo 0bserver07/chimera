@@ -1,6 +1,6 @@
 """Shared loader for project-root instruction files.
 
-Both Codex (`AGENTS.md`) and Claude Code (`CLAUDE.md`) ingest a
+Both Codex (`AGENTS.md`) and the upstream (`CLAUDE.md`) ingest a
 project-root markdown file as system instructions. This module unifies
 that discovery so every CLI surface (`mink`, `ferret`, future
 front-ends) reaches the *same* set of files in the *same* order.
@@ -100,6 +100,11 @@ def load_instruction_files(
     ``agent_memory``) so importing this module stays cheap and keeps
     the no-files case free of side effects.
 
+    Side effect: fires :data:`HookEvent.INSTRUCTIONS_LOADED` once with
+    the list of resolved paths so observers (audit log, agent telemetry)
+    can record which files shaped the system prompt. Empty discovery
+    skips the emit; errors inside the emit path are swallowed.
+
     Args:
         project_dir: Project root anchor. Defaults to ``Path.cwd()``.
 
@@ -150,7 +155,40 @@ def load_instruction_files(
     chimera_rules = cwd / ".chimera" / "rules.md"
     _push(chimera_rules, "rules.md")
 
+    if out:
+        _emit_instructions_loaded(out)
+
     return out
+
+
+def _emit_instructions_loaded(files: list[InstructionFile]) -> None:
+    """Fire :data:`HookEvent.INSTRUCTIONS_LOADED` after a successful walk.
+
+    Best-effort: a missing global emitter or an in-hook exception is
+    swallowed so CLI startup never crashes on observability code.
+
+    The emit carries ``tool_input`` with the resolved paths and source
+    labels so a hook can render an accurate "instructions seeded" banner
+    or audit which CLAUDE.md / AGENTS.md files shaped the prompt.
+    """
+    try:
+        from chimera.hooks.emitter import get_global_emitter
+        from chimera.hooks.events import HookEvent
+
+        emitter = get_global_emitter()
+        if emitter.active:
+            payload = {
+                "paths": [str(f.path) for f in files],
+                "sources": [f.source for f in files],
+                "truncated": [f.truncated for f in files],
+            }
+            emitter.emit_sync(
+                HookEvent.INSTRUCTIONS_LOADED,
+                tool_name="chimera.instruction_files",
+                tool_input=payload,
+            )
+    except Exception:  # pragma: no cover - best-effort
+        pass
 
 
 def load_instruction_text(

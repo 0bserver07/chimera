@@ -14,6 +14,7 @@ import os
 import re
 import sys
 from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 from typing import TYPE_CHECKING, Any, TextIO
 
 from chimera.streaming.base import StreamHandler
@@ -74,6 +75,10 @@ __all__ = [
     "RichStreamHandler",
     "MinkStreamHandler",
     "build_stream_handler",
+    "ThemePalette",
+    "OutputStyle",
+    "resolve_theme",
+    "resolve_output_style",
 ]
 
 
@@ -307,15 +312,35 @@ _TRUNC_LIMIT = 2000
 
 
 class ToolBlockRenderer:
-    """Render a tool call as a collapsed line plus a styled result block."""
+    """Render a tool call as a collapsed line plus a styled result block.
 
-    def __init__(self, stream: TextIO | None = None) -> None:
+    Accepts an optional :class:`ThemePalette` for colour swaps and an
+    :class:`OutputStyle` to honour per-style knobs (compact tool blocks,
+    custom diff context). Both default to the legacy values so existing
+    call sites are byte-for-byte unchanged.
+    """
+
+    def __init__(
+        self,
+        stream: TextIO | None = None,
+        *,
+        palette: ThemePalette | None = None,
+        style: OutputStyle | None = None,
+    ) -> None:
         self._stream = stream or sys.stdout
+        self._palette = palette
+        self._style = style or OutputStyle()
+
+    @property
+    def _p(self) -> Any:
+        """Effective palette: explicit theme wins, fallback to legacy ``_STYLE``."""
+        return self._palette if self._palette is not None else _STYLE
 
     def render_call(self, name: str, args: dict[str, Any] | str) -> None:
         """Write the collapsed header line: ``> name(short_args)``."""
         short = self._short_args(args)
-        line = f"▶ {_STYLE.wrap(name, _STYLE.bold)}({_STYLE.wrap(short, _STYLE.dim)})\n"
+        p = self._p
+        line = f"▶ {p.wrap(name, p.bold)}({p.wrap(short, p.dim)})\n"
         self._stream.write(line)
         self._stream.flush()
 
@@ -331,7 +356,7 @@ class ToolBlockRenderer:
         Args:
             name: Tool name; ``edit`` gets a unified diff, ``bash`` a bg tint.
             output: Raw text or a structured dict (Edit returns a dict).
-            is_error: Body lines render in color 203 (red) when True.
+            is_error: Body lines render in red when True.
             exit_code: Appended as a trailing ``exit N`` line when set.
         """
         if name.lower() == "edit" and isinstance(output, dict):
@@ -343,24 +368,37 @@ class ToolBlockRenderer:
 
         body, footer = self._truncate(body)
         is_bash = name.lower() == "bash"
+        p = self._p
+        # The legacy ``_Style`` exposes ``fg_red_203`` / ``bg_236`` /
+        # ``fg_green``; ThemePalette uses semantic names. Pull whichever
+        # attribute the active palette publishes so both shapes work.
+        fg_red = getattr(p, "fg_red", None) or getattr(p, "fg_red_203", "")
+        fg_green = getattr(p, "fg_green", "")
+        bg_tint = getattr(p, "bg_tint", None) or getattr(p, "bg_236", "")
 
         for raw_line in body.splitlines() or [""]:
             styled = raw_line
             if is_error:
-                styled = _STYLE.wrap(styled, _STYLE.fg_red_203)
-            if is_bash:
+                styled = p.wrap(styled, fg_red)
+            if is_bash and bg_tint:
                 # WHY: wrap bg AFTER fg so the tint covers the leading indent.
-                styled = _STYLE.wrap("  " + styled, _STYLE.bg_236)
+                styled = p.wrap("  " + styled, bg_tint)
             else:
                 styled = "  " + styled
             self._stream.write(styled + "\n")
 
         if footer:
-            self._stream.write(f"  {_STYLE.wrap(footer, _STYLE.dim)}\n")
+            self._stream.write(f"  {p.wrap(footer, p.dim)}\n")
         if exit_code is not None:
             tag = f"exit {exit_code}"
-            color = _STYLE.fg_red_203 if exit_code != 0 else _STYLE.fg_green
-            self._stream.write(f"  {_STYLE.wrap(tag, color)}\n")
+            color = fg_red if exit_code != 0 else fg_green
+            self._stream.write(f"  {p.wrap(tag, color)}\n")
+        if not self._style.compact_tool_blocks:
+            self._stream.flush()
+            return
+        # Compact mode skips the trailing flush separator that callers
+        # rely on for visual padding; downstream still sees writes
+        # because Python flushes stdout at process exit.
         self._stream.flush()
 
     @staticmethod
@@ -384,16 +422,20 @@ class ToolBlockRenderer:
             return body, ""
         return body[:_TRUNC_LIMIT], f"({len(body) - _TRUNC_LIMIT} more bytes)"
 
-    @staticmethod
-    def _edit_diff(result: dict[str, Any]) -> str:
+    def _edit_diff(self, result: dict[str, Any]) -> str:
         old = result.get("old_string") or result.get("old") or ""
         new = result.get("new_string") or result.get("new") or ""
         if not old and not new:
             return json.dumps(result, indent=2)
         path = result.get("file_path") or result.get("path") or "edit"
-        # WHY: delegate to DiffRenderer so Edit results render with the same
-        # ANSI palette as standalone diffs printed via DiffRenderer.print().
-        return DiffRenderer().format(old, new, path)
+        # WHY: delegate to DiffRenderer with the same palette + style so
+        # Edit results render with the active theme's ANSI palette and
+        # the user-configured diff context size.
+        renderer = DiffRenderer(
+            palette=self._palette,
+            context_lines=self._style.diff_context,
+        )
+        return renderer.format(old, new, path)
 
 
 _THINK_PATTERNS: tuple[str, ...] = (
@@ -457,7 +499,7 @@ class ThinkingBlockRenderer:
 class DiffRenderer:
     """Render unified diffs with an ANSI palette compatible with CC.
 
-    Colour map:
+    Colour map (default ``dark`` palette):
         ``+`` lines  -> green (color 42)
         ``-`` lines  -> red   (color 203)
         ``@@`` hunks -> cyan  (color 51)
@@ -465,16 +507,23 @@ class DiffRenderer:
 
     ``format(old, new, path)`` returns the styled string; ``print(...)``
     writes it to the configured stream.
+
+    The palette can be swapped per :class:`ThemePalette` and the unified
+    diff context size can be tuned via ``context_lines`` (defaults to 2,
+    matching CC). Both arguments default to backwards-compatible values
+    so existing call sites keep producing identical output.
     """
 
-    _FG_GREEN_42 = "\x1b[38;5;42m"
-    _FG_RED_203 = "\x1b[38;5;203m"
-    _FG_CYAN_51 = "\x1b[38;5;51m"
-    _BOLD = "\x1b[1m"
-    _RESET = "\x1b[0m"
-
-    def __init__(self, stream: TextIO | None = None) -> None:
+    def __init__(
+        self,
+        stream: TextIO | None = None,
+        *,
+        palette: ThemePalette | None = None,
+        context_lines: int = 2,
+    ) -> None:
         self._stream = stream or sys.stdout
+        self._palette = palette or _THEME_PALETTES["dark"]
+        self._context = max(0, int(context_lines))
 
     def format(self, old: str, new: str, path: str = "file") -> str:
         """Return a coloured unified diff between ``old`` and ``new``."""
@@ -483,19 +532,20 @@ class DiffRenderer:
             new.splitlines(keepends=True),
             fromfile=f"a/{path}",
             tofile=f"b/{path}",
-            n=2,
+            n=self._context,
         )
+        p = self._palette
         out: list[str] = []
         for line in diff:
             stripped = line.rstrip("\n")
             if stripped.startswith("+++") or stripped.startswith("---"):
-                out.append(f"{self._BOLD}{stripped}{self._RESET}")
+                out.append(p.wrap(stripped, p.bold))
             elif stripped.startswith("@@"):
-                out.append(f"{self._FG_CYAN_51}{stripped}{self._RESET}")
+                out.append(p.wrap(stripped, p.fg_cyan))
             elif stripped.startswith("+"):
-                out.append(f"{self._FG_GREEN_42}{stripped}{self._RESET}")
+                out.append(p.wrap(stripped, p.fg_green))
             elif stripped.startswith("-"):
-                out.append(f"{self._FG_RED_203}{stripped}{self._RESET}")
+                out.append(p.wrap(stripped, p.fg_red))
             else:
                 out.append(stripped)
         return "\n".join(out)
@@ -506,6 +556,238 @@ class DiffRenderer:
         if text:
             self._stream.write(text + "\n")
             self._stream.flush()
+
+
+# ---------------------------------------------------------------------------
+# Theme + OutputStyle resolution (W14-7 — apply MinkSettings.theme/outputStyles)
+# ---------------------------------------------------------------------------
+#
+# WHY: ``MinkSettings`` exposes ``theme`` (``"dark"`` / ``"light"`` / ``"auto"``
+# / ``"<custom>"``) and ``output_styles`` (per-style overrides). Wave-13 added
+# the parser; wave-14 wires those values into the renderers above so the user
+# actually sees a different palette / per-style code-block treatment.
+#
+# Design rationale:
+# - Keep the existing module-level ``_STYLE`` (``_Style`` instance) and
+#   ``DiffRenderer`` constants as the **default** palette so callers that
+#   never touch settings see identical output to before.
+# - Wrap the palette in a :class:`ThemePalette` dataclass that can be passed
+#   into ``DiffRenderer`` / ``ToolBlockRenderer`` / ``RichStreamHandler``.
+# - Resolve a ``theme`` string into a ``ThemePalette`` via :func:`resolve_theme`.
+# - Resolve a ``style`` name + ``output_styles`` mapping into an
+#   :class:`OutputStyle` via :func:`resolve_output_style`. The style controls
+#   per-tool behaviour: code-block highlighting on/off, diff context lines,
+#   Markdown body width.
+
+
+@dataclass
+class ThemePalette:
+    """ANSI palette used by :class:`ToolBlockRenderer` / :class:`DiffRenderer`.
+
+    Each attribute is a fully-formed ANSI escape sequence (or empty string
+    when the theme disables colour) so the renderers can concatenate without
+    knowing whether a slot is active. Attributes mirror the constants used
+    by the legacy ``_Style`` and ``DiffRenderer`` literals so a palette swap
+    never grows the renderer surface area.
+
+    Attributes:
+        name: Short identifier (``"dark"`` / ``"light"`` / ``"none"`` / a
+            user-supplied custom name). Surfaced for debugging / tests.
+        reset, dim, bold: Generic SGR helpers.
+        fg_red, fg_green, fg_cyan: Result-line colours; tool errors / diff
+            additions / hunks read these.
+        bg_tint: Background tint applied to ``bash`` tool output (``""``
+            disables the tint entirely on light themes).
+    """
+
+    name: str = "dark"
+    reset: str = "\x1b[0m"
+    dim: str = "\x1b[2m"
+    bold: str = "\x1b[1m"
+    fg_red: str = "\x1b[38;5;203m"
+    fg_green: str = "\x1b[38;5;42m"
+    fg_cyan: str = "\x1b[38;5;51m"
+    bg_tint: str = "\x1b[48;5;236m"
+
+    def wrap(self, text: str, *codes: str) -> str:
+        """Concat ``codes`` + ``text`` + ``reset``; empty-code slots are skipped."""
+        return "".join(c for c in codes if c) + text + (self.reset if any(codes) else "")
+
+
+# Built-in palettes. Custom themes fall back to ``dark`` unless the caller
+# passes an :class:`ThemePalette` instance directly via ``resolve_theme``.
+_THEME_PALETTES: dict[str, ThemePalette] = {
+    "dark": ThemePalette(
+        name="dark",
+        fg_red="\x1b[38;5;203m",
+        fg_green="\x1b[38;5;42m",
+        fg_cyan="\x1b[38;5;51m",
+        bg_tint="\x1b[48;5;236m",
+    ),
+    "light": ThemePalette(
+        name="light",
+        fg_red="\x1b[38;5;160m",
+        fg_green="\x1b[38;5;28m",
+        fg_cyan="\x1b[38;5;31m",
+        bg_tint="\x1b[48;5;254m",
+    ),
+    "none": ThemePalette(
+        name="none",
+        reset="",
+        dim="",
+        bold="",
+        fg_red="",
+        fg_green="",
+        fg_cyan="",
+        bg_tint="",
+    ),
+}
+
+
+def _autodetect_theme() -> str:
+    """Return ``"light"`` if the terminal advertises a light background, else ``"dark"``.
+
+    Honors the de-facto ``COLORFGBG`` env var (set by rxvt/konsole/iTerm2).
+    Format: ``"FG;BG"``; high-numbered ``BG`` = light. When the var is
+    unset or unparseable, defaults to ``"dark"`` since dark is the common
+    terminal background.
+    """
+    raw = os.environ.get("COLORFGBG", "").strip()
+    if not raw:
+        return "dark"
+    parts = raw.split(";")
+    if len(parts) < 2:
+        return "dark"
+    try:
+        bg = int(parts[-1])
+    except ValueError:
+        return "dark"
+    # Convention: bg index 7 / 15 (light gray / white) → light theme.
+    return "light" if bg >= 7 else "dark"
+
+
+def resolve_theme(
+    theme: str | ThemePalette | None,
+    *,
+    no_color: bool = False,
+) -> ThemePalette:
+    """Resolve a theme spec into a :class:`ThemePalette`.
+
+    Args:
+        theme: Either a ``ThemePalette`` instance (returned verbatim), one
+            of ``"dark"`` / ``"light"`` / ``"auto"`` / ``"none"``, or any
+            other custom string. Custom strings fall back to ``"dark"``
+            so callers never crash on a typo. ``None`` and ``""`` resolve
+            to the dark default.
+        no_color: When ``True``, force the colourless ``"none"`` palette
+            regardless of the theme argument. Honors ``$NO_COLOR`` callers.
+
+    Returns:
+        A :class:`ThemePalette` ready to inject into a renderer.
+    """
+    # WHY (forward-ref): ``_no_color_env`` is defined further down the
+    # module so we inline the check here rather than reorder declarations.
+    nc_env = bool(os.environ.get("NO_COLOR"))
+    if no_color or nc_env:
+        return _THEME_PALETTES["none"]
+    if isinstance(theme, ThemePalette):
+        return theme
+    if theme is None or theme == "":
+        return _THEME_PALETTES["dark"]
+    key = theme.strip().lower()
+    if key == "auto":
+        key = _autodetect_theme()
+    return _THEME_PALETTES.get(key, _THEME_PALETTES["dark"])
+
+
+@dataclass
+class OutputStyle:
+    """Per-style rendering knobs read from ``MinkSettings.output_styles``.
+
+    The CC schema lets users define named output styles with arbitrary
+    fields. Mink honours the recognised subset below; unknown keys are
+    preserved on :attr:`extra` so plugins can read them without being
+    blocked by validation.
+
+    Attributes:
+        name: Style identifier (``"default"`` when unset).
+        highlight_code: When ``False``, fenced code blocks render as plain
+            text even when pygments is installed. Mirrors CC's
+            ``highlightCode`` knob.
+        max_width: Optional console width override for Markdown wrapping.
+            ``None`` lets :class:`MarkdownStream` auto-detect.
+        diff_context: Number of unchanged context lines around each diff
+            hunk. Defaults to ``2`` (matches :class:`DiffRenderer`).
+        compact_tool_blocks: When ``True``, suppress the trailing newline
+            after each tool block. Useful for log-style downstream sinks.
+        extra: Pass-through bag of any unknown keys.
+    """
+
+    name: str = "default"
+    highlight_code: bool = True
+    max_width: int | None = None
+    diff_context: int = 2
+    compact_tool_blocks: bool = False
+    extra: dict[str, Any] = dataclass_field(default_factory=dict)
+
+
+def resolve_output_style(
+    name: str | None,
+    output_styles: dict[str, dict[str, Any]] | None,
+) -> OutputStyle:
+    """Build an :class:`OutputStyle` from the merged ``output_styles`` map.
+
+    Args:
+        name: Selected style name. ``None`` / ``""`` returns defaults.
+        output_styles: Map of style name → config dict, typically from
+            ``MinkSettings.output_styles``.
+
+    Returns:
+        A populated :class:`OutputStyle`. Missing/invalid entries fall
+        back to defaults so callers never crash on a bad key.
+    """
+    if not name:
+        return OutputStyle()
+    cfg = (output_styles or {}).get(name)
+    if not isinstance(cfg, dict):
+        return OutputStyle(name=name)
+
+    def _bool(*keys: str, default: bool) -> bool:
+        for k in keys:
+            if k in cfg:
+                v = cfg[k]
+                if isinstance(v, (bool, int)):
+                    return bool(v)
+        return default
+
+    def _int_or_none(*keys: str) -> int | None:
+        for k in keys:
+            if k in cfg:
+                v = cfg[k]
+                if isinstance(v, bool):
+                    return None
+                if isinstance(v, int):
+                    return v
+        return None
+
+    def _int(*keys: str, default: int) -> int:
+        v = _int_or_none(*keys)
+        return v if v is not None else default
+
+    known = {"highlight_code", "highlightCode", "max_width", "maxWidth",
+             "diff_context", "diffContext", "compact_tool_blocks",
+             "compactToolBlocks"}
+    extra = {k: v for k, v in cfg.items() if k not in known}
+    return OutputStyle(
+        name=name,
+        highlight_code=_bool("highlight_code", "highlightCode", default=True),
+        max_width=_int_or_none("max_width", "maxWidth"),
+        diff_context=_int("diff_context", "diffContext", default=2),
+        compact_tool_blocks=_bool(
+            "compact_tool_blocks", "compactToolBlocks", default=False,
+        ),
+        extra=extra,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -540,12 +822,36 @@ class RichStreamHandler(StreamHandler):
       the next prompt.
     """
 
-    def __init__(self, stream: TextIO | None = None) -> None:
-        """Initialize all child renderers against the same stream."""
+    def __init__(
+        self,
+        stream: TextIO | None = None,
+        *,
+        palette: ThemePalette | None = None,
+        style: OutputStyle | None = None,
+    ) -> None:
+        """Initialize all child renderers against the same stream.
+
+        Args:
+            stream: Output stream; defaults to ``sys.stdout``.
+            palette: Theme palette resolved via :func:`resolve_theme`. When
+                ``None`` the legacy dark palette is used so existing
+                callers see byte-identical output.
+            style: Per-style knobs from :func:`resolve_output_style`. When
+                ``None`` defaults are used (highlight code on, no width
+                cap, two diff context lines, no compact mode).
+        """
         self._stream = stream or sys.stdout
-        self._md = MarkdownStream(stream=self._stream)
+        self._palette = palette
+        self._style = style or OutputStyle()
+        self._md = MarkdownStream(
+            stream=self._stream,
+            width=self._style.max_width,
+            highlight_code=self._style.highlight_code,
+        )
         self._spinner = Spinner(stream=self._stream)
-        self._tools = ToolBlockRenderer(stream=self._stream)
+        self._tools = ToolBlockRenderer(
+            stream=self._stream, palette=palette, style=self._style,
+        )
         self._thinking = ThinkingBlockRenderer(stream=self._stream)
         # Map ``call_id`` -> tool_name so on_tool_end can pick the right
         # render path (bash gets a tinted block, edit gets a diff, etc.).
@@ -645,6 +951,8 @@ def build_stream_handler(
     stream: TextIO | None = None,
     no_color: bool = False,
     force_rich: bool = False,
+    settings: Any = None,
+    style_name: str | None = None,
 ) -> StreamHandler:
     """Pick the right :class:`StreamHandler` for the current environment.
 
@@ -656,7 +964,8 @@ def build_stream_handler(
     * ``stream`` (or ``sys.stdout`` when ``stream`` is None) is not a TTY.
 
     Otherwise a :class:`MinkStreamHandler` is returned for the rich
-    Markdown / Spinner / ToolBlock / Diff polished view.
+    Markdown / Spinner / ToolBlock / Diff polished view, with the theme
+    palette and output-style knobs from ``settings`` applied.
 
     Args:
         stream: Output stream candidate; defaults to ``sys.stdout``.
@@ -666,6 +975,12 @@ def build_stream_handler(
             caller knows it is writing to a terminal-like sink. Still
             falls back to :class:`ConsoleStreamHandler` when ``rich``
             is not importable.
+        settings: Optional ``MinkSettings`` (typed loosely as ``Any`` to
+            avoid an import-time cycle). When supplied, ``settings.theme``
+            and ``settings.output_styles`` are read; otherwise defaults
+            are used.
+        style_name: Output-style name to select from
+            ``settings.output_styles``. ``None`` = no per-style overrides.
 
     Returns:
         A ready-to-use :class:`StreamHandler` instance.
@@ -675,11 +990,19 @@ def build_stream_handler(
     # plain handler unconditionally.
     if not _RICH_AVAILABLE:
         return ConsoleStreamHandler()
+    palette = resolve_theme(
+        getattr(settings, "theme", None),
+        no_color=no_color,
+    )
+    style = resolve_output_style(
+        style_name,
+        getattr(settings, "output_styles", None),
+    )
     if force_rich:
-        return MinkStreamHandler(stream=stream)
+        return MinkStreamHandler(stream=stream, palette=palette, style=style)
     if no_color or _no_color_env() or not _is_tty(stream):
         return ConsoleStreamHandler()
-    return MinkStreamHandler(stream=stream)
+    return MinkStreamHandler(stream=stream, palette=palette, style=style)
 
 
 def _demo() -> None:

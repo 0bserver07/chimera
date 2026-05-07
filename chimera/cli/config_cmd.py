@@ -156,11 +156,40 @@ def _save_config(data: dict[str, Any]) -> Path:
     """Write ``data`` to disk, creating the parent directory as needed.
 
     Returns the path that was written so callers can echo it to the user.
+
+    Side effect: fires :data:`HookEvent.CONFIG_CHANGE` via the global hook
+    emitter once the file has been written so observers (linters, audit
+    log, mink hot-reload) react in lockstep with persisted edits. Errors
+    inside the emit path are swallowed — a missing global emitter or a
+    failing hook never breaks ``chimera config set/unset``.
     """
     path = config_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(_dump_toml(data), encoding="utf-8")
+    _emit_config_change(path)
     return path
+
+
+def _emit_config_change(path: Path) -> None:
+    """Fire :data:`HookEvent.CONFIG_CHANGE` after a successful save.
+
+    Best-effort — when no global emitter is registered the call is a
+    no-op. Importing ``chimera.hooks.*`` is deferred so the
+    ``chimera config get`` read path stays free of hook-system imports.
+    """
+    try:
+        from chimera.hooks.emitter import get_global_emitter
+        from chimera.hooks.events import HookEvent
+
+        emitter = get_global_emitter()
+        if emitter.active:
+            emitter.emit_sync(
+                HookEvent.CONFIG_CHANGE,
+                tool_name="chimera.config",
+                tool_input={"path": str(path)},
+            )
+    except Exception:  # pragma: no cover - best-effort
+        pass
 
 
 # ---------------------------------------------------------------------------
@@ -272,6 +301,7 @@ def cmd_edit(args: argparse.Namespace) -> int:
     guessing at ``vi``/``nano`` — explicit configuration beats an editor
     surprise on a remote box.
     """
+    del args  # ``cmd_edit`` is a verb without flags; argparse passes Namespace anyway.
     editor = os.environ.get("EDITOR")
     if not editor:
         print(
