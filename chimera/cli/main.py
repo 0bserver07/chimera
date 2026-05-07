@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
+import warnings
 from typing import Any, Sequence
 
 from chimera.synthesize import synthesize as synthesize_fn
@@ -180,12 +182,17 @@ def build_parser() -> argparse.ArgumentParser:
     from chimera.mink import cli as _mink_cli
     _mink_cli.add_arguments(mink_parser)
 
-    # ---- cc alias (deprecated) ----
+    # ---- cc alias (deprecated; removed in v0.7.0) ----
     # WHY: keep the historical 'cc' subcommand working so existing scripts
-    # don't break overnight. Surfaces a deprecation warning when invoked.
+    # don't break overnight. Renamed to 'mink' in v0.5.0; slated for
+    # removal in v0.7.0. The dispatcher emits both a stderr banner and a
+    # ``DeprecationWarning`` (silenceable via CHIMERA_SUPPRESS_CC_WARNING=1).
     cc_alias = subparsers.add_parser(
         "cc",
-        help="DEPRECATED alias for 'mink'. Use 'chimera mink' instead.",
+        help=(
+            "DEPRECATED alias for 'mink' — removed in v0.7.0. "
+            "Use 'chimera mink' instead."
+        ),
     )
     _mink_cli.add_arguments(cc_alias)
 
@@ -638,8 +645,16 @@ create_parser = build_parser
 _BENCHMARKS: dict[str, str] = {
     "human-eval": "chimera.eval.benchmarks.human_eval:HumanEval",
     "humaneval": "chimera.eval.benchmarks.human_eval:HumanEval",
+    "humaneval-x": "chimera.eval.benchmarks.humaneval_x:HumanEvalX",
+    "humanevalx": "chimera.eval.benchmarks.humaneval_x:HumanEvalX",
+    "multi-swe-bench": "chimera.eval.benchmarks.multi_swe_bench:MultiSWEBench",
+    "multiswebench": "chimera.eval.benchmarks.multi_swe_bench:MultiSWEBench",
+    "nocha": "chimera.eval.benchmarks.nocha:NoCha",
+    "programbench": "chimera.eval.benchmarks.programbench:ProgramBench",
     "swe-bench": "chimera.eval.benchmarks.swe_bench:SWEBench",
     "swebench": "chimera.eval.benchmarks.swe_bench:SWEBench",
+    "swe-lancer": "chimera.eval.benchmarks.swe_lancer:SWELancer",
+    "swelancer": "chimera.eval.benchmarks.swe_lancer:SWELancer",
     "aimo": "chimera.eval.benchmarks.aimo:AIMOBenchmark",
     "custom": "chimera.eval.benchmarks.custom:CustomBenchmark",
 }
@@ -1218,12 +1233,31 @@ def main(argv: Sequence[str] | None = None) -> int:
         from chimera.mink import cli as _mink_cli
         return _mink_cli.run(args)
     elif args.command == "cc":
-        # Deprecated alias — keep working but warn.
-        print(
-            "[deprecated] the legacy 'cc' subcommand has been renamed to "
-            "'mink'. Please update your scripts to use 'chimera mink'.",
-            file=sys.stderr,
-        )
+        # Deprecated alias — renamed to 'mink' in v0.5.0, slated for
+        # removal in v0.7.0. The banner + DeprecationWarning fire unless
+        # CHIMERA_SUPPRESS_CC_WARNING=1 is set; the suppression escape
+        # exists so users with vendored tooling that can't be updated
+        # overnight aren't blocked. Migration is purely textual:
+        # ``chimera cc <args>`` → ``chimera mink <args>`` (every flag
+        # and slash command is identical). See
+        # docs/migrations/v0.4-to-v0.5.md for the rename history.
+        if not os.environ.get("CHIMERA_SUPPRESS_CC_WARNING"):
+            print(
+                "[deprecated] 'chimera cc' was renamed to 'chimera mink' in "
+                "v0.5.0 and will be REMOVED in v0.7.0. Migration is a "
+                "1:1 rename — every flag and slash command is preserved. "
+                "Update CI / scripts: `sed -i '' -e 's/chimera cc/chimera mink/g'`. "
+                "Migration guide: docs/migrations/v0.4-to-v0.5.md. "
+                "Silence this banner with CHIMERA_SUPPRESS_CC_WARNING=1.",
+                file=sys.stderr,
+            )
+            warnings.warn(
+                "'chimera cc' was renamed to 'chimera mink' in v0.5.0 and "
+                "will be removed in v0.7.0; use 'chimera mink' instead. "
+                "Set CHIMERA_SUPPRESS_CC_WARNING=1 to silence.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         from chimera.mink import cli as _mink_cli
         return _mink_cli.run(args)
     elif args.command in ("otter", "multi"):

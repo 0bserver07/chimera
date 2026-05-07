@@ -417,8 +417,58 @@ class _ResumeStubAgent:
         self.tools: list[Any] = []
 
 
+def _list_resumable_sessions(limit: int = 10) -> list[tuple[str, float, str]]:
+    """Return the ``limit`` most-recent resumable session ids.
+
+    Walks both the event-sourced log root (``~/.chimera/eventlog/``)
+    and the file-storage root (``~/.chimera/sessions/``) and returns
+    a sorted list of ``(session_id, mtime, source)`` tuples — newest
+    first. Missing roots produce no entries (no error).
+
+    Args:
+        limit: Maximum number of rows to return. Defaults to 10.
+
+    Returns:
+        ``[(id, mtime, source), ...]`` where ``source`` is one of
+        ``"eventlog"`` or ``"file"``. Ids are deduplicated by name —
+        when both backends have the same id, the freshest mtime wins
+        and ``eventlog`` is preferred on ties.
+    """
+    rows: dict[str, tuple[float, str]] = {}
+
+    eventlog_root = Path.home() / ".chimera" / "eventlog"
+    if eventlog_root.is_dir():
+        for child in eventlog_root.iterdir():
+            if not child.is_dir():
+                continue
+            try:
+                mtime = child.stat().st_mtime
+            except OSError:
+                continue
+            rows[child.name] = (mtime, "eventlog")
+
+    sessions_root = Path.home() / ".chimera" / "sessions"
+    if sessions_root.is_dir():
+        for child in sessions_root.iterdir():
+            if not child.is_file() or child.suffix not in (".json", ".jsonl"):
+                continue
+            try:
+                mtime = child.stat().st_mtime
+            except OSError:
+                continue
+            sid = child.stem
+            existing = rows.get(sid)
+            # WHY: eventlog wins on ties — a richer replay path.
+            if existing is None or mtime > existing[0]:
+                rows[sid] = (mtime, "file")
+
+    sortable = [(sid, mtime, source) for sid, (mtime, source) in rows.items()]
+    sortable.sort(key=lambda r: r[1], reverse=True)
+    return sortable[:limit]
+
+
 def cmd_resume(session: Any, _env: Any, args: str, out: PrintFn) -> None:
-    """Resume a saved session by id and inject its messages into the live REPL.
+    """Resume a saved session by id, or list the most-recent ones.
 
     Tries the event-sourced log first (``~/.chimera/eventlog/<id>/``),
     then falls back to :class:`chimera.sessions.storage.file.FileStorage`
@@ -430,15 +480,32 @@ def cmd_resume(session: Any, _env: Any, args: str, out: PrintFn) -> None:
     stub when the live session has no agent so ``/resume`` is usable from
     a bare REPL too.
 
+    When called with no arg (``/resume``) we print the 10 most-recent
+    resumable session ids — a lightweight non-interactive picker. The
+    canonical interactive flow remains ``/resume <id>``.
+
     Args:
         session: Active session whose context will be replaced.
         _env: Unused.
-        args: ``<session_id>`` (whitespace stripped).
+        args: ``<session_id>`` (whitespace stripped). Empty value lists
+            recent sessions.
         out: Print function.
     """
     sid = args.strip()
     if not sid:
-        out("Usage: /resume <session_id>")
+        rows = _list_resumable_sessions(limit=10)
+        if not rows:
+            out(
+                "No resumable sessions found under ~/.chimera/eventlog/ "
+                "or ~/.chimera/sessions/. Pass /resume <id> once you have one."
+            )
+            return
+        out("Recent sessions (newest first) — pass id to /resume <id>:")
+        import datetime as _dt
+
+        for i, (rid, mtime, source) in enumerate(rows, 1):
+            stamp = _dt.datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M:%S")
+            out(f"  {i:>2}. [{source:>8}] {rid}  ({stamp})")
         return
 
     # WHY (audit M-6): ``Session.resume`` only reads ``agent.prompt`` and
@@ -817,6 +884,98 @@ def cmd_plugin(session: Any, _env: Any, args: str, out: PrintFn) -> None:
         )
 
 
+def cmd_diff(session: Any, env: Any, args: str, out: PrintFn) -> None:
+    """Show ``git diff`` for files modified during this session.
+
+    Wraps ``git diff HEAD`` (and ``git diff --stat HEAD`` for the
+    summary view) executed from the agent's working directory. When the
+    live session has a :class:`~chimera.core.file_tracker.FileTracker`
+    attached, we narrow the diff to *just* the files that tracker has
+    seen modified — that gives a tighter signal than the full
+    working-tree diff in long-running REPL sessions.
+
+    Usage:
+        ``/diff`` — full working-tree diff vs ``HEAD``.
+        ``/diff stat`` — ``git diff --stat HEAD`` summary.
+        ``/diff <path>`` — diff a specific path vs ``HEAD``.
+
+    Trademark hygiene: the slash mirrors the cross-CLI standard. No
+    competitor brand names are emitted in help text or output.
+
+    Args:
+        session: Active session (read for an attached ``file_tracker``).
+        env: Environment whose ``workdir`` anchors the git invocation.
+        args: Optional argument: ``stat`` for summary, or a path.
+        out: Print function.
+    """
+    workdir = getattr(env, "workdir", None) or os.getcwd()
+    if shutil.which("git") is None:
+        out("not available: git not on PATH")
+        return
+
+    raw = (args or "").strip()
+    base_cmd = ["git", "diff", "HEAD"]
+
+    # WHY: when no explicit path is given, prefer the FileTracker scope
+    # so a long REPL run shows just the files the agent touched.
+    paths: list[str] = []
+    if raw == "stat":
+        base_cmd = ["git", "diff", "--stat", "HEAD"]
+    elif raw:
+        paths = [raw]
+    else:
+        tracker = getattr(session, "file_tracker", None)
+        if tracker is not None:
+            for attr in ("modified_files", "modified", "files_modified"):
+                seen = getattr(tracker, attr, None)
+                if seen:
+                    try:
+                        paths = [str(p) for p in seen]
+                    except TypeError:
+                        paths = []
+                    break
+
+    cmd = list(base_cmd)
+    if paths:
+        cmd.append("--")
+        cmd.extend(paths)
+
+    try:
+        result = subprocess.run(
+            cmd,
+            cwd=workdir,
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+    except Exception as exc:  # noqa: BLE001
+        out(f"not available: git diff failed: {exc}")
+        return
+
+    # WHY: a non-zero rc with ``not a git repository`` is the most
+    # common failure mode; surface it clearly instead of dumping stderr
+    # raw at the user.
+    if result.returncode != 0:
+        stderr = (result.stderr or "").strip()
+        if "not a git repository" in stderr.lower():
+            out(f"not available: {workdir} is not a git repository")
+            return
+        out(f"git diff failed (rc={result.returncode}): {stderr or 'no stderr'}")
+        return
+
+    body = result.stdout or ""
+    if not body.strip():
+        if paths:
+            out(f"No diff vs HEAD for: {', '.join(paths)}")
+        else:
+            out("No diff vs HEAD (working tree is clean).")
+        return
+    if paths and raw != "stat":
+        out(f"# /diff scope: {len(paths)} file(s) vs HEAD")
+    out(body.rstrip("\n"))
+
+
 def cmd_review(session: Any, env: Any, _args: str, out: PrintFn) -> None:
     """Run the review orchestrator against the current git diff.
 
@@ -1016,7 +1175,16 @@ def _build_default_registry() -> None:
     register("permissions", cmd_permissions, "show active permission ruleset")
     register("hooks", cmd_hooks, "list registered hooks")
     register("mcp", cmd_mcp, "list MCP servers and tools")
-    register("resume", cmd_resume, "resume a saved session by id")
+    register(
+        "resume",
+        cmd_resume,
+        "resume a saved session by id (no arg = list recent)",
+    )
+    register(
+        "diff",
+        cmd_diff,
+        "git diff vs HEAD (no arg = files modified this session)",
+    )
     register("sandbox", cmd_sandbox, "toggle sandbox mode")
     register("subagent", cmd_subagent, "spawn a registered subagent")
     register("plugin", cmd_plugin, "list/install/enable/disable plugins")

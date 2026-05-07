@@ -42,8 +42,10 @@ from chimera.cli.slash_commands import (  # noqa: E402
     cmd_compact as _cmd_compact,
     cmd_config as _cmd_config,
     cmd_cost as _cmd_cost,
+    cmd_diff as _cmd_diff,
     cmd_doctor as _cmd_doctor,
     cmd_help as _cmd_help,
+    cmd_resume as _cmd_resume,
     cmd_status as _cmd_status,
 )
 
@@ -169,6 +171,12 @@ BADGER_SLASH_COMMANDS: dict[str, SlashHandler] = {
     # Session
     "clear": _cmd_clear,
     "session": _cmd_session,
+    # WHY (G9, w13): /resume + /diff are the cross-CLI standard slashes.
+    # badger surfaces them first; the shared registry under
+    # :mod:`chimera.cli.slash_commands` already exposes them to mink/
+    # otter/ferret REPLs that build off the same registry.
+    "resume": _cmd_resume,
+    "diff": _cmd_diff,
     # Agent
     "agent": _cmd_agent,
     "model": _cmd_model,
@@ -193,6 +201,8 @@ BADGER_SLASH_COMMANDS: dict[str, SlashHandler] = {
 BADGER_SLASH_HELP: dict[str, str] = {
     "clear": "clear the current context",
     "session": "save / list / fork the current session",
+    "resume": "resume a saved session by id (no arg = list recent)",
+    "diff": "git diff vs HEAD (no arg = files modified this session)",
     "agent": "list agent presets",
     "model": "show or cycle the active model",
     "tools": "list available tools",

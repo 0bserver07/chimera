@@ -21,7 +21,10 @@ class TestDefaultRegistry:
 
     def test_preset_count(self):
         registry = create_default_registry()
-        assert len(registry.list()) == 5
+        # 5 long-lived presets (build/explore/general/plan/review) + 4
+        # subagent profiles (planner/researcher/executor/reviewer) loaded
+        # from chimera/agents/presets/subagents/.
+        assert len(registry.list()) == 9
 
     def test_get_build(self):
         registry = create_default_registry()

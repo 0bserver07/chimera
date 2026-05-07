@@ -36,6 +36,17 @@
       "tags": ["secrets", "auth", "example"],
       "downloads": 0,
       "rating": 0.0
+    },
+    {
+      "_note": "Built-in plugin (real)",
+      "name": "chimera-plugin",
+      "version": "0.2.0",
+      "description": "Composable coding-agent primitives for Chimera: codebase search, multi-perspective code review, test generation, migration planning, context management, and benchmarking.",
+      "author": "Chimera Contributors",
+      "url": "https://github.com/0bserver07/chimera/tree/master/chimera-plugin",
+      "tags": ["coding-agent", "code-review", "test-generation", "search", "migration", "benchmark"],
+      "downloads": 0,
+      "rating": 0.0
     }
   ]
 }

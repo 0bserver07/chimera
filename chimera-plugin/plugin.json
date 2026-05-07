@@ -1,0 +1,76 @@
+{
+  "name": "chimera-plugin",
+  "version": "0.2.0",
+  "description": "Composable coding-agent primitives for Chimera: codebase search, multi-perspective code review, test generation, migration planning, context management, and benchmarking.",
+  "license": "MIT",
+  "author": "Chimera Contributors",
+  "homepage": "https://github.com/0bserver07/chimera",
+  "tags": [
+    "coding-agent",
+    "code-review",
+    "test-generation",
+    "search",
+    "migration",
+    "benchmark"
+  ],
+  "components": [
+    { "type": "skill", "name": "auto-test-lint",      "path": "skills/auto-test-lint.md" },
+    { "type": "skill", "name": "code-review",         "path": "skills/code-review.md" },
+    { "type": "skill", "name": "codebase-search",     "path": "skills/codebase-search.md" },
+    { "type": "skill", "name": "context-management",  "path": "skills/context-management.md" },
+    { "type": "skill", "name": "focus-chain",         "path": "skills/focus-chain.md" },
+    { "type": "skill", "name": "ghost-commits",       "path": "skills/ghost-commits.md" },
+    { "type": "skill", "name": "investigate-first",   "path": "skills/investigate-first.md" },
+    { "type": "skill", "name": "lint-feedback",       "path": "skills/lint-feedback.md" },
+    { "type": "skill", "name": "migration",           "path": "skills/migration.md" },
+    { "type": "skill", "name": "plan-act",            "path": "skills/plan-act.md" },
+    { "type": "skill", "name": "retry-loop",          "path": "skills/retry-loop.md" },
+    { "type": "skill", "name": "smart-compaction",    "path": "skills/smart-compaction.md" },
+    { "type": "skill", "name": "test-convergence",    "path": "skills/test-convergence.md" },
+    { "type": "skill", "name": "test-generation",     "path": "skills/test-generation.md" },
+
+    { "type": "agent", "name": "investigator", "path": "agents/investigator.md" },
+    { "type": "agent", "name": "reviewer",     "path": "agents/reviewer.md" },
+    { "type": "agent", "name": "tester",       "path": "agents/tester.md" },
+
+    { "type": "command", "name": "benchmark", "path": "commands/benchmark.md" },
+    { "type": "command", "name": "migrate",   "path": "commands/migrate.md" },
+    { "type": "command", "name": "review",    "path": "commands/review.md" },
+    { "type": "command", "name": "search",    "path": "commands/search.md" },
+    { "type": "command", "name": "testgen",   "path": "commands/testgen.md" },
+
+    { "type": "hook",  "name": "hooks", "path": "hooks/hooks.json" }
+  ],
+  "mcp_servers": {
+    "chimera-search": {
+      "command": ["python3", "-m", "chimera.mcp_servers.search_server"],
+      "module": "chimera.mcp_servers.search_server",
+      "description": "TF-IDF codebase search and symbol lookup."
+    },
+    "chimera-review": {
+      "command": ["python3", "-m", "chimera.mcp_servers.review_server"],
+      "module": "chimera.mcp_servers.review_server",
+      "description": "Multi-perspective code review (logic, security, tests, architecture, ...)."
+    },
+    "chimera-testgen": {
+      "command": ["python3", "-m", "chimera.mcp_servers.testgen_server"],
+      "module": "chimera.mcp_servers.testgen_server",
+      "description": "Test skeleton generation and coverage-gap analysis."
+    },
+    "chimera-migration": {
+      "command": ["python3", "-m", "chimera.mcp_servers.migration_server"],
+      "module": "chimera.mcp_servers.migration_server",
+      "description": "Migration scan/apply with presets (python2-to-3, commonjs-to-esm)."
+    },
+    "chimera-rag": {
+      "command": ["python3", "-m", "chimera.mcp_servers.rag_server"],
+      "module": "chimera.mcp_servers.rag_server",
+      "description": "RAG over docs and APIs with grounded answers."
+    },
+    "chimera-benchmark": {
+      "command": ["python3", "-m", "chimera.mcp_servers.benchmark_server"],
+      "module": "chimera.mcp_servers.benchmark_server",
+      "description": "HumanEval, SWE-bench, and custom benchmark suites."
+    }
+  }
+}

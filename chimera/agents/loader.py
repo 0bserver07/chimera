@@ -3,6 +3,7 @@
 Provides:
 - ``create_default_registry()`` — registry with built-in presets
 - ``load_custom_agents()`` — bulk-load ``.md`` files into a registry
+- ``builtin_subagents_dir()`` — locate the bundled subagent profiles
 - ``FileAgentDef`` — dataclass for file-based agent definitions
 - ``AgentLoader`` — multi-source agent discovery with priority resolution
 - ``AgentFactory`` — create Agent instances from file-based definitions
@@ -25,11 +26,18 @@ if TYPE_CHECKING:
 # Preset configs (lazy-loaded to avoid circular imports)
 _PRESET_NAMES = ["build", "explore", "general", "plan", "review"]
 
+# Subagent profile names (loaded from packaged markdown files in
+# ``chimera/agents/presets/subagents/``). Keep this list in sync with
+# the directory contents — it's used by tests and ``/agent list`` for
+# fast enumeration without re-reading the directory on every call.
+SUBAGENT_NAMES: tuple[str, ...] = ("planner", "researcher", "executor", "reviewer")
+
 
 def create_default_registry() -> AgentRegistry:
-    """Create a registry pre-loaded with all built-in presets."""
+    """Create a registry pre-loaded with all built-in presets + subagents."""
     registry = AgentRegistry()
     _load_presets(registry)
+    _load_subagents(registry)
     return registry
 
 
@@ -43,6 +51,37 @@ def _load_presets(registry: AgentRegistry) -> None:
 
     for config in [BUILD_CONFIG, EXPLORE_CONFIG, GENERAL_CONFIG, PLAN_CONFIG, REVIEW_CONFIG]:
         registry.register(config)
+
+
+def builtin_subagents_dir() -> Path:
+    """Return the directory bundling built-in subagent markdown profiles.
+
+    The directory ships with the package — see
+    ``chimera/agents/presets/subagents/``. Each ``*.md`` file is a
+    YAML-frontmatter agent definition consumable by
+    :meth:`AgentConfig.from_markdown`.
+    """
+    return Path(__file__).resolve().parent / "presets" / "subagents"
+
+
+def _load_subagents(registry: AgentRegistry) -> None:
+    """Load packaged subagent profiles (planner / researcher / executor /
+    reviewer) from the bundled markdown directory.
+
+    Subagents register *after* presets so a project / user override with
+    the same name (loaded later via ``load_custom_agents``) wins, which
+    matches the documented "last-loader-wins" priority. We ignore parse
+    errors silently so a broken in-repo profile never breaks startup —
+    the test suite exercises a stricter path.
+    """
+    sub_dir = builtin_subagents_dir()
+    if not sub_dir.is_dir():
+        return
+    for md_file in sorted(sub_dir.glob("*.md")):
+        try:
+            registry.register(AgentConfig.from_markdown(str(md_file)))
+        except Exception:
+            continue
 
 
 def load_custom_agents(registry: AgentRegistry, directory: str) -> list[str]:

@@ -241,7 +241,16 @@ def test_example_index_warning_present() -> None:
     # Each entry's description should also flag itself as an
     # example so search output makes the sample status obvious to
     # anyone running `chimera plugins search` against the file.
+    #
+    # Entries explicitly tagged ``_note: "Built-in plugin (real)"`` are
+    # exempt: they describe a real, in-tree plugin shipped alongside
+    # the sample (see ``chimera-plugin/plugin.json``). The ``_note``
+    # field on the entry itself signals the exemption to anyone reading
+    # the file.
     for entry in raw.get("plugins", []):
+        entry_note = str(entry.get("_note", ""))
+        if "BUILT-IN" in entry_note.upper() and "REAL" in entry_note.upper():
+            continue
         desc = entry.get("description", "")
         assert "EXAMPLE" in desc.upper(), (
             f"plugin entry {entry.get('name')!r} should flag itself "
