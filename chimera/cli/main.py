@@ -413,6 +413,27 @@ def build_parser() -> argparse.ArgumentParser:
     from chimera.cli import config_cmd as _config_cmd
     _config_cmd.register(subparsers)
 
+    # ---- which subcommand ----
+    # WHY: heuristic CLI recommender. Late-bind so a broken which_cmd.py
+    # never breaks ``chimera --help``. Falls through silently when the
+    # module is unimportable; the dispatcher below mirrors the same
+    # guard so the missing-subcommand path produces the standard help.
+    try:
+        from chimera.cli.which_cmd import add_subparser as _add_which
+        _add_which(subparsers)
+    except (ImportError, AttributeError):
+        pass
+
+    # ---- tier-status subcommand ----
+    # WHY: feature x tier readiness report; reads docs/tier-status.json
+    # and renders text / json / Markdown. Late-bound for the same reason
+    # as ``which`` -- a broken module must not break ``chimera --help``.
+    try:
+        from chimera.cli.tier_status import add_subparser as _add_tier
+        _add_tier(subparsers)
+    except (ImportError, AttributeError):
+        pass
+
     # ---- team subcommand (experimental, gated by CHIMERA_EXPERIMENTAL_AGENT_TEAMS) ----
     from chimera.mink import team as _team_cli
     _team_cli.register(subparsers)
@@ -944,16 +965,25 @@ def run_plugins(args: argparse.Namespace) -> int:
       coexist with marketplace ones.
     """
     from chimera.plugins.marketplace import (
+        NO_INDEX_HELP,
         MarketplaceClient,
         MarketplaceError,
         fetch_index,
         list_installed,
+        resolve_index_url,
         uninstall_plugin,
     )
 
     cli_name: str = args.cli
     scope: str = args.scope
     index_override: str | None = args.index
+
+    def _require_index() -> int | None:
+        """Print friendly help to stderr if no index resolves. Return rc."""
+        if resolve_index_url(index_override) is None:
+            print(NO_INDEX_HELP, file=sys.stderr)
+            return 2
+        return None
 
     # ---- legacy entry-point path ----
     if getattr(args, "legacy_entrypoints", False):
@@ -999,6 +1029,9 @@ def run_plugins(args: argparse.Namespace) -> int:
         return 0
 
     if args.action == "search":
+        rc = _require_index()
+        if rc is not None:
+            return rc
         try:
             registry = fetch_index(index_override)
         except MarketplaceError as exc:
@@ -1018,6 +1051,9 @@ def run_plugins(args: argparse.Namespace) -> int:
         if not args.query:
             print("Error: install requires a plugin name", file=sys.stderr)
             return 1
+        rc = _require_index()
+        if rc is not None:
+            return rc
         try:
             registry = fetch_index(index_override)
         except MarketplaceError as exc:
@@ -1063,8 +1099,10 @@ def run_auth(args: argparse.Namespace) -> int:
     """Execute the auth command (login / logout / status)."""
     from chimera.auth.oauth_device import (
         PROVIDER_PRESETS,
+        SCAFFOLD_PROVIDERS,
         DeviceFlowError,
         login as oauth_login,
+        scaffold_message,
     )
     from chimera.auth.store import CredentialStore
 
@@ -1105,6 +1143,15 @@ def run_auth(args: argparse.Namespace) -> int:
                 f"Known: {sorted(PROVIDER_PRESETS)}",
                 file=sys.stderr,
             )
+            return 2
+        # Scaffold-only providers (no public device-flow client). Bail with a
+        # friendly hint pointing at the API-key env var unless the user has
+        # supplied their own client_id + endpoints to drive a private client.
+        if (
+            provider in SCAFFOLD_PROVIDERS
+            and not (args.client_id and args.device_url and args.token_url)
+        ):
+            print(scaffold_message(provider), file=sys.stderr)
             return 2
         try:
             cred = oauth_login(
@@ -1255,6 +1302,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     elif args.command == "config":
         from chimera.cli import config_cmd as _config_cmd
         return _config_cmd.run(args)
+    elif args.command == "which":
+        try:
+            from chimera.cli.which_cmd import run as _which_run
+        except (ImportError, AttributeError) as exc:
+            print(f"chimera which: unavailable ({exc})", file=sys.stderr)
+            return 2
+        return _which_run(args)
+    elif args.command == "tier-status":
+        try:
+            from chimera.cli.tier_status import run as _tier_run
+        except (ImportError, AttributeError) as exc:
+            print(f"chimera tier-status: unavailable ({exc})", file=sys.stderr)
+            return 2
+        return _tier_run(args)
     elif args.command == "team":
         rc2: int = args.func(args)
         return rc2

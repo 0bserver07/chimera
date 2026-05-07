@@ -1,0 +1,473 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-05",
+  "tier_definitions": {
+    "1": "Live-verified: real model calls, real network, real CI evidence on file.",
+    "2": "Tests pass with mocks/fakes/fixtures; live verification not yet on file.",
+    "3": "Scaffolded: code exists; skeletons/placeholders or not fully wired."
+  },
+  "features": [
+    {
+      "name": "Anthropic provider",
+      "tier": 1,
+      "category": "providers",
+      "evidence": "tests/providers/test_anthropic.py + I4-LIVE-MATRIX live calls (glm-5.1:cloud via Anthropic-compatible wire)"
+    },
+    {
+      "name": "OpenAI provider",
+      "tier": 2,
+      "category": "providers",
+      "evidence": "tests/providers/test_openai.py — mocked HTTP; live key not exercised in I4 matrix"
+    },
+    {
+      "name": "Google (Gemini) provider",
+      "tier": 2,
+      "category": "providers",
+      "evidence": "tests/providers/test_google.py — mocked transport; no live row in I4"
+    },
+    {
+      "name": "Ollama provider",
+      "tier": 1,
+      "category": "providers",
+      "evidence": "I4-LIVE-MATRIX: 30 cells against three Ollama Cloud models, 24/30 pass"
+    },
+    {
+      "name": "OpenAI-compatible provider",
+      "tier": 2,
+      "category": "providers",
+      "evidence": "tests/providers/test_compatible.py + tests/providers/test_openrouter_headers.py — wire-level mocks"
+    },
+    {
+      "name": "Modal provider",
+      "tier": 3,
+      "category": "providers",
+      "evidence": "chimera/providers/modal.py exists; P1-MODAL scaffolds; no live verification"
+    },
+    {
+      "name": "Proxy provider",
+      "tier": 2,
+      "category": "providers",
+      "evidence": "tests/providers/test_proxy.py — HTTP relay tests with fake transport"
+    },
+    {
+      "name": "Cost catalog refresh",
+      "tier": 1,
+      "category": "providers",
+      "evidence": "P1-CATALOG: 11 new TestRefreshedCatalog cases + factory inference spot-checks"
+    },
+    {
+      "name": "OAuth device flow (openrouter, xai)",
+      "tier": 2,
+      "category": "providers",
+      "evidence": "P3-OAUTH: 28 hermetic tests; live device-code exchange not on file"
+    },
+    {
+      "name": "OAuth device flow (anthropic, openai)",
+      "tier": 3,
+      "category": "providers",
+      "evidence": "B3 follow-up: placeholder URLs; no public device-flow endpoint"
+    },
+    {
+      "name": "Agent core loop (ReAct)",
+      "tier": 1,
+      "category": "agent",
+      "evidence": "tests/core/test_loop.py + I4 bash/math prompts execute the loop end-to-end"
+    },
+    {
+      "name": "CodingAgent default REPL",
+      "tier": 1,
+      "category": "agent",
+      "evidence": "G3-W10-REPL-DEFAULT: REPL flipped to CodingAgent stack; --legacy-react escape preserved"
+    },
+    {
+      "name": "Tool registry (20 builtins)",
+      "tier": 1,
+      "category": "agent",
+      "evidence": "tests/tools/* + I4 bash prompt exercised across 5 CLIs"
+    },
+    {
+      "name": "Plan-and-Execute loop",
+      "tier": 2,
+      "category": "agent",
+      "evidence": "tests/core/loops/test_plan_and_execute.py — fake provider"
+    },
+    {
+      "name": "Reflexion loop",
+      "tier": 2,
+      "category": "agent",
+      "evidence": "tests/core/loops/test_reflexion.py — fake provider"
+    },
+    {
+      "name": "Tree-of-Thought loop",
+      "tier": 3,
+      "category": "agent",
+      "evidence": "chimera/core/loops/tree_of_thought.py — minimal happy-path tests; not exercised live"
+    },
+    {
+      "name": "Cancellation token",
+      "tier": 2,
+      "category": "agent",
+      "evidence": "tests/core/test_cancellation.py — thread-safe cooperative cancel"
+    },
+    {
+      "name": "FileTracker (cross-compaction)",
+      "tier": 2,
+      "category": "agent",
+      "evidence": "tests/core/test_file_tracker.py — unit-level"
+    },
+    {
+      "name": "MessageQueues (steering + follow-up)",
+      "tier": 2,
+      "category": "agent",
+      "evidence": "tests/core/test_message_queue.py"
+    },
+    {
+      "name": "Critic (LLM + Checklist)",
+      "tier": 2,
+      "category": "agent",
+      "evidence": "tests/critic/* — fake-provider iteration"
+    },
+    {
+      "name": "ACP external-agent tool",
+      "tier": 2,
+      "category": "agent",
+      "evidence": "tests/acp/* — JSON-RPC over subprocess stdio mocked"
+    },
+    {
+      "name": "HumanEval benchmark",
+      "tier": 1,
+      "category": "evaluation",
+      "evidence": "README: 90.9% pass@1 on full 164 problems with GLM-5"
+    },
+    {
+      "name": "MBPP-sanitized benchmark",
+      "tier": 1,
+      "category": "evaluation",
+      "evidence": "E4-MBPP-LIVE: 9/10 pass@1 against glm-5.1:cloud, $0.0649 spend"
+    },
+    {
+      "name": "SWE-bench Lite benchmark",
+      "tier": 1,
+      "category": "evaluation",
+      "evidence": "MEMORY: 10% resolve rate on 20 problems live; gap is model + scaffold tuning"
+    },
+    {
+      "name": "AIMO benchmark",
+      "tier": 2,
+      "category": "evaluation",
+      "evidence": "tests/eval/benchmarks/test_aimo.py — fixture-driven; no live row"
+    },
+    {
+      "name": "Aider Polyglot benchmark",
+      "tier": 2,
+      "category": "evaluation",
+      "evidence": "E3-AIDER-POLYGLOT: 26 tests; promoted out of shrew-only; live not yet on file"
+    },
+    {
+      "name": "BigCodeBench benchmark",
+      "tier": 2,
+      "category": "evaluation",
+      "evidence": "E2-BIGCODEBENCH: 32 tests including in-process exec; no live row"
+    },
+    {
+      "name": "WebArena benchmark",
+      "tier": 2,
+      "category": "evaluation",
+      "evidence": "E1-WEBARENA: 47 tests against synthetic fixtures; live not exercised"
+    },
+    {
+      "name": "Terminal-Bench benchmark",
+      "tier": 1,
+      "category": "evaluation",
+      "evidence": "MEMORY: 30% resolve rate on 10 tasks live (GLM-5)"
+    },
+    {
+      "name": "Eval Harness + metrics",
+      "tier": 1,
+      "category": "evaluation",
+      "evidence": "Used by every benchmark above; pass@k / resolve_rate / avg_cost computed against live runs"
+    },
+    {
+      "name": "Local environment",
+      "tier": 1,
+      "category": "environments",
+      "evidence": "Default for every CLI in I4 matrix; tests/env/test_local.py"
+    },
+    {
+      "name": "Git environment",
+      "tier": 2,
+      "category": "environments",
+      "evidence": "tests/env/test_git.py — branch isolation in tmp_path"
+    },
+    {
+      "name": "Docker environment",
+      "tier": 2,
+      "category": "environments",
+      "evidence": "tests/env/test_docker.py — container isolation; live skipped without daemon"
+    },
+    {
+      "name": "Remote environment (HTTP)",
+      "tier": 2,
+      "category": "environments",
+      "evidence": "tests/env/test_remote.py — fake httpx"
+    },
+    {
+      "name": "Cloud sandbox (Modal)",
+      "tier": 3,
+      "category": "environments",
+      "evidence": "chimera/env/modal_sandbox.py — V9 import-smoke only; no live provisioning"
+    },
+    {
+      "name": "PersistentShell (tmux)",
+      "tier": 2,
+      "category": "environments",
+      "evidence": "tests/env/test_shell.py — local tmux session lifecycle"
+    },
+    {
+      "name": "CI fix workflow",
+      "tier": 2,
+      "category": "workflows",
+      "evidence": "tests/ci/test_fix_workflow.py — fake CI logs"
+    },
+    {
+      "name": "Review orchestrator",
+      "tier": 2,
+      "category": "workflows",
+      "evidence": "tests/review/* — reviewer + author iteration with fake provider"
+    },
+    {
+      "name": "Researcher workflow",
+      "tier": 2,
+      "category": "workflows",
+      "evidence": "tests/research/test_researcher.py"
+    },
+    {
+      "name": "Migration planner",
+      "tier": 2,
+      "category": "workflows",
+      "evidence": "tests/migration/* — python2-to-3 + commonjs-to-esm presets"
+    },
+    {
+      "name": "Doc generator",
+      "tier": 2,
+      "category": "workflows",
+      "evidence": "tests/docs/test_generator.py — AST scan"
+    },
+    {
+      "name": "Test generator",
+      "tier": 2,
+      "category": "workflows",
+      "evidence": "tests/testgen/test_generator.py"
+    },
+    {
+      "name": "Synthesis trainer + strategies",
+      "tier": 2,
+      "category": "workflows",
+      "evidence": "tests/training/* — TestConvergence / TreeSearch / Curriculum / Ensemble / MajorityVoting / CEGIS / Incremental"
+    },
+    {
+      "name": "Session save/resume",
+      "tier": 1,
+      "category": "sessions",
+      "evidence": "B12-W11-RESUME: chimera resume <id> dispatcher; tests/cli/test_resume_top_level.py + live eventlog round-trips"
+    },
+    {
+      "name": "SessionTree (in-place branching)",
+      "tier": 2,
+      "category": "sessions",
+      "evidence": "tests/sessions/test_tree.py — JSONL persistence with fork/switch"
+    },
+    {
+      "name": "Eventlog persistence (append-only)",
+      "tier": 1,
+      "category": "sessions",
+      "evidence": "Used by all 7 CLIs in I4; ~/.chimera/eventlog/ writes verified"
+    },
+    {
+      "name": "Auto-compaction (thresholds)",
+      "tier": 2,
+      "category": "sessions",
+      "evidence": "tests/compaction/* — SOFT/HARD threshold tests"
+    },
+    {
+      "name": "Summary compaction",
+      "tier": 2,
+      "category": "sessions",
+      "evidence": "tests/compaction/test_summary.py — file-aware summarisation"
+    },
+    {
+      "name": "Permissions (5 policies)",
+      "tier": 2,
+      "category": "security",
+      "evidence": "tests/permissions/* — AutoApprove / AlwaysDeny / AllowList / DenyList / custom"
+    },
+    {
+      "name": "Audit log",
+      "tier": 2,
+      "category": "security",
+      "evidence": "tests/permissions/test_audit.py"
+    },
+    {
+      "name": "Risk classifier (bash)",
+      "tier": 2,
+      "category": "security",
+      "evidence": "tests/permissions/test_risk.py — pattern-based"
+    },
+    {
+      "name": "Secrets registry + redaction",
+      "tier": 2,
+      "category": "security",
+      "evidence": "tests/secrets/* — 10 built-in detector patterns"
+    },
+    {
+      "name": "Security analyzer (rule-based)",
+      "tier": 2,
+      "category": "security",
+      "evidence": "tests/security/test_analyzer.py"
+    },
+    {
+      "name": "LLM security analyzer",
+      "tier": 3,
+      "category": "security",
+      "evidence": "chimera/security/analyzer.py:LLMSecurityAnalyzer — fake-provider tests only"
+    },
+    {
+      "name": "Plugin manager (load/unload)",
+      "tier": 2,
+      "category": "plugins",
+      "evidence": "tests/plugins/test_manager.py"
+    },
+    {
+      "name": "Plugin marketplace (local index)",
+      "tier": 2,
+      "category": "plugins",
+      "evidence": "P2-MARKETPLACE: search/install/uninstall against fixture index"
+    },
+    {
+      "name": "Plugin marketplace (default remote index)",
+      "tier": 3,
+      "category": "plugins",
+      "evidence": "B2 follow-up: DEFAULT_INDEX_URL is a placeholder; doctor probe warns"
+    },
+    {
+      "name": "Directory plugin loader",
+      "tier": 2,
+      "category": "plugins",
+      "evidence": "tests/plugins/test_dir_loader.py — agents/*.md + .mcp.json + hooks/"
+    },
+    {
+      "name": "MCP client (stdio)",
+      "tier": 2,
+      "category": "mcp",
+      "evidence": "tests/mcp/test_client_stdio.py — subprocess JSON-RPC"
+    },
+    {
+      "name": "MCP client (HTTP)",
+      "tier": 2,
+      "category": "mcp",
+      "evidence": "tests/mcp/test_client_http.py — fake transport"
+    },
+    {
+      "name": "MCP servers (search/review/testgen/migration/rag/benchmark)",
+      "tier": 2,
+      "category": "mcp",
+      "evidence": "tests/mcp_servers/* — 6 servers, all with fixture inputs"
+    },
+    {
+      "name": "LSP client + diagnostics",
+      "tier": 2,
+      "category": "lsp",
+      "evidence": "tests/lsp/* — completion/diagnostics/rename against fake server"
+    },
+    {
+      "name": "LSP-as-tool",
+      "tier": 3,
+      "category": "lsp",
+      "evidence": "chimera/lsp/* exists; not surfaced as a first-class tool yet (roadmap)"
+    },
+    {
+      "name": "chimera doctor (setup diagnostics)",
+      "tier": 1,
+      "category": "cli",
+      "evidence": "A1-W11-DOCTOR: 18 probes, 32 tests, live --format json round-trip"
+    },
+    {
+      "name": "chimera config (persistent defaults)",
+      "tier": 1,
+      "category": "cli",
+      "evidence": "A2-W11-CONFIG: ~/.chimera/config.toml; 16 tests; smoke against live FS"
+    },
+    {
+      "name": "chimera agents (discovery)",
+      "tier": 1,
+      "category": "cli",
+      "evidence": "A3 + handoff: 18 tests; smoke output verified live"
+    },
+    {
+      "name": "chimera which (recommender)",
+      "tier": 1,
+      "category": "cli",
+      "evidence": "tests/cli/test_which_cmd.py — table-driven across 7 codenames; live --help passes"
+    },
+    {
+      "name": "chimera resume (cross-CLI dispatcher)",
+      "tier": 1,
+      "category": "cli",
+      "evidence": "B12-W11-RESUME: 23 tests + live eventlog prefix detection"
+    },
+    {
+      "name": "chimera tier-status",
+      "tier": 2,
+      "category": "cli",
+      "evidence": "C6-W11-TIER-STATUS: this very command; manifest-driven render covered by tests/cli/test_tier_status.py"
+    },
+    {
+      "name": "Friendly error wrapper",
+      "tier": 1,
+      "category": "cli",
+      "evidence": "A6-W11-ERRORS: ChimeraUserError + decorator applied to all 7 CLIs; 28 tests; smoke against live provider 401s"
+    },
+    {
+      "name": "Shell completion (bash/zsh/fish)",
+      "tier": 2,
+      "category": "cli",
+      "evidence": "tests/cli/test_completion.py — generator walks live parser"
+    },
+    {
+      "name": "Shell completion install",
+      "tier": 3,
+      "category": "cli",
+      "evidence": "A7 follow-up: install/undo helper not yet shipped"
+    },
+    {
+      "name": "Event bus (26 event types)",
+      "tier": 2,
+      "category": "observability",
+      "evidence": "tests/events/* — middleware + redaction"
+    },
+    {
+      "name": "Hooks (10 lifecycle events)",
+      "tier": 1,
+      "category": "observability",
+      "evidence": "G2-W10-HOOKS: 10 missing emit sites wired; tests cover each"
+    },
+    {
+      "name": "Cost tracker (per-step + cache)",
+      "tier": 2,
+      "category": "observability",
+      "evidence": "tests/providers/test_cost_tracker.py"
+    },
+    {
+      "name": "Streaming handlers",
+      "tier": 2,
+      "category": "observability",
+      "evidence": "tests/streaming/* — StreamingReAct + delta accounting"
+    },
+    {
+      "name": "Loop detection (exact + cycle)",
+      "tier": 2,
+      "category": "observability",
+      "evidence": "tests/detection/* — pattern repeat fixtures"
+    }
+  ]
+}
