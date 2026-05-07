@@ -100,7 +100,7 @@ def test_openrouter_extra_headers_default(monkeypatch) -> None:
     headers = providers._openrouter_extra_headers()  # noqa: SLF001
     assert "HTTP-Referer" in headers
     assert "X-Title" in headers
-    assert headers["X-Title"] == "chimera badger 0.5.0"
+    assert headers["X-Title"] == "chimera badger 0.6.0"
 
 
 def test_openrouter_extra_headers_env_override(monkeypatch) -> None:

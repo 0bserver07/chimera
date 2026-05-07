@@ -20,6 +20,7 @@ import os
 import sys
 from typing import Any
 
+from chimera.cli.help_long import register_argument
 from chimera.errors import friendly_errors
 
 # WHY: only stdlib + chimera at import time. Heavy provider deps load
@@ -214,140 +215,181 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     serve_grp = parser.add_argument_group("Serve / Parity")
 
     # WHY: env precedence is --model > $BADGER_MODEL > _DEFAULT_MODEL.
-    core.add_argument(
+    # W14-9: routed through ``register_argument`` so future verbose
+    # ``help=`` strings auto-promote to ``_LONG_HELP`` and never blow
+    # past the 50-line ceiling on ``chimera badger --help``.
+    register_argument(
+        core,
         "--model",
         default=os.environ.get("BADGER_MODEL") or _DEFAULT_MODEL,
         metavar="MODEL",
+        long_help=_LONG_HELP,
         help=f"Model id (default: $BADGER_MODEL or {_DEFAULT_MODEL}).",
     )
-    core.add_argument(
+    register_argument(
+        core,
         "-p",
         "--print",
         dest="print_mode",
         default=None,
         metavar="PROMPT",
+        long_help=_LONG_HELP,
         help="One-shot: run PROMPT, print, exit.",
     )
-    output.add_argument(
+    register_argument(
+        output,
         "--output-format",
         choices=list(_VALID_OUTPUT_FORMATS),
         default="text",
         metavar="FMT",
+        long_help=_LONG_HELP,
         help="text | json | stream-json (default: text).",
     )
     # WHY: tighter default than the other CLIs. Harness-rewrite posture
     # prefers rerun discipline over a long single trajectory.
-    behavior.add_argument(
+    register_argument(
+        behavior,
         "--max-steps",
         type=int,
         default=_DEFAULT_MAX_STEPS,
         metavar="N",
+        long_help=_LONG_HELP,
         help=f"Max agent steps per turn (default: {_DEFAULT_MAX_STEPS}).",
     )
-    core.add_argument(
+    register_argument(
+        core,
         "--cwd",
         default=None,
+        long_help=_LONG_HELP,
         help="Working directory (default: cwd).",
     )
-    behavior.add_argument(
+    register_argument(
+        behavior,
         "--allowed-tools",
         default="",
         metavar="LIST",
+        long_help=_LONG_HELP,
         help="Comma tool allowlist (empty = all).",
     )
     # WHY: rerun-on-failure is the load-bearing distinction. When set,
     # the agent's first attempt is checked for tell-tale failure markers
     # (test failures, syntax errors). On hit, we reset and retry with a
     # refined prompt up to --max-reruns extra attempts.
-    behavior.add_argument(
+    register_argument(
+        behavior,
         "--rerun-on-failure",
         action="store_true",
         default=False,
+        long_help=_LONG_HELP,
         help="Retry on test/syntax failure (uses --max-reruns).",
     )
-    behavior.add_argument(
+    register_argument(
+        behavior,
         "--max-reruns",
         type=int,
         default=2,
         metavar="N",
+        long_help=_LONG_HELP,
         help="Extra attempts when --rerun-on-failure (default: 2).",
     )
     # WHY (G3, w13): cross-CLI ``--permission-mode`` 5-mode surface.
     # Default = ``suggest`` (allow reads, ask writes) — matches the
     # harness-rewrite "show your work" posture without locking the
     # agent out of side effects entirely.
-    behavior.add_argument(
+    register_argument(
+        behavior,
         "--permission-mode",
         dest="permission_mode",
         choices=list(_VALID_PERMISSION_MODES),
         default="suggest",
         metavar="MODE",
+        long_help=_LONG_HELP,
         help="5-mode approval (default: suggest).",
     )
-    output.add_argument(
+    register_argument(
+        output,
         "--no-rich",
         action="store_true",
         default=False,
+        long_help=_LONG_HELP,
         help="Force plain stream handler even on TTY.",
     )
-    output.add_argument(
+    register_argument(
+        output,
         "--no-color",
         action="store_true",
         default=False,
+        long_help=_LONG_HELP,
         help="Synonym for --no-rich (also honors $NO_COLOR).",
     )
-    persistence.add_argument(
+    register_argument(
+        persistence,
         "--no-save",
         action="store_true",
         default=False,
+        long_help=_LONG_HELP,
         help="Don't persist the one-shot run to eventlog.",
     )
-    persistence.add_argument(
+    register_argument(
+        persistence,
         "--run-id",
         default=None,
         metavar="ID",
+        long_help=_LONG_HELP,
         help="Override auto-generated run id for the eventlog dir.",
     )
     # WHY (parity): the parity subcommand diffs current agent behaviour
     # against a declared schema. The schema lives at ``--against``.
-    serve_grp.add_argument(
+    register_argument(
+        serve_grp,
         "--against",
         dest="parity_against",
         default=None,
         metavar="PATH",
+        long_help=_LONG_HELP,
         help="parity: path to the parity schema (JSON/YAML).",
     )
-    serve_grp.add_argument(
+    register_argument(
+        serve_grp,
         "--http",
         action="store_true",
         default=False,
+        long_help=_LONG_HELP,
         help="serve: run HTTP server (default for badger).",
     )
-    serve_grp.add_argument(
+    register_argument(
+        serve_grp,
         "--host",
         default=None,
         metavar="HOST",
+        long_help=_LONG_HELP,
         help="serve --http: bind host (default: 127.0.0.1).",
     )
-    serve_grp.add_argument(
+    register_argument(
+        serve_grp,
         "--port",
         type=int,
         default=None,
         metavar="PORT",
+        long_help=_LONG_HELP,
         help="serve --http: bind port (default: 5176).",
     )
-    serve_grp.add_argument(
+    register_argument(
+        serve_grp,
         "--auth-token",
         default=None,
         metavar="TOKEN",
+        long_help=_LONG_HELP,
         help="serve --http: bearer token required on requests.",
     )
-    parser.add_argument(
+    register_argument(
+        parser,
         "subcommand",
         nargs="?",
         default=None,
         choices=list(_VALID_SUBCOMMANDS),
         metavar="SUBCOMMAND",
+        long_help=_LONG_HELP,
         help="serve | sessions | share | agents | bench | parity.",
     )
     parser.add_argument(
@@ -370,11 +412,13 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     # show`` so sessions persisted by ``chimera otter``, ``chimera
     # ferret``, ``chimera weasel``, ``chimera shrew``, ``chimera stoat``,
     # and ``chimera mink`` are also visible.
-    persistence.add_argument(
+    register_argument(
+        persistence,
         "--all-clis",
         dest="sessions_all_clis",
         action="store_true",
         default=False,
+        long_help=_LONG_HELP,
         help="sessions list: include every Chimera CLI's sessions.",
     )
 
