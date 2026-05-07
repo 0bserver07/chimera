@@ -388,6 +388,10 @@ def shim_otter_args(args: argparse.Namespace) -> argparse.Namespace:
         models=getattr(args, "models", "") or "",
         preset=getattr(args, "agent", None) or getattr(args, "preset", None),
         print_mode=None,
+        # W12-9: propagate ``--max-cost`` so the shared REPL gate in
+        # ``chimera.cli.code.run_code`` enforces it per turn. ``None``
+        # leaves gating off, matching pre-W12 behaviour.
+        max_cost=getattr(args, "max_cost", None),
         # WHY (G3, wave 10): bare ``chimera code`` defaults to the new
         # CodingAgent stack. Otter wires its /undo + /redo snapshot stack
         # into the legacy rich REPL via ``_post_session_init`` below; pin

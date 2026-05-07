@@ -271,9 +271,11 @@ _LONG_HELP: dict[str, str] = {
         "and the PRICING table — a ceiling, not a bill."
     ),
     "--max-cost": (
-        "With -p: refuse to run when the pre-flight cost estimate "
-        "exceeds USD. Exits 2 with a stderr message. Useful for CI "
-        "scripts and budget guards. REPL gating is not yet wired."
+        "Refuse turns whose estimated cost exceeds USD. With -p the "
+        "one-shot run exits 2 with a stderr message; in the REPL the "
+        "turn is refused and you stay at the prompt. Raise the cap "
+        "mid-session with /max-cost <usd>, or bypass for one turn "
+        "with /force-send. Useful for CI scripts and budget guards."
     ),
 }
 
@@ -701,7 +703,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         type=float,
         default=None,
         metavar="USD",
-        help="With -p: refuse to run if estimate exceeds USD.",
+        help="Refuse turns over USD (one-shot or REPL).",
     )
 
 
@@ -1572,10 +1574,13 @@ def _format_file_attachments(
 def _maybe_apply_cost_gate(args: argparse.Namespace) -> int | None:
     """Honor ``--estimate-cost`` / ``--max-cost`` before doing real work.
 
-    A8 — wave 11. Both flags fire on the one-shot ``-p`` path only; REPL
-    gating is intentionally deferred so this PR stays small. The gate
-    runs *before* provider / env setup so ``--estimate-cost`` is
-    essentially free (no network, no auth, no tool-group import).
+    A8 — wave 11. ``--estimate-cost`` and the one-shot ``--max-cost``
+    refusal both fire on the ``-p`` path here. W12-9 extends the cap
+    enforcement to the REPL via ``chimera.cli.code._gate_turn_by_cost``;
+    that path is wired through ``shim_otter_args`` so the same flag
+    value applies. The gate runs *before* provider / env setup so
+    ``--estimate-cost`` is essentially free (no network, no auth, no
+    tool-group import).
 
     Args:
         args: Parsed CLI namespace.

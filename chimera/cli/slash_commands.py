@@ -967,8 +967,10 @@ def _build_default_registry() -> None:
         cmd_context,
         cmd_debug,
         cmd_exit,
+        cmd_force_send,
         cmd_history,
         cmd_init,
+        cmd_max_cost,
         cmd_model,
         cmd_session,
         cmd_switch,
@@ -981,6 +983,16 @@ def _build_default_registry() -> None:
     register("help", cmd_help, "show this list")
     register("model", cmd_model, "show or cycle the active model")
     register("cost", cmd_cost, "show cumulative cost (per-model + per-step)")
+    register(
+        "max-cost",
+        cmd_max_cost,
+        "show / set / clear the per-turn cost cap (e.g. /max-cost 0.05)",
+    )
+    register(
+        "force-send",
+        cmd_force_send,
+        "bypass --max-cost for the next turn",
+    )
     register("clear", cmd_clear, "clear context")
     register("history", cmd_history, "show recent messages")
     register("tools", cmd_tools, "list available tools")

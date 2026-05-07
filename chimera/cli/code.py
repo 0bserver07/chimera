@@ -86,6 +86,70 @@ def cmd_cost(session: Any, env: Any, args: str, out: PrintFn) -> None:
         out(f"Remaining budget: ${tracker.remaining:.4f}")
 
 
+def cmd_max_cost(session: Any, env: Any, args: str, out: PrintFn) -> None:
+    """Raise / lower / clear the per-turn cost cap mid-session.
+
+    Usage:
+
+    * ``/max-cost`` — print the current cap (or ``unset``).
+    * ``/max-cost <usd>`` — set the cap to *<usd>* dollars. Accepts ``0``
+      (refuse every priced turn) and floats (``/max-cost 0.05``).
+    * ``/max-cost off`` / ``/max-cost none`` — clear the cap entirely;
+      the REPL stops gating turns until a new cap is set.
+
+    The cap is stashed on ``session._max_cost`` so the same value is
+    visible to the per-turn gate in :func:`run_code` and to the W12-9
+    test suite that monkeypatches ``estimate_cost``.
+    """
+    text = args.strip()
+    current = getattr(session, "_max_cost", None)
+
+    if not text:
+        if current is None:
+            out("Per-turn cost cap: unset (no gating).")
+        else:
+            out(f"Per-turn cost cap: ${float(current):.4f}")
+        out("Set with /max-cost <usd>, clear with /max-cost off.")
+        return
+
+    lowered = text.lower()
+    if lowered in {"off", "none", "unset", "clear"}:
+        session._max_cost = None
+        out("Per-turn cost cap cleared. REPL will not gate turns until a "
+            "new cap is set.")
+        return
+
+    try:
+        new_cap = float(text)
+    except ValueError:
+        out(f"Invalid value: {text!r}. Use /max-cost <usd> or "
+            "/max-cost off.")
+        return
+
+    if new_cap < 0:
+        out(f"Invalid value: {new_cap}. Cap must be >= 0.")
+        return
+
+    session._max_cost = new_cap
+    out(f"Per-turn cost cap set to ${new_cap:.4f}.")
+
+
+def cmd_force_send(session: Any, env: Any, args: str, out: PrintFn) -> None:
+    """Bypass the per-turn cost cap for the very next user turn.
+
+    Sets a one-shot flag on the session so the next non-slash input is
+    submitted regardless of ``_max_cost``. The flag is consumed by the
+    gate in :func:`run_code` after a single turn, so the safety net is
+    automatically re-armed.
+
+    Usage: ``/force-send`` — toggle the one-shot bypass on. Repeating
+    the command before submitting a turn is a no-op (the flag is
+    already set). After the next turn fires, gating resumes.
+    """
+    session._force_send_once = True
+    out("Force-send armed. The next turn will bypass the --max-cost cap.")
+
+
 def cmd_clear(session: Any, env: Any, args: str, out: PrintFn) -> None:
     session.clear()
     out("Context cleared.")
@@ -357,6 +421,8 @@ _COMMANDS: dict[str, CommandHandler] = {
     "help": cmd_help,
     "model": cmd_model,
     "cost": cmd_cost,
+    "max-cost": cmd_max_cost,
+    "force-send": cmd_force_send,
     "clear": cmd_clear,
     "history": cmd_history,
     "tools": cmd_tools,
@@ -460,6 +526,87 @@ def _session_path(workdir: str) -> Path:
     session_dir = Path.home() / ".chimera" / "sessions"
     session_dir.mkdir(parents=True, exist_ok=True)
     return session_dir / f"{h}.jsonl"
+
+
+def _gate_turn_by_cost(
+    session: Any,
+    user_input: str,
+    *,
+    err: Any = sys.stderr,
+) -> bool:
+    """Return ``True`` when *user_input* may be sent given the cost cap.
+
+    W12-9 — per-turn cost gating for the REPL. Mirrors the one-shot
+    ``-p`` gate in ``chimera.otter.cli._maybe_apply_cost_gate``: estimate
+    via :func:`chimera.cli.cost_estimator.estimate_cost`, refuse when the
+    estimate exceeds ``session._max_cost``, and surface a friendly
+    message that points at ``/max-cost`` and ``/force-send`` for the
+    user's next move.
+
+    Args:
+        session: Active REPL session. Reads ``provider.model_name``,
+            ``_max_cost`` and ``_force_send_once`` (one-shot bypass).
+        user_input: The prompt the user just typed at the ``>`` prompt.
+        err: Stream to write the refusal message to. ``sys.stderr`` in
+            production; tests redirect to ``io.StringIO``.
+
+    Returns:
+        ``True`` to let the caller submit the turn, ``False`` to refuse
+        and skip back to the readline prompt. The one-shot bypass
+        (``_force_send_once``) is consumed before this function returns
+        so the cap re-arms automatically.
+    """
+    cap = getattr(session, "_max_cost", None)
+    if cap is None:
+        return True
+    if getattr(session, "_force_send_once", False):
+        # Consume the one-shot flag exactly once so the next turn is
+        # gated again. Doing this *before* the estimate keeps the
+        # bypass cheap when the user has armed it intentionally.
+        session._force_send_once = False
+        return True
+
+    # Lazy import: cost_estimator only loads when gating is active.
+    from chimera.cli.cost_estimator import (
+        ModelNotPriced,
+        estimate_cost,
+    )
+
+    provider = getattr(session, "provider", None)
+    model = getattr(provider, "model_name", None)
+    if not model:
+        # No model => no estimate. Fail closed: refuse the turn so the
+        # user knows the budget guard isn't actually wired.
+        print(
+            "Refusing turn: no provider model attached; cannot estimate "
+            "cost. Clear the cap with /max-cost off if you really want "
+            "to proceed.",
+            file=err,
+        )
+        return False
+
+    try:
+        est = estimate_cost(model, user_input)
+    except ModelNotPriced:
+        print(
+            f"Refusing turn: model {model!r} has no PRICING entry; cost "
+            "estimation is unavailable while --max-cost is set. Type "
+            "/max-cost off to disable gating, or /force-send to send "
+            "this one turn anyway.",
+            file=err,
+        )
+        return False
+
+    if est.total_usd > float(cap):
+        print(
+            f"Refusing turn: estimated ${est.total_usd:.4f} exceeds "
+            f"--max-cost ${float(cap):.4f}. Type /max-cost <usd> to "
+            "raise the cap or send anyway with /force-send",
+            file=err,
+        )
+        return False
+
+    return True
 
 
 def _read_steering_input() -> str | None:
@@ -690,6 +837,16 @@ def run_code(args: Any) -> int:
     session._model_list = model_list  # type: ignore[attr-defined]
     session._model_index = 0  # type: ignore[attr-defined]
 
+    # W12-9: per-turn cost gating. ``--max-cost`` (otter, mink) is plumbed
+    # through to the REPL via ``args.max_cost``. The cap lives on the
+    # session so ``/max-cost`` can raise it mid-session and ``/force-send``
+    # can bypass it for one turn without leaking state across turns.
+    initial_max_cost = getattr(args, "max_cost", None)
+    session._max_cost = (  # type: ignore[attr-defined]
+        float(initial_max_cost) if initial_max_cost is not None else None
+    )
+    session._force_send_once = False  # type: ignore[attr-defined]
+
     # Optional post-session-init hook. Used by the otter REPL to wire its
     # per-turn snapshot stack (``chimera.otter.repl.install_snapshot_hooks``)
     # without forking the shared interactive loop. ``None`` (the default)
@@ -724,6 +881,12 @@ def run_code(args: Any) -> int:
             except SystemExit:
                 print("Bye!")
                 break
+            continue
+
+        # W12-9: per-turn cost gate. Refuse the turn here (before the
+        # agent thread spins up) when the estimate exceeds the active
+        # ``--max-cost`` cap. ``/force-send`` opts out for one turn.
+        if not _gate_turn_by_cost(session, user_input):
             continue
 
         # RUNNING MODE — agent in background thread, poll for steering

@@ -272,14 +272,33 @@ chimera otter -p "..." --max-cost 0.01 --model glm-5
 | Flag | Default | Description |
 |---|---|---|
 | `--estimate-cost` | off | Print a dollar/token estimate from the prompt + chosen model and exit `rc=0` without running the agent. |
-| `--max-cost USD` | unset | Refuse to run with `rc=2` when the pre-flight estimate exceeds USD. |
+| `--max-cost USD` | unset | Refuse turns whose pre-flight estimate exceeds USD. With `-p` the run exits `rc=2`; in the REPL the turn is refused and you stay at the prompt. |
+
+### REPL gating (W12-9)
+
+`--max-cost` also applies to the interactive REPL. Each typed turn is estimated against the active cap before the agent runs; turns whose estimate exceeds the cap are refused with a stderr message:
+
+```text
+> implement a 1500-line refactor
+Refusing turn: estimated $0.0184 exceeds --max-cost $0.0100. Type
+/max-cost <usd> to raise the cap or send anyway with /force-send
+```
+
+Two slash commands manage the cap mid-session:
+
+| Command | Effect |
+|---|---|
+| `/max-cost` | Print the current cap (or `unset`). |
+| `/max-cost <usd>` | Raise / lower the cap (e.g. `/max-cost 0.05`). `0` refuses every priced turn. |
+| `/max-cost off` | Clear the cap entirely; gating turns off. |
+| `/force-send` | Bypass the cap for the next turn only. The cap re-arms after that turn fires. |
 
 Caveats:
 
-- **Pricing-table coverage**: only models listed in `PRICING` are estimable. Unknown models exit `rc=2` with a friendly stderr hint pointing at the pricing file. With `--max-cost` set against an uncosted model the gate fails closed.
+- **Pricing-table coverage**: only models listed in `PRICING` are estimable. Unknown models exit `rc=2` (or refuse the REPL turn) with a friendly stderr hint pointing at the pricing file. With `--max-cost` set against an uncosted model the gate fails closed.
 - **Token heuristic**: chars-÷-4 is good to ~10–20% on English prose; less accurate on dense code or non-Latin scripts. Use the reported number as a ceiling for budget guards, not as a final invoice.
-- **Scope**: A8 wires both flags only on the one-shot `-p` path. REPL gating (per-turn estimation in interactive mode) is intentionally deferred to keep this PR small; track in the wave-12 backlog.
 - **Output buckets**: the default `expected_output_tokens=2048` matches a typical agent reply with embedded tool calls. Tune in code (Python embedders) when pre-estimating long-form generation jobs.
+- **Cumulative cost**: the gate is per-turn. Use `/cost` to see cumulative spend; combine with `/max-cost` for budget pacing across turns.
 
 ## Exit codes
 
