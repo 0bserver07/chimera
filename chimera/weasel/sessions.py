@@ -49,6 +49,7 @@ __all__ = [
 
 
 _PREFIX = "weasel-"
+_CLI_ORIGIN = "weasel"
 
 
 # ---------------------------------------------------------------------------
@@ -74,6 +75,7 @@ class SessionRecord:
     tool_calls: int
     path: Path
     error: str | None = None
+    cli_origin: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         """Render as a JSON-serializable dict."""
@@ -89,6 +91,7 @@ class SessionRecord:
             "tool_calls": self.tool_calls,
             "path": str(self.path),
             "error": self.error,
+            "cli_origin": self.cli_origin,
         }
 
 
@@ -135,7 +138,12 @@ def _read_summary(session_dir: Path) -> dict[str, Any] | None:
     return data
 
 
-def _summary_to_record(session_dir: Path, summary: dict[str, Any]) -> SessionRecord:
+def _summary_to_record(
+    session_dir: Path,
+    summary: dict[str, Any],
+    *,
+    cli_origin: str = _CLI_ORIGIN,
+) -> SessionRecord:
     """Convert a ``summary.json`` dict into a :class:`SessionRecord`."""
     return SessionRecord(
         session_id=str(
@@ -151,34 +159,55 @@ def _summary_to_record(session_dir: Path, summary: dict[str, Any]) -> SessionRec
         tool_calls=int(summary.get("tool_calls_total", 0) or 0),
         path=session_dir,
         error=summary.get("error"),
+        cli_origin=cli_origin,
     )
 
 
-def iter_sessions(eventlog_root: Path | None = None) -> Iterator[SessionRecord]:
+def iter_sessions(
+    eventlog_root: Path | None = None,
+    *,
+    all_clis: bool = False,
+) -> Iterator[SessionRecord]:
     """Yield one :class:`SessionRecord` per persisted weasel session, newest first.
 
     Args:
         eventlog_root: Override the eventlog root. Defaults to
             :func:`default_eventlog_root`.
+        all_clis: When ``True``, yield records for every Chimera CLI's
+            sessions, not just ``weasel-`` (B9-W11). Default ``False``
+            preserves the historic per-CLI behavior.
 
     Yields:
         :class:`SessionRecord` instances ordered by ``session_id``
         descending. ``weasel-<UTC>-<uuid>`` prefixes sort lexically
         identical to chronologically.
     """
-    root = eventlog_root or default_eventlog_root()
-    if not root.exists():
-        return
-    candidates = [
-        p for p in root.iterdir()
-        if p.is_dir() and p.name.startswith(_PREFIX)
-    ]
-    candidates.sort(key=lambda p: p.name, reverse=True)
-    for session_dir in candidates:
-        summary = _read_summary(session_dir)
-        if summary is None:
-            continue
-        yield _summary_to_record(session_dir, summary)
+    # WHY (B9-W11): late-binding sibling import.
+    from chimera.sessions.eventlog.cross_cli import (
+        iter_all_sessions as _iter_all,
+        iter_sessions_for_cli as _iter_for,
+    )
+
+    source = (
+        _iter_all(eventlog_root)
+        if all_clis
+        else _iter_for(_CLI_ORIGIN, eventlog_root)
+    )
+    for cross in source:
+        yield SessionRecord(
+            session_id=cross.session_id,
+            started_at=cross.started_at,
+            ended_at=cross.ended_at,
+            model=cross.model,
+            prompt=cross.prompt,
+            success=cross.success,
+            cost_usd=cross.cost_usd,
+            steps=cross.steps,
+            tool_calls=cross.tool_calls,
+            path=cross.path,
+            error=cross.error,
+            cli_origin=cross.cli_origin,
+        )
 
 
 def get_session(
@@ -250,8 +279,17 @@ def _short_date(iso: str) -> str:
     return head
 
 
-def format_session_table(records: list[SessionRecord]) -> str:
+def format_session_table(
+    records: list[SessionRecord],
+    *,
+    show_origin: bool = False,
+) -> str:
     """Render ``records`` as a fixed-width table for ``sessions list``.
+
+    Args:
+        records: The records to render.
+        show_origin: When ``True`` (cross-CLI mode, B9-W11), render an
+            extra ``ORIGIN`` column.
 
     Returns:
         The fully rendered table (header + rows + footer summary). Empty
@@ -260,19 +298,37 @@ def format_session_table(records: list[SessionRecord]) -> str:
     if not records:
         return "(no weasel sessions found)"
     rows: list[str] = []
-    rows.append(
-        f"{'STARTED':<16}  {'ID':<36}  {'OK':<3}  {'STEPS':>5}  {'PROMPT':<40}"
-    )
-    rows.append("-" * 110)
+    if show_origin:
+        rows.append(
+            f"{'STARTED':<16}  {'ID':<36}  {'ORIGIN':<7}  "
+            f"{'OK':<3}  {'STEPS':>5}  {'PROMPT':<40}"
+        )
+        rows.append("-" * 118)
+    else:
+        rows.append(
+            f"{'STARTED':<16}  {'ID':<36}  {'OK':<3}  {'STEPS':>5}  {'PROMPT':<40}"
+        )
+        rows.append("-" * 110)
     for r in records:
         ok = "yes" if r.success else "no"
-        rows.append(
-            f"{_short_date(r.started_at):<16}  "
-            f"{_short(r.session_id, 36):<36}  "
-            f"{ok:<3}  "
-            f"{r.steps:>5}  "
-            f"{_short(r.prompt, 40):<40}"
-        )
+        if show_origin:
+            origin = (r.cli_origin or "?")[:7]
+            rows.append(
+                f"{_short_date(r.started_at):<16}  "
+                f"{_short(r.session_id, 36):<36}  "
+                f"{origin:<7}  "
+                f"{ok:<3}  "
+                f"{r.steps:>5}  "
+                f"{_short(r.prompt, 40):<40}"
+            )
+        else:
+            rows.append(
+                f"{_short_date(r.started_at):<16}  "
+                f"{_short(r.session_id, 36):<36}  "
+                f"{ok:<3}  "
+                f"{r.steps:>5}  "
+                f"{_short(r.prompt, 40):<40}"
+            )
     rows.append("")
     rows.append(f"{len(records)} session(s)")
     return "\n".join(rows)
@@ -308,6 +364,7 @@ def cmd_sessions_list(
     eventlog_root: Path | None = None,
     json_output: bool = False,
     out: Any = None,
+    all_clis: bool = False,
 ) -> int:
     """Implement ``chimera weasel sessions list``.
 
@@ -315,17 +372,20 @@ def cmd_sessions_list(
         eventlog_root: Override the eventlog root (mainly for tests).
         json_output: Emit a JSON array instead of the table.
         out: Stream to write to. Defaults to :data:`sys.stdout`.
+        all_clis: When ``True`` (``--all-clis``, B9-W11), include
+            sessions created by every Chimera CLI; the table grows an
+            ``ORIGIN`` column.
 
     Returns:
         Process exit code.
     """
     stream = out if out is not None else sys.stdout
-    records = list(iter_sessions(eventlog_root))
+    records = list(iter_sessions(eventlog_root, all_clis=all_clis))
     if json_output:
         stream.write(json.dumps([r.to_dict() for r in records], indent=2))
         stream.write("\n")
     else:
-        stream.write(format_session_table(records))
+        stream.write(format_session_table(records, show_origin=all_clis))
         stream.write("\n")
     return 0
 
@@ -687,8 +747,9 @@ def dispatch_sessions(args: argparse.Namespace) -> int:
     action = getattr(args, "sub_action", None) or "list"
     target = getattr(args, "sub_target", None)
     json_output = bool(getattr(args, "json_output", False))
+    all_clis = bool(getattr(args, "sessions_all_clis", False))
     if action == "list":
-        return cmd_sessions_list(json_output=json_output)
+        return cmd_sessions_list(json_output=json_output, all_clis=all_clis)
     if action == "show":
         return cmd_sessions_show(target, json_output=json_output)
     if action == "cost":

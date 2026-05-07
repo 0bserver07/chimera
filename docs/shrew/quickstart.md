@@ -14,7 +14,9 @@ mirrors an IDE-first sandboxed agent, shrew mirrors a small-model
 coding agent — a thin layer on top of
 [`chimera weasel`](../weasel/quickstart.md) that pins three
 small-model defaults, ships a curated skill set, and adds a
-benchmark harness for Aider Polyglot and GAIA.
+benchmark harness for Aider Polyglot and GAIA. Run `chimera shrew
+--help-long` to see verbose per-flag descriptions; `--help` itself
+stays under 50 lines for scannability.
 
 The headline thesis: most "the model can't code" complaints are
 really "the scaffold is too rich for this model". Shrew exists to

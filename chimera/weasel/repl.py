@@ -82,6 +82,7 @@ class MinimalRepl:
         max_steps: int = 50,
         out: TextIO | None = None,
         input_fn: Callable[[str], str] | None = None,
+        legacy_react: bool = False,
     ) -> None:
         """Initialise the REPL state.
 
@@ -96,12 +97,22 @@ class MinimalRepl:
             input_fn: Callable that returns the next line of user input.
                 Defaults to the builtin :func:`input` (which wires up
                 readline editing on most terminals). Tests inject a fake.
+            legacy_react: When ``False`` (default), free-text turns are
+                dispatched to :class:`chimera.assembly.coding_agent.CodingAgent`
+                with ``preset="coding_agent"`` — the wave-10 G3 default
+                flip applied to weasel by wave-11 B1. When ``True``,
+                free-text turns use the legacy bare :class:`ReAct` stack
+                (the original W5 path). The CodingAgent path falls back
+                to the legacy ReAct path automatically when the assembly
+                module is not importable, so this flag rarely needs to
+                be flipped manually.
         """
         self.model = model
         self.workdir = os.path.abspath(workdir or os.getcwd())
         self.max_steps = int(max_steps)
         self.out: TextIO = out if out is not None else sys.stdout
         self._input: Callable[[str], str] = input_fn if input_fn is not None else input
+        self.legacy_react = bool(legacy_react)
         # WHY: history is the single source of truth for ``/clear``. We
         # don't reuse :class:`chimera.sessions.Session` here because that
         # would pull in the full session-tree/eventlog stack — which is
@@ -200,6 +211,15 @@ class MinimalRepl:
     def run_turn(self, prompt: str) -> str:
         """Run a single agent turn and return the textual output.
 
+        Dispatches to :meth:`_run_turn_coding_agent` (the wave-10 G3
+        default — :class:`chimera.assembly.coding_agent.CodingAgent` with
+        ``preset="coding_agent"``) or :meth:`_run_turn_react` (the
+        legacy bare :class:`ReAct` stack) based on :attr:`legacy_react`.
+
+        The CodingAgent path falls back to the ReAct path automatically
+        when the assembly module is not importable, so a missing optional
+        dependency never crashes the REPL.
+
         Args:
             prompt: User message to send.
 
@@ -208,6 +228,100 @@ class MinimalRepl:
             ``"weasel:"`` when provider construction or the turn itself
             fails. Errors do *not* propagate — REPLs that bubble exceptions
             to the user are unfriendly.
+        """
+        if not self.legacy_react:
+            # Late-binding import: a missing chimera.assembly module (e.g. a
+            # trimmed install or import-time failure inside the assembly
+            # stack) must not break the REPL — fall through to legacy ReAct.
+            try:
+                from chimera.assembly.coding_agent import (  # noqa: F401
+                    CodingAgent,
+                )
+            except Exception:  # noqa: BLE001 — defensive: any import failure falls back
+                pass
+            else:
+                return self._run_turn_coding_agent(prompt)
+        return self._run_turn_react(prompt)
+
+    def _run_turn_coding_agent(self, prompt: str) -> str:
+        """Run a single turn through the assembled :class:`CodingAgent` stack.
+
+        Mirrors the dispatch loop in :func:`chimera.cli.code._run_new_stack`
+        — iterates the async event stream and concatenates the textual
+        ``assistant`` content into a single string return value so the
+        REPL's existing ``self._write(text)`` plumbing stays untouched.
+
+        Args:
+            prompt: User message to send.
+
+        Returns:
+            The agent's textual output, or an error message prefixed with
+            ``"weasel:"`` on failure. Errors never propagate.
+        """
+        try:
+            import asyncio
+
+            from chimera.assembly.coding_agent import CodingAgent
+            from chimera.core.loop_events import LoopEventType
+        except Exception as exc:  # noqa: BLE001 — import drift shouldn't crash the REPL
+            return f"weasel: coding-agent stack unavailable: {exc}"
+
+        try:
+            agent = CodingAgent(
+                model=self.model or "claude-sonnet-4-20250514",
+                preset="coding_agent",
+                project_dir=self.workdir,
+            )
+        except Exception as exc:  # noqa: BLE001 — surface auth / build errors politely
+            return f"weasel: coding-agent error: {exc}"
+
+        chunks: list[str] = []
+
+        async def _drive() -> None:
+            agent.reset_abort()
+            async for event in agent.run(prompt):
+                t = event.type
+                if t == LoopEventType.assistant:
+                    content = getattr(event.data, "content", str(event.data))
+                    if content and content.strip():
+                        chunks.append(content)
+                elif t == LoopEventType.assistant_chunk:
+                    chunks.append(str(event.data))
+                elif t == LoopEventType.system:
+                    if event.data:
+                        chunks.append(str(event.data))
+
+        try:
+            asyncio.run(_drive())
+        except KeyboardInterrupt:
+            try:
+                agent.abort()
+            except Exception:  # noqa: BLE001 — abort is best-effort
+                pass
+            return "[cancelled]"
+        except Exception as exc:  # noqa: BLE001 — REPL should never crash
+            return f"weasel: turn failed: {exc}"
+
+        text = "".join(chunks).strip()
+        # Track in history regardless of success so /clear has something
+        # to drop. Mirrors :meth:`_run_turn_react`.
+        self.history.append(("user", prompt))
+        self.history.append(("assistant", text))
+        return text
+
+    def _run_turn_react(self, prompt: str) -> str:
+        """Legacy single-turn dispatch through the bare :class:`ReAct` loop.
+
+        Pre-wave-11 weasel REPL path. Kept behind ``legacy_react=True``
+        for users who want the original behaviour (or as a fallback when
+        the assembly module is not importable).
+
+        Args:
+            prompt: User message to send.
+
+        Returns:
+            The agent's textual output, or an error message prefixed with
+            ``"weasel:"`` on failure.
         """
         try:
             import asyncio
@@ -314,8 +428,9 @@ def run(args: argparse.Namespace) -> int:
     it against ``sys.stdin`` / ``sys.stdout``.
 
     Args:
-        args: Parsed weasel CLI namespace. Reads ``model``, ``cwd``, and
-            ``max_steps``; tolerates missing attributes via ``getattr``.
+        args: Parsed weasel CLI namespace. Reads ``model``, ``cwd``,
+            ``max_steps``, and ``legacy_react``; tolerates missing
+            attributes via ``getattr``.
 
     Returns:
         Process exit code.
@@ -326,6 +441,7 @@ def run(args: argparse.Namespace) -> int:
         model=getattr(args, "model", None),
         workdir=workdir,
         max_steps=int(max_steps_raw),
+        legacy_react=bool(getattr(args, "legacy_react", False)),
     )
     return repl.run()
 

@@ -46,6 +46,99 @@ _VALID_MODES = ("interactive", "print", "rpc", "sdk")
 _VALID_SUBCOMMANDS = (None, "sessions", "share")
 _VALID_SUB_ACTIONS = (None, "list", "show", "cost")
 
+# A10-W11: parser ref + per-flag long descriptions for ``--help-long``.
+_PARSER: argparse.ArgumentParser | None = None
+_LONG_HELP: dict[str, str] = {
+    "--model": (
+        "Model identifier. Resolution order: --model > $WEASEL_MODEL > "
+        f"the {_DEFAULT_MODEL} default. Resolved through "
+        "chimera.providers.factory.create_provider."
+    ),
+    "--mode": (
+        "Operating mode: 'interactive' (REPL, default), 'print' "
+        "(one-shot text/JSON), 'rpc' (stdio JSON-RPC), 'sdk' "
+        "(prints embedding pointer and exits)."
+    ),
+    "-p / --print": (
+        "One-shot print mode: run a single agent turn against PROMPT, "
+        "emit the assistant text on stdout, then exit."
+    ),
+    "--json": (
+        "When paired with -p, emit a single JSON object on stdout "
+        "({output, success, model}) instead of plain text."
+    ),
+    "--list-models": (
+        "List models recognised by chimera.providers.cost.PRICING and "
+        "exit. Useful for discovering valid identifiers."
+    ),
+    "--cwd": (
+        "Working directory for the agent run. Default: process cwd."
+    ),
+    "--max-steps": (
+        "Maximum agent steps per turn (default: 50)."
+    ),
+    "--legacy-react": (
+        "Opt out of the new CodingAgent default (wave 11) and use the "
+        "legacy bare ReAct stack for free-text turns. Reserved for "
+        "back-compat with users who need the original W5 behaviour."
+    ),
+    "--resume": (
+        "Resume a persisted weasel run by id (matches "
+        "~/.chimera/eventlog/<id>/). The replayed conversation is "
+        "prepended to the new turn so the agent has full context."
+    ),
+    "-c / --continue": (
+        "Resume the most-recent weasel run under the current working "
+        "directory. Equivalent to --resume <newest-weasel-id-in-cwd>."
+    ),
+    "subcommand": (
+        "Optional positional: 'sessions' (list/show/cost) or "
+        "'share <id>' to export a session transcript."
+    ),
+    "--since": (
+        "With 'sessions cost': drop sessions older than this cutoff. "
+        "Accepts shorthand (7d / 24h / 30m) or an ISO-8601 date."
+    ),
+    "--cost-model": (
+        "With 'sessions cost': case-insensitive substring filter on "
+        "model name. Pass 'all' (or omit) to include every model."
+    ),
+    "--cost-format": (
+        "With 'sessions cost': output format. Defaults to 'json' "
+        "when --json is set, 'text' otherwise. CSV is also supported."
+    ),
+    "--cost-limit": (
+        "With 'sessions cost': cap on rows considered (newest first). "
+        "No cap by default; useful for fixture stability."
+    ),
+    "--share-sink": (
+        "With 'share': destination for the rendered transcript. "
+        "Defaults to 'file' (writes ~/.chimera/shares/weasel-<id>.<ext>)."
+    ),
+    "--share-format": (
+        "With 'share': render format. Defaults to 'json' "
+        "(round-trips with 'sessions show --json'); 'md' yields a "
+        "human-readable transcript."
+    ),
+    "--theme": (
+        "Theme name. Resolved from built-ins (default, dark, "
+        "solarized) plus on-disk JSON files under <cwd>/.weasel/"
+        "themes/ and ~/.weasel/themes/. Defaults to $WEASEL_THEME "
+        "or 'default'."
+    ),
+    "--prompt-template": (
+        "Prompt-template name. Resolved from the built-in 'default' "
+        "plus on-disk markdown files under <cwd>/.weasel/prompts/ "
+        "and ~/.weasel/prompts/. Defaults to $WEASEL_PROMPT_TEMPLATE "
+        "or 'default'."
+    ),
+    "--all-clis": (
+        "With 'sessions list': include sessions created by every "
+        "Chimera CLI (otter / ferret / shrew / stoat / mink / "
+        "badger), not just weasel. Adds an ORIGIN column."
+    ),
+}
+
 
 def _resolve_version() -> str:
     """Return the weasel scaffold version string for ``--version``.
@@ -68,220 +161,189 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         parser: An :class:`argparse.ArgumentParser` (typically the weasel
             subparser created by :func:`chimera.cli.main.build_parser`).
     """
+    # A10-W11: stash for ``--help-long`` rendering in ``run()``.
+    global _PARSER
+    _PARSER = parser
+
     parser.add_argument(
         "--version",
         action="version",
         version=f"chimera weasel {_resolve_version()}",
     )
-    # WHY: env precedence is --model > $WEASEL_MODEL > _DEFAULT_MODEL,
-    # mirroring otter's $OTTER_MODEL pattern. CI / shells pin a model
-    # once while keeping ad-hoc --model overrides cheap.
     parser.add_argument(
+        "--help-long",
+        dest="help_long",
+        action="store_true",
+        default=False,
+        help="Show full help (incl. long flag descriptions).",
+    )
+
+    core = parser.add_argument_group("Core")
+    behavior = parser.add_argument_group("Behavior")
+    output = parser.add_argument_group("Output")
+    persistence = parser.add_argument_group("Persistence")
+
+    # WHY: env precedence is --model > $WEASEL_MODEL > _DEFAULT_MODEL.
+    core.add_argument(
         "--model",
         default=os.environ.get("WEASEL_MODEL") or _DEFAULT_MODEL,
-        help=(
-            "Model identifier (default: $WEASEL_MODEL or "
-            f"{_DEFAULT_MODEL}). Resolved through "
-            "``chimera.providers.factory.create_provider``."
-        ),
+        metavar="MODEL",
+        help=f"Model id (default: $WEASEL_MODEL or {_DEFAULT_MODEL}).",
     )
-    # WHY: the four-mode philosophy. Default is interactive. Print is the
-    # ``-p`` shortcut (parity with the upstream minimal harness). RPC is
-    # stdio JSON-RPC for process integration (W2). SDK is the passthrough
-    # banner pointing the user at ``from chimera.weasel.sdk import Agent``.
-    parser.add_argument(
+    # WHY: the four-mode philosophy.
+    core.add_argument(
         "--mode",
         choices=list(_VALID_MODES),
         default="interactive",
-        help=(
-            "Operating mode: interactive (REPL, default), print "
-            "(one-shot text/JSON), rpc (stdio JSON-RPC), or sdk "
-            "(prints embedding pointer and exits)."
-        ),
+        metavar="MODE",
+        help="interactive | print | rpc | sdk (default: interactive).",
     )
-    parser.add_argument(
+    core.add_argument(
         "-p",
         "--print",
         dest="print_mode",
         default=None,
-        help="One-shot: run a single turn with PROMPT, print, exit.",
+        metavar="PROMPT",
+        help="One-shot: run PROMPT, print, exit.",
     )
-    parser.add_argument(
+    output.add_argument(
         "--json",
         dest="json_output",
         action="store_true",
         default=False,
-        help=(
-            "When paired with -p, emit a single JSON object on stdout "
-            "(``{output, success, model}``) instead of plain text."
-        ),
+        help="With -p: emit JSON envelope instead of text.",
     )
-    parser.add_argument(
+    output.add_argument(
         "--list-models",
         dest="list_models",
         action="store_true",
         default=False,
-        help=(
-            "List models recognised by ``chimera.providers.cost.PRICING`` "
-            "and exit."
-        ),
+        help="List recognised model ids and exit.",
     )
-    parser.add_argument(
+    core.add_argument(
         "--cwd",
         default=None,
-        help="Working directory (default: current directory).",
+        help="Working directory (default: cwd).",
     )
-    parser.add_argument(
+    behavior.add_argument(
         "--max-steps",
         type=int,
         default=50,
-        help="Maximum agent steps per turn (default: 50).",
+        metavar="N",
+        help="Max agent steps per turn (default: 50).",
     )
-    # WHY (C1, wave 9): --resume / --continue mirror mink's flag pair so
-    # one-shot ``-p`` invocations can pick up where the previous weasel
-    # run left off. ``--resume <id>`` loads the named
-    # ``~/.chimera/eventlog/weasel-*`` directory; ``-c`` resolves the
-    # newest weasel run for the current cwd.
-    parser.add_argument(
+    # WHY (B1, wave 11): align weasel with the wave-10 G3 default flip.
+    behavior.add_argument(
+        "--legacy-react",
+        dest="legacy_react",
+        action="store_true",
+        default=False,
+        help="Use legacy ReAct (opt out of CodingAgent default).",
+    )
+    # WHY (C1, wave 9): --resume / --continue mirror mink's flag pair.
+    persistence.add_argument(
         "--resume",
         default=None,
-        help=(
-            "Resume a persisted weasel run by id (matches "
-            "~/.chimera/eventlog/<id>/). The replayed conversation is "
-            "prepended to the new turn so the agent has full context."
-        ),
+        metavar="ID",
+        help="Resume a persisted weasel run by id.",
     )
-    parser.add_argument(
+    persistence.add_argument(
         "-c",
         "--continue",
         dest="continue_latest",
         action="store_true",
         default=False,
-        help=(
-            "Resume the most-recent weasel run under the current "
-            "working directory. Equivalent to "
-            "``--resume <newest-weasel-id-in-cwd>``."
-        ),
+        help="Resume the newest weasel run under cwd.",
     )
-    # WHY (sessions placeholder): weasel's only subcommand is ``sessions``
-    # (list/show). Everything else stays out of the surface deliberately.
     parser.add_argument(
         "subcommand",
         nargs="?",
         default=None,
         choices=list(_VALID_SUBCOMMANDS),
         metavar="SUBCOMMAND",
-        help="Optional: 'sessions' (list/show/cost) or 'share <id>'.",
+        help="sessions | share.",
     )
     parser.add_argument(
         "sub_action",
         nargs="?",
         default=None,
         metavar="ACTION",
-        help=(
-            "With 'sessions': 'list', 'show <id>', or 'cost'. With "
-            "'share': the SESSION_ID to share (positional)."
-        ),
+        help="list | show | cost | <session-id>.",
     )
     parser.add_argument(
         "sub_target",
         nargs="?",
         default=None,
         metavar="TARGET",
-        help="Session id consumed by 'sessions show'.",
+        help="Session id for sessions show.",
     )
-    # WHY: cost subcommand flags. Mirror ``mink runs cost`` so the rollup
-    # JSON/CSV/text shape is byte-identical across CLIs. All optional;
-    # defaults come from ``cmd_sessions_cost``.
-    parser.add_argument(
+    persistence.add_argument(
         "--since",
         dest="cost_since",
         default=None,
-        help=(
-            "With 'sessions cost': drop sessions older than this cutoff. "
-            "Accepts shorthand (``7d`` / ``24h`` / ``30m``) or ISO-8601."
-        ),
+        metavar="WINDOW",
+        help="sessions cost: cutoff (e.g. 7d / ISO).",
     )
-    parser.add_argument(
+    persistence.add_argument(
         "--cost-model",
         dest="cost_model",
         default=None,
-        help=(
-            "With 'sessions cost': case-insensitive substring filter "
-            "on model name. Pass ``all`` (or omit) for every model."
-        ),
+        metavar="STR",
+        help="sessions cost: model substring filter.",
     )
-    parser.add_argument(
+    persistence.add_argument(
         "--cost-format",
         dest="cost_format",
         choices=("text", "json", "csv"),
         default=None,
-        help=(
-            "With 'sessions cost': output format. Defaults to ``json`` "
-            "when ``--json`` is set, ``text`` otherwise."
-        ),
+        metavar="FMT",
+        help="sessions cost: text | json | csv.",
     )
-    parser.add_argument(
+    persistence.add_argument(
         "--cost-limit",
         dest="cost_limit",
         type=int,
         default=None,
-        help=(
-            "With 'sessions cost': cap on rows considered (newest first; "
-            "no cap by default)."
-        ),
+        metavar="N",
+        help="sessions cost: row cap (newest first).",
     )
-    # WHY: share subcommand flags. Mirror otter's share_cmd; HTTP / HTML
-    # are intentionally omitted — weasel keeps the share surface small.
-    parser.add_argument(
+    persistence.add_argument(
         "--share-sink",
         dest="share_sink",
         choices=("file", "stdout"),
         default=None,
-        help=(
-            "With 'share': destination for the rendered transcript. "
-            "Defaults to ``file`` (writes ``~/.chimera/shares/weasel-<id>.<ext>``)."
-        ),
+        metavar="SINK",
+        help="share: file (default) | stdout.",
     )
-    parser.add_argument(
+    persistence.add_argument(
         "--share-format",
         dest="share_format",
         choices=("json", "md"),
         default=None,
-        help=(
-            "With 'share': render format. Defaults to ``json`` "
-            "(round-trips with ``sessions show --json``)."
-        ),
+        metavar="FMT",
+        help="share: json (default) | md.",
     )
-    # WHY (W2, wave 9): theme + prompt-template registries are core
-    # extension surfaces — themes restyle the REPL prompt prefixes,
-    # prompt-templates swap the agent's system prompt without editing
-    # source. Both flags resolve via the user/project loaders defined
-    # in :mod:`chimera.weasel.themes` /
-    # :mod:`chimera.weasel.prompt_templates`. Unknown ids fall back to
-    # ``default`` rather than erroring, mirroring the loader's
-    # never-raise policy.
-    parser.add_argument(
+    behavior.add_argument(
         "--theme",
         dest="theme",
         default=os.environ.get("WEASEL_THEME") or None,
-        help=(
-            "Theme name. Resolved from built-ins (``default``, "
-            "``dark``, ``solarized``) plus on-disk JSON files under "
-            "``<cwd>/.weasel/themes/`` and ``~/.weasel/themes/``. "
-            "Defaults to $WEASEL_THEME or ``default``."
-        ),
+        metavar="NAME",
+        help="REPL theme (default: $WEASEL_THEME or 'default').",
     )
-    parser.add_argument(
+    behavior.add_argument(
         "--prompt-template",
         dest="prompt_template",
         default=os.environ.get("WEASEL_PROMPT_TEMPLATE") or None,
-        help=(
-            "Prompt-template name. Resolved from the built-in "
-            "``default`` plus on-disk markdown files under "
-            "``<cwd>/.weasel/prompts/`` and ``~/.weasel/prompts/``. "
-            "Defaults to $WEASEL_PROMPT_TEMPLATE or ``default``."
-        ),
+        metavar="NAME",
+        help="System prompt template (default: 'default').",
+    )
+    # B9-W11: cross-CLI session listing.
+    persistence.add_argument(
+        "--all-clis",
+        dest="sessions_all_clis",
+        action="store_true",
+        default=False,
+        help="sessions list: include every Chimera CLI's sessions.",
     )
 
 
@@ -735,6 +797,13 @@ def run(args: argparse.Namespace) -> int:
     Returns:
         Process exit code.
     """
+    # A10-W11: ``--help-long`` shows standard help + long flag descriptions.
+    if getattr(args, "help_long", False):
+        from chimera.cli.help_long import print_help_long
+
+        print_help_long(_PARSER, _LONG_HELP)
+        return 0
+
     if getattr(args, "list_models", False):
         return _run_list_models()
 

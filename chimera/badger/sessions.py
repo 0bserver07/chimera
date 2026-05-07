@@ -41,11 +41,17 @@ __all__ = [
 
 
 _PREFIX = "badger-"
+_CLI_ORIGIN = "badger"
 
 
 @dataclass
 class SessionRecord:
-    """Compact summary of one persisted badger session."""
+    """Compact summary of one persisted badger session.
+
+    The ``cli_origin`` field is populated by :func:`iter_sessions` from
+    the on-disk directory prefix; defaults to the empty string for
+    hand-built records (e.g. inside fixtures).
+    """
 
     session_id: str
     started_at: str
@@ -58,6 +64,7 @@ class SessionRecord:
     tool_calls: int
     path: Path
     error: str | None = None
+    cli_origin: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         """Render as a JSON-serializable dict for ``--json`` output."""
@@ -73,6 +80,7 @@ class SessionRecord:
             "tool_calls": self.tool_calls,
             "path": str(self.path),
             "error": self.error,
+            "cli_origin": self.cli_origin,
         }
 
 
@@ -114,7 +122,12 @@ def _read_summary(session_dir: Path) -> dict[str, Any] | None:
     return data
 
 
-def _summary_to_record(session_dir: Path, summary: dict[str, Any]) -> SessionRecord:
+def _summary_to_record(
+    session_dir: Path,
+    summary: dict[str, Any],
+    *,
+    cli_origin: str = _CLI_ORIGIN,
+) -> SessionRecord:
     """Convert a ``summary.json`` dict into a :class:`SessionRecord`."""
     return SessionRecord(
         session_id=str(
@@ -132,39 +145,80 @@ def _summary_to_record(session_dir: Path, summary: dict[str, Any]) -> SessionRec
         tool_calls=int(summary.get("tool_calls_total", 0) or 0),
         path=session_dir,
         error=summary.get("error"),
+        cli_origin=cli_origin,
     )
 
 
-def iter_sessions(eventlog_root: Path | None = None) -> Iterator[SessionRecord]:
+def iter_sessions(
+    eventlog_root: Path | None = None,
+    *,
+    all_clis: bool = False,
+) -> Iterator[SessionRecord]:
     """Yield one :class:`SessionRecord` per persisted badger session, newest first.
 
     Args:
         eventlog_root: Override the eventlog root. Defaults to
             :func:`default_eventlog_root`.
+        all_clis: When ``True``, also yield records for sessions created
+            by other Chimera CLIs (otter, ferret, weasel, shrew, stoat,
+            mink). Default ``False`` preserves the historic
+            "badger-only" behavior.
 
     Yields:
         :class:`SessionRecord` instances ordered by ``session_id``
         descending (session ids are timestamp-sortable).
     """
-    root = eventlog_root or default_eventlog_root()
-    if not root.exists():
+    # WHY (B9-W11): late-binding import keeps the cross-CLI walker
+    # optional — if ``chimera.sessions.eventlog.cross_cli`` ever fails
+    # to import (e.g. partial install), the per-CLI default path keeps
+    # working via the legacy disk walk below.
+    from chimera.sessions.eventlog.cross_cli import (
+        iter_all_sessions as _iter_all,
+        iter_sessions_for_cli as _iter_for,
+    )
+
+    if all_clis:
+        for cross in _iter_all(eventlog_root):
+            yield SessionRecord(
+                session_id=cross.session_id,
+                started_at=cross.started_at,
+                ended_at=cross.ended_at,
+                model=cross.model,
+                prompt=cross.prompt,
+                success=cross.success,
+                cost_usd=cross.cost_usd,
+                steps=cross.steps,
+                tool_calls=cross.tool_calls,
+                path=cross.path,
+                error=cross.error,
+                cli_origin=cross.cli_origin,
+            )
         return
-    candidates = [
-        p for p in root.iterdir()
-        if p.is_dir() and p.name.startswith(_PREFIX)
-    ]
-    candidates.sort(key=lambda p: p.name, reverse=True)
-    for session_dir in candidates:
-        summary = _read_summary(session_dir)
-        if summary is None:
-            continue
-        yield _summary_to_record(session_dir, summary)
+    for cross in _iter_for(_CLI_ORIGIN, eventlog_root):
+        yield SessionRecord(
+            session_id=cross.session_id,
+            started_at=cross.started_at,
+            ended_at=cross.ended_at,
+            model=cross.model,
+            prompt=cross.prompt,
+            success=cross.success,
+            cost_usd=cross.cost_usd,
+            steps=cross.steps,
+            tool_calls=cross.tool_calls,
+            path=cross.path,
+            error=cross.error,
+            cli_origin=cross.cli_origin,
+        )
 
 
 def get_session(
     session_id: str, eventlog_root: Path | None = None,
 ) -> SessionDetail:
     """Load one session's summary + every ``event-*.json`` file.
+
+    Looks for ``session_id`` regardless of CLI origin: a badger CLI can
+    inspect a session created by ``chimera otter`` or ``chimera ferret``
+    by id alone, no prefix tweaking required (B9-W11).
 
     Args:
         session_id: The session directory name.
@@ -280,12 +334,16 @@ def format_session_table(
     records: Iterable[SessionRecord],
     *,
     limit: int = 20,
+    show_origin: bool = False,
 ) -> str:
     """Render ``records`` as a fixed-column table.
 
     Args:
         records: Any iterable of :class:`SessionRecord`.
         limit: Maximum number of rows to show. Use ``<= 0`` for unlimited.
+        show_origin: When ``True`` (cross-CLI listing), render an extra
+            ``ORIGIN`` column right after ``SESSION_ID`` so the user can
+            tell which CLI wrote each session.
 
     Returns:
         A multi-line string. Empty input returns the header line plus a
@@ -295,16 +353,18 @@ def format_session_table(
     if limit > 0:
         rows = rows[:limit]
 
-    header_cols = (
-        ("SESSION_ID", 38),
+    base_cols: list[tuple[str, int]] = [("SESSION_ID", 38)]
+    if show_origin:
+        base_cols.append(("ORIGIN", 7))
+    base_cols.extend([
         ("DATE", 16),
         ("MODEL", 18),
         ("STEPS", 5),
         ("COST", 8),
         ("OK", 3),
         ("PROMPT", 60),
-    )
-    header_line = "  ".join(name.ljust(width) for name, width in header_cols)
+    ])
+    header_line = "  ".join(name.ljust(width) for name, width in base_cols)
     if not rows:
         return f"{header_line}\n(no persisted badger sessions found)"
 
@@ -312,18 +372,18 @@ def format_session_table(
     for r in rows:
         ok_str = "yes" if r.success else "no "
         cost_str = f"${r.cost_usd:.4f}"
-        line = "  ".join(
-            [
-                r.session_id.ljust(38),
-                _short_date(r.started_at).ljust(16),
-                _short(r.model, 18).ljust(18),
-                str(r.steps).rjust(5),
-                cost_str.rjust(8),
-                ok_str,
-                _short(r.prompt, 60),
-            ]
-        )
-        lines.append(line)
+        cells: list[str] = [r.session_id.ljust(38)]
+        if show_origin:
+            cells.append((r.cli_origin or "?").ljust(7))
+        cells.extend([
+            _short_date(r.started_at).ljust(16),
+            _short(r.model, 18).ljust(18),
+            str(r.steps).rjust(5),
+            cost_str.rjust(8),
+            ok_str,
+            _short(r.prompt, 60),
+        ])
+        lines.append("  ".join(cells))
     return "\n".join(lines)
 
 
@@ -386,8 +446,15 @@ def format_session_detail(
 
 
 def cmd_sessions_list(args: argparse.Namespace) -> int:
-    """Implement ``chimera badger sessions list``."""
-    records = list(iter_sessions())
+    """Implement ``chimera badger sessions list``.
+
+    The ``--all-clis`` flag (``args.sessions_all_clis``) drops the
+    badger-only prefix filter so sessions created by any Chimera CLI
+    show up; the table renders an extra ``ORIGIN`` column in that mode
+    so the user can tell which CLI wrote each row.
+    """
+    all_clis = bool(getattr(args, "sessions_all_clis", False))
+    records = list(iter_sessions(all_clis=all_clis))
 
     since_raw = getattr(args, "sessions_since", None)
     if since_raw:
@@ -412,7 +479,7 @@ def cmd_sessions_list(args: argparse.Namespace) -> int:
         print(json.dumps([r.to_dict() for r in rows], indent=2))
         return 0
 
-    print(format_session_table(records, limit=limit))
+    print(format_session_table(records, limit=limit, show_origin=all_clis))
     return 0
 
 

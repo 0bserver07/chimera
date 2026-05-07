@@ -134,6 +134,19 @@ cmd_share("stoat-20260430T101455-1f3c2a8b", sink="file", fmt="md")
 Every helper accepts an `eventlog_root` / `shares_dir` override so
 tests can isolate against a temp directory.
 
+## Cross-CLI sessions
+
+Stoat shares `~/.chimera/eventlog/` with every other Chimera CLI —
+`stoat-<utc>-<uuid>/` directories sit alongside `mink-`, `otter-`,
+`ferret-`, `weasel-`, `shrew-`, and `badger-` prefixes. Per-CLI
+`sessions list` commands default to filtering on their own prefix (the
+historic behavior). Pass `--all-clis` to drop the filter and surface a
+combined chronological view with an `ORIGIN` column. Every per-CLI
+`sessions show <id>` resolves a session by directory name regardless of
+origin, so a stoat operator can inspect an otter or ferret session
+transcript with the id alone. The shared walker lives at
+`chimera/sessions/eventlog/cross_cli.py`.
+
 ## See also
 
 - [`quickstart.md`](quickstart.md) — install + first run.

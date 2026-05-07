@@ -235,13 +235,22 @@ def test_free_text_calls_run_turn(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_run_turn_handles_provider_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A failing provider build surfaces a friendly stderr-like line."""
+    """A failing provider build surfaces a friendly stderr-like line.
+
+    This test exercises the legacy ReAct path (where ``_build_provider``
+    is the provider construction site). Wave-11 B1 flipped the default
+    free-text path to ``CodingAgent``, so we pin ``legacy_react=True``
+    here to keep the original assertion semantics — mirroring how
+    wave-10 G3's ``tests/cli/test_cli_code.py`` opts existing legacy
+    tests into ``legacy_react=True`` after the default flip.
+    """
 
     def fake_build(self: MinimalRepl) -> Any:
         raise ValueError("no key configured")
 
     monkeypatch.setattr(MinimalRepl, "_build_provider", fake_build)
     repl, _ = _make_repl([])
+    repl.legacy_react = True  # opt into the legacy path under test
     text = repl.run_turn("ping")
     assert text.startswith("weasel: provider error:")
     assert "no key configured" in text

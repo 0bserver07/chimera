@@ -5,7 +5,9 @@ Badger is the seventh Chimera coding-agent CLI. It mirrors a
 and rerun-on-failure discipline as a first-class concern. Where mink
 mirrors a TUI-first ergonomic and ferret mirrors a sandbox-first /
 IDE-first posture, badger is what you reach for when "better harness
-tools" is the load-bearing requirement.
+tools" is the load-bearing requirement. Run `chimera badger --help-long`
+to see verbose per-flag descriptions; `--help` itself stays under 50
+lines for scannability.
 
 ## Install
 

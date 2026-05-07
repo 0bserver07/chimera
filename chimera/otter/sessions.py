@@ -88,6 +88,7 @@ class SessionRecord:
     path: Path
     error: str | None = None
     title: str | None = None
+    cli_origin: str = ""
 
     def display_title(self) -> str:
         """Return the user-facing title.
@@ -115,6 +116,7 @@ class SessionRecord:
             "tool_calls": self.tool_calls,
             "path": str(self.path),
             "error": self.error,
+            "cli_origin": self.cli_origin,
         }
 
 
@@ -143,6 +145,7 @@ class SessionDetail:
 
 
 _PREFIX = "otter-"
+_CLI_ORIGIN = "otter"
 
 
 def default_eventlog_root() -> Path:
@@ -164,7 +167,12 @@ def _read_summary(session_dir: Path) -> dict[str, Any] | None:
     return data
 
 
-def _summary_to_record(session_dir: Path, summary: dict[str, Any]) -> SessionRecord:
+def _summary_to_record(
+    session_dir: Path,
+    summary: dict[str, Any],
+    *,
+    cli_origin: str = _CLI_ORIGIN,
+) -> SessionRecord:
     """Convert a ``summary.json`` dict into a :class:`SessionRecord`."""
     raw_title = summary.get("title")
     title = str(raw_title) if isinstance(raw_title, str) and raw_title.strip() else None
@@ -181,6 +189,7 @@ def _summary_to_record(session_dir: Path, summary: dict[str, Any]) -> SessionRec
         path=session_dir,
         error=summary.get("error"),
         title=title,
+        cli_origin=cli_origin,
     )
 
 
@@ -226,31 +235,62 @@ def iter_session_run_records(eventlog_root: Path | None = None) -> Iterator[Any]
         yield _summary_to_record(session_dir, summary)
 
 
-def iter_sessions(eventlog_root: Path | None = None) -> Iterator[SessionRecord]:
+def iter_sessions(
+    eventlog_root: Path | None = None,
+    *,
+    all_clis: bool = False,
+) -> Iterator[SessionRecord]:
     """Yield one :class:`SessionRecord` per persisted otter session, newest first.
 
     Args:
         eventlog_root: Override the eventlog root. Defaults to
             :func:`default_eventlog_root`.
+        all_clis: When ``True``, also yield records for sessions
+            created by other Chimera CLIs. Default ``False`` preserves
+            the historic ``otter-`` only behavior (B9-W11).
 
     Yields:
         :class:`SessionRecord` instances ordered by ``session_id``
         descending (session ids start with ``otter-<UTC>-<uuid>``, so
         lexical ordering equals chronological ordering).
     """
-    root = eventlog_root or default_eventlog_root()
-    if not root.exists():
-        return
-    candidates = [
-        p for p in root.iterdir()
-        if p.is_dir() and p.name.startswith(_PREFIX)
-    ]
-    candidates.sort(key=lambda p: p.name, reverse=True)
-    for session_dir in candidates:
-        summary = _read_summary(session_dir)
-        if summary is None:
-            continue
-        yield _summary_to_record(session_dir, summary)
+    # WHY (B9-W11): late-binding sibling import to avoid hard-coupling
+    # otter sessions to the cross-CLI module's import order.
+    from chimera.sessions.eventlog.cross_cli import (
+        iter_all_sessions as _iter_all,
+        iter_sessions_for_cli as _iter_for,
+    )
+
+    source = (
+        _iter_all(eventlog_root)
+        if all_clis
+        else _iter_for(_CLI_ORIGIN, eventlog_root)
+    )
+    for cross in source:
+        # WHY: rebuild as the otter-flavored ``SessionRecord`` so the
+        # extra ``title`` field (otter-only) and the existing
+        # :meth:`display_title` semantics keep working downstream.
+        raw_title = cross.summary.get("title") if cross.summary else None
+        title = (
+            str(raw_title)
+            if isinstance(raw_title, str) and raw_title.strip()
+            else None
+        )
+        yield SessionRecord(
+            session_id=cross.session_id,
+            started_at=cross.started_at,
+            ended_at=cross.ended_at,
+            model=cross.model,
+            prompt=cross.prompt,
+            success=cross.success,
+            cost_usd=cross.cost_usd,
+            steps=cross.steps,
+            tool_calls=cross.tool_calls,
+            path=cross.path,
+            error=cross.error,
+            title=title,
+            cli_origin=cross.cli_origin,
+        )
 
 
 def get_session(
@@ -418,6 +458,7 @@ def format_session_table(
     *,
     limit: int = 20,
     color: bool | None = None,
+    show_origin: bool = False,
 ) -> str:
     """Render ``records`` as a fixed-column table.
 
@@ -426,6 +467,8 @@ def format_session_table(
         limit: Maximum number of rows to show. Use ``<= 0`` for unlimited.
         color: When True, emit ANSI color. When None, auto-detect via
             ``sys.stdout.isatty()`` and the ``NO_COLOR`` env var.
+        show_origin: When ``True`` (cross-CLI mode), render an extra
+            ``ORIGIN`` column right after ``SESSION_ID`` (B9-W11).
 
     Returns:
         A multi-line string. Empty input returns the header line plus a
@@ -442,8 +485,10 @@ def format_session_table(
     # via ``sessions rename``. When ``title`` is unset on a record we
     # fall back to the prompt for back-compat with existing fixtures —
     # both routes go through :meth:`SessionRecord.display_title`.
-    header_cols = (
-        ("SESSION_ID", 38),
+    base_cols: list[tuple[str, int]] = [("SESSION_ID", 38)]
+    if show_origin:
+        base_cols.append(("ORIGIN", 7))
+    base_cols.extend([
         ("DATE", 16),
         ("MODEL", 18),
         ("STEPS", 5),
@@ -451,10 +496,10 @@ def format_session_table(
         ("OK", 3),
         ("TITLE", 40),
         ("PROMPT", 60),
-    )
+    ])
     header_line = "  ".join(
         _color(name.ljust(width), _BOLD, enable=enable)
-        for name, width in header_cols
+        for name, width in base_cols
     )
     if not rows:
         empty = _color(
@@ -470,19 +515,19 @@ def format_session_table(
         )
         cost_str = f"${r.cost_usd:.4f}"
         title_cell = _short(r.display_title(), 40)
-        line = "  ".join(
-            [
-                r.session_id.ljust(38),
-                _short_date(r.started_at).ljust(16),
-                _short(r.model, 18).ljust(18),
-                str(r.steps).rjust(5),
-                cost_str.rjust(8),
-                ok_styled,
-                title_cell.ljust(40),
-                _short(r.prompt, 60),
-            ]
-        )
-        lines.append(line)
+        cells: list[str] = [r.session_id.ljust(38)]
+        if show_origin:
+            cells.append((r.cli_origin or "?").ljust(7))
+        cells.extend([
+            _short_date(r.started_at).ljust(16),
+            _short(r.model, 18).ljust(18),
+            str(r.steps).rjust(5),
+            cost_str.rjust(8),
+            ok_styled,
+            title_cell.ljust(40),
+            _short(r.prompt, 60),
+        ])
+        lines.append("  ".join(cells))
     return "\n".join(lines)
 
 
@@ -596,7 +641,8 @@ def cmd_sessions_list(args: argparse.Namespace) -> int:
         Exit code: ``0`` on success (including empty result set),
         ``2`` when ``--since`` cannot be parsed.
     """
-    records = list(iter_sessions())
+    all_clis = bool(getattr(args, "sessions_all_clis", False))
+    records = list(iter_sessions(all_clis=all_clis))
 
     since_raw = getattr(args, "sessions_since", None)
     if since_raw:
@@ -623,7 +669,9 @@ def cmd_sessions_list(args: argparse.Namespace) -> int:
 
     no_color = bool(getattr(args, "no_color", False))
     color: bool | None = False if no_color else None
-    print(format_session_table(records, limit=limit, color=color))
+    print(format_session_table(
+        records, limit=limit, color=color, show_origin=all_clis,
+    ))
     return 0
 
 

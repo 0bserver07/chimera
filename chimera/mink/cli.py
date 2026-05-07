@@ -36,6 +36,121 @@ from chimera.errors import friendly_errors
 _DEFAULT_MODEL = "kimi-k2.6:cloud"
 _DEFAULT_FALLBACK = "qwen3:32b"
 
+# A10-W11: parser ref + per-flag long descriptions for ``--help-long``.
+_PARSER: argparse.ArgumentParser | None = None
+_LONG_HELP: dict[str, str] = {
+    "--tool-timeout": (
+        "Per-tool-call timeout in seconds. When exceeded, the tool "
+        "returns an error result (the agent can react) instead of "
+        "crashing the run. Default: no timeout."
+    ),
+    "--model": (
+        "Ollama model tag. Resolution order: --model > $CHIMERA_MINK_"
+        f"MODEL > the {_DEFAULT_MODEL} default. Falls back to "
+        f"$CHIMERA_MINK_FALLBACK (default {_DEFAULT_FALLBACK}) when "
+        "the primary model is unreachable."
+    ),
+    "--permission-mode": (
+        "Permission mode (ecosystem parity). 'default' asks for risky "
+        "ops; 'acceptEdits' auto-approves edits; 'bypassPermissions' "
+        "skips all prompts; 'plan' is read-only planning mode."
+    ),
+    "--allowed-tools": (
+        "Comma-separated tool names to allow (case-insensitive). "
+        "Empty means every tool in the default group is exposed."
+    ),
+    "--resume": (
+        "Resume a session by id (matches "
+        "~/.chimera/sessions/<id>.jsonl). The replayed conversation "
+        "is prepended to the new turn so the agent has full context."
+    ),
+    "-c / --continue": (
+        "Resume the most-recent mink run under the current working "
+        "directory. Equivalent to --resume <newest-mink-id-in-cwd>."
+    ),
+    "--agent": (
+        "Agent preset name to load via the agent registry. Pulls "
+        "system prompt, allowed tools, and model defaults."
+    ),
+    "--cwd": (
+        "Working directory. Default: current directory. Resolved to "
+        "an absolute path before the env is built."
+    ),
+    "--remote": (
+        "Run tools on a remote host over SSH. Format: "
+        "ssh://user@host[:port][/path]. Uses ~/.ssh/config + "
+        "ssh-agent for authentication. Default: run locally."
+    ),
+    "-p / --print": (
+        "One-shot print mode: run a single turn with PROMPT, print, "
+        "exit. Pairs with --output-format json|stream-json for "
+        "machine-readable output."
+    ),
+    "--output-format": (
+        "One-shot output format. 'text' prints assistant reply; "
+        "'json' emits a single result object on exit; 'stream-json' "
+        "prints one JSON line per LoopEvent."
+    ),
+    "--max-steps": "Maximum agent steps per turn (default: 50).",
+    "--no-save": (
+        "Do not persist the one-shot run to ~/.chimera/eventlog/. "
+        "Default behavior saves the full message + tool history."
+    ),
+    "--run-id": (
+        "Override the auto-generated run id for the persisted "
+        "eventlog directory. Useful for reproducible test fixtures."
+    ),
+    "--no-rich": (
+        "Force the plain ConsoleStreamHandler even when stdout is a "
+        "TTY. Default behavior auto-selects: rich on TTY, plain when "
+        "piped."
+    ),
+    "--no-color": (
+        "Synonym for --no-rich. Also honored implicitly when the "
+        "$NO_COLOR environment variable is set."
+    ),
+    "runs_command": (
+        "Optional positional: 'runs' to inspect persisted "
+        "~/.chimera/eventlog runs, or 'agents' to list/show "
+        "available agent presets."
+    ),
+    "--full": (
+        "With 'runs show <id>': dump every event as readable "
+        "markdown. Default omits noisy intermediate events."
+    ),
+    "--limit": (
+        "With 'runs list': cap the rows shown (default: 20). Pass "
+        "<=0 for unlimited."
+    ),
+    "--runs-model": (
+        "With 'runs list': only show runs whose model name matches "
+        "this substring (case-insensitive)."
+    ),
+    "--success-only": (
+        "With 'runs list': only show runs where success=true."
+    ),
+    "--failed-only": (
+        "With 'runs list': only show runs where success=false."
+    ),
+    "--events / --no-events": (
+        "With 'runs show': include or suppress the event transcript. "
+        "Default includes events."
+    ),
+    "--sink": (
+        "With 'runs share': export backend. 'file' (default) writes "
+        "to ~/.chimera/shares/. 'gist' requires gh-auth. 'base64' "
+        "returns a data URI suitable for inline pastes."
+    ),
+    "--since": (
+        "With 'runs cost': window to aggregate over. Accepts "
+        "shorthand (7d / 24h / 30m) or an ISO-8601 date."
+    ),
+    "--format": (
+        "With 'runs cost': output format (default: text). 'json' "
+        "and 'csv' are also supported."
+    ),
+}
+
 
 # WHY (audit M-17): Session.resume / EventSourcedSession.resume only need
 # ``agent.prompt.render()`` + ``agent.tools`` to seed Context, then we throw
@@ -105,6 +220,13 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     attach the same surface to their own parsers without re-running
     subcommand registration.
     """
+    # A10-W11: stash for ``--help-long`` rendering in ``run()``.
+    global _PARSER
+    _PARSER = parser
+    parser.usage = (
+        "chimera mink [OPTIONS] [SUBCOMMAND] [ACTION] [TARGET]"
+    )
+
     # WHY (audit H-1): expose `chimera mink --version` so packaging scripts
     # and users can confirm what they installed without launching the REPL.
     parser.add_argument(
@@ -112,156 +234,137 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         action="version",
         version=f"chimera mink {_resolve_version()}",
     )
-    # WHY (audit H-4): per-tool-call timeout. When set, each tool dispatch
-    # is wrapped in `asyncio.wait_for(...)`; on timeout the loop emits a
-    # synthetic error result and continues rather than crashing.
     parser.add_argument(
+        "--help-long",
+        dest="help_long",
+        action="store_true",
+        default=False,
+        help="Show full help (incl. long flag descriptions).",
+    )
+
+    core = parser.add_argument_group("Core")
+    behavior = parser.add_argument_group("Behavior")
+    output = parser.add_argument_group("Output")
+    persistence = parser.add_argument_group("Persistence")
+    runs_grp = parser.add_argument_group("Runs / Agents")
+
+    # WHY (audit H-4): per-tool-call timeout.
+    behavior.add_argument(
         "--tool-timeout",
         type=float,
         default=None,
-        metavar="SECONDS",
-        help="Per-tool-call timeout in seconds. When exceeded, the tool "
-        "returns an error result (the agent can react) instead of crashing "
-        "the run. Default: no timeout.",
+        metavar="SEC",
+        help="Per-tool-call timeout (default: none).",
     )
     # WHY: env-var precedence is --model > $CHIMERA_MINK_MODEL > _DEFAULT_MODEL.
-    # Lets CI / shell sessions pin a tag once while keeping ad-hoc --model
-    # overrides cheap. Mirrors the existing $CHIMERA_MINK_FALLBACK pattern.
-    parser.add_argument(
+    core.add_argument(
         "--model",
         default=os.environ.get("CHIMERA_MINK_MODEL") or _DEFAULT_MODEL,
-        help=f"Ollama model tag (default: $CHIMERA_MINK_MODEL or {_DEFAULT_MODEL}). "
-        f"Falls back to $CHIMERA_MINK_FALLBACK (default {_DEFAULT_FALLBACK}) "
-        "if the primary model is unreachable.",
+        metavar="MODEL",
+        help=f"Ollama tag (default: $CHIMERA_MINK_MODEL or {_DEFAULT_MODEL}).",
     )
-    parser.add_argument(
+    behavior.add_argument(
         "--permission-mode",
         choices=["default", "acceptEdits", "bypassPermissions", "plan"],
         default="default",
-        help="Permission mode (ecosystem parity). 'default' asks for risky ops; "
-        "'acceptEdits' auto-approves edits; 'bypassPermissions' skips all "
-        "prompts; 'plan' is read-only planning mode.",
+        metavar="MODE",
+        help="default | acceptEdits | bypassPermissions | plan.",
     )
-    parser.add_argument(
+    behavior.add_argument(
         "--allowed-tools",
         default="",
-        help="Comma-separated tool names to allow (ecosystem parity). Empty = all.",
+        metavar="LIST",
+        help="Comma tool allowlist (empty = all).",
     )
-    parser.add_argument(
+    persistence.add_argument(
         "--resume",
         default=None,
-        help="Resume a session by id (matches ~/.chimera/sessions/<id>.jsonl).",
+        metavar="ID",
+        help="Resume a session by id.",
     )
-    # WHY (C1, wave 9): -c / --continue rounds out the ``--resume`` flag
-    # so mink shares the otter / ferret / weasel / shrew flag pair. The
-    # resolver picks the newest ``mink-*`` eventlog under the current
-    # cwd and feeds its id back through the existing resume path.
-    parser.add_argument(
+    # WHY (C1, wave 9): -c / --continue rounds out the ``--resume`` flag.
+    persistence.add_argument(
         "-c",
         "--continue",
         dest="continue_latest",
         action="store_true",
         default=False,
-        help=(
-            "Resume the most-recent mink run under the current working "
-            "directory. Equivalent to ``--resume <newest-mink-id-in-cwd>``."
-        ),
+        help="Resume the newest mink run under cwd.",
     )
-    parser.add_argument(
+    core.add_argument(
         "--agent",
         default=None,
-        help="Agent preset name to load via the agent registry.",
+        metavar="NAME",
+        help="Agent preset name to load.",
     )
-    parser.add_argument(
+    core.add_argument(
         "--cwd",
         default=None,
-        help="Working directory (default: current directory).",
+        help="Working directory (default: cwd).",
     )
-    # WHY (issue #127): when set, route file/bash tools through a remote
-    # SSHEnvironment instead of LocalEnvironment. Format mirrors git/scp:
-    #   ssh://user@host[:port][/abs/path]
-    # Authentication piggybacks on ~/.ssh/config + ssh-agent (no password
-    # prompts in the scaffold). Live testing requires CHIMERA_SSH_TEST_HOST.
-    parser.add_argument(
+    # WHY (issue #127): SSH-routed tool execution.
+    core.add_argument(
         "--remote",
         default=None,
         metavar="SSH_URL",
-        help="Run tools on a remote host over SSH. Format: "
-        "ssh://user@host[:port][/path]. Uses ~/.ssh/config + agent for "
-        "auth. Default: run locally.",
+        help="Run tools on remote host (ssh://user@host[:port][/path]).",
     )
-    parser.add_argument(
+    core.add_argument(
         "-p",
         "--print",
         dest="print_mode",
         default=None,
-        help="One-shot: run a single turn with PROMPT, print, exit.",
+        metavar="PROMPT",
+        help="One-shot: run PROMPT, print, exit.",
     )
-    parser.add_argument(
+    output.add_argument(
         "--output-format",
         choices=["text", "json", "stream-json"],
         default="text",
-        help="One-shot output format. 'stream-json' prints one JSON line per "
-        "LoopEvent; 'json' prints a single result object on exit.",
+        metavar="FMT",
+        help="text | json | stream-json (default: text).",
     )
-    # WHY: max-steps is exposed by the underlying `chimera code` REPL — we
-    # surface a parallel default so users get the same ceiling here.
-    parser.add_argument(
+    # WHY: max-steps is exposed by the underlying `chimera code` REPL.
+    behavior.add_argument(
         "--max-steps",
         type=int,
         default=50,
-        help="Maximum agent steps per turn (default: 50).",
+        metavar="N",
+        help="Max agent steps per turn (default: 50).",
     )
-    # WHY: persistence defaults ON for one-shot --print runs so users can
-    # `--resume` them later. --no-save lets pipelines opt out (e.g. when
-    # the prompt itself is sensitive and shouldn't hit disk).
-    parser.add_argument(
+    # WHY: persistence defaults ON for one-shot --print runs.
+    persistence.add_argument(
         "--no-save",
         action="store_true",
         default=False,
-        help="Do not persist the one-shot run to ~/.chimera/eventlog/. "
-        "Default behavior saves the full message + tool history.",
+        help="Don't persist the one-shot run to eventlog.",
     )
-    parser.add_argument(
+    persistence.add_argument(
         "--run-id",
         default=None,
-        help="Override the auto-generated run id for the persisted "
-        "eventlog directory. Useful for reproducible test fixtures.",
+        metavar="ID",
+        help="Override auto-generated run id for eventlog dir.",
     )
-    # WHY (audit B-2 / B-7 / B-8 + H-2): MinkStreamHandler is the new default
-    # on a TTY but users piping to a file/grep want the plain handler.
-    # ``--no-rich``/``--no-color`` are synonyms: explicit opt-outs that force
-    # the plain ConsoleStreamHandler. Pipes auto-disable rich via ``isatty()``
-    # detection, and the ``NO_COLOR`` env var is honored as well.
-    parser.add_argument(
+    output.add_argument(
         "--no-rich",
         action="store_true",
         default=False,
-        help="Force the plain ConsoleStreamHandler even when stdout is a TTY. "
-        "Default behavior auto-selects: rich on TTY, plain when piped.",
+        help="Force plain stream handler even on TTY.",
     )
-    parser.add_argument(
+    output.add_argument(
         "--no-color",
         action="store_true",
         default=False,
-        help="Synonym for --no-rich. Also honored implicitly when the "
-        "$NO_COLOR environment variable is set.",
+        help="Synonym for --no-rich (also honors $NO_COLOR).",
     )
-    # WHY (audit H-3): expose persisted runs through a small positional
-    # subcommand surface so users can list and inspect them without
-    # ``cat``-ing JSON by hand. Positional dispatch keeps this orthogonal
-    # to the top-level argparse subparser slot already taken by
-    # ``chimera <command>`` — we reuse ``args.runs_command`` etc. inside
-    # ``run()``. ``runs`` is the only positional we accept; everything
-    # else is parsed via the existing flag set above.
+    # WHY (audit H-3): expose persisted runs through a positional subcommand.
     parser.add_argument(
         "runs_command",
         nargs="?",
         default=None,
         choices=[None, "runs", "agents"],
         metavar="SUBCOMMAND",
-        help="Optional: 'runs' to inspect persisted ~/.chimera/eventlog runs, "
-        "or 'agents' to list/show available agent presets.",
+        help="runs | agents.",
     )
     parser.add_argument(
         "runs_action",
@@ -269,95 +372,88 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         default=None,
         choices=[None, "list", "show", "share", "cost"],
         metavar="ACTION",
-        help="With 'runs' or 'agents': 'list' (table), 'show <name|id>' (detail), "
-        "'share <run-id>' (export tarball; runs only), "
-        "or 'cost' (aggregate cost across persisted runs; runs only).",
+        help="list | show | share | cost.",
     )
     parser.add_argument(
         "runs_target",
         nargs="?",
         default=None,
         metavar="TARGET",
-        help="Run id consumed by 'runs show', or agent name consumed by 'agents show'.",
+        help="Run id or agent name for show/share.",
     )
-    parser.add_argument(
+    runs_grp.add_argument(
         "--full",
         action="store_true",
         default=False,
-        help="With 'runs show <id>': dump every event as readable markdown.",
+        help="runs show: dump every event as markdown.",
     )
-    # WHY (audit H-3, refinement): filter + display flags for the runs
-    # subcommand. Naming uses ``runs_*`` to avoid clashing with top-level
-    # mink flags like ``--model`` (which the runs filter shadows by going
-    # through ``--runs-model``).
-    parser.add_argument(
+    # WHY (audit H-3, refinement): filter + display flags for runs.
+    runs_grp.add_argument(
         "--limit",
         dest="runs_limit",
         type=int,
         default=20,
-        help="With 'runs list': cap the rows shown (default 20; <=0 = unlimited).",
+        metavar="N",
+        help="runs list: row cap (default: 20; <=0 = unlimited).",
     )
-    parser.add_argument(
+    runs_grp.add_argument(
         "--runs-model",
         dest="runs_filter_model",
         default=None,
-        help="With 'runs list': only show runs whose model name matches this.",
+        metavar="STR",
+        help="runs list: model name substring filter.",
     )
-    parser.add_argument(
+    runs_grp.add_argument(
         "--success-only",
         dest="runs_success_only",
         action="store_true",
         default=False,
-        help="With 'runs list': only show runs where success=true.",
+        help="runs list: only success=true rows.",
     )
-    parser.add_argument(
+    runs_grp.add_argument(
         "--failed-only",
         dest="runs_failed_only",
         action="store_true",
         default=False,
-        help="With 'runs list': only show runs where success=false.",
+        help="runs list: only success=false rows.",
     )
-    parser.add_argument(
+    runs_grp.add_argument(
         "--events",
         dest="runs_show_events",
         action="store_true",
         default=True,
-        help="With 'runs show': include the event transcript (default).",
+        help=argparse.SUPPRESS,  # default-True; pair with --no-events
     )
-    parser.add_argument(
+    runs_grp.add_argument(
         "--no-events",
         dest="runs_show_events",
         action="store_false",
-        help="With 'runs show': suppress the event transcript.",
+        help="runs show: suppress event transcript.",
     )
-    # WHY (issue #129): ``--sink`` selects the share backend for
-    # ``runs share <id>``. Default is ``file`` so the command works
-    # offline; ``gist`` requires ``gh auth``; ``base64`` returns a
-    # data URI suitable for inline pastes.
-    parser.add_argument(
+    # WHY (issue #129): ``--sink`` selects the share backend.
+    runs_grp.add_argument(
         "--sink",
         dest="runs_share_sink",
         choices=["gist", "file", "base64"],
         default="file",
-        help="With 'runs share': export backend (default: file).",
+        metavar="SINK",
+        help="runs share: file (default) | gist | base64.",
     )
-    # WHY (M4): ``runs cost`` flags. ``--since`` / ``--format`` are unique
-    # to ``cost`` so they get their own dest names; ``--runs-model``
-    # already exists for ``runs list`` and is reused here as the model
-    # filter so users only learn one flag.
-    parser.add_argument(
+    # WHY (M4): ``runs cost`` flags.
+    runs_grp.add_argument(
         "--since",
         dest="runs_cost_since",
         default=None,
-        help="With 'runs cost': window to aggregate over. Accepts shorthand "
-        "(e.g. '7d', '24h', '30m') or an ISO-8601 date.",
+        metavar="WINDOW",
+        help="runs cost: window (e.g. 7d / ISO).",
     )
-    parser.add_argument(
+    runs_grp.add_argument(
         "--format",
         dest="runs_cost_format",
         choices=["text", "json", "csv"],
         default="text",
-        help="With 'runs cost': output format (default: text).",
+        metavar="FMT",
+        help="runs cost: text | json | csv (default: text).",
     )
 
 
@@ -2138,6 +2234,13 @@ def run(args: argparse.Namespace) -> int:
     Returns:
         Process exit code (``0`` on success).
     """
+    # A10-W11: ``--help-long`` shows standard help + long flag descriptions.
+    if getattr(args, "help_long", False):
+        from chimera.cli.help_long import print_help_long
+
+        print_help_long(_PARSER, _LONG_HELP)
+        return 0
+
     # WHY (audit H-3): the runs subcommand is read-only and never touches
     # the live agent / provider stack, so dispatch it first to bypass the
     # OllamaProvider bring-up in `_build_provider`. Returning early keeps

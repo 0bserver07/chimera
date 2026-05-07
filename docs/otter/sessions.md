@@ -358,8 +358,22 @@ is a follow-up tracked in the parity matrix.
 Otter and mink share `~/.chimera/eventlog/`. They never collide because
 the directory prefix disambiguates: `mink-*` for mink, `otter-*` for
 otter. `chimera mink runs list` skips `otter-*`; `chimera otter sessions
-list` skips `mink-*`. A future combined viewer can read both with one
-`iter()` and dispatch on the prefix.
+list` skips `mink-*` by default — but the `--all-clis` flag (B9-W11)
+opts into a combined view.
+
+## Cross-CLI sessions
+
+By default `chimera otter sessions list` filters to `otter-*` directories,
+matching the historic per-CLI scope. Pass `--all-clis` to fold in every
+other Chimera CLI's sessions (`mink-`, `ferret-`, `weasel-`, `shrew-`,
+`stoat-`, `badger-`) into one chronological view; the table grows an
+`ORIGIN` column so you can tell which CLI wrote each row, and `--json`
+output adds a top-level `cli_origin` field per record. `sessions show
+<id>` already resolves a session by directory name regardless of which
+CLI created it, so an otter operator can pull up a ferret session
+transcript with the id alone — no flag required. The shared walker
+lives at `chimera/sessions/eventlog/cross_cli.py` and is consumed by
+every per-CLI `sessions.py` via `iter_sessions(all_clis=True)`.
 
 ## See also
 

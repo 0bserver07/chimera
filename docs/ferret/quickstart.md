@@ -12,7 +12,7 @@ multi-client agent, ferret mirrors the IDE-first OpenAI-flagship
 coding agent: a sandbox-first runner with single-flag approval
 presets, an ACP JSON-RPC transport that ships as the default `serve`
 transport, and an optional cloud bridge so a local ferret session
-can be driven from a remote UI.
+can be driven from a remote UI. Run `chimera ferret --help-long` to see verbose per-flag descriptions; `--help` itself stays under 50 lines for scannability.
 
 This page walks the four entry points end-to-end. For deeper dives:
 

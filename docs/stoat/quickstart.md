@@ -10,7 +10,9 @@ description: Install stoat, learn the shell-mode toggle, and run your first agen
 harness and [`chimera shrew`](../shrew/quickstart.md) tunes for small
 local models, **stoat ships a shell-mode toggle**: in the same REPL,
 each line either feeds the LLM agent or runs as a direct shell command,
-and the user flips between the two without leaving the prompt.
+and the user flips between the two without leaving the prompt. Run
+`chimera stoat --help-long` to see verbose per-flag descriptions;
+`--help` itself stays under 50 lines for scannability.
 
 The headline trade is ergonomic. Stoat is for users who live in their
 terminal and want one buffer for both `ls -la` and "explain this repo".

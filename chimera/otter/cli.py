@@ -74,6 +74,210 @@ _VALID_SUB_ACTIONS = (
 )
 
 
+# A10-W11: parser ref + per-flag long descriptions for ``--help-long``.
+_PARSER: argparse.ArgumentParser | None = None
+_LONG_HELP: dict[str, str] = {
+    "--model": (
+        "Model identifier. Resolution order: --model > $OTTER_MODEL > "
+        f"the {_DEFAULT_MODEL} default. Resolved through "
+        "chimera.providers.factory.create_provider."
+    ),
+    "-p / --print": (
+        "One-shot print mode: run a single agent turn against PROMPT, "
+        "emit the assistant text on stdout, then exit. Pairs with "
+        "--output-format json|stream-json for machine-readable output."
+    ),
+    "--title": (
+        "With -p: human-friendly label stored in summary.json and "
+        "shown by 'chimera otter sessions list'. When unset, the "
+        "prompt is used as the title."
+    ),
+    "-f / --file": (
+        "With -p: attach a file's contents to the prompt. May be "
+        "passed multiple times to stack attachments. Use '-' to read "
+        "from stdin."
+    ),
+    "--output-format": (
+        "One-shot output format. 'text' (default) prints assistant "
+        "reply; 'json' emits a single result object on exit; "
+        "'stream-json' prints one JSON line per LoopEvent."
+    ),
+    "--max-steps": "Maximum agent steps per turn (default: 50).",
+    "--cwd": (
+        "Working directory for the agent run. Default: process cwd."
+    ),
+    "--allowed-tools": (
+        "Comma-separated tool names to allow (case-insensitive). "
+        "Empty means every tool in AGENT_TOOLS is exposed."
+    ),
+    "--no-rich": (
+        "Force the plain ConsoleStreamHandler even when stdout is a "
+        "TTY. Default: auto-select rich on TTY, plain when piped."
+    ),
+    "--no-color": (
+        "Synonym for --no-rich. Also honored implicitly when the "
+        "$NO_COLOR environment variable is set."
+    ),
+    "--no-save": (
+        "Do not persist the one-shot run to ~/.chimera/eventlog/. "
+        "Default behavior saves the full message + tool history."
+    ),
+    "--no-lsp": (
+        "Disable the otter LSP tool group (diagnostics / completion "
+        "/ rename / definition / references). LSP is on by default; "
+        "tools degrade gracefully when no language server is found."
+    ),
+    "--no-rules": (
+        "Skip ingestion of AGENTS.md, .cursor/rules/*.mdc, and "
+        ".opencode/rules.md into the system prompt. Default behavior "
+        "appends a '## Project Rules' section when any source exists."
+    ),
+    "--no-custom-commands": (
+        "Skip loading user-defined commands from "
+        ".opencode/command/*.md at REPL startup. Default loads both "
+        "user-scope (~/.opencode/command/) and project-scope ones."
+    ),
+    "--run-id": (
+        "Override the auto-generated run id for the persisted "
+        "eventlog directory. Useful for reproducible test fixtures."
+    ),
+    "--resume": (
+        "Resume a persisted otter run by id (matches "
+        "~/.chimera/eventlog/<id>/). The replayed conversation is "
+        "prepended to the new turn so the agent has full context."
+    ),
+    "-c / --continue": (
+        "Resume the most-recent otter run under the current working "
+        "directory. Equivalent to --resume <newest-otter-id-in-cwd>."
+    ),
+    "--acp": (
+        "With 'serve': run the ACP (Agent Client Protocol) JSON-RPC "
+        "server on stdio instead of the HTTP server."
+    ),
+    "--host": (
+        "With 'serve' (HTTP mode): bind host (default: 127.0.0.1). "
+        "Use 0.0.0.0 only with --auth-token."
+    ),
+    "--port": "With 'serve' (HTTP mode): bind port (default: 5173).",
+    "--auth-token": (
+        "With 'serve' (HTTP mode): shared-secret bearer token "
+        "required on every request except /healthz."
+    ),
+    "--tls-cert": (
+        "With 'serve' (HTTP mode): path to a PEM-encoded server "
+        "certificate. Must be paired with --tls-key. When set the "
+        "server serves HTTPS instead of HTTP."
+    ),
+    "--tls-key": (
+        "With 'serve' (HTTP mode): path to the PEM-encoded private "
+        "key matching --tls-cert."
+    ),
+    "--no-plugins": (
+        "Skip directory-based plugin discovery under "
+        "~/.opencode/plugin/* and <project>/.opencode/plugin/*. "
+        "Default loads all discovered plugins."
+    ),
+    "--no-mcp": (
+        "Skip MCP server discovery from ~/.opencode/config.json and "
+        ".opencode/{config,mcp}.json. Default: MCP servers are "
+        "loaded and their tools attached to the otter agent."
+    ),
+    "--tui": (
+        "Launch the textual-based otter TUI prototype (requires the "
+        "[tui] extra: 'pip install chimera-run[tui]'). The TUI talks "
+        "to an in-process OtterServer over the same HTTP+SSE "
+        "surface a remote client would use."
+    ),
+    "--no-tui": (
+        "Force the readline REPL even when stdout is a TTY and the "
+        "[tui] extra is installed. Equivalent to setting "
+        "CHIMERA_NO_TUI=1 in the environment."
+    ),
+    "--user": (
+        "With 'agents create': write the new agent file to the "
+        "user-scope directory (~/.opencode/agent/) instead of the "
+        "project-scope directory (<cwd>/.opencode/agent/)."
+    ),
+    "subcommand": (
+        "Optional positional: 'serve' (HTTP/ACP server), 'sessions' "
+        "(list/show), 'share' (export a session), 'agents' (list/"
+        "show/create), 'bench' (benchmarks), 'mcp' (server mgmt)."
+    ),
+    "mcp_extra": (
+        "With 'mcp add <name>': trailing executable + args for the "
+        "stdio MCP server (ignored when --mcp-http <url> is set)."
+    ),
+    "--mcp-http": (
+        "With 'mcp add': add an HTTP MCP server at this URL "
+        "(mutually exclusive with the trailing stdio command)."
+    ),
+    "--mcp-header": (
+        "With 'mcp add --mcp-http': repeatable KEY=VALUE HTTP "
+        "header. Use once per header."
+    ),
+    "--mcp-env": (
+        "With 'mcp add' (stdio): repeatable KEY=VALUE subprocess "
+        "environment override. Use once per variable."
+    ),
+    "--yes": (
+        "With 'mcp add': skip the interactive 'write this entry?' "
+        "y/N confirmation. Use in CI scripts."
+    ),
+    "--since": (
+        "With 'sessions cost' (or 'sessions list'): filter window. "
+        "Accepts shorthand ('7d', '24h', '30m') or ISO-8601 date."
+    ),
+    "--format": (
+        "With 'sessions cost': output format (default: text). "
+        "'json' and 'csv' are also supported."
+    ),
+    "--sessions-model": (
+        "With 'sessions list/cost': filter to sessions whose model "
+        "matches (case-insensitive substring; 'all' = no filter)."
+    ),
+    "--sessions-limit": (
+        "With 'sessions list/cost': cap rows considered (newest "
+        "first; <=0 / unset = no cap)."
+    ),
+    "--sessions-json": (
+        "With 'sessions list/show': emit JSON instead of the table. "
+        "(sessions cost uses --format json instead.)"
+    ),
+    "--all-clis": (
+        "With 'sessions list': include sessions created by every "
+        "Chimera CLI (ferret / weasel / shrew / stoat / mink / "
+        "badger), not just otter. Adds an ORIGIN column."
+    ),
+    "--bench-limit": (
+        "With 'bench': max tasks to run (default: 5; pass 0 for "
+        "full run)."
+    ),
+    "--bench-domain": (
+        "With 'bench tau-bench': domain to evaluate "
+        "(airline/retail/telecom/banking/mock; default: airline)."
+    ),
+    "--all": (
+        "With 'serve stop': stop every backgrounded server of this "
+        "flavor. Mutually exclusive with --port."
+    ),
+    "--serve-timeout": (
+        "With 'serve stop': seconds to wait after SIGTERM before "
+        "escalating (default: 10.0)."
+    ),
+    "--estimate-cost": (
+        "With -p: print a pre-flight cost estimate (dollar + token) "
+        "based on the prompt + chosen model and exit without running "
+        "the agent. Estimate uses chars-divided-by-4 token heuristic "
+        "and the PRICING table — a ceiling, not a bill."
+    ),
+    "--max-cost": (
+        "With -p: refuse to run when the pre-flight cost estimate "
+        "exceeds USD. Exits 2 with a stderr message. Useful for CI "
+        "scripts and budget guards. REPL gating is not yet wired."
+    ),
+}
+
+
 def _resolve_version() -> str:
     """Resolve the chimera package version for ``--version`` output.
 
@@ -106,339 +310,251 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         parser: An :class:`argparse.ArgumentParser` (typically the otter
             subparser created by :func:`chimera.cli.main.build_parser`).
     """
+    # A10-W11: stash for ``--help-long`` rendering in ``run()``.
+    global _PARSER
+    _PARSER = parser
+    parser.usage = (
+        "chimera otter [OPTIONS] [SUBCOMMAND] [ACTION] [TARGET]"
+    )
+    # A10-W11: widen the help column so dual-spelling args
+    # (``-p PROMPT, --print PROMPT``) don't wrap and inflate line count.
+    class _WideFormatter(argparse.HelpFormatter):
+        def __init__(self, prog: str) -> None:
+            super().__init__(prog, max_help_position=30)
+
+    parser.formatter_class = _WideFormatter
+
     parser.add_argument(
         "--version",
         action="version",
         version=f"chimera otter {_resolve_version()}",
+        help=argparse.SUPPRESS,
     )
-    # WHY: env precedence is --model > $OTTER_MODEL > _DEFAULT_MODEL. Lets
-    # CI / shells pin a model once while keeping ad-hoc --model overrides
-    # cheap. Mirrors mink's $CHIMERA_MINK_MODEL pattern.
     parser.add_argument(
+        "--help-long",
+        dest="help_long",
+        action="store_true",
+        default=False,
+        help="Show full help (incl. long flag descriptions).",
+    )
+
+    core = parser.add_argument_group("Core")
+    behavior = parser.add_argument_group("Behavior")
+    output = parser.add_argument_group("Output")
+    persistence = parser.add_argument_group("Persistence")
+    serve_grp = parser.add_argument_group("Serve / MCP")
+    sessions_grp = parser.add_argument_group("Sessions / Bench / Cost")
+    cost_group = sessions_grp  # A10-W11: keep cost flags inline
+
+    # WHY: env precedence is --model > $OTTER_MODEL > _DEFAULT_MODEL.
+    core.add_argument(
         "--model",
         default=os.environ.get("OTTER_MODEL") or _DEFAULT_MODEL,
-        help=(
-            "Model identifier (default: $OTTER_MODEL or "
-            f"{_DEFAULT_MODEL}). Resolved through "
-            "``chimera.providers.factory.create_provider``."
-        ),
+        metavar="MODEL",
+        help="Model id (default: $OTTER_MODEL).",
     )
-    parser.add_argument(
+    core.add_argument(
         "-p",
         "--print",
         dest="print_mode",
         default=None,
-        help="One-shot: run a single turn with PROMPT, print, exit.",
+        metavar="PROMPT",
+        help="One-shot: run PROMPT, print, exit.",
     )
-    # WHY (O4-W9): a hand-authored ``--title`` lets users tag a one-shot
-    # ``-p`` run so ``chimera otter sessions list`` surfaces a friendly
-    # label instead of the truncated prompt heuristic. When unset, the
-    # ``prompt`` field continues to drive the rendered title (back-compat).
-    # The value is persisted into ``summary.json`` under the ``title`` key
-    # so ``sessions show`` and ``sessions list`` can both surface it.
-    parser.add_argument(
+    # WHY (O4-W9): hand-authored ``--title`` for sessions list label.
+    # Hidden from --help; full description in --help-long.
+    core.add_argument(
         "--title",
         dest="session_title",
         default=None,
-        help=(
-            "With -p: human-friendly label stored in summary.json and shown "
-            "by 'chimera otter sessions list'. When unset, the prompt is "
-            "used as the title."
-        ),
+        metavar="STR",
+        help=argparse.SUPPRESS,
     )
-    # WHY (O3-W9): ``--file/-f`` lets ``-p`` invocations attach the contents
-    # of one or more files to the prompt without copy-paste. Each path is
-    # read at run time and wrapped in a ``<file path="..." lines="N">``
-    # block (XML-like, mirrors mink's prompt attachment shape) which is
-    # concatenated *before* the ``-p`` text. ``-`` reads from stdin once;
-    # repeating ``-`` is allowed but only the first stdin read returns
-    # bytes. Multiple ``-f`` invocations stack via ``action="append"``.
-    parser.add_argument(
+    # WHY (O3-W9): ``--file/-f`` attaches file contents to the prompt.
+    core.add_argument(
         "-f",
         "--file",
         dest="files",
         action="append",
         default=None,
         metavar="PATH",
-        help=(
-            "With -p: attach a file's contents to the prompt. May be passed "
-            "multiple times to stack attachments. Use '-' to read from stdin."
-        ),
+        help="With -p: attach file (repeatable; '-' = stdin).",
     )
-    parser.add_argument(
+    output.add_argument(
         "--output-format",
         choices=list(_VALID_OUTPUT_FORMATS),
         default="text",
-        help=(
-            "One-shot output format. 'stream-json' prints one JSON line per "
-            "LoopEvent; 'json' prints a single result object on exit."
-        ),
+        metavar="FMT",
+        help="text | json | stream-json (default: text).",
     )
-    parser.add_argument(
+    behavior.add_argument(
         "--max-steps",
         type=int,
         default=50,
-        help="Maximum agent steps per turn (default: 50).",
+        metavar="N",
+        help="Max agent steps per turn (default: 50).",
     )
-    parser.add_argument(
+    core.add_argument(
         "--cwd",
         default=None,
-        help="Working directory (default: current directory).",
+        help="Working directory (default: cwd).",
     )
-    parser.add_argument(
+    behavior.add_argument(
         "--allowed-tools",
         default="",
-        help=(
-            "Comma-separated tool names to allow (case-insensitive). "
-            "Empty = all tools."
-        ),
+        metavar="LIST",
+        help="Comma tool allowlist (empty = all).",
     )
-    parser.add_argument(
+    output.add_argument(
         "--no-rich",
         action="store_true",
         default=False,
-        help=(
-            "Force the plain ConsoleStreamHandler even when stdout is a TTY. "
-            "Default: auto-select rich on TTY, plain when piped."
-        ),
+        help="Force plain stream handler even on TTY.",
     )
-    parser.add_argument(
+    output.add_argument(
         "--no-color",
         action="store_true",
         default=False,
-        help=(
-            "Synonym for --no-rich. Also honored implicitly when the "
-            "$NO_COLOR environment variable is set."
-        ),
+        help="Synonym for --no-rich (honors $NO_COLOR).",
     )
-    parser.add_argument(
+    persistence.add_argument(
         "--no-save",
         action="store_true",
         default=False,
-        help=(
-            "Do not persist the one-shot run to ~/.chimera/eventlog/. "
-            "Default behavior saves the full message + tool history."
-        ),
+        help="Don't persist the one-shot run to eventlog.",
     )
-    # WHY (W5): LSP tools (diagnostics, completion, rename, definition,
-    # references) are part of otter's default tool group, mirroring the
-    # upstream open-source coding agent's "LSP as primary capability"
-    # posture. The flag is opt-out so users on machines without language
-    # servers can disable detection (and the warning) entirely.
-    parser.add_argument(
+    # WHY (W5): LSP tools opt-out. Hidden from --help; see --help-long.
+    behavior.add_argument(
         "--no-lsp",
         action="store_true",
         default=False,
-        help=(
-            "Disable the otter LSP tool group (diagnostics/completion/"
-            "rename/definition/references). LSP is on by default; "
-            "tools degrade gracefully when no language server is found."
-        ),
+        help=argparse.SUPPRESS,
     )
-    # WHY (W3): project + user rules from AGENTS.md, .cursor/rules/*.mdc,
-    # and .opencode/rules.md are appended to the otter system prompt by
-    # default via :func:`chimera.otter.rules.load_otter_rules`. ``--no-rules``
-    # skips that ingestion (useful for repro tests + CI fixtures that want
-    # a deterministic prompt independent of repo state).
-    parser.add_argument(
+    # WHY (W3): rules ingestion opt-out. Hidden from --help (see --help-long).
+    behavior.add_argument(
         "--no-rules",
         action="store_true",
         default=False,
-        help=(
-            "Skip ingestion of AGENTS.md, .cursor/rules/*.mdc, and "
-            ".opencode/rules.md into the system prompt. Default behavior "
-            "appends a '## Project Rules' section when any source exists."
-        ),
+        help=argparse.SUPPRESS,
     )
-    # WHY (W4): user-defined slash commands from ``.opencode/command/*.md``
-    # are loaded by default at REPL startup so projects can ship reusable
-    # prompt templates. Locked-down environments (CI, untrusted project
-    # trees) can opt out so a malicious project file can't shadow a
-    # built-in slash command like ``/exit``.
-    parser.add_argument(
+    # WHY (W4): user slash-commands opt-out. Hidden from --help.
+    behavior.add_argument(
         "--no-custom-commands",
         dest="no_custom_commands",
         action="store_true",
         default=False,
-        help=(
-            "Skip loading user-defined commands from .opencode/command/*.md "
-            "at REPL startup. Default behavior loads both user-scope "
-            "(~/.opencode/command/) and project-scope ones."
-        ),
+        help=argparse.SUPPRESS,
     )
-    parser.add_argument(
+    persistence.add_argument(
         "--run-id",
         default=None,
-        help=(
-            "Override the auto-generated run id for the persisted "
-            "eventlog directory. Useful for reproducible test fixtures."
-        ),
+        metavar="ID",
+        help="Override auto-generated run id for eventlog dir.",
     )
-    # WHY (C1, wave 9): --resume / --continue mirror mink and the otter
-    # interactive REPL so a one-shot ``-p`` invocation can pick up where
-    # the previous run left off. ``--resume <id>`` loads the named
-    # ``~/.chimera/eventlog/otter-*`` directory; ``-c`` /
-    # ``--continue`` resolves the newest otter run for the current cwd
-    # via :func:`chimera.sessions.eventlog.find_latest_run`.
-    parser.add_argument(
+    # WHY (C1, wave 9): --resume / --continue.
+    persistence.add_argument(
         "--resume",
         default=None,
-        help=(
-            "Resume a persisted otter run by id (matches "
-            "~/.chimera/eventlog/<id>/). The replayed conversation is "
-            "prepended to the new turn so the agent has full context."
-        ),
+        metavar="ID",
+        help="Resume a persisted otter run by id.",
     )
-    parser.add_argument(
+    persistence.add_argument(
         "-c",
         "--continue",
         dest="continue_latest",
         action="store_true",
         default=False,
-        help=(
-            "Resume the most-recent otter run under the current "
-            "working directory. Equivalent to "
-            "``--resume <newest-otter-id-in-cwd>``."
-        ),
+        help="Resume the newest otter run under cwd.",
     )
-    # WHY: ``--acp`` re-routes ``chimera otter serve`` to the JSON-RPC ACP
-    # server (agent O6) instead of the HTTP server (agent O14). External
-    # IDE / TUI clients drive the agent over stdio when this flag is set.
-    parser.add_argument(
+    # WHY: ``--acp`` re-routes ``serve`` to the JSON-RPC ACP server.
+    serve_grp.add_argument(
         "--acp",
         action="store_true",
         default=False,
-        help=(
-            "With 'serve': run the ACP (Agent Client Protocol) JSON-RPC "
-            "server on stdio instead of the HTTP server."
-        ),
+        help="serve: ACP JSON-RPC over stdio (vs HTTP).",
     )
-    # WHY: the HTTP variant of ``chimera otter serve`` (agent O14) takes a
-    # bind host + port + optional shared-secret bearer token. Defaults
-    # match :mod:`chimera.otter.server` so flags-omitted use is sane.
-    parser.add_argument(
+    # WHY: HTTP serve flags.
+    serve_grp.add_argument(
         "--host",
         default=None,
-        help=(
-            "With 'serve' (HTTP mode): bind host (default: 127.0.0.1). "
-            "Use 0.0.0.0 only with --auth-token."
-        ),
+        metavar="HOST",
+        help="serve (HTTP): bind host (default: 127.0.0.1).",
     )
-    parser.add_argument(
+    serve_grp.add_argument(
         "--port",
         type=int,
         default=None,
-        help="With 'serve' (HTTP mode): bind port (default: 5173).",
+        metavar="PORT",
+        help="serve (HTTP): bind port (default: 5173).",
     )
-    parser.add_argument(
+    serve_grp.add_argument(
         "--auth-token",
         default=None,
-        help=(
-            "With 'serve' (HTTP mode): shared-secret bearer token "
-            "required on every request except /healthz."
-        ),
+        metavar="TOKEN",
+        help="serve (HTTP): bearer token required on requests.",
     )
-    # WHY (O-SERVER-3): bearer auth over plain HTTP exposes the token to
-    # any on-path observer once the server binds off-localhost. Pair the
-    # bearer with TLS by passing both flags; the server wraps its listen
-    # socket via ``ssl.SSLContext`` (stdlib only) so clients use HTTPS.
-    parser.add_argument(
+    # WHY (O-SERVER-3): TLS pair. Hidden from --help; see --help-long.
+    serve_grp.add_argument(
         "--tls-cert",
         dest="tls_cert",
         default=None,
-        help=(
-            "With 'serve' (HTTP mode): path to a PEM-encoded server "
-            "certificate. Must be paired with --tls-key. When set the "
-            "server serves HTTPS instead of HTTP."
-        ),
+        metavar="PATH",
+        help=argparse.SUPPRESS,
     )
-    parser.add_argument(
+    serve_grp.add_argument(
         "--tls-key",
         dest="tls_key",
         default=None,
-        help=(
-            "With 'serve' (HTTP mode): path to the PEM-encoded private "
-            "key matching --tls-cert."
-        ),
+        metavar="PATH",
+        help=argparse.SUPPRESS,
     )
-    # WHY (W2): plugins under ``~/.opencode/plugin/*`` and
-    # ``<project>/.opencode/plugin/*`` are wired into every otter session by
-    # default. ``--no-plugins`` lets users / CI disable directory-based
-    # plugin discovery without removing the on-disk dirs.
-    parser.add_argument(
+    # WHY (W2): plugin discovery opt-out. Hidden from --help.
+    behavior.add_argument(
         "--no-plugins",
         dest="no_plugins",
         action="store_true",
         default=False,
-        help=(
-            "Skip directory-based plugin discovery under "
-            "~/.opencode/plugin/* and <project>/.opencode/plugin/* "
-            "(default: load all discovered plugins)."
-        ),
+        help=argparse.SUPPRESS,
     )
-    # WHY: MCP tool ingest is on by default (symmetric with mink's
-    # ``_load_mcp_tools`` which always runs). ``--no-mcp`` lets users
-    # opt out when ``~/.opencode/config.json`` or
-    # ``.opencode/{config,mcp}.json`` configures servers they don't
-    # want spawned for this invocation (e.g. CI runs, offline tests).
-    parser.add_argument(
+    # WHY: MCP discovery opt-out. Hidden from --help.
+    behavior.add_argument(
         "--no-mcp",
         dest="no_mcp",
         action="store_true",
         default=False,
-        help=(
-            "Skip MCP server discovery from ~/.opencode/config.json and "
-            ".opencode/{config,mcp}.json. Default: MCP servers are loaded "
-            "and their tools attached to the otter agent."
-        ),
+        help=argparse.SUPPRESS,
     )
-    # WHY (C5): ``--tui`` boots a textual-based prototype frontend bound
-    # to an in-process :class:`OtterServer`. The default REPL stays
-    # readline-based; this flag is opt-in so users without the optional
-    # ``[tui]`` extra never pay the textual import cost. See
-    # ``docs/otter/tui.md`` for the install + key bindings.
-    parser.add_argument(
+    # WHY (C5): textual-based TUI prototype. Hidden from --help.
+    behavior.add_argument(
         "--tui",
         dest="tui",
         action="store_true",
         default=False,
-        help=(
-            "Launch the textual-based otter TUI prototype (requires "
-            "the [tui] extra: 'pip install chimera-run[tui]'). The "
-            "TUI talks to an in-process OtterServer over the same "
-            "HTTP+SSE surface a remote client would use."
-        ),
+        help=argparse.SUPPRESS,
     )
-    # WHY (O1 — wave 9): ``--user`` flips ``otter agents create`` from
-    # project-scope (``<cwd>/.opencode/agent/<name>.md``) to user-scope
-    # (``~/.opencode/agent/<name>.md``). The flag is generic enough to
-    # repurpose for any future ``--user``-vs-project agents subcommand
-    # (think ``agents delete --user reviewer``) without re-parsing.
-    parser.add_argument(
+    # WHY (A9 — wave 11): force readline REPL on TTY. Hidden from --help.
+    behavior.add_argument(
+        "--no-tui",
+        dest="no_tui",
+        action="store_true",
+        default=False,
+        help=argparse.SUPPRESS,
+    )
+    # WHY (O1 — wave 9): ``--user`` flips agents create scope. Hidden.
+    behavior.add_argument(
         "--user",
         dest="agents_user",
         action="store_true",
         default=False,
-        help=(
-            "With 'agents create': write the new agent file to the "
-            "user-scope directory (~/.opencode/agent/) instead of the "
-            "project-scope directory (<cwd>/.opencode/agent/)."
-        ),
+        help=argparse.SUPPRESS,
     )
-    # WHY: subcommand placeholders are positionals so the orchestrator can
-    # route ``chimera otter serve``, ``chimera otter sessions list``, etc.
-    # without re-parsing. Other agents in the wave own the bodies; we just
-    # stub the dispatch.
     parser.add_argument(
         "subcommand",
         nargs="?",
         default=None,
         choices=list(_VALID_SUBCOMMANDS),
         metavar="SUBCOMMAND",
-        help=(
-            "Optional: 'serve' (HTTP server placeholder), 'sessions' "
-            "(list/show), 'share' (share a session), 'agents' (list/show)."
-        ),
+        help="serve | sessions | share | agents | bench | mcp.",
     )
     parser.add_argument(
         "sub_action",
@@ -446,170 +562,146 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         default=None,
         choices=list(_VALID_SUB_ACTIONS),
         metavar="ACTION",
-        help="With 'sessions' or 'agents': 'list' or 'show <name>'.",
+        help="list | show | create | cost | <suite>.",
     )
     parser.add_argument(
         "sub_target",
         nargs="?",
         default=None,
         metavar="TARGET",
-        help="Run/session id consumed by 'show' or 'share' actions.",
+        help="Run/session id for show/share.",
     )
-    # WHY (W9-O2): ``mcp add <name> <command...>`` needs a variadic tail
-    # after ``sub_target`` so the entire stdio command is captured as
-    # one argv slice. ``nargs="*"`` keeps the slot optional for the
-    # other subcommands (defaults to []) so this surface is purely
-    # additive.
+    # WHY (W9-O2): mcp add variadic tail. Hidden from --help.
     parser.add_argument(
         "mcp_extra",
         nargs="*",
         default=[],
         metavar="MCP_EXTRA",
-        help=(
-            "With 'mcp add <name>': trailing executable + args for the "
-            "stdio MCP server (ignored when --mcp-http <url> is set)."
-        ),
+        help=argparse.SUPPRESS,
     )
-    # WHY (W9-O2): ``mcp``-specific flags. The ``--user`` flag is
-    # already registered (dest ``agents_user``) so the mcp dispatcher
-    # reuses it; new flags use the ``--mcp-*`` prefix so they don't
-    # shadow flags other subcommands might want later.
-    parser.add_argument(
+    # WHY (W9-O2): ``mcp``-specific flags. Hidden from --help; see --help-long.
+    serve_grp.add_argument(
         "--mcp-http",
         dest="mcp_http",
         default=None,
-        help=(
-            "With 'mcp add': add an HTTP MCP server at this URL "
-            "(mutually exclusive with the trailing stdio command)."
-        ),
+        metavar="URL",
+        help=argparse.SUPPRESS,
     )
-    parser.add_argument(
+    serve_grp.add_argument(
         "--mcp-header",
         dest="mcp_header",
         action="append",
         default=None,
-        help=(
-            "With 'mcp add --mcp-http': repeatable KEY=VALUE HTTP header. "
-            "Use once per header."
-        ),
+        metavar="K=V",
+        help=argparse.SUPPRESS,
     )
-    parser.add_argument(
+    serve_grp.add_argument(
         "--mcp-env",
         dest="mcp_env",
         action="append",
         default=None,
-        help=(
-            "With 'mcp add' (stdio): repeatable KEY=VALUE subprocess "
-            "environment override. Use once per variable."
-        ),
+        metavar="K=V",
+        help=argparse.SUPPRESS,
     )
-    parser.add_argument(
+    serve_grp.add_argument(
         "--yes",
         dest="mcp_yes",
         action="store_true",
         default=False,
-        help=(
-            "With 'mcp add': skip the interactive 'write this entry?' "
-            "y/N confirmation. Use in CI scripts."
-        ),
+        help=argparse.SUPPRESS,
     )
-    # WHY (O18): bench-specific flags. Kept under their own ``--bench-*``
-    # prefix so ``otter bench humaneval --limit 20`` is unambiguous against
-    # the future ``otter sessions list --limit 20`` surface.
-    # WHY (G6): ``sessions cost`` flags — parity with ``mink runs cost``
-    # (see :mod:`chimera.mink.cost`) and the ``GET /runs/cost`` HTTP route.
-    # Naming uses ``sessions_*`` dest names so the dispatcher
-    # :func:`chimera.otter.sessions.dispatch_sessions` reads them
-    # uniformly across ``list``, ``show``, and ``cost`` actions.
-    parser.add_argument(
+    # WHY (O18 / G6): bench + sessions cost flags.
+    sessions_grp.add_argument(
         "--since",
         dest="sessions_since",
         default=None,
-        help=(
-            "With 'sessions cost' (or 'sessions list'): filter window. "
-            "Accepts shorthand ('7d', '24h', '30m') or ISO-8601 date."
-        ),
+        metavar="WINDOW",
+        help="sessions cost/list: window (e.g. 7d / ISO).",
     )
-    parser.add_argument(
+    sessions_grp.add_argument(
         "--format",
         dest="sessions_format",
         choices=["text", "json", "csv"],
         default="text",
-        help=(
-            "With 'sessions cost': output format (default: text)."
-        ),
+        metavar="FMT",
+        help="sessions cost: text | json | csv (default: text).",
     )
-    parser.add_argument(
+    sessions_grp.add_argument(
         "--sessions-model",
         dest="sessions_model",
         default=None,
-        help=(
-            "With 'sessions list/cost': filter to sessions whose model "
-            "matches (case-insensitive substring; 'all' = no filter)."
-        ),
+        metavar="STR",
+        help="sessions list/cost: model substring filter.",
     )
-    parser.add_argument(
+    sessions_grp.add_argument(
         "--sessions-limit",
         dest="sessions_limit_flag",
         type=int,
         default=None,
-        help=(
-            "With 'sessions list/cost': cap rows considered "
-            "(newest first; <=0 / unset = no cap)."
-        ),
+        metavar="N",
+        help="sessions list/cost: row cap (newest first).",
     )
-    parser.add_argument(
+    sessions_grp.add_argument(
         "--sessions-json",
         dest="sessions_json",
         action="store_true",
         default=False,
-        help=(
-            "With 'sessions list/show': emit JSON instead of the table. "
-            "(``sessions cost`` uses ``--format json`` instead.)"
-        ),
+        help="sessions list/show: emit JSON instead of table.",
     )
-    parser.add_argument(
+    # B9-W11: cross-CLI session listing.
+    sessions_grp.add_argument(
+        "--all-clis",
+        dest="sessions_all_clis",
+        action="store_true",
+        default=False,
+        help="sessions list: include all CLIs' sessions.",
+    )
+    sessions_grp.add_argument(
         "--bench-limit",
         dest="bench_limit",
         type=int,
         default=5,
-        help=(
-            "With 'bench': max tasks to run (default: 5; pass 0 for full run)."
-        ),
+        metavar="N",
+        help="bench: max tasks (default: 5; 0 = full run).",
     )
-    parser.add_argument(
+    sessions_grp.add_argument(
         "--bench-domain",
         dest="bench_domain",
         default="airline",
-        help=(
-            "With 'bench tau-bench': domain to evaluate "
-            "(airline/retail/telecom/banking/mock; default: airline)."
-        ),
+        metavar="DOMAIN",
+        help="bench tau-bench: domain (default: airline).",
     )
-    # WHY (server-mgmt): ``serve stop`` accepts ``--port`` (already declared
-    # above) to target one server or ``--all`` to graceful-stop every
-    # backgrounded otter server. ``--serve-timeout`` widens the SIGTERM
-    # window for slow shutdowns; default 10s matches the project
-    # graceful-shutdown rule (see CLAUDE.md).
-    parser.add_argument(
+    # WHY (server-mgmt): ``serve stop`` knobs. Hidden from --help.
+    serve_grp.add_argument(
         "--all",
         dest="serve_stop_all",
         action="store_true",
         default=False,
-        help=(
-            "With 'serve stop': stop every backgrounded server of this "
-            "flavor (otter/ferret). Mutually exclusive with --port."
-        ),
+        help=argparse.SUPPRESS,
     )
-    parser.add_argument(
+    serve_grp.add_argument(
         "--serve-timeout",
         dest="serve_stop_timeout",
         type=float,
         default=10.0,
-        help=(
-            "With 'serve stop': seconds to wait after SIGTERM before "
-            "escalating to SIGKILL (default: 10.0)."
-        ),
+        metavar="SEC",
+        help=argparse.SUPPRESS,
+    )
+    # WHY (A8 — wave 11): pre-flight cost estimation.
+    cost_group.add_argument(
+        "--estimate-cost",
+        dest="estimate_cost",
+        action="store_true",
+        default=False,
+        help="With -p: print cost estimate and exit.",
+    )
+    cost_group.add_argument(
+        "--max-cost",
+        dest="max_cost",
+        type=float,
+        default=None,
+        metavar="USD",
+        help="With -p: refuse to run if estimate exceeds USD.",
     )
 
 
@@ -1477,6 +1569,72 @@ def _format_file_attachments(
 # ---------------------------------------------------------------------------
 
 
+def _maybe_apply_cost_gate(args: argparse.Namespace) -> int | None:
+    """Honor ``--estimate-cost`` / ``--max-cost`` before doing real work.
+
+    A8 — wave 11. Both flags fire on the one-shot ``-p`` path only; REPL
+    gating is intentionally deferred so this PR stays small. The gate
+    runs *before* provider / env setup so ``--estimate-cost`` is
+    essentially free (no network, no auth, no tool-group import).
+
+    Args:
+        args: Parsed CLI namespace.
+
+    Returns:
+        ``None`` to let ``_run_print_mode`` proceed normally. An ``int``
+        exit code (``0`` for ``--estimate-cost``, ``2`` when ``--max-cost``
+        is exceeded or the model is uncosted with ``--max-cost`` set).
+    """
+    estimate_flag = bool(getattr(args, "estimate_cost", False))
+    max_cost = getattr(args, "max_cost", None)
+    if not estimate_flag and max_cost is None:
+        return None
+
+    from chimera.cli.cost_estimator import (
+        ModelNotPriced,
+        estimate_cost,
+        format_estimate,
+    )
+
+    prompt = args.print_mode or ""
+    try:
+        est = estimate_cost(args.model, prompt)
+    except ModelNotPriced:
+        # Friendly message; uncosted models shouldn't silently pass
+        # through ``--max-cost`` (that would defeat the budget guard).
+        msg = (
+            f"chimera otter: model {args.model!r} has no entry in the "
+            "pricing table (chimera/providers/cost.py:PRICING). Cost "
+            "estimation is unavailable."
+        )
+        if estimate_flag:
+            print(msg, file=sys.stderr)
+            return 2
+        # Plain ``--max-cost`` without ``--estimate-cost``: warn but
+        # refuse, so the budget guard fails closed.
+        print(
+            f"{msg} Refusing to run with --max-cost set against an "
+            "uncosted model.",
+            file=sys.stderr,
+        )
+        return 2
+
+    if estimate_flag:
+        fmt = "json" if args.output_format == "json" else "text"
+        print(format_estimate(est, output=fmt))
+        return 0
+
+    if max_cost is not None and est.total_usd > float(max_cost):
+        print(
+            f"Refusing to run: estimated ${est.total_usd:.4f} exceeds "
+            f"--max-cost ${float(max_cost):.4f}",
+            file=sys.stderr,
+        )
+        return 2
+
+    return None
+
+
 def _run_print_mode(args: argparse.Namespace) -> int:
     """Execute a single turn and emit results in the requested format.
 
@@ -1490,6 +1648,13 @@ def _run_print_mode(args: argparse.Namespace) -> int:
     Returns:
         Process exit code.
     """
+    # A8 — wave 11: pre-flight cost gate. Returns an exit code when
+    # ``--estimate-cost`` printed-and-exited or ``--max-cost`` refused;
+    # returns ``None`` to fall through to the normal one-shot flow.
+    gate_rc = _maybe_apply_cost_gate(args)
+    if gate_rc is not None:
+        return gate_rc
+
     import asyncio
 
     from chimera.core.agent import Agent
@@ -2126,6 +2291,8 @@ def _dispatch_sessions(args: argparse.Namespace) -> int:
     args.sessions_json = getattr(args, "sessions_json", False)
     args.sessions_full = getattr(args, "sessions_full", False)
     args.sessions_format = getattr(args, "sessions_format", "text") or "text"
+    # B9-W11: cross-CLI listing toggle.
+    args.sessions_all_clis = getattr(args, "sessions_all_clis", False)
     # WHY (O4-W9): ``sessions rename <id> <title...>`` reuses the
     # variadic trailing positional slot (``mcp_extra``, also used by
     # ``mcp add`` for the stdio command tail) to capture the new title.
@@ -2237,6 +2404,55 @@ _SUBCOMMAND_DISPATCH: dict[str, Any] = {
 # ---------------------------------------------------------------------------
 
 
+# WHY (A9 — wave 11): probing for the optional ``[tui]`` extra fires once
+# per process and the result is cached at module level. ``import textual``
+# is a non-trivial cost (textual loads rich, tree-sitter bindings, etc.);
+# the auto-launch dispatch path runs on every ``chimera otter`` invocation
+# so we want the negative branch (``textual`` not installed) to be a single
+# attribute lookup after the first call. Tests reset this sentinel via the
+# module attribute so probe behaviour is deterministic across cases.
+_TEXTUAL_AVAILABLE: bool | None = None
+
+
+def _textual_available() -> bool:
+    """Return True iff the optional ``[tui]`` extra (textual) is importable.
+
+    Result is cached at module scope after the first call so repeated
+    invocations during a single process pay the import cost at most once.
+    Tests can reset the cache by setting
+    ``chimera.otter.cli._TEXTUAL_AVAILABLE = None``.
+
+    Returns:
+        ``True`` when ``import textual`` succeeded, ``False`` otherwise.
+    """
+    global _TEXTUAL_AVAILABLE
+    if _TEXTUAL_AVAILABLE is None:
+        try:
+            import textual  # noqa: F401
+            _TEXTUAL_AVAILABLE = True
+        except ImportError:
+            _TEXTUAL_AVAILABLE = False
+    return _TEXTUAL_AVAILABLE
+
+
+def _run_readline_repl(args: argparse.Namespace) -> int:
+    """Boot the readline-based otter REPL (default non-TTY / opt-out path).
+
+    Thin wrapper around :func:`chimera.otter.repl.run_otter_repl` so the
+    cli ``run`` entry can decide between TUI and readline without pulling
+    the heavy REPL imports unless the readline path is actually selected.
+
+    Args:
+        args: Parsed ``argparse.Namespace`` for the otter subparser.
+
+    Returns:
+        Process exit code from the underlying REPL.
+    """
+    from chimera.otter.repl import run_otter_repl
+
+    return int(run_otter_repl(args))
+
+
 def _dispatch_tui(args: argparse.Namespace) -> int:
     """Boot the textual TUI prototype against an in-process server.
 
@@ -2330,6 +2546,13 @@ def run(args: argparse.Namespace) -> int:
     Returns:
         Process exit code (``0`` on success).
     """
+    # A10-W11: ``--help-long`` shows standard help + long flag descriptions.
+    if getattr(args, "help_long", False):
+        from chimera.cli.help_long import print_help_long
+
+        print_help_long(_PARSER, _LONG_HELP)
+        return 0
+
     sub = getattr(args, "subcommand", None)
     if sub in _SUBCOMMAND_DISPATCH:
         handler = _SUBCOMMAND_DISPATCH[sub]
@@ -2338,24 +2561,53 @@ def run(args: argparse.Namespace) -> int:
     if args.print_mode is not None:
         return _run_print_mode(args)
 
-    # WHY (C5): ``--tui`` boots the textual-based TUI prototype against
-    # an in-process :class:`OtterServer`. The TUI is opt-in (gated by
-    # the ``[tui]`` extra) so the readline REPL stays the default and
-    # the import cost of textual only fires when the user asks for it.
-    if bool(getattr(args, "tui", False)):
+    # WHY (A9 — wave 11): with no ``-p`` and no subcommand, ``chimera
+    # otter`` enters interactive mode. The dispatch picks between the
+    # textual TUI (``--tui`` flag, or auto when stdout is a TTY *and*
+    # the ``[tui]`` extra is installed) and the readline REPL
+    # (``--no-tui``, ``CHIMERA_NO_TUI=1``, non-TTY stdout, or missing
+    # ``[tui]`` extra). Priority order:
+    #
+    #   1. ``--no-tui`` / ``CHIMERA_NO_TUI=1`` → readline REPL.
+    #   2. ``--tui`` → textual TUI (graceful failure on missing extra
+    #      via :func:`_dispatch_tui`'s existing exit-2 path).
+    #   3. stdout is a TTY *and* textual is importable → textual TUI
+    #      with a one-line stderr hint pointing at ``--no-tui``.
+    #   4. Otherwise (non-TTY stdout or textual missing) → readline REPL.
+    no_tui_env = os.environ.get("CHIMERA_NO_TUI", "").strip() == "1"
+    no_tui_flag = bool(getattr(args, "no_tui", False))
+    tui_flag = bool(getattr(args, "tui", False))
+
+    if no_tui_flag or no_tui_env:
+        return _run_readline_repl(args)
+
+    if tui_flag:
         return _dispatch_tui(args)
 
-    # No print, no subcommand — emit a brief usage hint pointing at the
-    # interactive REPL placeholder (agent O2). Returning 0 here would mask
-    # "user forgot -p"; returning 2 (usage) is the conventional answer.
-    print(
-        "otter: interactive REPL not yet wired in this scaffold. "
-        "Use --print/-p PROMPT for one-shot mode, --version for version, "
-        "or --help for the full flag list. "
-        "(see research/otter/SPEC.md, agent O2).",
-        file=sys.stderr,
-    )
-    return 2
+    # WHY: ``sys.stdout.isatty()`` is the canonical "interactive
+    # terminal" probe — it returns False when stdout is piped, captured
+    # by pytest, or running under most CI runners, which keeps tests
+    # and CI on the readline path automatically.
+    try:
+        is_tty = bool(sys.stdout.isatty())
+    except (AttributeError, ValueError):
+        # ``sys.stdout`` may be a closed/replaced stream in exotic
+        # embeddings; treat that as non-TTY rather than crashing.
+        is_tty = False
+
+    if is_tty and _textual_available():
+        # WHY: emit a one-line breadcrumb so users who land in the TUI
+        # by surprise know how to opt out. Stderr keeps the hint out
+        # of any captured stdout pipeline. Printing every time is
+        # cheap and removes the need for a per-process latch.
+        print(
+            "otter: TUI activated. Use --no-tui to disable, "
+            "or set CHIMERA_NO_TUI=1.",
+            file=sys.stderr,
+        )
+        return _dispatch_tui(args)
+
+    return _run_readline_repl(args)
 
 
 __all__ = [

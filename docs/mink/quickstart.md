@@ -2,7 +2,7 @@
 
 ## What this is
 
-`chimera mink` is a coding-agent REPL built on Chimera's existing `AgentLoop`, `LoopConfig`, tool registry, permissions, and session primitives. Its default backend is Ollama with `glm-5.1:cloud` (or `kimi-k2.6:cloud` for the walking-skeleton example). The runtime is a single-process script that drives a real ReAct loop end-to-end with streamed text + tool calls, the `chimera mink` subcommand and slash-command surface, drop-in `settings.json` ingest (permissions + hooks), and a rich markdown TUI.
+`chimera mink` is a coding-agent REPL built on Chimera's existing `AgentLoop`, `LoopConfig`, tool registry, permissions, and session primitives. Its default backend is Ollama with `glm-5.1:cloud` (or `kimi-k2.6:cloud` for the walking-skeleton example). The runtime is a single-process script that drives a real ReAct loop end-to-end with streamed text + tool calls, the `chimera mink` subcommand and slash-command surface, drop-in `settings.json` ingest (permissions + hooks), and a rich markdown TUI. Run `chimera mink --help-long` to see verbose per-flag descriptions; `--help` itself stays under 50 lines for scannability.
 
 ## Provider choice
 

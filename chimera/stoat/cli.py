@@ -69,6 +69,102 @@ _VALID_SUBCOMMANDS = (
 _VALID_SUB_ACTIONS = (None, "list", "show", "cost", "humaneval", "tau-bench")
 
 
+# A10-W11: hold the parser ref so ``--help-long`` in ``run()`` can call
+# ``parser.format_help()`` after argparse has already finished its parse.
+_PARSER: argparse.ArgumentParser | None = None
+
+# A10-W11: long-form per-flag descriptions printed by ``--help-long``.
+# Short ``help=`` strings on the parser stay <=60 chars so ``chimera stoat
+# --help`` fits in <=50 lines; the verbose copy lives here.
+_LONG_HELP: dict[str, str] = {
+    "--model": (
+        "Model identifier. Resolution order: --model > $STOAT_MODEL > "
+        f"the {_DEFAULT_MODEL} default. Routed through "
+        "chimera.stoat.providers.build_provider so the Kimi-first "
+        "provider chain is honored."
+    ),
+    "-p / --print": (
+        "One-shot print mode: run a single agent turn against PROMPT, "
+        "emit the assistant text on stdout, then exit. Pairs with "
+        "--json for a machine-readable result envelope."
+    ),
+    "--mode": (
+        "Operating mode: 'interactive' (REPL, default), 'print' "
+        "(one-shot text — equivalent to -p), 'rpc' (delegate to "
+        "chimera.cli.code in JSON-RPC mode for IDE integrations)."
+    ),
+    "--shell-mode": (
+        "Boot the REPL already in shell mode. Each input line runs as "
+        "'bash -c <input>' until /shell or Ctrl-X toggles back to agent "
+        "mode. The shell-mode toggle is stoat's headline feature."
+    ),
+    "--cwd": (
+        "Working directory for the agent run. Default: process cwd. "
+        "Resolved to an absolute path before the env is built."
+    ),
+    "--max-steps": (
+        "Maximum agent steps per turn (default 50). Cap protects "
+        "against runaway loops. Honored by both -p and the REPL."
+    ),
+    "--allowed-tools": (
+        "Comma-separated tool name allowlist (case-insensitive). Empty "
+        "means every tool in AGENT_TOOLS is exposed. Unknown names "
+        "produce an error listing the valid set."
+    ),
+    "--no-color": (
+        "Disable ANSI colors in REPL output. Honored implicitly when "
+        "the $NO_COLOR environment variable is set; explicit flag "
+        "wins over auto-detection."
+    ),
+    "--no-rich": (
+        "Force the plain ConsoleStreamHandler even when stdout is a "
+        "TTY. Default behavior auto-selects rich on TTY and plain "
+        "when stdout is piped or redirected."
+    ),
+    "--json": (
+        "When paired with -p, emit a single JSON object on stdout "
+        "({output, success, model}) instead of plain text. Useful "
+        "for piping into jq or downstream tools."
+    ),
+    "subcommand": (
+        "Optional positional: 'serve' (ACP server stub), 'sessions' "
+        "(list/show/cost), 'share' (export a session transcript), "
+        "'agents' (registry browser), 'bench' (benchmark suites)."
+    ),
+    "--since": (
+        "With 'sessions cost': drop sessions older than this cutoff. "
+        "Accepts shorthand (7d / 24h / 30m) or an ISO-8601 date."
+    ),
+    "--cost-model": (
+        "With 'sessions cost': case-insensitive substring filter on "
+        "model name. Pass 'all' (or omit) to include every model."
+    ),
+    "--cost-format": (
+        "With 'sessions cost': output format. Defaults to 'json' "
+        "when --json is set, 'text' otherwise. CSV is also supported."
+    ),
+    "--cost-limit": (
+        "With 'sessions cost': cap on rows considered (newest first). "
+        "No cap by default; useful for fixture stability."
+    ),
+    "--share-sink": (
+        "With 'share': destination for the rendered transcript. "
+        "Defaults to 'file' (writes ~/.chimera/shares/stoat-<id>.<ext>). "
+        "'stdout' streams the transcript directly."
+    ),
+    "--share-format": (
+        "With 'share': render format. Defaults to 'json' "
+        "(round-trips with 'sessions show --json'). 'md' yields "
+        "a human-readable markdown transcript."
+    ),
+    "--all-clis": (
+        "With 'sessions list': include sessions created by every "
+        "Chimera CLI (otter / ferret / weasel / shrew / mink / "
+        "badger), not just stoat. Adds an ORIGIN column."
+    ),
+}
+
+
 def _resolve_version() -> str:
     """Return the stoat scaffold version for ``--version`` output.
 
@@ -91,98 +187,97 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         parser: An :class:`argparse.ArgumentParser` (typically the stoat
             subparser created by :func:`chimera.cli.main.build_parser`).
     """
+    # A10-W11: stash for ``--help-long`` later in ``run()``.
+    global _PARSER
+    _PARSER = parser
+
     parser.add_argument(
         "--version",
         action="version",
         version=f"chimera stoat {_resolve_version()}",
     )
+    # A10-W11: top-level help-long flag. Argparse parses it like any
+    # store_true; ``run()`` checks it before the routing tree.
+    parser.add_argument(
+        "--help-long",
+        dest="help_long",
+        action="store_true",
+        default=False,
+        help="Show full help (incl. long flag descriptions).",
+    )
+
+    core = parser.add_argument_group("Core")
+    behavior = parser.add_argument_group("Behavior")
+    output = parser.add_argument_group("Output")
+    persistence = parser.add_argument_group("Persistence")
+
     # WHY: env precedence is --model > $STOAT_MODEL > _DEFAULT_MODEL.
     # Lets CI / shells pin a model once while keeping ad-hoc --model
     # overrides cheap. Mirrors weasel's $WEASEL_MODEL pattern.
-    parser.add_argument(
+    core.add_argument(
         "--model",
         default=os.environ.get("STOAT_MODEL") or _DEFAULT_MODEL,
-        help=(
-            "Model identifier (default: $STOAT_MODEL or "
-            f"{_DEFAULT_MODEL}). Resolved through "
-            "``chimera.stoat.providers.build_provider``."
-        ),
+        help=f"Model id (default: $STOAT_MODEL or {_DEFAULT_MODEL}).",
     )
-    parser.add_argument(
+    core.add_argument(
         "-p",
         "--print",
         dest="print_mode",
+        metavar="PROMPT",
         default=None,
-        help="One-shot: run a single turn with PROMPT, print, exit.",
+        help="One-shot: run PROMPT, print, exit.",
     )
-    parser.add_argument(
+    core.add_argument(
         "--mode",
         choices=list(_VALID_MODES),
         default="interactive",
-        help=(
-            "Operating mode: interactive (REPL, default), print "
-            "(one-shot text), rpc (delegate to chimera.cli.code rpc)."
-        ),
+        help="Mode (default: interactive).",
     )
     # WHY: shell-mode toggle is the headline feature. ``--shell-mode``
     # boots the REPL already in shell mode (Ctrl-X / /shell flips back).
-    parser.add_argument(
+    behavior.add_argument(
         "--shell-mode",
         dest="shell_mode",
         action="store_true",
         default=False,
-        help=(
-            "Start the REPL in shell mode. Each input runs as 'bash -c "
-            "<input>' until ``/shell`` (or Ctrl-X) toggles back to "
-            "agent mode."
-        ),
+        help="Start REPL in shell mode (toggle via /shell or Ctrl-X).",
     )
-    parser.add_argument(
+    core.add_argument(
         "--cwd",
         default=None,
-        help="Working directory (default: current directory).",
+        help="Working directory (default: cwd).",
     )
-    parser.add_argument(
+    behavior.add_argument(
         "--max-steps",
         type=int,
         default=50,
-        help="Maximum agent steps per turn (default: 50).",
+        metavar="N",
+        help="Max agent steps per turn (default: 50).",
     )
-    parser.add_argument(
+    behavior.add_argument(
         "--allowed-tools",
         default="",
-        help=(
-            "Comma-separated tool names to allow (case-insensitive). "
-            "Empty = all tools."
-        ),
+        metavar="LIST",
+        help="Comma tool allowlist (empty = all).",
     )
-    parser.add_argument(
+    output.add_argument(
         "--no-color",
         action="store_true",
         default=False,
-        help=(
-            "Disable ANSI colors in REPL output. Honored implicitly "
-            "when $NO_COLOR is set."
-        ),
+        help="Disable ANSI colors (also honors $NO_COLOR).",
     )
-    parser.add_argument(
+    output.add_argument(
         "--no-rich",
         action="store_true",
         default=False,
-        help=(
-            "Force the plain ConsoleStreamHandler even when stdout is a "
-            "TTY. Default: auto-select rich on TTY, plain when piped."
-        ),
+        help="Force plain stream handler even on TTY.",
     )
-    parser.add_argument(
+    output.add_argument(
         "--json",
         dest="json_output",
         action="store_true",
         default=False,
-        help=(
-            "When paired with ``-p``, emit a single JSON object on "
-            "stdout (``{output, success, model}``) instead of plain text."
-        ),
+        help="With -p: emit JSON envelope instead of text.",
     )
     # WHY: subcommand placeholders are positionals so the orchestrator
     # can route ``chimera stoat sessions list``, ``chimera stoat share
@@ -193,11 +288,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         default=None,
         choices=list(_VALID_SUBCOMMANDS),
         metavar="SUBCOMMAND",
-        help=(
-            "Optional: 'serve' (ACP server), 'sessions' (list/show/cost), "
-            "'share' (share a session), 'agents' (list/show), 'bench' "
-            "(benchmark suites)."
-        ),
+        help="serve | sessions | share | agents | bench.",
     )
     parser.add_argument(
         "sub_action",
@@ -205,78 +296,71 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         default=None,
         choices=list(_VALID_SUB_ACTIONS),
         metavar="ACTION",
-        help=(
-            "With 'sessions': 'list', 'show', or 'cost'. With "
-            "'agents'/'bench': 'list' / 'show' / suite names."
-        ),
+        help="list | show | cost | <suite>.",
     )
     parser.add_argument(
         "sub_target",
         nargs="?",
         default=None,
         metavar="TARGET",
-        help="Session id or agent name consumed by 'show' / 'share'.",
+        help="Session id or agent name for show/share.",
     )
     # WHY: cost flags mirror mink/weasel/shrew so the rollup JSON/CSV/text
     # shape is byte-identical across CLIs.
-    parser.add_argument(
+    persistence.add_argument(
         "--since",
         dest="cost_since",
         default=None,
-        help=(
-            "With 'sessions cost': drop sessions older than this cutoff. "
-            "Accepts shorthand (``7d`` / ``24h`` / ``30m``) or ISO-8601."
-        ),
+        metavar="WINDOW",
+        help="sessions cost: cutoff (e.g. 7d / ISO).",
     )
-    parser.add_argument(
+    persistence.add_argument(
         "--cost-model",
         dest="cost_model",
         default=None,
-        help=(
-            "With 'sessions cost': case-insensitive substring filter "
-            "on model name. Pass ``all`` (or omit) for every model."
-        ),
+        metavar="STR",
+        help="sessions cost: model substring filter.",
     )
-    parser.add_argument(
+    persistence.add_argument(
         "--cost-format",
         dest="cost_format",
         choices=("text", "json", "csv"),
         default=None,
-        help=(
-            "With 'sessions cost': output format. Defaults to ``json`` "
-            "when ``--json`` is set, ``text`` otherwise."
-        ),
+        metavar="FMT",
+        help="sessions cost: text | json | csv.",
     )
-    parser.add_argument(
+    persistence.add_argument(
         "--cost-limit",
         dest="cost_limit",
         type=int,
         default=None,
-        help=(
-            "With 'sessions cost': cap on rows considered (newest first; "
-            "no cap by default)."
-        ),
+        metavar="N",
+        help="sessions cost: row cap (newest first).",
     )
     # Share knobs.
-    parser.add_argument(
+    persistence.add_argument(
         "--share-sink",
         dest="share_sink",
         choices=("file", "stdout"),
         default=None,
-        help=(
-            "With 'share': destination for the rendered transcript. "
-            "Defaults to ``file`` (writes ``~/.chimera/shares/stoat-<id>.<ext>``)."
-        ),
+        metavar="SINK",
+        help="share: file (default) | stdout.",
     )
-    parser.add_argument(
+    persistence.add_argument(
         "--share-format",
         dest="share_format",
         choices=("json", "md"),
         default=None,
-        help=(
-            "With 'share': render format. Defaults to ``json`` "
-            "(round-trips with ``sessions show --json``)."
-        ),
+        metavar="FMT",
+        help="share: json (default) | md.",
+    )
+    # B9-W11: cross-CLI session listing.
+    persistence.add_argument(
+        "--all-clis",
+        dest="sessions_all_clis",
+        action="store_true",
+        default=False,
+        help="sessions list: include every Chimera CLI's sessions.",
     )
 
 
@@ -527,6 +611,14 @@ def run(args: argparse.Namespace) -> int:
     Returns:
         Process exit code.
     """
+    # A10-W11: ``--help-long`` shows the standard ``--help`` output plus a
+    # ``Detailed flag descriptions`` section sourced from ``_LONG_HELP``.
+    if getattr(args, "help_long", False):
+        from chimera.cli.help_long import print_help_long
+
+        print_help_long(_PARSER, _LONG_HELP)
+        return 0
+
     sub = getattr(args, "subcommand", None)
     if sub in _SUBCOMMAND_DISPATCH:
         handler = _SUBCOMMAND_DISPATCH[sub]

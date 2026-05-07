@@ -82,6 +82,135 @@ _VALID_OS_SANDBOX_FLAGS = ("auto", "on", "off")
 # ``_run_print_mode`` how to construct it.
 _VALID_SANDBOX_BACKENDS = ("local", "modal")
 
+# A10-W11: parser ref + per-flag long descriptions for ``--help-long``.
+_PARSER: argparse.ArgumentParser | None = None
+_LONG_HELP: dict[str, str] = {
+    "--model": (
+        "Model identifier. Resolution order: --model > $FERRET_MODEL > "
+        f"the {_DEFAULT_MODEL} default. Routed through "
+        "chimera.ferret.providers.build_provider with fallback to "
+        "chimera.providers.factory.create_provider."
+    ),
+    "-p / --print": (
+        "One-shot print mode: run a single agent turn against PROMPT, "
+        "emit the assistant text on stdout, then exit. Pairs with "
+        "--output-format json for a structured envelope."
+    ),
+    "--output-format": (
+        "One-shot output format. 'text' (default) prints the assistant "
+        "reply; 'json' emits a single result object on exit; "
+        "'stream-json' prints one JSON line per LoopEvent."
+    ),
+    "--max-steps": "Maximum agent steps per turn (default: 50).",
+    "--cwd": (
+        "Working directory for the agent run. Default: process cwd. "
+        "Resolved to an absolute path before the env is built."
+    ),
+    "--allowed-tools": (
+        "Comma-separated tool names to allow (case-insensitive). "
+        "Empty means every tool in AGENT_TOOLS is exposed."
+    ),
+    "--no-rich": (
+        "Force the plain ConsoleStreamHandler even when stdout is a "
+        "TTY. Default: auto-select rich on TTY, plain when piped."
+    ),
+    "--no-color": (
+        "Synonym for --no-rich. Also honored implicitly when the "
+        "$NO_COLOR environment variable is set."
+    ),
+    "--no-save": (
+        "Do not persist the one-shot run to ~/.chimera/eventlog/. "
+        "Default behavior saves the full message + tool history."
+    ),
+    "--run-id": (
+        "Override the auto-generated run id for the persisted "
+        "eventlog directory. Useful for reproducible test fixtures."
+    ),
+    "--resume": (
+        "Resume a persisted ferret run by id (matches "
+        "~/.chimera/eventlog/<id>/). The replayed conversation is "
+        "prepended to the new turn so the agent has full context."
+    ),
+    "-c / --continue": (
+        "Resume the most-recent ferret run under the current working "
+        "directory. Equivalent to --resume <newest-ferret-id-in-cwd>."
+    ),
+    "--sandbox": (
+        "Sandbox mode for shell-style tools (default: read-only). "
+        "'workspace-write' allows writes inside the project; "
+        "'workspace-write-network' adds outbound network access."
+    ),
+    "--os-sandbox": (
+        "OS-level sandbox layer for shell tools (default: auto). "
+        "'auto' engages seatbelt (macOS) or Landlock (Linux) if "
+        "supported; 'on' forces it; 'off' disables it."
+    ),
+    "--sandbox-backend": (
+        "Execution backend for tool calls (default: local). 'local' "
+        "runs inside the current cwd via LocalEnvironment. 'modal' "
+        "provisions an ephemeral Modal container per session "
+        "(requires `pip install 'chimera-run[modal-sandbox]'`)."
+    ),
+    "--approval": (
+        "Approval preset (default: read-only). 'auto' approves "
+        "low-risk tools and prompts for high-risk; 'full' approves "
+        "all tool calls without prompting."
+    ),
+    "--config": (
+        "Override the ferret config file path. Default: merge "
+        "~/.codex/config.toml with project ./.codex/config.toml."
+    ),
+    "--http": (
+        "With 'serve': run the HTTP server instead of the default ACP "
+        "(Agent Client Protocol) JSON-RPC server on stdio."
+    ),
+    "--host": (
+        "With 'serve --http': bind host (default: 127.0.0.1). "
+        "Use 0.0.0.0 only with --auth-token."
+    ),
+    "--port": "With 'serve --http': bind port (default: 5174).",
+    "--auth-token": (
+        "With 'serve --http': shared-secret bearer token required on "
+        "every request except /healthz."
+    ),
+    "--tls-cert": (
+        "With 'serve --http': path to a PEM-encoded server "
+        "certificate. Must be paired with --tls-key. When set the "
+        "server speaks HTTPS."
+    ),
+    "--tls-key": (
+        "With 'serve --http': path to a PEM-encoded private key "
+        "matching --tls-cert."
+    ),
+    "--remote-url": (
+        "With 'bridge': HTTPS base URL of the remote bridge service. "
+        "Default points at a placeholder .invalid domain — operators "
+        "must opt in to a real remote."
+    ),
+    "--bridge-token": (
+        "With 'bridge': shared-secret bearer token sent on every "
+        "request. Falls back to $FERRET_BRIDGE_TOKEN."
+    ),
+    "subcommand": (
+        "Optional positional: 'serve' (ACP/HTTP server), 'sessions' "
+        "(list/show), 'share' (export a session), 'agents' (list/"
+        "show), 'bench' (benchmark suites), 'bridge' (cloud bridge)."
+    ),
+    "--all": (
+        "With 'serve stop': stop every backgrounded ferret server. "
+        "Mutually exclusive with --port."
+    ),
+    "--serve-timeout": (
+        "With 'serve stop': seconds to wait after SIGTERM before "
+        "escalating (default: 10.0)."
+    ),
+    "--all-clis": (
+        "With 'sessions list': include sessions created by every "
+        "Chimera CLI (otter / weasel / shrew / stoat / mink / "
+        "badger), not just ferret. Adds an ORIGIN column."
+    ),
+}
+
 
 def _resolve_version() -> str:
     """Resolve the chimera package version for ``--version`` output.
@@ -117,285 +246,217 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         parser: An :class:`argparse.ArgumentParser` (typically the ferret
             subparser created by :func:`chimera.cli.main.build_parser`).
     """
+    # A10-W11: stash for ``--help-long`` rendering in ``run()``.
+    global _PARSER
+    _PARSER = parser
+    # A10-W11: short usage line keeps ``--help`` <=50 lines. The full
+    # auto-generated usage is still available via ``--help-long``.
+    parser.usage = (
+        "chimera ferret [OPTIONS] [SUBCOMMAND] [ACTION] [TARGET]"
+    )
+
     parser.add_argument(
         "--version",
         action="version",
         version=f"chimera ferret {_resolve_version()}",
+        help=argparse.SUPPRESS,
     )
-    # WHY: env precedence is --model > $FERRET_MODEL > _DEFAULT_MODEL. Lets
-    # CI / shells pin a model once while keeping ad-hoc --model overrides
-    # cheap. Mirrors otter's $OTTER_MODEL pattern.
     parser.add_argument(
+        "--help-long",
+        dest="help_long",
+        action="store_true",
+        default=False,
+        help="Show full help (incl. long flag descriptions).",
+    )
+
+    core = parser.add_argument_group("Core")
+    behavior = parser.add_argument_group("Behavior")
+    output = parser.add_argument_group("Output")
+    persistence = parser.add_argument_group("Persistence")
+    serve_grp = parser.add_argument_group("Serve / Bridge")
+
+    # WHY: env precedence is --model > $FERRET_MODEL > _DEFAULT_MODEL.
+    core.add_argument(
         "--model",
         default=os.environ.get("FERRET_MODEL") or _DEFAULT_MODEL,
-        help=(
-            "Model identifier (default: $FERRET_MODEL or "
-            f"{_DEFAULT_MODEL}). Resolved through "
-            "``chimera.ferret.providers.build_provider`` (FF6) "
-            "with fallback to ``chimera.providers.factory.create_provider``."
-        ),
+        metavar="MODEL",
+        help=f"Model id (default: $FERRET_MODEL or {_DEFAULT_MODEL}).",
     )
-    parser.add_argument(
+    core.add_argument(
         "-p",
         "--print",
         dest="print_mode",
         default=None,
-        help="One-shot: run a single turn with PROMPT, print, exit.",
+        metavar="PROMPT",
+        help="One-shot: run PROMPT, print, exit.",
     )
-    parser.add_argument(
+    output.add_argument(
         "--output-format",
         choices=list(_VALID_OUTPUT_FORMATS),
         default="text",
-        help=(
-            "One-shot output format. 'stream-json' prints one JSON line per "
-            "LoopEvent; 'json' prints a single result object on exit."
-        ),
+        metavar="FMT",
+        help="text | json | stream-json (default: text).",
     )
-    parser.add_argument(
+    behavior.add_argument(
         "--max-steps",
         type=int,
         default=50,
-        help="Maximum agent steps per turn (default: 50).",
+        metavar="N",
+        help="Max agent steps per turn (default: 50).",
     )
-    parser.add_argument(
+    core.add_argument(
         "--cwd",
         default=None,
-        help="Working directory (default: current directory).",
+        help="Working directory (default: cwd).",
     )
-    parser.add_argument(
+    behavior.add_argument(
         "--allowed-tools",
         default="",
-        help=(
-            "Comma-separated tool names to allow (case-insensitive). "
-            "Empty = all tools."
-        ),
+        metavar="LIST",
+        help="Comma tool allowlist (empty = all).",
     )
-    parser.add_argument(
+    output.add_argument(
         "--no-rich",
         action="store_true",
         default=False,
-        help=(
-            "Force the plain ConsoleStreamHandler even when stdout is a TTY. "
-            "Default: auto-select rich on TTY, plain when piped."
-        ),
+        help="Force plain stream handler even on TTY.",
     )
-    parser.add_argument(
+    output.add_argument(
         "--no-color",
         action="store_true",
         default=False,
-        help=(
-            "Synonym for --no-rich. Also honored implicitly when the "
-            "$NO_COLOR environment variable is set."
-        ),
+        help="Synonym for --no-rich (also honors $NO_COLOR).",
     )
-    parser.add_argument(
+    persistence.add_argument(
         "--no-save",
         action="store_true",
         default=False,
-        help=(
-            "Do not persist the one-shot run to ~/.chimera/eventlog/. "
-            "Default behavior saves the full message + tool history."
-        ),
+        help="Don't persist the one-shot run to eventlog.",
     )
-    parser.add_argument(
+    persistence.add_argument(
         "--run-id",
         default=None,
-        help=(
-            "Override the auto-generated run id for the persisted "
-            "eventlog directory. Useful for reproducible test fixtures."
-        ),
+        metavar="ID",
+        help="Override auto-generated run id for the eventlog dir.",
     )
-    # WHY (C1, wave 9): --resume / --continue mirror mink's flag pair so
-    # one-shot ``-p`` invocations can pick up where the previous ferret
-    # run left off. ``--resume <id>`` loads the named
-    # ``~/.chimera/eventlog/ferret-*`` directory; ``-c`` resolves the
-    # newest ferret run for the current cwd.
-    parser.add_argument(
+    # WHY (C1, wave 9): --resume / --continue mirror mink's flag pair.
+    persistence.add_argument(
         "--resume",
         default=None,
-        help=(
-            "Resume a persisted ferret run by id (matches "
-            "~/.chimera/eventlog/<id>/). The replayed conversation is "
-            "prepended to the new turn so the agent has full context."
-        ),
+        metavar="ID",
+        help="Resume a persisted ferret run by id.",
     )
-    parser.add_argument(
+    persistence.add_argument(
         "-c",
         "--continue",
         dest="continue_latest",
         action="store_true",
         default=False,
-        help=(
-            "Resume the most-recent ferret run under the current "
-            "working directory. Equivalent to "
-            "``--resume <newest-ferret-id-in-cwd>``."
-        ),
+        help="Resume the newest ferret run under cwd.",
     )
-    # WHY (FF2): sandbox-first execution. The default is the safest mode
-    # (read-only); opting up requires explicit selection. Sibling FF2 owns
-    # the runner that consumes this flag.
-    parser.add_argument(
+    # WHY (FF2): sandbox-first execution.
+    behavior.add_argument(
         "--sandbox",
         choices=list(_VALID_SANDBOX_MODES),
         default="read-only",
-        help=(
-            "Sandbox mode for shell-style tools (default: read-only). "
-            "'workspace-write' allows writes inside the project; "
-            "'workspace-write-network' adds outbound network access."
-        ),
+        metavar="MODE",
+        help="Sandbox mode (default: read-only).",
     )
-    # WHY (F1, wave 9): OS-level sandboxing for ferret. Wraps every
-    # bash invocation with seatbelt (macOS) or Landlock (Linux) when
-    # the platform supports it. ``auto`` (default) engages the
-    # primitive opportunistically; ``on`` forces it (and warns when
-    # absent); ``off`` disables it entirely. See
-    # :mod:`chimera.ferret.os_sandbox`.
-    parser.add_argument(
+    # WHY (F1, wave 9): OS-level sandboxing for ferret.
+    behavior.add_argument(
         "--os-sandbox",
         dest="os_sandbox",
         choices=list(_VALID_OS_SANDBOX_FLAGS),
         default="auto",
-        help=(
-            "OS-level sandbox layer for shell tools (default: auto). "
-            "'auto' engages seatbelt (macOS) or Landlock (Linux) if "
-            "supported; 'on' forces it; 'off' disables it."
-        ),
+        metavar="OPT",
+        help="OS sandbox: auto (default) | on | off.",
     )
-    # WHY (P1, wave 9): execution backend for tool calls. ``local`` uses
-    # ``LocalEnvironment`` (current default). ``modal`` provisions an
-    # ephemeral Modal sandbox container; requires the ``[modal-sandbox]``
-    # extra. Falls back to ``local`` with a stderr warning when modal
-    # isn't importable so we never crash on a misconfigured host.
-    parser.add_argument(
+    # WHY (P1, wave 9): execution backend for tool calls.
+    behavior.add_argument(
         "--sandbox-backend",
         dest="sandbox_backend",
         choices=list(_VALID_SANDBOX_BACKENDS),
         default="local",
-        help=(
-            "Execution backend for tool calls (default: local). "
-            "'local' runs inside the current cwd via LocalEnvironment. "
-            "'modal' provisions an ephemeral Modal container per session "
-            "(requires `pip install 'chimera-run[modal-sandbox]'`)."
-        ),
+        metavar="BACKEND",
+        help="Backend: local (default) | modal.",
     )
-    # WHY (FF3): approval preset is a single-flag selection that maps to a
-    # full permission policy (vs otter's fine-grained --allowed-tools).
-    parser.add_argument(
+    # WHY (FF3): approval preset.
+    behavior.add_argument(
         "--approval",
         choices=list(_VALID_APPROVAL_PRESETS),
         default="read-only",
-        help=(
-            "Approval preset (default: read-only). 'auto' approves "
-            "low-risk tools and prompts for high-risk; 'full' approves "
-            "all tool calls without prompting."
-        ),
+        metavar="PRESET",
+        help="Approval preset (default: read-only).",
     )
-    # WHY (FF1): the upstream IDE-first OpenAI-flagship coding agent ships
-    # a TOML config at ``~/.codex/config.toml`` plus an optional project
-    # ``.codex/config.toml``. Allow an explicit override path for tests
-    # and one-off invocations.
-    parser.add_argument(
+    # WHY (FF1): config override.
+    core.add_argument(
         "--config",
         dest="config_path",
         default=None,
-        help=(
-            "Override the ferret config file path. Default: merge "
-            "~/.codex/config.toml with project ./.codex/config.toml."
-        ),
+        metavar="PATH",
+        help="Override ferret config file path.",
     )
-    # WHY (FF4): ACP is the *default* serve transport (IDE-first ergonomic);
-    # HTTP requires the opt-in --http flag. This inverts otter's --acp gate.
-    parser.add_argument(
+    # WHY (FF4): ACP is the *default* serve transport.
+    serve_grp.add_argument(
         "--http",
         action="store_true",
         default=False,
-        help=(
-            "With 'serve': run the HTTP server instead of the default "
-            "ACP (Agent Client Protocol) JSON-RPC server on stdio."
-        ),
+        help="serve: run HTTP server instead of default ACP.",
     )
-    parser.add_argument(
+    serve_grp.add_argument(
         "--host",
         default=None,
-        help=(
-            "With 'serve --http': bind host (default: 127.0.0.1). "
-            "Use 0.0.0.0 only with --auth-token."
-        ),
+        metavar="HOST",
+        help="serve --http: bind host (default: 127.0.0.1).",
     )
-    parser.add_argument(
+    serve_grp.add_argument(
         "--port",
         type=int,
         default=None,
-        help="With 'serve --http': bind port (default: 5174).",
+        metavar="PORT",
+        help="serve --http: bind port (default: 5174).",
     )
-    parser.add_argument(
+    serve_grp.add_argument(
         "--auth-token",
         default=None,
-        help=(
-            "With 'serve --http': shared-secret bearer token required "
-            "on every request except /healthz."
-        ),
+        metavar="TOKEN",
+        help="serve --http: bearer token required on requests.",
     )
-    # WHY (F1/W8): TLS pair gates the HTTP path off-localhost so the
-    # bearer token is never exposed in cleartext. Both halves must be
-    # set together; ``_dispatch_serve_http`` rejects half-pairs at the
-    # CLI layer (mirrors ``chimera otter serve``'s contract).
-    parser.add_argument(
+    # WHY (F1/W8): TLS pair gates the HTTP path off-localhost.
+    serve_grp.add_argument(
         "--tls-cert",
         dest="tls_cert",
         default=None,
-        help=(
-            "With 'serve --http': path to a PEM-encoded server "
-            "certificate. Must be paired with --tls-key. When set the "
-            "server speaks HTTPS and Authorization headers stay encrypted."
-        ),
+        metavar="PATH",
+        help="serve --http: PEM cert (paired with --tls-key).",
     )
-    parser.add_argument(
+    serve_grp.add_argument(
         "--tls-key",
         dest="tls_key",
         default=None,
-        help=(
-            "With 'serve --http': path to a PEM-encoded private key "
-            "matching --tls-cert."
-        ),
+        metavar="PATH",
+        help="serve --http: PEM key matching --tls-cert.",
     )
-    # WHY (FF5): cloud-bridge flags. ``--remote-url`` selects the HTTPS
-    # base URL of the remote bridge service; ``--bridge-token`` supplies
-    # the bearer token (falls back to ``$FERRET_BRIDGE_TOKEN``). Both are
-    # consumed by ``chimera.ferret.cloud_bridge.build_bridge_from_args``.
-    parser.add_argument(
+    # WHY (FF5): cloud-bridge flags.
+    serve_grp.add_argument(
         "--remote-url",
         default=None,
-        help=(
-            "With 'bridge': HTTPS base URL of the remote bridge service "
-            "(default: see chimera.ferret.cloud_bridge.DEFAULT_REMOTE_URL, "
-            "which points at a placeholder .invalid domain — operators "
-            "must opt in to a real remote)."
-        ),
+        metavar="URL",
+        help="bridge: HTTPS base URL of remote bridge service.",
     )
-    parser.add_argument(
+    serve_grp.add_argument(
         "--bridge-token",
         default=None,
-        help=(
-            "With 'bridge': shared-secret bearer token sent on every "
-            "request as 'Authorization: Bearer <token>'. Falls back to "
-            "$FERRET_BRIDGE_TOKEN."
-        ),
+        metavar="TOKEN",
+        help="bridge: bearer token ($FERRET_BRIDGE_TOKEN fallback).",
     )
-    # WHY: subcommand placeholders are positionals so the orchestrator can
-    # route ``chimera ferret serve``, ``chimera ferret sessions list``, etc.
-    # without re-parsing. Sibling agents in the wave own the bodies.
     parser.add_argument(
         "subcommand",
         nargs="?",
         default=None,
         choices=list(_VALID_SUBCOMMANDS),
         metavar="SUBCOMMAND",
-        help=(
-            "Optional: 'serve' (ACP/HTTP server), 'sessions' (list/show), "
-            "'share' (share a session), 'agents' (list/show), 'bench' "
-            "(benchmark suites)."
-        ),
+        help="serve | sessions | share | agents | bench | bridge.",
     )
     parser.add_argument(
         "sub_action",
@@ -403,39 +464,38 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         default=None,
         choices=list(_VALID_SUB_ACTIONS),
         metavar="ACTION",
-        help="With 'sessions' or 'agents': 'list' or 'show <name>'.",
+        help="list | show | <suite> | status | stop.",
     )
     parser.add_argument(
         "sub_target",
         nargs="?",
         default=None,
         metavar="TARGET",
-        help="Run/session id consumed by 'show' or 'share' actions.",
+        help="Run/session id for show/share.",
     )
-    # WHY (server-mgmt): ``serve stop`` accepts ``--port`` (already declared
-    # above) to target one server or ``--all`` to graceful-stop every
-    # backgrounded ferret server. ``--serve-timeout`` widens the SIGTERM
-    # window for slow shutdowns; default 10s matches the project
-    # graceful-shutdown rule (see CLAUDE.md).
-    parser.add_argument(
+    # WHY (server-mgmt): ``serve stop`` knobs.
+    serve_grp.add_argument(
         "--all",
         dest="serve_stop_all",
         action="store_true",
         default=False,
-        help=(
-            "With 'serve stop': stop every backgrounded ferret server. "
-            "Mutually exclusive with --port."
-        ),
+        help="serve stop: stop every backgrounded ferret server.",
     )
-    parser.add_argument(
+    serve_grp.add_argument(
         "--serve-timeout",
         dest="serve_stop_timeout",
         type=float,
         default=10.0,
-        help=(
-            "With 'serve stop': seconds to wait after SIGTERM before "
-            "escalating to SIGKILL (default: 10.0)."
-        ),
+        metavar="SEC",
+        help="serve stop: SIGTERM grace window (default: 10.0).",
+    )
+    # B9-W11: cross-CLI session listing.
+    persistence.add_argument(
+        "--all-clis",
+        dest="sessions_all_clis",
+        action="store_true",
+        default=False,
+        help="sessions list: include every Chimera CLI's sessions.",
     )
 
 
@@ -764,6 +824,8 @@ def _dispatch_sessions(args: argparse.Namespace) -> int:
     args.sessions_model = getattr(args, "sessions_model", None)
     args.sessions_limit = getattr(args, "sessions_limit", 50)
     args.sessions_json = getattr(args, "sessions_json", False)
+    # B9-W11
+    args.sessions_all_clis = getattr(args, "sessions_all_clis", False)
     if not hasattr(args, "full"):
         args.full = True
     rc = dispatch_sessions(args)
@@ -1156,6 +1218,13 @@ def run(args: argparse.Namespace) -> int:
     Returns:
         Process exit code (``0`` on success).
     """
+    # A10-W11: ``--help-long`` shows standard help + long flag descriptions.
+    if getattr(args, "help_long", False):
+        from chimera.cli.help_long import print_help_long
+
+        print_help_long(_PARSER, _LONG_HELP)
+        return 0
+
     sub = getattr(args, "subcommand", None)
     if sub in _SUBCOMMAND_DISPATCH:
         handler = _SUBCOMMAND_DISPATCH[sub]

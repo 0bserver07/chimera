@@ -11,7 +11,9 @@ description: Install weasel, learn the four operating modes, and run one example
 multi-client agent, and [`chimera ferret`](../ferret/quickstart.md)
 mirrors an IDE-first sandbox-first agent, weasel mirrors **the
 minimal harness**: powerful defaults plus four operating modes,
-adapt-to-your-workflow rather than ship-every-feature.
+adapt-to-your-workflow rather than ship-every-feature. Run
+`chimera weasel --help-long` to see verbose per-flag descriptions;
+`--help` itself stays under 50 lines for scannability.
 
 The headline trade is simplicity. Weasel ships **no sub-agents, no
 plan mode, no built-in approval presets, no opinionated session

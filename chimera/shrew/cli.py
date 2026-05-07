@@ -75,6 +75,99 @@ _VALID_SUB_ACTIONS = (
     "terminal-bench",
 )
 
+# A10-W11: parser ref + per-flag long-form descriptions for ``--help-long``.
+_PARSER: argparse.ArgumentParser | None = None
+_LONG_HELP: dict[str, str] = {
+    "--model": (
+        "Model identifier. Resolution order: --model > $SHREW_MODEL > "
+        f"the {_DEFAULT_MODEL} default. Local llama.cpp / Ollama models "
+        "resolve through chimera.shrew.providers; cloud models "
+        "(anthropic/claude-..., openai/gpt-...) fall through to "
+        "chimera.providers.factory.create_provider."
+    ),
+    "--mode": (
+        "Operating mode: 'interactive' (REPL, default), 'print' "
+        "(one-shot text/JSON), 'rpc' (stdio JSON-RPC server), 'sdk' "
+        "(prints embedding pointer and exits)."
+    ),
+    "-p / --print": (
+        "One-shot print mode: run a single agent turn against PROMPT, "
+        "emit the assistant text on stdout, then exit. Pairs with "
+        "--json for a machine-readable envelope."
+    ),
+    "--json": (
+        "When paired with -p, emit a single JSON object on stdout "
+        "({output, success, model}) instead of plain text."
+    ),
+    "--list-models": (
+        "List models recognised by chimera.providers.cost.PRICING and "
+        "exit. Useful for discovering valid identifiers before "
+        "passing them via --model."
+    ),
+    "--cwd": (
+        "Working directory for the agent run. Default: process cwd. "
+        "Resolved to an absolute path before the env is built."
+    ),
+    "--max-steps": (
+        f"Maximum agent steps per turn (default: {_DEFAULT_MAX_STEPS}). "
+        "Smaller than mink/otter's 50 — small models don't benefit "
+        "from long horizons and burn budget on tool selection."
+    ),
+    "--allowed-tools": (
+        f"Comma-separated tool name allowlist (default: "
+        f"{_DEFAULT_ALLOWED_TOOLS}). Pass --allowed-tools='' to allow "
+        "the full default tool group."
+    ),
+    "--resume": (
+        "Resume a persisted shrew run by id (matches "
+        "~/.chimera/eventlog/<id>/). The replayed conversation is "
+        "prepended to the new turn so the agent has full context."
+    ),
+    "-c / --continue": (
+        "Resume the most-recent shrew run under the current working "
+        "directory. Equivalent to --resume <newest-shrew-id-in-cwd>."
+    ),
+    "subcommand": (
+        "Optional positional: 'sessions' (list/show/cost), 'bench' "
+        "(aider-polyglot / gaia / harbor / terminal-bench), or "
+        "'share <id>' to export a session transcript."
+    ),
+    "--since": (
+        "With 'sessions cost': drop sessions older than this cutoff. "
+        "Accepts shorthand (7d / 24h / 30m) or an ISO-8601 date."
+    ),
+    "--cost-model": (
+        "With 'sessions cost': case-insensitive substring filter on "
+        "model name. Pass 'all' (or omit) to include every model."
+    ),
+    "--cost-format": (
+        "With 'sessions cost': output format. Defaults to 'json' "
+        "when --json is set, 'text' otherwise. CSV is also supported."
+    ),
+    "--cost-limit": (
+        "With 'sessions cost': cap on rows considered (newest first). "
+        "No cap by default; useful for fixture stability."
+    ),
+    "--share-sink": (
+        "With 'share': destination for the rendered transcript. "
+        "Defaults to 'file' (writes ~/.chimera/shares/shrew-<id>.<ext>)."
+    ),
+    "--share-format": (
+        "With 'share': render format. Defaults to 'json' "
+        "(round-trips with 'sessions show --json'); 'md' yields a "
+        "human-readable transcript."
+    ),
+    "--bench-limit": (
+        "With 'bench': max tasks to run (default: 5; pass 0 for the "
+        "full benchmark suite)."
+    ),
+    "--all-clis": (
+        "With 'sessions list': include sessions created by every "
+        "Chimera CLI (otter / ferret / weasel / stoat / mink / "
+        "badger), not just shrew. Adds an ORIGIN column."
+    ),
+}
+
 
 def _resolve_version() -> str:
     """Return the shrew scaffold version string for ``--version``.
@@ -100,232 +193,187 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         parser: An :class:`argparse.ArgumentParser` (typically the shrew
             subparser created by :func:`chimera.cli.main.build_parser`).
     """
+    # A10-W11: stash for ``--help-long`` rendering in ``run()``.
+    global _PARSER
+    _PARSER = parser
+
     parser.add_argument(
         "--version",
         action="version",
         version=f"chimera shrew {_resolve_version()}",
     )
-    # WHY: env precedence is --model > $SHREW_MODEL > _DEFAULT_MODEL,
-    # mirroring weasel's $WEASEL_MODEL pattern. CI / shells pin a model
-    # once while keeping ad-hoc --model overrides cheap.
     parser.add_argument(
+        "--help-long",
+        dest="help_long",
+        action="store_true",
+        default=False,
+        help="Show full help (incl. long flag descriptions).",
+    )
+
+    core = parser.add_argument_group("Core")
+    behavior = parser.add_argument_group("Behavior")
+    output = parser.add_argument_group("Output")
+    persistence = parser.add_argument_group("Persistence")
+
+    # WHY: env precedence is --model > $SHREW_MODEL > _DEFAULT_MODEL.
+    core.add_argument(
         "--model",
         default=os.environ.get("SHREW_MODEL") or _DEFAULT_MODEL,
-        help=(
-            "Model identifier (default: $SHREW_MODEL or "
-            f"{_DEFAULT_MODEL}). Local llama.cpp / Ollama models resolve "
-            "through ``chimera.shrew.providers`` (S5); cloud models "
-            "(``anthropic/claude-...``, ``openai/gpt-...``) fall through "
-            "to ``chimera.providers.factory.create_provider``."
-        ),
+        metavar="MODEL",
+        help=f"Model id (default: $SHREW_MODEL or {_DEFAULT_MODEL}).",
     )
     # WHY: shrew inherits weasel's four-mode philosophy verbatim.
-    parser.add_argument(
+    core.add_argument(
         "--mode",
         choices=list(_VALID_MODES),
         default="interactive",
-        help=(
-            "Operating mode: interactive (REPL, default), print "
-            "(one-shot text/JSON), rpc (stdio JSON-RPC), or sdk "
-            "(prints embedding pointer and exits)."
-        ),
+        metavar="MODE",
+        help="interactive | print | rpc | sdk (default: interactive).",
     )
-    parser.add_argument(
+    core.add_argument(
         "-p",
         "--print",
         dest="print_mode",
         default=None,
-        help="One-shot: run a single turn with PROMPT, print, exit.",
+        metavar="PROMPT",
+        help="One-shot: run PROMPT, print, exit.",
     )
-    parser.add_argument(
+    output.add_argument(
         "--json",
         dest="json_output",
         action="store_true",
         default=False,
-        help=(
-            "When paired with -p, emit a single JSON object on stdout "
-            "(``{output, success, model}``) instead of plain text."
-        ),
+        help="With -p: emit JSON envelope instead of text.",
     )
-    parser.add_argument(
+    output.add_argument(
         "--list-models",
         dest="list_models",
         action="store_true",
         default=False,
-        help=(
-            "List models recognised by ``chimera.providers.cost.PRICING`` "
-            "and exit."
-        ),
+        help="List recognised model ids and exit.",
     )
-    parser.add_argument(
+    core.add_argument(
         "--cwd",
         default=None,
-        help="Working directory (default: current directory).",
+        help="Working directory (default: cwd).",
     )
-    # WHY: 30 instead of 50 — small models don't benefit from long
-    # horizons. They lose track, loop on tool selection, and burn
-    # context. Capping at 30 is the small-model coding agent default.
-    parser.add_argument(
+    # WHY: 30 instead of 50 — small models don't benefit from long horizons.
+    behavior.add_argument(
         "--max-steps",
         type=int,
         default=_DEFAULT_MAX_STEPS,
-        help=(
-            f"Maximum agent steps per turn (default: {_DEFAULT_MAX_STEPS}; "
-            "smaller than mink/otter's 50 — small models don't benefit "
-            "from long horizons)."
-        ),
+        metavar="N",
+        help=f"Max agent steps per turn (default: {_DEFAULT_MAX_STEPS}).",
     )
-    # WHY: restricted-by-default tool set — Read/Write/Edit/Bash. Small
-    # models pick wrong tools when the menu is large; the upstream
-    # small-model agent ships exactly this minimal set. ``--allowed-tools=""``
-    # opts back into the full default tool group.
-    parser.add_argument(
+    # WHY: restricted-by-default tool set — Read/Write/Edit/Bash.
+    behavior.add_argument(
         "--allowed-tools",
         default=_DEFAULT_ALLOWED_TOOLS,
-        help=(
-            "Comma-separated tool names to allow (case-insensitive; "
-            f"default: {_DEFAULT_ALLOWED_TOOLS}). Pass an empty string "
-            "(``--allowed-tools=''``) to allow the full default tool "
-            "group."
-        ),
+        metavar="LIST",
+        help=f"Comma allowlist (default: {_DEFAULT_ALLOWED_TOOLS}).",
     )
-    # WHY (C1, wave 9): --resume / --continue mirror mink's flag pair so
-    # one-shot ``-p`` invocations can pick up where the previous shrew
-    # run left off. ``--resume <id>`` loads the named
-    # ``~/.chimera/eventlog/shrew-*`` directory; ``-c`` resolves the
-    # newest shrew run for the current cwd.
-    parser.add_argument(
+    # WHY (C1, wave 9): --resume / --continue mirror mink's flag pair.
+    persistence.add_argument(
         "--resume",
         default=None,
-        help=(
-            "Resume a persisted shrew run by id (matches "
-            "~/.chimera/eventlog/<id>/). The replayed conversation is "
-            "prepended to the new turn so the agent has full context."
-        ),
+        metavar="ID",
+        help="Resume a persisted shrew run by id.",
     )
-    parser.add_argument(
+    persistence.add_argument(
         "-c",
         "--continue",
         dest="continue_latest",
         action="store_true",
         default=False,
-        help=(
-            "Resume the most-recent shrew run under the current "
-            "working directory. Equivalent to "
-            "``--resume <newest-shrew-id-in-cwd>``."
-        ),
+        help="Resume the newest shrew run under cwd.",
     )
-    # WHY: shrew exposes ``sessions`` (parity with weasel) and ``bench``
-    # (S4 benchmark harness — Aider Polyglot / GAIA / harbor / terminal-bench).
+    # WHY: shrew exposes ``sessions`` (parity with weasel) and ``bench``.
     parser.add_argument(
         "subcommand",
         nargs="?",
         default=None,
         choices=list(_VALID_SUBCOMMANDS),
         metavar="SUBCOMMAND",
-        help=(
-            "Optional: 'sessions' (list/show/cost), 'bench' "
-            "(aider-polyglot/gaia/harbor/terminal-bench), or 'share <id>'."
-        ),
+        help="sessions | bench | share.",
     )
-    # WHY: ``sub_action`` is intentionally free-form so ``share <id>`` can
-    # accept arbitrary session ids in slot 2. The dispatcher
-    # (:mod:`chimera.shrew.sessions` / benchmarks) rejects unknown actions
-    # with a clear message.
     parser.add_argument(
         "sub_action",
         nargs="?",
         default=None,
         metavar="ACTION",
-        help=(
-            "With 'sessions': 'list', 'show <id>', or 'cost'. With "
-            "'bench': 'aider-polyglot', 'gaia', 'harbor', or "
-            "'terminal-bench'. With 'share': the SESSION_ID to share "
-            "(positional)."
-        ),
+        help="list | show | cost | <suite> | <session-id>.",
     )
     parser.add_argument(
         "sub_target",
         nargs="?",
         default=None,
         metavar="TARGET",
-        help="Session id consumed by 'sessions show'.",
+        help="Session id for sessions show.",
     )
-    # WHY: cost subcommand flags. Mirror ``mink runs cost`` so the rollup
-    # JSON/CSV/text shape is byte-identical across CLIs. All optional;
-    # defaults come from ``cmd_sessions_cost``.
-    parser.add_argument(
+    # WHY: cost subcommand flags. Mirror ``mink runs cost``.
+    persistence.add_argument(
         "--since",
         dest="cost_since",
         default=None,
-        help=(
-            "With 'sessions cost': drop sessions older than this cutoff. "
-            "Accepts shorthand (``7d`` / ``24h`` / ``30m``) or ISO-8601."
-        ),
+        metavar="WINDOW",
+        help="sessions cost: cutoff (e.g. 7d / ISO).",
     )
-    parser.add_argument(
+    persistence.add_argument(
         "--cost-model",
         dest="cost_model",
         default=None,
-        help=(
-            "With 'sessions cost': case-insensitive substring filter on "
-            "model name. Pass ``all`` (or omit) for every model."
-        ),
+        metavar="STR",
+        help="sessions cost: model substring filter.",
     )
-    parser.add_argument(
+    persistence.add_argument(
         "--cost-format",
         dest="cost_format",
         choices=("text", "json", "csv"),
         default=None,
-        help=(
-            "With 'sessions cost': output format. Defaults to ``json`` "
-            "when ``--json`` is set, ``text`` otherwise."
-        ),
+        metavar="FMT",
+        help="sessions cost: text | json | csv.",
     )
-    parser.add_argument(
+    persistence.add_argument(
         "--cost-limit",
         dest="cost_limit",
         type=int,
         default=None,
-        help=(
-            "With 'sessions cost': cap on rows considered (newest first; "
-            "no cap by default)."
-        ),
+        metavar="N",
+        help="sessions cost: row cap (newest first).",
     )
-    # WHY: share subcommand flags. Mirror weasel's share surface; HTTP /
-    # HTML are intentionally omitted — shrew inherits weasel's minimal
-    # posture.
-    parser.add_argument(
+    # WHY: share subcommand flags. Mirror weasel's share surface.
+    persistence.add_argument(
         "--share-sink",
         dest="share_sink",
         choices=("file", "stdout"),
         default=None,
-        help=(
-            "With 'share': destination for the rendered transcript. "
-            "Defaults to ``file`` (writes ``~/.chimera/shares/shrew-<id>.<ext>``)."
-        ),
+        metavar="SINK",
+        help="share: file (default) | stdout.",
     )
-    parser.add_argument(
+    persistence.add_argument(
         "--share-format",
         dest="share_format",
         choices=("json", "md"),
         default=None,
-        help=(
-            "With 'share': render format. Defaults to ``json`` "
-            "(round-trips with ``sessions show --json``)."
-        ),
+        metavar="FMT",
+        help="share: json (default) | md.",
     )
-    # WHY (S4): bench-specific flag. Keeps the surface unambiguous
-    # against future ``sessions`` filters.
-    parser.add_argument(
+    # WHY (S4): bench-specific flag.
+    behavior.add_argument(
         "--bench-limit",
         dest="bench_limit",
         type=int,
         default=5,
-        help=(
-            "With 'bench': max tasks to run (default: 5; pass 0 for "
-            "full run)."
-        ),
+        metavar="N",
+        help="bench: max tasks (default: 5; 0 = full run).",
+    )
+    # B9-W11: cross-CLI session listing.
+    persistence.add_argument(
+        "--all-clis",
+        dest="sessions_all_clis",
+        action="store_true",
+        default=False,
+        help="sessions list: include every Chimera CLI's sessions.",
     )
 
 
@@ -879,6 +927,13 @@ def run(args: argparse.Namespace) -> int:
     Returns:
         Process exit code.
     """
+    # A10-W11: ``--help-long`` shows standard help + long flag descriptions.
+    if getattr(args, "help_long", False):
+        from chimera.cli.help_long import print_help_long
+
+        print_help_long(_PARSER, _LONG_HELP)
+        return 0
+
     if getattr(args, "list_models", False):
         return _run_list_models()
 

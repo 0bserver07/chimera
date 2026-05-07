@@ -49,6 +49,100 @@ _VALID_SUBCOMMANDS = (
 )
 _VALID_SUB_ACTIONS = (None, "list", "show", "humaneval", "tau-bench")
 
+# A10-W11: parser ref for ``--help-long`` rendering and the per-flag
+# long-form descriptions printed below the standard help.
+_PARSER: argparse.ArgumentParser | None = None
+_LONG_HELP: dict[str, str] = {
+    "--model": (
+        "Model identifier. Resolution order: --model > $BADGER_MODEL > "
+        f"the {_DEFAULT_MODEL} default. Routed through "
+        "chimera.badger.providers.build_provider with fallback to "
+        "chimera.providers.factory.create_provider."
+    ),
+    "-p / --print": (
+        "One-shot print mode: run a single agent turn against PROMPT, "
+        "emit the assistant text on stdout, then exit. Pairs with "
+        "--output-format json for a structured envelope."
+    ),
+    "--output-format": (
+        "One-shot output format. 'text' (default) prints the assistant "
+        "reply; 'json' emits a single result object on exit; "
+        "'stream-json' prints one JSON line per LoopEvent."
+    ),
+    "--max-steps": (
+        f"Maximum agent steps per turn (default: {_DEFAULT_MAX_STEPS}). "
+        "Tighter than the other Chimera CLIs by design — pair with "
+        "--rerun-on-failure to recover from short-trajectory failures."
+    ),
+    "--cwd": (
+        "Working directory for the agent run. Default: process cwd. "
+        "Resolved to an absolute path before the env is built."
+    ),
+    "--allowed-tools": (
+        "Comma-separated tool names to allow (case-insensitive). Empty "
+        "= every tool. The harness-rewrite default is the full set; "
+        "restrict here for sandbox-like discipline."
+    ),
+    "--rerun-on-failure": (
+        "When the agent's first attempt shows tell-tale failure markers "
+        "(test failures, syntax errors), reset and retry with a refined "
+        "prompt up to --max-reruns extra attempts."
+    ),
+    "--max-reruns": (
+        "Maximum extra attempts when --rerun-on-failure is set "
+        "(default: 2). Total attempts = 1 + max-reruns."
+    ),
+    "--no-rich": (
+        "Force the plain ConsoleStreamHandler even when stdout is a TTY. "
+        "Default behavior auto-selects rich on TTY and plain when "
+        "stdout is piped."
+    ),
+    "--no-color": (
+        "Synonym for --no-rich. Also honored implicitly when the "
+        "$NO_COLOR environment variable is set."
+    ),
+    "--no-save": (
+        "Do not persist the one-shot run to ~/.chimera/eventlog/. "
+        "Default behavior saves the full message + tool history so "
+        "the run can be resumed later."
+    ),
+    "--run-id": (
+        "Override the auto-generated run id for the persisted eventlog "
+        "directory. Useful for reproducible test fixtures."
+    ),
+    "--against": (
+        "With 'parity': path to the parity schema file (JSON or YAML). "
+        "Defaults to PARITY.md / PARITY.json under the current "
+        "directory if neither --against nor a positional schema is "
+        "supplied."
+    ),
+    "--http": (
+        "With 'serve': run the HTTP server (default for badger). "
+        "Pass --no-http to switch to ACP."
+    ),
+    "--host": (
+        "With 'serve --http': bind host (default: 127.0.0.1). "
+        "Use 0.0.0.0 only with --auth-token."
+    ),
+    "--port": (
+        "With 'serve --http': bind port (default: 5176)."
+    ),
+    "--auth-token": (
+        "With 'serve --http': shared-secret bearer token required on "
+        "every request except /healthz."
+    ),
+    "subcommand": (
+        "Optional positional: 'serve' (HTTP/ACP), 'sessions' (list/"
+        "show), 'share' (export a session), 'agents' (list/show), "
+        "'bench' (benchmark suites), 'parity' (parity-schema check)."
+    ),
+    "--all-clis": (
+        "With 'sessions list': include sessions created by every "
+        "Chimera CLI (otter / ferret / weasel / shrew / stoat / mink), "
+        "not just badger. Adds an ORIGIN column."
+    ),
+}
+
 
 def _resolve_version() -> str:
     """Resolve the chimera package version for ``--version`` output.
@@ -83,163 +177,145 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         parser: An :class:`argparse.ArgumentParser` (typically the badger
             subparser created by :func:`chimera.cli.main.build_parser`).
     """
+    # A10-W11: stash for ``--help-long`` rendering in ``run()``.
+    global _PARSER
+    _PARSER = parser
+
     parser.add_argument(
         "--version",
         action="version",
         version=f"chimera badger {_resolve_version()}",
     )
-    # WHY: env precedence is --model > $BADGER_MODEL > _DEFAULT_MODEL.
     parser.add_argument(
+        "--help-long",
+        dest="help_long",
+        action="store_true",
+        default=False,
+        help="Show full help (incl. long flag descriptions).",
+    )
+
+    core = parser.add_argument_group("Core")
+    behavior = parser.add_argument_group("Behavior")
+    output = parser.add_argument_group("Output")
+    persistence = parser.add_argument_group("Persistence")
+    serve_grp = parser.add_argument_group("Serve / Parity")
+
+    # WHY: env precedence is --model > $BADGER_MODEL > _DEFAULT_MODEL.
+    core.add_argument(
         "--model",
         default=os.environ.get("BADGER_MODEL") or _DEFAULT_MODEL,
-        help=(
-            "Model identifier (default: $BADGER_MODEL or "
-            f"{_DEFAULT_MODEL}). Resolved through "
-            "``chimera.badger.providers.build_provider`` with fallback to "
-            "``chimera.providers.factory.create_provider``."
-        ),
+        metavar="MODEL",
+        help=f"Model id (default: $BADGER_MODEL or {_DEFAULT_MODEL}).",
     )
-    parser.add_argument(
+    core.add_argument(
         "-p",
         "--print",
         dest="print_mode",
         default=None,
-        help="One-shot: run a single turn with PROMPT, print, exit.",
+        metavar="PROMPT",
+        help="One-shot: run PROMPT, print, exit.",
     )
-    parser.add_argument(
+    output.add_argument(
         "--output-format",
         choices=list(_VALID_OUTPUT_FORMATS),
         default="text",
-        help=(
-            "One-shot output format. 'stream-json' prints one JSON line per "
-            "LoopEvent; 'json' prints a single result object on exit."
-        ),
+        metavar="FMT",
+        help="text | json | stream-json (default: text).",
     )
     # WHY: tighter default than the other CLIs. Harness-rewrite posture
     # prefers rerun discipline over a long single trajectory.
-    parser.add_argument(
+    behavior.add_argument(
         "--max-steps",
         type=int,
         default=_DEFAULT_MAX_STEPS,
-        help=(
-            f"Maximum agent steps per turn (default: {_DEFAULT_MAX_STEPS}). "
-            "Tighter than the other Chimera CLIs by design — pair with "
-            "--rerun-on-failure to recover from short-trajectory failures."
-        ),
+        metavar="N",
+        help=f"Max agent steps per turn (default: {_DEFAULT_MAX_STEPS}).",
     )
-    parser.add_argument(
+    core.add_argument(
         "--cwd",
         default=None,
-        help="Working directory (default: current directory).",
+        help="Working directory (default: cwd).",
     )
-    parser.add_argument(
+    behavior.add_argument(
         "--allowed-tools",
         default="",
-        help=(
-            "Comma-separated tool names to allow (case-insensitive). "
-            "Empty = all tools. The harness-rewrite default is the full "
-            "set; restrict here for sandbox-like discipline."
-        ),
+        metavar="LIST",
+        help="Comma tool allowlist (empty = all).",
     )
     # WHY: rerun-on-failure is the load-bearing distinction. When set,
     # the agent's first attempt is checked for tell-tale failure markers
     # (test failures, syntax errors). On hit, we reset and retry with a
     # refined prompt up to --max-reruns extra attempts.
-    parser.add_argument(
+    behavior.add_argument(
         "--rerun-on-failure",
         action="store_true",
         default=False,
-        help=(
-            "When the agent's first attempt fails (test failure, syntax "
-            "error in output), reset and retry with a refined prompt up "
-            "to --max-reruns extra attempts."
-        ),
+        help="Retry on test/syntax failure (uses --max-reruns).",
     )
-    parser.add_argument(
+    behavior.add_argument(
         "--max-reruns",
         type=int,
         default=2,
-        help=(
-            "Maximum extra attempts when --rerun-on-failure is set "
-            "(default: 2). Total attempts = 1 + max-reruns."
-        ),
+        metavar="N",
+        help="Extra attempts when --rerun-on-failure (default: 2).",
     )
-    parser.add_argument(
+    output.add_argument(
         "--no-rich",
         action="store_true",
         default=False,
-        help=(
-            "Force the plain ConsoleStreamHandler even when stdout is a TTY."
-        ),
+        help="Force plain stream handler even on TTY.",
     )
-    parser.add_argument(
+    output.add_argument(
         "--no-color",
         action="store_true",
         default=False,
-        help=(
-            "Synonym for --no-rich. Also honored implicitly when the "
-            "$NO_COLOR environment variable is set."
-        ),
+        help="Synonym for --no-rich (also honors $NO_COLOR).",
     )
-    parser.add_argument(
+    persistence.add_argument(
         "--no-save",
         action="store_true",
         default=False,
-        help=(
-            "Do not persist the one-shot run to ~/.chimera/eventlog/. "
-            "Default behavior saves the full message + tool history."
-        ),
+        help="Don't persist the one-shot run to eventlog.",
     )
-    parser.add_argument(
+    persistence.add_argument(
         "--run-id",
         default=None,
-        help=(
-            "Override the auto-generated run id for the persisted "
-            "eventlog directory. Useful for reproducible test fixtures."
-        ),
+        metavar="ID",
+        help="Override auto-generated run id for the eventlog dir.",
     )
     # WHY (parity): the parity subcommand diffs current agent behaviour
     # against a declared schema. The schema lives at ``--against``.
-    parser.add_argument(
+    serve_grp.add_argument(
         "--against",
         dest="parity_against",
         default=None,
-        help=(
-            "With 'parity': path to the parity schema file "
-            "(JSON or YAML). Defaults to PARITY.md/PARITY.json under "
-            "the current directory."
-        ),
+        metavar="PATH",
+        help="parity: path to the parity schema (JSON/YAML).",
     )
-    parser.add_argument(
+    serve_grp.add_argument(
         "--http",
         action="store_true",
         default=False,
-        help=(
-            "With 'serve': run the HTTP server (default for badger). "
-            "Pass --no-http to switch to ACP."
-        ),
+        help="serve: run HTTP server (default for badger).",
     )
-    parser.add_argument(
+    serve_grp.add_argument(
         "--host",
         default=None,
-        help=(
-            "With 'serve --http': bind host (default: 127.0.0.1). "
-            "Use 0.0.0.0 only with --auth-token."
-        ),
+        metavar="HOST",
+        help="serve --http: bind host (default: 127.0.0.1).",
     )
-    parser.add_argument(
+    serve_grp.add_argument(
         "--port",
         type=int,
         default=None,
-        help="With 'serve --http': bind port (default: 5176).",
+        metavar="PORT",
+        help="serve --http: bind port (default: 5176).",
     )
-    parser.add_argument(
+    serve_grp.add_argument(
         "--auth-token",
         default=None,
-        help=(
-            "With 'serve --http': shared-secret bearer token required "
-            "on every request except /healthz."
-        ),
+        metavar="TOKEN",
+        help="serve --http: bearer token required on requests.",
     )
     parser.add_argument(
         "subcommand",
@@ -247,11 +323,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         default=None,
         choices=list(_VALID_SUBCOMMANDS),
         metavar="SUBCOMMAND",
-        help=(
-            "Optional: 'serve' (HTTP/ACP), 'sessions' (list/show), "
-            "'share' (export a session), 'agents' (list/show), 'bench' "
-            "(benchmark suites), 'parity' (parity-schema check)."
-        ),
+        help="serve | sessions | share | agents | bench | parity.",
     )
     parser.add_argument(
         "sub_action",
@@ -259,14 +331,26 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         default=None,
         choices=list(_VALID_SUB_ACTIONS),
         metavar="ACTION",
-        help="With 'sessions' or 'agents': 'list' or 'show <name>'.",
+        help="list | show | <suite>.",
     )
     parser.add_argument(
         "sub_target",
         nargs="?",
         default=None,
         metavar="TARGET",
-        help="Run/session id consumed by 'show' or 'share' actions.",
+        help="Run/session id for show/share.",
+    )
+    # B9-W11: cross-CLI session listing. ``--all-clis`` drops the
+    # ``badger-`` prefix filter from ``sessions list`` and ``sessions
+    # show`` so sessions persisted by ``chimera otter``, ``chimera
+    # ferret``, ``chimera weasel``, ``chimera shrew``, ``chimera stoat``,
+    # and ``chimera mink`` are also visible.
+    persistence.add_argument(
+        "--all-clis",
+        dest="sessions_all_clis",
+        action="store_true",
+        default=False,
+        help="sessions list: include every Chimera CLI's sessions.",
     )
 
 
@@ -378,6 +462,9 @@ def _dispatch_sessions(args: argparse.Namespace) -> int:
     args.sessions_model = getattr(args, "sessions_model", None)
     args.sessions_limit = getattr(args, "sessions_limit", 50)
     args.sessions_json = getattr(args, "sessions_json", False)
+    # B9-W11: ``--all-clis`` drops the ``badger-`` prefix filter so
+    # sessions list / show can see every CLI's eventlog.
+    args.sessions_all_clis = getattr(args, "sessions_all_clis", False)
     if not hasattr(args, "full"):
         args.full = True
     rc = dispatch_sessions(args)
@@ -576,6 +663,15 @@ def run(args: argparse.Namespace) -> int:
     Returns:
         Process exit code (``0`` on success).
     """
+    # A10-W11: ``--help-long`` prints the standard help plus per-flag long
+    # descriptions and exits. Checked before subcommand dispatch so users
+    # don't need to know the routing tree.
+    if getattr(args, "help_long", False):
+        from chimera.cli.help_long import print_help_long
+
+        print_help_long(_PARSER, _LONG_HELP)
+        return 0
+
     sub = getattr(args, "subcommand", None)
     if sub in _SUBCOMMAND_DISPATCH:
         handler = _SUBCOMMAND_DISPATCH[sub]
