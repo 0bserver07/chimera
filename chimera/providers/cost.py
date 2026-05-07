@@ -53,6 +53,16 @@ PRICING: dict[str, tuple[float, float]] = {
     # DeepSeek
     "deepseek-chat": (0.27, 1.10),
     "deepseek-reasoner": (0.55, 2.19),
+    # DeepSeek-V4 family — pricing TODO. DeepSeek had not published a V4
+    # rate sheet at integration time, so we copy the deepseek-reasoner
+    # numbers ($0.55 / $2.19 per Mtok) as a placeholder. Longer prefixes
+    # (``deepseek-v4-pro``, ``deepseek-v4-pro:cloud``) are matched first by
+    # ``calculate_cost`` so a future split is straightforward. Source:
+    # DeepSeek API pricing page (https://api-docs.deepseek.com/quick_start/pricing)
+    # — refresh once V4 SKUs ship.
+    "deepseek-v4-pro:cloud": (0.55, 2.19),
+    "deepseek-v4-pro": (0.55, 2.19),
+    "deepseek-v4": (0.55, 2.19),
     # xAI / Grok — public pricing (verify against console.x.ai before billing).
     # Longer prefixes (grok-3-mini) are matched first by ``calculate_cost``.
     "grok-3-mini": (0.30, 0.50),

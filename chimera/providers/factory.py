@@ -300,6 +300,17 @@ def _infer_provider(model: str) -> str:
         # Kimi / Moonshot models are served via Anthropic-compatible endpoints
         # (api.moonshot.ai, Ollama cloud, etc.). Default to anthropic.
         return "anthropic"
+    if model_lower.startswith("deepseek"):
+        # DeepSeek-V4 family. ``:cloud``-tagged ids (e.g. ``deepseek-v4-pro:cloud``)
+        # are served via the local Ollama daemon's cloud passthrough; bare ids
+        # (``deepseek-v4``, ``deepseek-v4-pro``, ``deepseek-chat``,
+        # ``deepseek-reasoner``) speak DeepSeek's hosted OpenAI-compatible API
+        # at ``https://api.deepseek.com/v1`` and route through ``compatible``.
+        # Catalog entries (``chimera.providers.catalog``) carry the per-model
+        # base_url + api_key_env binding for the non-cloud variants.
+        if model_lower.endswith(":cloud"):
+            return "ollama"
+        return "compatible"
     if model_lower.startswith("grok"):
         # xAI Grok models are served via the OpenAI-compatible API at
         # ``https://api.x.ai/v1``. The xai provider wraps
@@ -330,6 +341,6 @@ def _infer_provider(model: str) -> str:
         f"  2. Pass provider_type='anthropic' | 'openai' | 'google' | "
         f"'ollama' explicitly.\n"
         f"  3. Use a prefix that matches a known provider (claude-*, gpt-*,\n"
-        f"     gemini-*, glm-*, kimi-*, grok-*, llama*, qwen*, mistral*, phi*,\n"
-        f"     vllm/* (local vLLM), sglang/* (local SGLang))."
+        f"     gemini-*, glm-*, kimi-*, grok-*, deepseek-*, llama*, qwen*,\n"
+        f"     mistral*, phi*, vllm/* (local vLLM), sglang/* (local SGLang))."
     )

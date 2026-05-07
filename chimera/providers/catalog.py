@@ -73,6 +73,19 @@ _BUILTIN_ENTRIES: list[ModelConfig] = [
                 api_key_env="DEEPSEEK_API_KEY", context_window=64_000, cost=(0.27, 1.10)),
     ModelConfig("deepseek-reasoner", "compatible", base_url="https://api.deepseek.com/v1",
                 api_key_env="DEEPSEEK_API_KEY", context_window=64_000, cost=(0.55, 2.19)),
+    # DeepSeek-V4 family. Bare ids hit DeepSeek's hosted OpenAI-compatible
+    # API; the ``:cloud``-tagged variant is served via the local Ollama
+    # daemon's cloud passthrough (``ollama run deepseek-v4-pro:cloud``).
+    # Pricing is a placeholder copying the deepseek-reasoner numbers
+    # (input $0.55 / output $2.19 per Mtok); refresh once DeepSeek
+    # publishes the V4 list. Context window mirrors DeepSeek-V3's
+    # documented 128k window.
+    ModelConfig("deepseek-v4", "compatible", base_url="https://api.deepseek.com/v1",
+                api_key_env="DEEPSEEK_API_KEY", context_window=128_000, cost=(0.55, 2.19)),
+    ModelConfig("deepseek-v4-pro", "compatible", base_url="https://api.deepseek.com/v1",
+                api_key_env="DEEPSEEK_API_KEY", context_window=128_000, cost=(0.55, 2.19)),
+    ModelConfig("deepseek-v4-pro:cloud", "ollama", base_url_env="OLLAMA_HOST",
+                context_window=262_144, cost=(0.55, 2.19)),
 ]
 
 
