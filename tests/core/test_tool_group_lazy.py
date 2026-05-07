@@ -85,27 +85,22 @@ def test_task_tool_first_then_tool_group_module_resolves() -> None:
 
 
 def test_agent_tools_after_lazy_resolve_matches_pre_lazy_set() -> None:
-    """The lazy-resolved ``AGENT_TOOLS`` ToolGroup must contain the same set of
-    tool classes as the pre-lazy version (no behavioural drift).
-
-    The pre-lazy set, per ``_make_agent_tools`` in tool_group.py, is::
-
-        ReadFileTool, WriteFileTool, EditFileTool, BashTool, SearchTool,
-        ListFilesTool, TestTool, GitTool, ReplaceInFileTool, ImageReadTool,
-        RepoMapTool, ThinkTool, TodoTool, VerifyTool, WebSearchTool
+    """The lazy-resolved ``AGENT_TOOLS`` ToolGroup must contain the original
+    pre-lazy tool set as a subset (no removal). Additions from later waves
+    (W13-G13: apply_patch, write_guard, notebook_edit, worktree, cron) are
+    expected and welcome — the contract here is "no behavioural drift in the
+    legacy 15".
     """
     from chimera.core.tool_group import AGENT_TOOLS, DEFAULT_TOOLS
 
-    expected_agent = {
+    legacy_agent = {
         "read_file", "write_file", "edit_file", "bash", "search",
         "list_files", "test", "git", "replace_in_file", "read_image",
         "repo_map", "think", "todo", "verify_answer", "web_search",
     }
     actual_agent = {t.name for t in AGENT_TOOLS}
-    assert actual_agent == expected_agent, (
-        f"AGENT_TOOLS drift; missing={expected_agent - actual_agent} "
-        f"extra={actual_agent - expected_agent}"
-    )
+    missing = legacy_agent - actual_agent
+    assert not missing, f"AGENT_TOOLS regressed; missing legacy tools: {missing}"
 
     expected_default = {"read_file", "write_file", "bash", "read_image"}
     actual_default = {t.name for t in DEFAULT_TOOLS}

@@ -76,6 +76,13 @@ def _make_agent_tools() -> ToolGroup:
     from chimera.tools.todo import TodoTool
     from chimera.tools.verify import VerifyTool
     from chimera.tools.web_search import WebSearchTool
+    from chimera.tools.apply_patch import ApplyPatchTool
+    from chimera.tools.write_guard import WriteGuardTool
+    from chimera.tools.notebook_edit import NotebookEditTool
+    from chimera.tools.worktree_tool import EnterWorktreeTool, ExitWorktreeTool
+    from chimera.tools.cron_tools import (
+        CronCreateTool, CronDeleteTool, CronListTool,
+    )
     return ToolGroup("agent", [
         ReadFileTool(), WriteFileTool(), EditFileTool(),
         BashTool(), SearchTool(), ListFilesTool(),
@@ -86,6 +93,18 @@ def _make_agent_tools() -> ToolGroup:
         # TodoTool() which keeps the default persist=False.
         TodoTool(persist=True),
         VerifyTool(), WebSearchTool(),
+        # WHY (W13-G1): apply_patch is a shared default for the ferret +
+        # otter coding-agent CLIs so multi-file structured edits are
+        # available without needing to pin a custom tool list.
+        ApplyPatchTool(),
+        # WHY (W13-G13): write_guard surfaces the write_file vs edit_file
+        # invariant; notebook_edit / worktree / cron close the
+        # AGENT_TOOLS gap that previously left mink (and friends) without
+        # a default Jupyter / git-worktree / scheduled-task surface.
+        WriteGuardTool(),
+        NotebookEditTool(),
+        EnterWorktreeTool(), ExitWorktreeTool(),
+        CronCreateTool(), CronListTool(), CronDeleteTool(),
     ])
 
 

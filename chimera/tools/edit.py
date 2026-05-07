@@ -63,6 +63,17 @@ class EditFileTool(BaseTool):
     def execute(self, args: dict[str, Any], env: Environment | None) -> ToolResult:
         path = args["path"]
 
+        # WriteGuard (W13-G13): when enforced, refuse to edit_file a missing
+        # file — the agent meant write_file. Runs before read-before-write so
+        # missing-file diagnostics are not masked by the read-tracking check.
+        from chimera.tools.write_guard import WriteGuard, WriteGuardError
+
+        if WriteGuard.is_enforced():
+            try:
+                WriteGuard.check_edit(path, env)
+            except WriteGuardError as e:
+                return ToolResult(output="", error=str(e))
+
         # --- #130: Read-before-write guard ---
         if self._enforce_read_before_write:
             resolved = _resolve_edit_path(path, self._read_ops, env)

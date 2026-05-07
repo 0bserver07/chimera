@@ -30,6 +30,16 @@ class WriteFileTool(BaseTool):
         path = args["path"]
         new_content = args["content"]
 
+        # WriteGuard (W13-G13): when enforced, refuse to clobber an existing
+        # file via write_file — the agent almost certainly meant edit_file.
+        from chimera.tools.write_guard import WriteGuard, WriteGuardError
+
+        if WriteGuard.is_enforced():
+            try:
+                WriteGuard.check_write(path, env)
+            except WriteGuardError as e:
+                return ToolResult(output="", error=str(e))
+
         if self._write_ops is not None:
             # Read before-state for diff using read_ops if available
             before: str | None = None
