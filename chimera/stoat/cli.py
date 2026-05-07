@@ -95,8 +95,14 @@ _LONG_HELP: dict[str, str] = {
     ),
     "--shell-mode": (
         "Boot the REPL already in shell mode. Each input line runs as "
-        "'bash -c <input>' until /shell or Ctrl-X toggles back to agent "
+        "'bash -c <input>' until /shell or Ctrl-X s toggles back to agent "
         "mode. The shell-mode toggle is stoat's headline feature."
+    ),
+    "--plan-mode": (
+        "Boot the REPL already in plan mode. The agent emits a plan and "
+        "asks for confirmation rather than acting; no edit/write/bash "
+        "tools fire on plan turns. Toggle with /plan or Ctrl-X p. "
+        "Plans persist to ~/.chimera/plans/ for /resume."
     ),
     "--cwd": (
         "Working directory for the agent run. Default: process cwd. "
@@ -240,7 +246,14 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         dest="shell_mode",
         action="store_true",
         default=False,
-        help="Start REPL in shell mode (toggle via /shell or Ctrl-X).",
+        help="Start REPL in shell mode (toggle via /shell or Ctrl-X s).",
+    )
+    behavior.add_argument(
+        "--plan-mode",
+        dest="plan_mode",
+        action="store_true",
+        default=False,
+        help="Start REPL in plan mode (planner posture, no actions).",
     )
     core.add_argument(
         "--cwd",

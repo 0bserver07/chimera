@@ -152,15 +152,24 @@ def test_blank_input_is_ignored() -> None:
 
 
 def test_run_entry_point_uses_namespace_attrs(monkeypatch) -> None:
-    """:func:`run` reads ``model`` / ``cwd`` / ``max_steps`` / ``shell_mode``."""
+    """:func:`run` reads model / cwd / max_steps / shell_mode / plan_mode."""
     captured: dict[str, object] = {}
 
     class _StubRepl:
-        def __init__(self, *, model, workdir, max_steps, start_in_shell_mode) -> None:
+        def __init__(
+            self,
+            *,
+            model,
+            workdir,
+            max_steps,
+            start_in_shell_mode,
+            start_in_plan_mode=False,
+        ) -> None:
             captured["model"] = model
             captured["workdir"] = workdir
             captured["max_steps"] = max_steps
             captured["start_in_shell_mode"] = start_in_shell_mode
+            captured["start_in_plan_mode"] = start_in_plan_mode
 
         def run(self) -> int:
             return 0
@@ -174,6 +183,7 @@ def test_run_entry_point_uses_namespace_attrs(monkeypatch) -> None:
         cwd="/tmp",
         max_steps=10,
         shell_mode=True,
+        plan_mode=False,
     )
     rc = stoat_repl.run(args)
     assert rc == 0
@@ -181,3 +191,4 @@ def test_run_entry_point_uses_namespace_attrs(monkeypatch) -> None:
     assert captured["workdir"] == "/tmp"
     assert captured["max_steps"] == 10
     assert captured["start_in_shell_mode"] is True
+    assert captured["start_in_plan_mode"] is False

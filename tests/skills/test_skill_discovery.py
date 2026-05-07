@@ -78,9 +78,13 @@ def test_discover_skills_nested(tmp_path):
 
 
 def test_default_search_paths():
+    # Layout (W13-G12): bundled algorithm skills + project + user.
+    # Bundled comes first so project / user paths override by name.
     paths = default_search_paths("/my/project")
-    assert len(paths) == 2
-    assert paths[0] == Path("/my/project/.chimera/skills")
+    assert len(paths) == 3
+    assert paths[0].name == "algorithms"   # bundled in-tree set
+    assert Path("/my/project/.chimera/skills") in paths
+    assert (Path.home() / ".chimera" / "skills") in paths
 
 
 def test_format_skills_for_prompt():

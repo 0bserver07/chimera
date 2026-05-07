@@ -7,6 +7,11 @@ The keyboard equivalent ``Ctrl-X`` is documented as the "shell-mode toggle"
 in :mod:`chimera.stoat.shell_mode`; ``/shell`` is the slash-typeable form
 for terminals that intercept ``Ctrl-X``.
 
+A second posture, ``plan`` mode, is reachable via ``/plan`` (or the
+``Ctrl-X p`` chord) — it asks the agent to produce a plan and request
+confirmation rather than acting. Plan persistence lives in
+:mod:`chimera.stoat.plan_mode`.
+
 The dispatcher returns a :class:`SlashResult` per command so callers (the
 REPL) can decide whether to keep looping, render text, or perform a side
 effect like clearing history.
@@ -20,6 +25,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable
 
+from chimera.stoat.plan_mode import PlanModeManager
 from chimera.stoat.shell_mode import MODE_AGENT, MODE_SHELL, ShellModeManager
 
 __all__ = [
@@ -36,6 +42,7 @@ SLASH_COMMANDS: tuple[str, ...] = (
     "/clear",
     "/model",
     "/shell",
+    "/plan",
     "/cost",
     "/history",
 )
@@ -68,10 +75,12 @@ _HELP_TEXT = (
     "  /clear           Reset conversation history.\n"
     "  /model [<id>]    Show or set the active model id.\n"
     "  /shell           Toggle between agent mode and shell mode.\n"
+    "  /plan            Toggle plan mode (planner posture, no actions).\n"
     "  /cost            Show running cost for the current session.\n"
     "  /history [<n>]   Show the last n submitted lines (default 10).\n"
-    "Anything else is sent to the model (agent mode) or run as bash -c "
-    "<line> (shell mode)."
+    "Chord (when prompt_toolkit is installed): Ctrl-X p / s / h.\n"
+    "Anything else is sent to the model (agent mode), run as bash -c "
+    "<line> (shell mode), or planned (plan mode)."
 )
 
 
@@ -92,12 +101,16 @@ class SlashPalette:
         on_clear: Optional callback fired when ``/clear`` is dispatched.
             Receives no arguments. Used by the REPL to drop its
             conversation-history buffer.
+        plan_mode: Optional :class:`PlanModeManager` consulted by
+            ``/plan``. When ``None``, ``/plan`` reports that plan-mode
+            wiring is unavailable rather than erroring.
     """
 
     shell_mode: ShellModeManager
     model: str | None = None
     cost_usd: float = 0.0
     on_clear: Callable[[], None] | None = None
+    plan_mode: PlanModeManager | None = None
 
     # ------------------------------------------------------------------
     # Per-command handlers
@@ -126,7 +139,14 @@ class SlashPalette:
         return SlashResult(text=f"model set: {self.model}")
 
     def cmd_shell(self, _arg: str) -> SlashResult:
-        """``/shell`` — toggle between agent and shell mode."""
+        """``/shell`` — toggle between agent and shell mode.
+
+        Leaves plan mode (if active) so the agent/shell toggle remains
+        the user's primary mental model — plan mode is the explicit
+        third posture, never an implicit overlay.
+        """
+        if self.plan_mode is not None and self.plan_mode.is_active():
+            self.plan_mode.disable()
         new_mode = self.shell_mode.toggle()
         if new_mode == MODE_SHELL:
             return SlashResult(
@@ -136,6 +156,25 @@ class SlashPalette:
                 )
             )
         return SlashResult(text="(agent mode)")
+
+    def cmd_plan(self, _arg: str) -> SlashResult:
+        """``/plan`` — toggle plan mode (agent emits a plan, doesn't act)."""
+        if self.plan_mode is None:
+            return SlashResult(
+                text=(
+                    "/plan: plan mode unavailable in this REPL "
+                    "(no PlanModeManager wired)."
+                )
+            )
+        new_state = self.plan_mode.toggle()
+        if new_state:
+            return SlashResult(
+                text=(
+                    "(plan mode: each input asks for a plan + confirmation. "
+                    "Type /plan to leave plan mode.)"
+                )
+            )
+        return SlashResult(text="(plan mode off)")
 
     def cmd_cost(self, _arg: str) -> SlashResult:
         """``/cost`` — render running cost for the active session."""
@@ -185,6 +224,7 @@ class SlashPalette:
             "/clear": self.cmd_clear,
             "/model": self.cmd_model,
             "/shell": self.cmd_shell,
+            "/plan": self.cmd_plan,
             "/cost": self.cmd_cost,
             "/history": self.cmd_history,
         }
@@ -205,6 +245,7 @@ def build_default_palette(
     shell_mode: ShellModeManager | None = None,
     model: str | None = None,
     on_clear: Callable[[], None] | None = None,
+    plan_mode: PlanModeManager | None = None,
 ) -> SlashPalette:
     """Construct a :class:`SlashPalette` with defaults for the stoat REPL.
 
@@ -213,6 +254,9 @@ def build_default_palette(
             ``None``, a fresh manager is created in agent mode.
         model: Initial model id rendered by ``/model``.
         on_clear: Callback fired when ``/clear`` runs.
+        plan_mode: Optional :class:`PlanModeManager` consulted by
+            ``/plan``. ``None`` is allowed (the palette stays
+            backwards-compatible with the agent/shell-only REPL).
 
     Returns:
         A configured :class:`SlashPalette`.
@@ -222,4 +266,5 @@ def build_default_palette(
         shell_mode=manager,
         model=model,
         on_clear=on_clear,
+        plan_mode=plan_mode,
     )

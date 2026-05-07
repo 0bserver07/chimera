@@ -107,13 +107,40 @@ def _parse_skill_file(path: Path) -> Skill | None:
     )
 
 
+def bundled_algorithms_path() -> Path:
+    """Return the path to the bundled algorithm skills (G12).
+
+    Lives next to this module under ``chimera/skills/algorithms/``.
+    Each subdirectory holds one ``SKILL.md`` (binary-search, dp,
+    bfs, dfs, hash, two-pointers, sliding-window, sorting, greedy,
+    recursion, graph-traversal, math-tricks, string-algos).
+
+    Exposed as a function rather than a module-level constant so
+    test fixtures can override the lookup with monkeypatch and so
+    callers can import it without paying the resolve cost when the
+    feature isn't used.
+    """
+    return Path(__file__).resolve().parent / "algorithms"
+
+
 def default_search_paths(workdir: str = ".") -> list[Path]:
     """Return default skill search paths in priority order.
 
-    1. {workdir}/.chimera/skills/ (project-local)
-    2. ~/.chimera/skills/ (user global)
+    1. Bundled chimera algorithm skills (G12) — read-only, ships with
+       the package so shrew always has the algorithm cheat-sheet
+       set without requiring user configuration.
+    2. ``{workdir}/.chimera/skills/`` (project-local) — overrides
+       bundled by skill name.
+    3. ``~/.chimera/skills/`` (user global) — overrides project.
+
+    The "later wins by name" semantics in :func:`discover_skills`
+    means a project skill named ``algo-binary-search`` will override
+    the bundled version, and a user skill of the same name will
+    override the project version. This matches the rest of
+    Chimera's project-over-user precedence model.
     """
     return [
+        bundled_algorithms_path(),
         Path(workdir) / ".chimera" / "skills",
         Path.home() / ".chimera" / "skills",
     ]

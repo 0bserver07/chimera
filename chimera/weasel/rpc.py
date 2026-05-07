@@ -184,7 +184,10 @@ class WeaselRpcServer:
         """Handle ``prompt`` — send a user message to the agent.
 
         Args:
-            params: Must contain ``message``: str.
+            params: Must contain ``message``: str. May also contain
+                ``stream``: bool (default ``False``); when ``True`` the
+                server emits one ``stream/event`` JSON-RPC notification
+                per agent step before writing the final response.
 
         Returns:
             ``{"output": str, "success": bool}``.
@@ -195,9 +198,13 @@ class WeaselRpcServer:
         message = params.get("message")
         if not isinstance(message, str):
             raise _RpcError(INVALID_PARAMS, "params.message must be a string")
+        stream_raw = params.get("stream", False)
+        stream = bool(stream_raw)
         self._cancelled = False
 
         if self._session is not None:
+            if stream:
+                return self._prompt_streaming(message)
             try:
                 result = self._session.chat(message)
                 output = getattr(result, "output", "") or ""
@@ -210,7 +217,99 @@ class WeaselRpcServer:
         self._stub_messages.append({"role": "user", "content": message})
         echo = f"echo: {message}"
         self._stub_messages.append({"role": "assistant", "content": echo})
+        if stream:
+            # Synthesize a single-step stream so clients can exercise the
+            # notification path without spinning up a real session.
+            self._write_notification(
+                "stream/event",
+                {
+                    "kind": "step",
+                    "step": 0,
+                    "done": True,
+                    "content": echo,
+                    "tool_calls": [],
+                },
+            )
+            self._write_notification(
+                "stream/event",
+                {"kind": "done", "output": echo, "success": True},
+            )
         return {"output": echo, "success": True}
+
+    def _prompt_streaming(self, message: str) -> dict[str, Any]:
+        """Drive ``session.iter_chat`` and emit per-step notifications.
+
+        Each step yielded by :meth:`Session.iter_chat` is wrapped in a
+        ``stream/event`` notification with ``kind == "step"``. After the
+        generator completes, a final ``stream/event`` notification with
+        ``kind == "done"`` is emitted, followed by the normal JSON-RPC
+        response carrying the final ``AgentResult`` summary.
+
+        Args:
+            message: User message to send.
+
+        Returns:
+            The standard ``prompt`` envelope: ``{"output", "success"}``.
+        """
+        sess = self._session
+        # Defensive: caller already gated on session is not None, but
+        # mypy / runtime safety want an explicit check.
+        if sess is None or not hasattr(sess, "iter_chat"):
+            try:
+                result = sess.chat(message) if sess is not None else None
+            except Exception as e:
+                return {"output": "", "success": False, "error": str(e)}
+            output = getattr(result, "output", "") if result is not None else ""
+            success = bool(getattr(result, "success", True)) if result is not None else False
+            return {"output": output or "", "success": success}
+
+        last_output = ""
+        success = True
+        error: str | None = None
+        try:
+            generator = sess.iter_chat(message)
+            while True:
+                try:
+                    step = next(generator)
+                except StopIteration as stop:
+                    final = stop.value
+                    if final is not None:
+                        last_output = getattr(final, "output", "") or ""
+                        success = bool(getattr(final, "success", True))
+                    break
+                self._write_notification(
+                    "stream/event",
+                    _step_to_payload(step),
+                )
+                # Cooperative cancel: if the client called ``cancel``
+                # mid-stream, we stop pulling steps. The session's own
+                # cancel hook still flags the underlying loop.
+                if self._cancelled:
+                    if hasattr(sess, "cancel"):
+                        try:
+                            sess.cancel()
+                        except Exception:
+                            pass
+                    success = False
+                    error = "cancelled"
+                    break
+        except Exception as e:
+            success = False
+            error = str(e)
+
+        done_payload: dict[str, Any] = {
+            "kind": "done",
+            "output": last_output,
+            "success": success,
+        }
+        if error is not None:
+            done_payload["error"] = error
+        self._write_notification("stream/event", done_payload)
+
+        envelope: dict[str, Any] = {"output": last_output, "success": success}
+        if error is not None:
+            envelope["error"] = error
+        return envelope
 
     def _method_cancel(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle ``cancel`` — cancel the in-flight turn (best effort).
@@ -295,6 +394,49 @@ class WeaselRpcServer:
         payload = {"jsonrpc": "2.0", "id": request_id, "error": err}
         self._stdout.write(json.dumps(payload) + "\n")
         self._stdout.flush()
+
+    def _write_notification(self, method: str, params: dict[str, Any]) -> None:
+        """Write a JSON-RPC 2.0 notification (no id, no response expected).
+
+        Used by the streaming ``prompt`` path to emit one frame per
+        agent step before the final response is written. Notifications
+        are valid JSON-RPC 2.0 frames that the client must accept
+        without sending back an envelope of their own.
+        """
+        payload = {"jsonrpc": "2.0", "method": method, "params": params}
+        self._stdout.write(json.dumps(payload) + "\n")
+        self._stdout.flush()
+
+
+def _step_to_payload(step: Any) -> dict[str, Any]:
+    """Marshal a :class:`StepResult` (or duck type) into a notification body.
+
+    Reads only the public, non-load-bearing fields so any object shaped
+    like ``StepResult`` works — keeps the rpc module decoupled from the
+    rest of the agent runtime.
+    """
+    message = getattr(step, "message", None)
+    content = getattr(message, "content", "") if message is not None else ""
+    role = getattr(message, "role", "") if message is not None else ""
+    raw_calls = getattr(step, "tool_calls", []) or []
+    tool_calls: list[dict[str, Any]] = []
+    for tc in raw_calls:
+        tool_calls.append(
+            {
+                "id": getattr(tc, "id", ""),
+                "name": getattr(tc, "name", ""),
+                "arguments": getattr(tc, "arguments", {}) or {},
+            }
+        )
+    return {
+        "kind": "step",
+        "step": int(getattr(step, "step", 0) or 0),
+        "done": bool(getattr(step, "done", False)),
+        "role": role or "",
+        "content": content or "",
+        "tool_calls": tool_calls,
+        "cost": float(getattr(step, "cost", 0.0) or 0.0),
+    }
 
 
 # ---------------------------------------------------------------------------

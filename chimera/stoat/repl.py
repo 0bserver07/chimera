@@ -1,13 +1,17 @@
 """``chimera stoat`` interactive REPL with the shell-mode toggle.
 
-The stoat REPL combines two ergonomic layers:
+The stoat REPL combines three ergonomic layers:
 
 * A small slash palette (``/help``, ``/exit``, ``/clear``, ``/model``,
-  ``/shell``, ``/cost``, ``/history``) — implemented in
+  ``/shell``, ``/plan``, ``/cost``, ``/history``) — implemented in
   :mod:`chimera.stoat.slash`.
 * A **shell-mode toggle** — the user can flip the REPL into shell mode
   (every input runs as ``bash -c <input>``) and back without leaving the
   REPL. The state machine lives in :mod:`chimera.stoat.shell_mode`.
+* A **plan mode** — third posture beyond agent/shell where the agent
+  produces a plan and asks for confirmation rather than acting. State
+  + persistence live in :mod:`chimera.stoat.plan_mode`; on-buffer chord
+  toggling (``Ctrl-X p``) lives in :mod:`chimera.stoat.keybindings`.
 
 The REPL deliberately stays self-contained (mirrors weasel's
 :class:`MinimalRepl`) rather than wrapping :func:`chimera.cli.code.run_code`
@@ -27,6 +31,13 @@ import os
 import sys
 from typing import TYPE_CHECKING, Any, Callable, TextIO
 
+from chimera.stoat.keybindings import ChordCallbacks, build_input_adapter
+from chimera.stoat.plan_mode import (
+    Plan,
+    PlanModeManager,
+    build_plan_system_prompt,
+    save_plan,
+)
 from chimera.stoat.shell_mode import (
     MODE_AGENT,
     MODE_SHELL,
@@ -41,9 +52,10 @@ __all__ = ["StoatRepl", "run"]
 
 
 _BANNER_TEMPLATE = (
-    "stoat — Chimera coding agent (shell-mode toggle: /shell)\n"
-    "model: {model}  ·  mode: {mode}  ·  cwd: {cwd}\n"
-    "Type /help for commands, /exit to quit.\n"
+    "stoat — Chimera coding agent (toggles: /shell · /plan)\n"
+    "model: {model}  ·  posture: {posture}  ·  cwd: {cwd}\n"
+    "Type /help for commands, /exit to quit. "
+    "Ctrl-X p / s / h for chord bindings (when prompt_toolkit installed).\n"
 )
 
 
@@ -69,6 +81,8 @@ class StoatRepl:
         out: TextIO | None = None,
         input_fn: Callable[[str], str] | None = None,
         start_in_shell_mode: bool = False,
+        start_in_plan_mode: bool = False,
+        stderr: TextIO | None = None,
     ) -> None:
         """Initialise the REPL state.
 
@@ -82,26 +96,55 @@ class StoatRepl:
             max_steps: Per-turn step cap forwarded to :class:`ReAct`.
             out: Output stream. Defaults to :data:`sys.stdout`.
             input_fn: Callable that returns the next line of user input.
-                Defaults to the builtin :func:`input`. Tests inject a fake.
+                When provided, the chord input adapter is bypassed and
+                the legacy ``input(prompt)`` flow runs (tests inject a
+                fake here). When ``None``, a chord-aware input adapter
+                is built — prompt_toolkit when installed, line-oriented
+                stdlib ``input()`` otherwise.
             start_in_shell_mode: When ``True``, the REPL boots in shell
                 mode (mirrors ``--shell-mode`` on the CLI).
+            start_in_plan_mode: When ``True``, the REPL boots in plan
+                mode (mirrors ``--plan-mode`` / ``Ctrl-X p`` on first
+                input).
+            stderr: Stream the chord fallback hint is written to.
+                Defaults to :data:`sys.stderr`.
         """
         self.model = model
         self.workdir = os.path.abspath(workdir or os.getcwd())
         self.max_steps = int(max_steps)
         self.out: TextIO = out if out is not None else sys.stdout
-        self._input: Callable[[str], str] = (
-            input_fn if input_fn is not None else input
-        )
+        self.stderr: TextIO = stderr if stderr is not None else sys.stderr
+        self._user_input_fn: Callable[[str], str] | None = input_fn
         self.history: list[tuple[str, str]] = []
 
         initial_mode = MODE_SHELL if start_in_shell_mode else MODE_AGENT
         self.shell_mode = ShellModeManager(mode=initial_mode)
+        self.plan_mode = PlanModeManager(active=bool(start_in_plan_mode))
         self.palette: SlashPalette = build_default_palette(
             shell_mode=self.shell_mode,
             model=model,
             on_clear=self._on_clear,
+            plan_mode=self.plan_mode,
         )
+
+        # WHY: when tests pass an ``input_fn``, we honour it as-is — no
+        # chord wiring, no prompt_toolkit. For real interactive use we
+        # build the chord adapter so Ctrl-X p / s / h fire. The adapter
+        # itself decides whether prompt_toolkit is available and emits
+        # a one-line stderr hint when it falls back.
+        self._adapter: Any = None
+        if input_fn is None:
+            callbacks = ChordCallbacks(
+                on_plan_toggle=self._on_chord_plan,
+                on_shell_toggle=self._on_chord_shell,
+                on_help=self._on_chord_help,
+            )
+            self._adapter = build_input_adapter(
+                shell_mode=self.shell_mode,
+                plan_mode=self.plan_mode,
+                callbacks=callbacks,
+                stderr=self.stderr,
+            )
 
     # ------------------------------------------------------------------
     # Output helpers
@@ -117,6 +160,49 @@ class StoatRepl:
     def _on_clear(self) -> None:
         """Callback invoked by the slash palette on ``/clear``."""
         self.history.clear()
+
+    # ------------------------------------------------------------------
+    # Chord callbacks (Ctrl-X p / Ctrl-X s / Ctrl-X h)
+    # ------------------------------------------------------------------
+
+    def _on_chord_plan(self, active: bool) -> None:
+        """Render a banner when ``Ctrl-X p`` toggles plan mode."""
+        if active:
+            self._write(
+                "(plan mode: each input asks for a plan + confirmation. "
+                "Type /plan or Ctrl-X p to leave.)"
+            )
+        else:
+            self._write("(plan mode off)")
+
+    def _on_chord_shell(self, mode: str) -> None:
+        """Render a banner when ``Ctrl-X s`` toggles shell mode."""
+        if mode == MODE_SHELL:
+            self._write(
+                "(shell mode: each input runs as 'bash -c <input>'. "
+                "Type /shell or Ctrl-X s to return to agent mode.)"
+            )
+        else:
+            self._write("(agent mode)")
+
+    def _on_chord_help(self, text: str) -> None:
+        """Render the chord help blurb when ``Ctrl-X h`` fires."""
+        self._write(text)
+
+    # ------------------------------------------------------------------
+    # Input dispatch
+    # ------------------------------------------------------------------
+
+    def _read_input(self, prompt: str) -> str:
+        """Return the next line of user input.
+
+        Routes through the chord-aware :class:`InputAdapter` for real
+        interactive use, or the test-injected ``input_fn`` when present.
+        """
+        if self._user_input_fn is not None:
+            return self._user_input_fn(prompt)
+        assert self._adapter is not None  # set when input_fn is None
+        return str(self._adapter.read_line())
 
     # ------------------------------------------------------------------
     # Provider / agent invocation (one agent-mode turn)
@@ -199,6 +285,97 @@ class StoatRepl:
         return text
 
     # ------------------------------------------------------------------
+    # Plan-mode turn
+    # ------------------------------------------------------------------
+
+    def run_plan_turn(self, prompt: str) -> str:
+        """Run a single plan-only turn and persist the plan.
+
+        Plan mode swaps the system prompt for the plan-mode addendum
+        (see :data:`chimera.stoat.plan_mode.PLAN_SYSTEM_PROMPT`) so the
+        LLM is asked to *plan* — emit a step-by-step plan and ask for
+        confirmation — rather than to act. The resulting plan is saved
+        to ``~/.chimera/plans/`` so it can be reviewed or resumed later.
+
+        Errors fall back to a degraded textual plan so the REPL is still
+        usable when the agent stack or provider isn't available.
+
+        Args:
+            prompt: User message describing what to plan.
+
+        Returns:
+            Rendered plan text plus a footer indicating where the plan
+            was saved.
+        """
+        try:
+            import asyncio
+
+            from chimera.core.agent import Agent
+            from chimera.core.cancellation import CancellationToken
+            from chimera.core.loop import ReAct
+            from chimera.core.loop_config import LoopConfig
+            from chimera.core.prompt import Prompt
+            from chimera.core.tool_group import AGENT_TOOLS
+            from chimera.env.local import LocalEnvironment
+        except Exception as exc:  # noqa: BLE001 — never crash the REPL
+            return f"stoat: plan-mode stack unavailable: {exc}"
+
+        try:
+            provider = self._build_provider()
+        except Exception as exc:  # noqa: BLE001
+            return f"stoat: provider error: {exc}"
+
+        env = LocalEnvironment(workdir=self.workdir)
+        env.setup()
+
+        cancel = CancellationToken()
+        config = LoopConfig(cancellation=cancel)
+        loop = ReAct(max_steps=self.max_steps, config=config)
+        sys_prompt = Prompt.from_string(
+            build_plan_system_prompt(
+                "You are Stoat, a Chimera coding agent with a shell-mode toggle. "
+                "Use tools to inspect the user's repo. Be concise."
+            )
+        )
+        agent = Agent(
+            provider=provider,
+            tools=list(AGENT_TOOLS),
+            loop=loop,
+            prompt=sys_prompt,
+        )
+
+        try:
+            result: Any = asyncio.run(agent.async_run(prompt, env=env))
+        except KeyboardInterrupt:
+            cancel.cancel()
+            return "[cancelled]"
+        except Exception as exc:  # noqa: BLE001
+            return f"stoat: plan turn failed: {exc}"
+        finally:
+            env.cleanup()
+
+        text = str(getattr(result, "output", "") or "")
+
+        # Persist the plan, even when the agent emitted an empty body —
+        # the prompt itself is signal worth keeping for /resume.
+        plan = Plan.new(
+            prompt=prompt,
+            content=text,
+            model=self.palette.model or self.model,
+            cwd=self.workdir,
+        )
+        try:
+            saved = save_plan(plan)
+            self.plan_mode.last_plan_id = plan.plan_id
+            footer = f"\n\n[plan saved: {saved}]"
+        except OSError as exc:
+            footer = f"\n\n[stoat: plan save failed: {exc}]"
+
+        self.history.append(("user", f"[plan] {prompt}"))
+        self.history.append(("assistant", text))
+        return text + footer
+
+    # ------------------------------------------------------------------
     # Shell-mode turn
     # ------------------------------------------------------------------
 
@@ -237,9 +414,9 @@ class StoatRepl:
             ``True`` to keep looping; ``False`` when the user typed
             ``/exit`` or signalled EOF.
         """
-        prompt = self.shell_mode.prompt
+        prompt = self._current_prompt()
         try:
-            line = self._input(prompt)
+            line = self._read_input(prompt)
         except EOFError:
             self._write("")
             return False
@@ -266,7 +443,13 @@ class StoatRepl:
             return result.keep_going
 
         self.shell_mode.record(line)
-        if self.shell_mode.is_shell_mode():
+        # Posture precedence: plan > shell > agent. Plan wins because
+        # it's the explicit "deliberate, don't act" override; shell
+        # comes next because it's a posture toggle; everything else is
+        # an agent turn.
+        if self.plan_mode.is_active():
+            text = self.run_plan_turn(line)
+        elif self.shell_mode.is_shell_mode():
             text = self.run_shell_turn(line)
         else:
             text = self.run_agent_turn(line)
@@ -274,15 +457,22 @@ class StoatRepl:
             self._write(text)
         return True
 
+    def _current_prompt(self) -> str:
+        """Return the prompt prefix for the active posture (plan > shell)."""
+        if self.plan_mode.is_active():
+            return self.plan_mode.plan_prompt
+        return self.shell_mode.prompt
+
     def run(self) -> int:
         """Drive the REPL until ``/exit`` or EOF.
 
         Returns:
             Process exit code. Always ``0`` for normal exits.
         """
+        posture = "plan" if self.plan_mode.is_active() else self.shell_mode.mode
         banner = _BANNER_TEMPLATE.format(
             model=self.palette.model or self.model or "(unresolved)",
-            mode=self.shell_mode.mode,
+            posture=posture,
             cwd=self.workdir,
         )
         self._write(banner)
@@ -313,5 +503,6 @@ def run(args: argparse.Namespace) -> int:
         workdir=workdir,
         max_steps=int(max_steps_raw),
         start_in_shell_mode=bool(getattr(args, "shell_mode", False)),
+        start_in_plan_mode=bool(getattr(args, "plan_mode", False)),
     )
     return repl.run()

@@ -73,6 +73,139 @@ def detect_node() -> str | None:
     return shutil.which("node")
 
 
+def detect_npm() -> str | None:
+    """Return the absolute path to the ``npm`` executable, or ``None``.
+
+    Sibling of :func:`detect_node`; used by :func:`ensure_npm_install`
+    to decide whether dependency installation is even possible.
+    """
+    return shutil.which("npm")
+
+
+def detect_node_version() -> tuple[int, int, int] | None:
+    """Return ``(major, minor, patch)`` for the host's ``node``, or ``None``.
+
+    Spawns ``node --version`` and parses ``vX.Y.Z`` off stdout. Returns
+    ``None`` when ``node`` is missing, the call fails, or the output is
+    not parseable. Stdlib only — no third-party version libraries.
+    """
+    node_path = detect_node()
+    if node_path is None:
+        return None
+    try:
+        completed = subprocess.run(  # noqa: S603 — args list, no shell
+            [node_path, "--version"],
+            capture_output=True,
+            text=True,
+            timeout=5.0,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if completed.returncode != 0:
+        return None
+    raw = (completed.stdout or "").strip()
+    if raw.startswith("v"):
+        raw = raw[1:]
+    parts = raw.split(".")
+    if len(parts) < 3:
+        return None
+    try:
+        return (int(parts[0]), int(parts[1]), int(parts[2]))
+    except ValueError:
+        return None
+
+
+# Marker file: presence under ``node_modules/`` means a successful install
+# happened. We avoid stat()ing the full tree on every invocation.
+_NPM_INSTALL_MARKER = ".chimera-installed"
+
+
+def ensure_npm_install(
+    plugin_dir: Path,
+    *,
+    timeout_s: float = 120.0,
+) -> tuple[bool, str | None]:
+    """Run ``npm install`` once when ``package.json`` declares dependencies.
+
+    Idempotent and lazy:
+
+    * Skips entirely when ``package.json`` has no ``dependencies`` /
+      ``devDependencies`` keys, or both are empty.
+    * Skips when ``node_modules/<marker>`` already exists (we created
+      it on a prior successful install).
+    * Skips with a clear error when ``npm`` is not on PATH.
+
+    Args:
+        plugin_dir: Extension root containing ``package.json``.
+        timeout_s: Per-install timeout. ``npm install`` over a slow link
+            is the most common reason this overruns; tunable per-call.
+
+    Returns:
+        ``(ran, error)`` where ``ran`` is ``True`` iff a fresh
+        ``npm install`` was executed in this call (existing
+        ``node_modules`` short-circuits to ``(False, None)``). ``error``
+        is a human-readable string when install failed; ``None`` on
+        success or when install was unnecessary.
+    """
+    pkg_data = _read_package_json(plugin_dir)
+    deps = pkg_data.get("dependencies") if isinstance(pkg_data, dict) else None
+    dev_deps = (
+        pkg_data.get("devDependencies") if isinstance(pkg_data, dict) else None
+    )
+    has_deps = (isinstance(deps, dict) and deps) or (
+        isinstance(dev_deps, dict) and dev_deps
+    )
+    if not has_deps:
+        return False, None
+
+    node_modules = plugin_dir / "node_modules"
+    marker = node_modules / _NPM_INSTALL_MARKER
+    if marker.is_file():
+        return False, None
+
+    npm_path = detect_npm()
+    if npm_path is None:
+        return False, (
+            f"npm executable not found on PATH; cannot install "
+            f"dependencies for extension at {plugin_dir}"
+        )
+
+    try:
+        completed = subprocess.run(  # noqa: S603 — args list, no shell
+            [npm_path, "install", "--no-audit", "--no-fund", "--silent"],
+            cwd=str(plugin_dir),
+            capture_output=True,
+            text=True,
+            timeout=timeout_s,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return False, (
+            f"npm install timed out after {timeout_s:.0f}s in {plugin_dir}"
+        )
+    except OSError as exc:
+        return False, f"could not spawn npm: {exc}"
+
+    if completed.returncode != 0:
+        # Capture stderr tail so the loader's error list stays short.
+        stderr_tail = (completed.stderr or "").strip().splitlines()[-3:]
+        return False, (
+            f"npm install failed (exit {completed.returncode}) in "
+            f"{plugin_dir}: {' | '.join(stderr_tail)}"
+        )
+
+    # Mark success so subsequent loads skip the spawn.
+    try:
+        node_modules.mkdir(parents=True, exist_ok=True)
+        marker.write_text("ok\n", encoding="utf-8")
+    except OSError:
+        # The install itself succeeded; failure to write the marker is
+        # not fatal — at worst we re-run install on next load.
+        pass
+    return True, None
+
+
 def _read_package_json(plugin_dir: Path) -> dict[str, Any]:
     """Best-effort read of ``package.json`` from ``plugin_dir``.
 
@@ -401,6 +534,19 @@ def build_node_tools(
             f"JS/TS tools for '{plugin_name}' will report runtime errors."
         )
 
+    # Best-effort dependency install. We only spawn ``npm install`` when
+    # the manifest actually declares dependencies *and* node_modules is
+    # not already populated — see :func:`ensure_npm_install` for the
+    # full short-circuit logic. Failures are recorded but do not block
+    # tool construction; an extension whose runtime fails will surface
+    # the error per-call rather than at load time.
+    if node_path is not None:
+        _ran, install_err = ensure_npm_install(plugin_dir)  # noqa: F841
+        if install_err is not None:
+            errors.append(
+                f"npm install for '{plugin_name}': {install_err}"
+            )
+
     entry_point = resolve_node_entry(plugin_dir, manifest)
     if entry_point is None:
         errors.append(
@@ -477,5 +623,8 @@ __all__ = [
     "NodeExtensionTool",
     "build_node_tools",
     "detect_node",
+    "detect_node_version",
+    "detect_npm",
+    "ensure_npm_install",
     "resolve_node_entry",
 ]
