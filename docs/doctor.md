@@ -61,7 +61,8 @@ chimera doctor:
                                       hint: uv pip install modal
   cli.mink                    ok      chimera 0.5.0
   eventlog.dir                ok      /Users/you/.chimera/eventlog
-  plugin.index                ok      default index reachable: https://chimera-run.dev/plugins/index.json
+  plugin.index                warn    no plugin index configured
+                                      hint: set $CHIMERA_PLUGIN_INDEX, pass --index, or run `chimera config set plugin_index <url>` (see docs/plugins-index.md)
 
   summary: 14 ok, 4 warn, 0 fail
 ```

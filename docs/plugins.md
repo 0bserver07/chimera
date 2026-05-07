@@ -81,11 +81,19 @@ Resolution precedence for the index location:
 
 1. `--index` flag.
 2. `$CHIMERA_PLUGIN_INDEX` environment variable.
-3. The default, `https://chimera-run.dev/plugins/index.json`.
+3. `chimera config set plugin_index <url-or-path>` (persisted in
+   `~/.chimera/config.toml` under `[global] plugin_index`).
+4. No baked-in default. If none of the above is configured,
+   `chimera plugins search` prints a friendly multi-line help on
+   stderr and exits with code 2.
 
 `http://` and `https://` URLs are fetched with httpx (an optional
 dependency). Anything else is treated as a local file path — handy for
 offline mirrors and CI.
+
+For schema details, hosting recipes, and best practices around
+versioning + integrity, see [`docs/plugins-index.md`](plugins-index.md).
+A working sample lives at [`examples/plugin-index.json`](../examples/plugin-index.json).
 
 ### Tarball layout
 

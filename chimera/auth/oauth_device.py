@@ -36,9 +36,63 @@ __all__ = [
     "DeviceFlowError",
     "DeviceFlowPreset",
     "PROVIDER_PRESETS",
+    "SCAFFOLD_PROVIDERS",
+    "scaffold_message",
     "login",
     "copy_to_clipboard",
 ]
+
+
+# ---------------------------------------------------------------------------
+# Scaffold provider hints
+# ---------------------------------------------------------------------------
+# WHY: providers that do not publish a public OAuth device-flow client live in
+# PROVIDER_PRESETS as documented placeholders so ``from_preset`` can still
+# refer to them by name, but ``chimera auth login <provider>`` should bail
+# early with a friendly hint pointing the user at API keys instead of trying
+# to open a browser or poll a non-existent endpoint.
+
+SCAFFOLD_PROVIDERS: dict[str, dict[str, str]] = {
+    "anthropic": {
+        "env_var": "ANTHROPIC_API_KEY",
+        "key_prefix": "sk-ant-...",
+        "console_url": "https://console.anthropic.com/account/keys",
+    },
+    "openai": {
+        "env_var": "OPENAI_API_KEY",
+        "key_prefix": "sk-...",
+        "console_url": "https://platform.openai.com/api-keys",
+    },
+}
+
+
+def scaffold_message(provider: str) -> str:
+    """Return the friendly stderr text shown when a user runs login on a
+    scaffold-only provider (no public device flow).
+
+    Args:
+        provider: Logical provider id (must be a key of
+            :data:`SCAFFOLD_PROVIDERS`).
+
+    Returns:
+        Multi-line message with the API-key env var and the console URL to
+        get a key.
+    """
+    info = SCAFFOLD_PROVIDERS[provider]
+    env_var = info["env_var"]
+    key_prefix = info["key_prefix"]
+    console_url = info["console_url"]
+    other = "openai" if provider == "anthropic" else "anthropic"
+    other_info = SCAFFOLD_PROVIDERS[other]
+    return (
+        f"{provider} does not have a public OAuth device flow.\n"
+        f"\n"
+        f"To authenticate, set the API key environment variable:\n"
+        f"  export {env_var}={key_prefix}\n"
+        f"\n"
+        f"Get an API key from: {console_url}\n"
+        f"(For {other}, see {other_info['console_url']})"
+    )
 
 
 class DeviceFlowError(RuntimeError):
@@ -92,9 +146,9 @@ PROVIDER_PRESETS: dict[str, DeviceFlowPreset] = {
         scopes=[],
         placeholder=True,
         notes=(
-            "Anthropic does not publish a device-flow client at this time. "
-            "Use ANTHROPIC_API_KEY or 'chimera auth login --client-id ... "
-            "--device-url ... --token-url ...' to override."
+            "anthropic does not publish a public OAuth device flow. "
+            "Set ANTHROPIC_API_KEY (https://console.anthropic.com/account/keys) "
+            "or pass --client-id / --device-url / --token-url to use a private client."
         ),
     ),
     "openai": DeviceFlowPreset(
@@ -105,9 +159,9 @@ PROVIDER_PRESETS: dict[str, DeviceFlowPreset] = {
         scopes=[],
         placeholder=True,
         notes=(
-            "OpenAI does not publish a device-flow client at this time. "
-            "Use OPENAI_API_KEY or 'chimera auth login --client-id ... "
-            "--device-url ... --token-url ...' to override."
+            "openai does not publish a public OAuth device flow. "
+            "Set OPENAI_API_KEY (https://platform.openai.com/api-keys) "
+            "or pass --client-id / --device-url / --token-url to use a private client."
         ),
     ),
 }

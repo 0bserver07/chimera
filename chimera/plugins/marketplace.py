@@ -16,10 +16,12 @@ The remote layer is intentionally minimal:
   ...]}`` (extra fields ignored).
 - Each :class:`PluginInfo` may carry a ``url`` pointing at a ``.tar.gz``
   archive, plus an optional ``sha256`` checksum.
-- ``$CHIMERA_PLUGIN_INDEX`` env var overrides the default URL — useful
-  for tests and offline mirrors. Values starting with ``http://`` or
-  ``https://`` are fetched via httpx; anything else is treated as a
-  local file path.
+- ``$CHIMERA_PLUGIN_INDEX`` env var configures the index URL. Values
+  starting with ``http://`` or ``https://`` are fetched via httpx;
+  anything else is treated as a local file path.
+- There is no built-in default index. Hosting one is the user's choice;
+  see ``docs/plugins-index.md`` for the schema and a sample at
+  ``examples/plugin-index.json``.
 """
 from __future__ import annotations
 
@@ -33,8 +35,27 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-DEFAULT_INDEX_URL = "https://chimera-run.dev/plugins/index.json"
-"""Default registry index URL. Override with ``$CHIMERA_PLUGIN_INDEX``."""
+DEFAULT_INDEX_URL: str | None = None
+"""Default registry index URL.
+
+Intentionally ``None``: Chimera does not host a curated public registry.
+Operators must point at a self-hosted index via the ``--index`` flag,
+the ``$CHIMERA_PLUGIN_INDEX`` env var, or ``chimera config set
+plugin_index <url>``. See ``docs/plugins-index.md``.
+"""
+
+NO_INDEX_HELP: str = (
+    "No plugin index configured.\n"
+    "\n"
+    "To search the marketplace, set one of:\n"
+    "  export CHIMERA_PLUGIN_INDEX=https://your-index.example.com/index.json\n"
+    "  chimera plugins search --index https://your-index.example.com/index.json\n"
+    "  chimera config set plugin_index https://your-index.example.com/index.json\n"
+    "\n"
+    "To host your own index, see docs/plugins-index.md\n"
+    "To try a sample index, see examples/plugin-index.json"
+)
+"""Multi-line help printed when no plugin index is configured."""
 
 SUPPORTED_CLIS: tuple[str, ...] = (
     "mink",
@@ -319,23 +340,40 @@ class MarketplaceError(RuntimeError):
     """Raised when a marketplace operation fails."""
 
 
-def resolve_index_url(override: str | None = None) -> str:
+def resolve_index_url(override: str | None = None) -> str | None:
     """Resolve which registry index URL/path to load.
 
     Precedence: explicit ``override`` > ``$CHIMERA_PLUGIN_INDEX`` env
-    var > :data:`DEFAULT_INDEX_URL`.
+    var > ``chimera config`` (``[global] plugin_index``) >
+    :data:`DEFAULT_INDEX_URL`.
+
+    Returns ``None`` when no index is configured anywhere — callers
+    should treat that as "show the user how to set one up" rather than
+    falling back to a baked-in default URL. See :data:`NO_INDEX_HELP`.
 
     Args:
         override: Optional explicit URL or local path.
 
     Returns:
-        URL or filesystem path string.
+        URL or filesystem path string, or ``None`` when nothing is
+        configured.
     """
     if override:
         return override
     env_value = os.environ.get("CHIMERA_PLUGIN_INDEX")
     if env_value:
         return env_value
+    # Persistent config: ``chimera config set plugin_index <url>``.
+    # Lazy import so the marketplace module remains usable even when
+    # ``chimera.cli`` is unavailable (e.g. trimmed deploys).
+    try:
+        from chimera.cli.config_loader import resolve_default
+
+        configured = resolve_default("global", "plugin_index", None)
+        if isinstance(configured, str) and configured:
+            return configured
+    except Exception:  # noqa: BLE001 — config is best-effort
+        pass
     return DEFAULT_INDEX_URL
 
 
@@ -367,6 +405,8 @@ def fetch_index(
         MarketplaceError: If the index cannot be loaded or parsed.
     """
     target = resolve_index_url(url)
+    if target is None:
+        raise MarketplaceError(NO_INDEX_HELP)
     raw: str
     if _is_remote(target):
         try:

@@ -428,6 +428,20 @@ def check_plugin_index(
             detail=f"could not import marketplace ({exc})",
             hint="set $CHIMERA_PLUGIN_INDEX to a JSON registry URL",
         )
+    # No env override AND no built-in default: that's the documented
+    # zero-config state, not an error. Surface a hint so users can wire
+    # one up via env, --index, or `chimera config set plugin_index`.
+    if DEFAULT_INDEX_URL is None:
+        return Check(
+            name="plugin.index",
+            status=WARN,
+            detail="no plugin index configured",
+            hint=(
+                "set $CHIMERA_PLUGIN_INDEX, pass --index, or run "
+                "`chimera config set plugin_index <url>` "
+                "(see docs/plugins-index.md)"
+            ),
+        )
     # File:// or local path? Just stat it.
     if DEFAULT_INDEX_URL.startswith("file://") or DEFAULT_INDEX_URL.startswith("/"):
         path = (

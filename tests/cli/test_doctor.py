@@ -18,6 +18,8 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from chimera.cli import doctor
 
 
@@ -275,16 +277,34 @@ def test_check_plugin_index_env_override() -> None:
     assert "example.com" in check.detail
 
 
-def test_check_plugin_index_default_unreachable() -> None:
-    err = urllib.error.URLError("dns failure")
-    check = doctor.check_plugin_index(env={}, opener=_make_opener(err))
-    assert check.status == doctor.WARN
-    assert "unreachable" in check.detail
-
-
-def test_check_plugin_index_default_reachable() -> None:
+def test_check_plugin_index_no_config() -> None:
+    """With no env override and no built-in default URL, doctor surfaces a
+    WARN with a hint pointing users at the three configuration paths."""
     check = doctor.check_plugin_index(env={}, opener=_make_opener(b"{}"))
-    assert check.status == doctor.OK
+    assert check.status == doctor.WARN
+    assert "no plugin index" in check.detail.lower()
+    assert check.hint is not None
+    assert "CHIMERA_PLUGIN_INDEX" in check.hint or "plugin_index" in check.hint
+
+
+def test_check_plugin_index_local_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    """If a deployment monkey-patches DEFAULT_INDEX_URL to a local path that
+    exists, doctor reports OK without any HTTP probe."""
+    import tempfile
+    import chimera.plugins.marketplace as mp_mod
+
+    with tempfile.NamedTemporaryFile(
+        suffix=".json", delete=False
+    ) as fh:
+        fh.write(b'{"plugins": []}')
+        local_path = fh.name
+    try:
+        monkeypatch.setattr(mp_mod, "DEFAULT_INDEX_URL", local_path)
+        check = doctor.check_plugin_index(env={})
+        assert check.status == doctor.OK
+        assert "local index" in check.detail
+    finally:
+        Path(local_path).unlink(missing_ok=True)
 
 
 # ---------------------------------------------------------------------------

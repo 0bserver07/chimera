@@ -22,6 +22,25 @@ export ANTHROPIC_API_KEY=sk-ant-…
 chimera code
 ```
 
+## Provider authentication matrix
+
+Not every provider publishes a public OAuth device-flow client. The matrix
+below summarizes what `chimera auth login <provider>` will do today, and
+where to fall back to API keys when device flow is unavailable.
+
+| Provider   | OAuth device flow | API key env var      | Console URL                                   |
+|------------|-------------------|----------------------|-----------------------------------------------|
+| Anthropic  | Not supported     | `ANTHROPIC_API_KEY`  | <https://console.anthropic.com/account/keys>  |
+| OpenAI     | Not supported     | `OPENAI_API_KEY`     | <https://platform.openai.com/api-keys>        |
+| OpenRouter | Supported         | `OPENROUTER_API_KEY` | <https://openrouter.ai/keys>                  |
+| xAI        | Supported         | `XAI_API_KEY`        | <https://console.x.ai/>                       |
+
+Running `chimera auth login anthropic` (or `openai`) without explicit
+`--client-id` / `--device-url` / `--token-url` overrides exits with code `2`
+and prints a friendly hint pointing at the API-key env var. If you have your
+own private OAuth client registered with the provider, pass all three
+overrides and the same flow runs against your endpoints.
+
 ## OAuth 2.0 device flow
 
 For providers that publish a public OAuth client, you can authenticate without
@@ -56,12 +75,12 @@ chimera auth logout openrouter       # remove a credential
 
 ### Provider presets
 
-| Provider     | Status                          | Notes |
-|--------------|---------------------------------|-------|
-| `openrouter` | Public client baked in          | Scope: `completion` |
-| `xai`        | Public client baked in          | Scope: `api` |
-| `anthropic`  | Placeholder — overrides required | No public device-flow client published |
-| `openai`     | Placeholder — overrides required | No public device-flow client published |
+| Provider     | Status                              | Notes |
+|--------------|-------------------------------------|-------|
+| `openrouter` | Public client baked in              | Scope: `completion` |
+| `xai`        | Public client baked in              | Scope: `api` |
+| `anthropic`  | Scaffold only — use `ANTHROPIC_API_KEY` | No public device-flow client; CLI exits 2 with API-key hint |
+| `openai`     | Scaffold only — use `OPENAI_API_KEY`    | No public device-flow client; CLI exits 2 with API-key hint |
 
 ### Custom client / endpoints
 

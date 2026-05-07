@@ -1,0 +1,41 @@
+{
+  "_note": "EXAMPLE INDEX - these plugins do not exist; replace with your own",
+  "_schema_version": 1,
+  "_docs": "https://0bserver07.github.io/chimera/plugins-index/",
+  "_generated": "2026-05-05",
+  "plugins": [
+    {
+      "name": "rufflint-hooks",
+      "version": "1.0.0",
+      "description": "EXAMPLE - Pre-commit hook bundle wiring ruff into the otter PostToolUse pipeline.",
+      "author": "Example Author",
+      "url": "https://example.com/plugins/rufflint-hooks-1.0.0.tar.gz",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "tags": ["lint", "hooks", "example"],
+      "downloads": 0,
+      "rating": 0.0
+    },
+    {
+      "name": "swebench-runner",
+      "version": "0.3.1",
+      "description": "EXAMPLE - Wraps the chimera eval harness so SWE-bench tasks ship as a one-shot agent skill.",
+      "author": "Example Org",
+      "url": "https://example.com/plugins/swebench-runner-0.3.1.tar.gz",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "tags": ["benchmark", "eval", "example"],
+      "downloads": 0,
+      "rating": 0.0
+    },
+    {
+      "name": "vault-secrets",
+      "version": "2.1.0",
+      "description": "EXAMPLE - Pulls API keys from Hashicorp Vault into the chimera secrets registry at startup.",
+      "author": "Example Co",
+      "url": "https://example.com/plugins/vault-secrets-2.1.0.tar.gz",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "tags": ["secrets", "auth", "example"],
+      "downloads": 0,
+      "rating": 0.0
+    }
+  ]
+}

@@ -86,8 +86,15 @@ def _make_index(target: Path, plugins: list[dict[str, object]]) -> Path:
 # ---------------------------------------------------------------------------
 
 
-def test_resolve_index_url_default(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_resolve_index_url_default(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """With no env / no config / no override, resolution falls all the way
+    through to ``DEFAULT_INDEX_URL`` (which is intentionally ``None``)."""
     monkeypatch.delenv("CHIMERA_PLUGIN_INDEX", raising=False)
+    # Redirect $CHIMERA_CONFIG_HOME at an empty dir so any host-side
+    # ``~/.chimera/config.toml`` cannot leak ``plugin_index`` in.
+    monkeypatch.setenv("CHIMERA_CONFIG_HOME", str(tmp_path))
     assert resolve_index_url() == DEFAULT_INDEX_URL
 
 
