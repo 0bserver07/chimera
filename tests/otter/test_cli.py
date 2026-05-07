@@ -222,11 +222,18 @@ def test_run_dispatches_agents_subcommand(capsys) -> None:
     agents:`` prefix is gone — the real error text now mentions the
     unresolved name and the search paths. We keep the rc==2 contract
     and assert on the unresolved name plus a search-path fragment.
+
+    WHY: target was "reviewer" before W13-G8 added a built-in
+    ``reviewer`` subagent profile to the default registry — the
+    handler now resolves that name and returns 0. We pin a name that
+    is guaranteed not to exist so the rc=2 unresolved path stays
+    exercised.
     """
-    rc = otter_cli.run(_ns(subcommand="agents", sub_action="show", sub_target="reviewer"))
+    target = "definitely-not-an-agent-xyz"
+    rc = otter_cli.run(_ns(subcommand="agents", sub_action="show", sub_target=target))
     assert rc == 2
     captured = capsys.readouterr()
-    assert "reviewer" in captured.err
+    assert target in captured.err
     assert ".opencode/agent" in captured.err or "not found" in captured.err
 
 
