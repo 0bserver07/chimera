@@ -146,9 +146,9 @@ def _ns(model: str = "anthropic/claude-sonnet-4") -> argparse.Namespace:
 @pytest.mark.parametrize(
     ("module_path", "expected_title"),
     [
-        ("chimera.otter.providers", "chimera otter 0.5.0"),
-        ("chimera.ferret.providers", "chimera ferret 0.5.0"),
-        ("chimera.weasel.providers", "chimera weasel 0.5.0"),
+        ("chimera.otter.providers", "chimera otter 0.6.0"),
+        ("chimera.ferret.providers", "chimera ferret 0.6.0"),
+        ("chimera.weasel.providers", "chimera weasel 0.6.0"),
     ],
 )
 def test_cli_chain_sets_openrouter_headers(

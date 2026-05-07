@@ -2,7 +2,7 @@
 
 AI that reads, writes, edits, and iterates on code with tests. Chimera is a Python library for building these tools yourself, plus a ready-to-run coding agent on top of it.
 
-**Status: Alpha** — 3922 passing tests. Reproducible benchmarks with GLM-5.1: HumanEval 66.5% pass@1 (109/164), SWE-bench Lite 10% (2/20, top-20 smallest patches). Raw results in `data/`.
+**Status: Alpha** — 7665 passing tests, 62 skipped (live integration tests excluded; v0.6.0 baseline measured 2026-05-07). Reproducible benchmarks with GLM-5.1: HumanEval 66.5% pass@1 (109/164), SWE-bench Lite 10% (2/20, top-20 smallest patches). Raw results in `data/`.
 
 ## Who This Is For
 
@@ -24,14 +24,14 @@ Chimera gives you two things:
 
 ## Install
 
-Latest release: **v0.3.0** ([release notes](https://github.com/0bserver07/chimera/releases/tag/v0.3.0)).
+Latest release: **v0.6.0** ([release notes](https://github.com/0bserver07/chimera/releases/tag/v0.6.0)).
 
 Not yet on PyPI. Install from source:
 
 ```bash
-pip install "git+https://github.com/0bserver07/chimera.git@v0.3.0#egg=chimera-run[anthropic]"   # GLM-5 / Anthropic-compatible
-pip install "git+https://github.com/0bserver07/chimera.git@v0.3.0#egg=chimera-run[openai]"      # GPT
-pip install "git+https://github.com/0bserver07/chimera.git@v0.3.0#egg=chimera-run[all]"         # anthropic + openai + browser + remote
+pip install "git+https://github.com/0bserver07/chimera.git@v0.6.0#egg=chimera-run[anthropic]"   # GLM-5 / Anthropic-compatible
+pip install "git+https://github.com/0bserver07/chimera.git@v0.6.0#egg=chimera-run[openai]"      # GPT
+pip install "git+https://github.com/0bserver07/chimera.git@v0.6.0#egg=chimera-run[all]"         # anthropic + openai + browser + remote
 ```
 
 Requires Python 3.11+. A `chimera-run` PyPI release is planned post-alpha.
