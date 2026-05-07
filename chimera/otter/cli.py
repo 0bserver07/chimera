@@ -29,6 +29,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from chimera.cli.help_long import register_argument
 from chimera.errors import friendly_errors
 
 # WHY: only stdlib + chimera at import time. Provider deps (httpx, anthropic,
@@ -46,7 +47,22 @@ Anthropic provider auto-detection.
 """
 
 _VALID_OUTPUT_FORMATS = ("text", "json", "stream-json")
-_VALID_SUBCOMMANDS = (None, "serve", "sessions", "share", "agents", "bench", "mcp")
+# WHY (W14-2): worktree, stats, export, import, skills are otter Tier-1
+# polish (research/W12-3-OPENCODE-GAP.md G5/G7/G8/G9/G10).
+_VALID_SUBCOMMANDS = (
+    None,
+    "serve",
+    "sessions",
+    "share",
+    "agents",
+    "bench",
+    "mcp",
+    "worktree",
+    "stats",
+    "export",
+    "import",
+    "skills",
+)
 # WHY (O18): ``bench`` repurposes the ``sub_action`` positional slot for
 # the benchmark name (``humaneval`` / ``tau-bench``). The choices below
 # are the union of all sub_action shapes any otter subcommand accepts so
@@ -71,6 +87,10 @@ _VALID_SUB_ACTIONS = (
     # WHY (O4-W9): ``rename`` lets ``otter sessions rename <id> <title>``
     # update the title key in summary.json after the run finished.
     "rename",
+    # WHY (W14-2): worktree / skills sub-actions reuse the same slot
+    # so argparse's ``choices`` validation keeps working.
+    "remove",
+    "fetch",
 )
 
 
@@ -349,18 +369,25 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     cost_group = sessions_grp  # A10-W11: keep cost flags inline
 
     # WHY: env precedence is --model > $OTTER_MODEL > _DEFAULT_MODEL.
-    core.add_argument(
+    # W14-9: routed through ``register_argument`` so future verbose
+    # ``help=`` strings auto-promote to ``_LONG_HELP`` and never bloat
+    # the 50-line ceiling on ``chimera otter --help``.
+    register_argument(
+        core,
         "--model",
         default=os.environ.get("OTTER_MODEL") or _DEFAULT_MODEL,
         metavar="MODEL",
+        long_help=_LONG_HELP,
         help="Model id (default: $OTTER_MODEL).",
     )
-    core.add_argument(
+    register_argument(
+        core,
         "-p",
         "--print",
         dest="print_mode",
         default=None,
         metavar="PROMPT",
+        long_help=_LONG_HELP,
         help="One-shot: run PROMPT, print, exit.",
     )
     # WHY (O4-W9): hand-authored ``--title`` for sessions list label.
@@ -373,56 +400,72 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         help=argparse.SUPPRESS,
     )
     # WHY (O3-W9): ``--file/-f`` attaches file contents to the prompt.
-    core.add_argument(
+    register_argument(
+        core,
         "-f",
         "--file",
         dest="files",
         action="append",
         default=None,
         metavar="PATH",
+        long_help=_LONG_HELP,
         help="With -p: attach file (repeatable; '-' = stdin).",
     )
-    output.add_argument(
+    register_argument(
+        output,
         "--output-format",
         choices=list(_VALID_OUTPUT_FORMATS),
         default="text",
         metavar="FMT",
+        long_help=_LONG_HELP,
         help="text | json | stream-json (default: text).",
     )
-    behavior.add_argument(
+    register_argument(
+        behavior,
         "--max-steps",
         type=int,
         default=50,
         metavar="N",
+        long_help=_LONG_HELP,
         help="Max agent steps per turn (default: 50).",
     )
-    core.add_argument(
+    register_argument(
+        core,
         "--cwd",
         default=None,
+        long_help=_LONG_HELP,
         help="Working directory (default: cwd).",
     )
-    behavior.add_argument(
+    register_argument(
+        behavior,
         "--allowed-tools",
         default="",
         metavar="LIST",
+        long_help=_LONG_HELP,
         help="Comma tool allowlist (empty = all).",
     )
-    output.add_argument(
+    register_argument(
+        output,
         "--no-rich",
         action="store_true",
         default=False,
+        long_help=_LONG_HELP,
         help="Force plain stream handler even on TTY.",
     )
-    output.add_argument(
+    register_argument(
+        output,
         "--no-color",
         action="store_true",
         default=False,
+        long_help=_LONG_HELP,
         help="Synonym for --no-rich (honors $NO_COLOR).",
     )
-    persistence.add_argument(
+    register_argument(
+        persistence,
         "--no-save",
         action="store_true",
         default=False,
+        long_help=_LONG_HELP,
         help="Don't persist the one-shot run to eventlog.",
     )
     # WHY (W5): LSP tools opt-out. Hidden from --help; see --help-long.
@@ -447,52 +490,66 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         default=False,
         help=argparse.SUPPRESS,
     )
-    persistence.add_argument(
+    register_argument(
+        persistence,
         "--run-id",
         default=None,
         metavar="ID",
+        long_help=_LONG_HELP,
         help="Override auto-generated run id for eventlog dir.",
     )
     # WHY (C1, wave 9): --resume / --continue.
-    persistence.add_argument(
+    register_argument(
+        persistence,
         "--resume",
         default=None,
         metavar="ID",
+        long_help=_LONG_HELP,
         help="Resume a persisted otter run by id.",
     )
-    persistence.add_argument(
+    register_argument(
+        persistence,
         "-c",
         "--continue",
         dest="continue_latest",
         action="store_true",
         default=False,
+        long_help=_LONG_HELP,
         help="Resume the newest otter run under cwd.",
     )
     # WHY: ``--acp`` re-routes ``serve`` to the JSON-RPC ACP server.
-    serve_grp.add_argument(
+    register_argument(
+        serve_grp,
         "--acp",
         action="store_true",
         default=False,
+        long_help=_LONG_HELP,
         help="serve: ACP JSON-RPC over stdio (vs HTTP).",
     )
     # WHY: HTTP serve flags.
-    serve_grp.add_argument(
+    register_argument(
+        serve_grp,
         "--host",
         default=None,
         metavar="HOST",
+        long_help=_LONG_HELP,
         help="serve (HTTP): bind host (default: 127.0.0.1).",
     )
-    serve_grp.add_argument(
+    register_argument(
+        serve_grp,
         "--port",
         type=int,
         default=None,
         metavar="PORT",
+        long_help=_LONG_HELP,
         help="serve (HTTP): bind port (default: 5173).",
     )
-    serve_grp.add_argument(
+    register_argument(
+        serve_grp,
         "--auth-token",
         default=None,
         metavar="TOKEN",
+        long_help=_LONG_HELP,
         help="serve (HTTP): bearer token required on requests.",
     )
     # WHY (O-SERVER-3): TLS pair. Hidden from --help; see --help-long.
@@ -550,21 +607,30 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         default=False,
         help=argparse.SUPPRESS,
     )
-    parser.add_argument(
+    register_argument(
+        parser,
         "subcommand",
         nargs="?",
         default=None,
         choices=list(_VALID_SUBCOMMANDS),
         metavar="SUBCOMMAND",
+        long_help=_LONG_HELP,
         help="serve | sessions | share | agents | bench | mcp.",
     )
+    # WHY (W14-2): the ``sub_action`` slot doubles as a positional value
+    # for subcommands like ``share <SESSION_ID>`` / ``export <ID>`` /
+    # ``import <FILE>`` / ``worktree create <NAME>``. Constraining
+    # ``choices`` to a fixed list (the wave-1 design) blocked those
+    # surfaces because argparse validates the slot value before
+    # dispatch. We drop ``choices`` so each handler can validate its
+    # own action; ``_VALID_SUB_ACTIONS`` is now an informational
+    # constant for grep / docs.
     parser.add_argument(
         "sub_action",
         nargs="?",
         default=None,
-        choices=list(_VALID_SUB_ACTIONS),
         metavar="ACTION",
-        help="list | show | create | cost | <suite>.",
+        help="list | show | create | cost | <suite> | <id>.",
     )
     parser.add_argument(
         "sub_target",
@@ -613,64 +679,80 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         help=argparse.SUPPRESS,
     )
     # WHY (O18 / G6): bench + sessions cost flags.
-    sessions_grp.add_argument(
+    register_argument(
+        sessions_grp,
         "--since",
         dest="sessions_since",
         default=None,
         metavar="WINDOW",
+        long_help=_LONG_HELP,
         help="sessions cost/list: window (e.g. 7d / ISO).",
     )
-    sessions_grp.add_argument(
+    register_argument(
+        sessions_grp,
         "--format",
         dest="sessions_format",
         choices=["text", "json", "csv"],
         default="text",
         metavar="FMT",
+        long_help=_LONG_HELP,
         help="sessions cost: text | json | csv (default: text).",
     )
-    sessions_grp.add_argument(
+    register_argument(
+        sessions_grp,
         "--sessions-model",
         dest="sessions_model",
         default=None,
         metavar="STR",
+        long_help=_LONG_HELP,
         help="sessions list/cost: model substring filter.",
     )
-    sessions_grp.add_argument(
+    register_argument(
+        sessions_grp,
         "--sessions-limit",
         dest="sessions_limit_flag",
         type=int,
         default=None,
         metavar="N",
+        long_help=_LONG_HELP,
         help="sessions list/cost: row cap (newest first).",
     )
-    sessions_grp.add_argument(
+    register_argument(
+        sessions_grp,
         "--sessions-json",
         dest="sessions_json",
         action="store_true",
         default=False,
+        long_help=_LONG_HELP,
         help="sessions list/show: emit JSON instead of table.",
     )
     # B9-W11: cross-CLI session listing.
-    sessions_grp.add_argument(
+    register_argument(
+        sessions_grp,
         "--all-clis",
         dest="sessions_all_clis",
         action="store_true",
         default=False,
+        long_help=_LONG_HELP,
         help="sessions list: include all CLIs' sessions.",
     )
-    sessions_grp.add_argument(
+    register_argument(
+        sessions_grp,
         "--bench-limit",
         dest="bench_limit",
         type=int,
         default=5,
         metavar="N",
+        long_help=_LONG_HELP,
         help="bench: max tasks (default: 5; 0 = full run).",
     )
-    sessions_grp.add_argument(
+    register_argument(
+        sessions_grp,
         "--bench-domain",
         dest="bench_domain",
         default="airline",
         metavar="DOMAIN",
+        long_help=_LONG_HELP,
         help="bench tau-bench: domain (default: airline).",
     )
     # WHY (server-mgmt): ``serve stop`` knobs. Hidden from --help.
@@ -690,20 +772,120 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         help=argparse.SUPPRESS,
     )
     # WHY (A8 — wave 11): pre-flight cost estimation.
-    cost_group.add_argument(
+    register_argument(
+        cost_group,
         "--estimate-cost",
         dest="estimate_cost",
         action="store_true",
         default=False,
+        long_help=_LONG_HELP,
         help="With -p: print cost estimate and exit.",
     )
-    cost_group.add_argument(
+    register_argument(
+        cost_group,
         "--max-cost",
         dest="max_cost",
         type=float,
         default=None,
         metavar="USD",
+        long_help=_LONG_HELP,
         help="Refuse turns over USD (one-shot or REPL).",
+    )
+    # WHY (W14-2): polish-tier flags. Hidden from --help to keep the
+    # short usage stable; full descriptions live in --help-long.
+    polish = parser.add_argument_group("Polish (W14-2)")
+    polish.add_argument(
+        "--worktree-branch",
+        dest="worktree_branch",
+        default=None,
+        metavar="BRANCH",
+        help=argparse.SUPPRESS,
+    )
+    polish.add_argument(
+        "--worktree-repo",
+        dest="worktree_repo",
+        default=None,
+        metavar="PATH",
+        help=argparse.SUPPRESS,
+    )
+    polish.add_argument(
+        "--worktree-force",
+        dest="worktree_force",
+        action="store_true",
+        default=False,
+        help=argparse.SUPPRESS,
+    )
+    polish.add_argument(
+        "--worktree-json",
+        dest="worktree_json",
+        action="store_true",
+        default=False,
+        help=argparse.SUPPRESS,
+    )
+    polish.add_argument(
+        "--stats-since",
+        dest="stats_since",
+        default=None,
+        metavar="WINDOW",
+        help=argparse.SUPPRESS,
+    )
+    polish.add_argument(
+        "--stats-model",
+        dest="stats_model",
+        default=None,
+        metavar="STR",
+        help=argparse.SUPPRESS,
+    )
+    polish.add_argument(
+        "--stats-format",
+        dest="stats_format",
+        choices=["text", "json"],
+        default=None,
+        metavar="FMT",
+        help=argparse.SUPPRESS,
+    )
+    polish.add_argument(
+        "--export-format",
+        dest="export_format",
+        choices=["json", "md", "markdown", "html"],
+        default=None,
+        metavar="FMT",
+        help=argparse.SUPPRESS,
+    )
+    polish.add_argument(
+        "--export-output",
+        dest="export_output",
+        default=None,
+        metavar="PATH",
+        help=argparse.SUPPRESS,
+    )
+    polish.add_argument(
+        "--import-overwrite",
+        dest="import_overwrite",
+        action="store_true",
+        default=False,
+        help=argparse.SUPPRESS,
+    )
+    polish.add_argument(
+        "--skills-index",
+        dest="skills_index",
+        default=None,
+        metavar="URL",
+        help=argparse.SUPPRESS,
+    )
+    polish.add_argument(
+        "--skills-cache",
+        dest="skills_cache",
+        default=None,
+        metavar="PATH",
+        help=argparse.SUPPRESS,
+    )
+    polish.add_argument(
+        "--skills-overwrite",
+        dest="skills_overwrite",
+        action="store_true",
+        default=False,
+        help=argparse.SUPPRESS,
     )
 
 
@@ -2400,6 +2582,82 @@ def _dispatch_mcp(args: argparse.Namespace) -> int:
     return dispatch_mcp(args)
 
 
+def _dispatch_worktree(args: argparse.Namespace) -> int:
+    """Wire ``chimera otter worktree {create|list|remove}`` (W14-2)."""
+    from chimera.otter.worktree import dispatch_worktree
+
+    return dispatch_worktree(args)
+
+
+def _dispatch_stats(args: argparse.Namespace) -> int:
+    """Wire ``chimera otter stats`` (W14-2)."""
+    from chimera.otter.stats import dispatch_stats
+
+    return dispatch_stats(args)
+
+
+def _dispatch_export(args: argparse.Namespace) -> int:
+    """Wire ``chimera otter export <session-id> [--format ...]`` (W14-2)."""
+    from chimera.otter.export_import import dispatch_export
+
+    return dispatch_export(args)
+
+
+def _dispatch_import(args: argparse.Namespace) -> int:
+    """Wire ``chimera otter import <file>`` (W14-2)."""
+    from chimera.otter.export_import import dispatch_import
+
+    return dispatch_import(args)
+
+
+def _dispatch_skills(args: argparse.Namespace) -> int:
+    """Wire ``chimera otter skills fetch <URL>`` (W14-2 — remote index download)."""
+    action = (getattr(args, "sub_action", None) or "list").lower()
+    if action != "fetch":
+        print(
+            f"error: unknown 'skills' action: {action!r} "
+            "(supported: fetch)",
+            file=sys.stderr,
+        )
+        return 2
+    url = (
+        getattr(args, "skills_index", None)
+        or getattr(args, "sub_target", None)
+    )
+    if not url:
+        print(
+            "error: 'skills fetch' requires a URL "
+            "(via --skills-index or as a positional)",
+            file=sys.stderr,
+        )
+        return 2
+    from urllib.error import URLError
+
+    from chimera.skills.discovery import (
+        default_remote_cache,
+        download_remote_skills,
+    )
+
+    cache_dir = (
+        Path(getattr(args, "skills_cache")) if getattr(args, "skills_cache", None)
+        else default_remote_cache()
+    )
+    overwrite = bool(getattr(args, "skills_overwrite", False))
+    try:
+        skills = download_remote_skills(
+            url,
+            cache_dir=cache_dir,
+            overwrite=overwrite,
+        )
+    except (ValueError, URLError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(f"fetched {len(skills)} skills into {cache_dir}")
+    for s in skills:
+        print(f"  {s.name}  {s.description}")
+    return 0
+
+
 _SUBCOMMAND_DISPATCH: dict[str, Any] = {
     "serve": _dispatch_serve,
     "sessions": _dispatch_sessions,
@@ -2407,6 +2665,11 @@ _SUBCOMMAND_DISPATCH: dict[str, Any] = {
     "agents": _dispatch_agents,
     "bench": _dispatch_bench,
     "mcp": _dispatch_mcp,
+    "worktree": _dispatch_worktree,
+    "stats": _dispatch_stats,
+    "export": _dispatch_export,
+    "import": _dispatch_import,
+    "skills": _dispatch_skills,
 }
 
 

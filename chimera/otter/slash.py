@@ -627,16 +627,28 @@ def cmd_undo(session: Any, env: Any, args: str, out: PrintFn) -> None:
 
     steps = _parse_steps(args)
     rewound = 0
+    last_popped: CheckpointInfo | None = None
     while rewound < steps and state.undo_stack:
-        popped = state.undo_stack.pop()
-        state.redo_stack.append(popped)
+        last_popped = state.undo_stack.pop()
+        state.redo_stack.append(last_popped)
         rewound += 1
 
-    # Determine the target checkpoint to restore: the new top-of-stack, or
-    # the pre-turn-1 baseline if the stack is now empty.
+    # Determine the target checkpoint to restore. Three cases:
+    #   1. Stack still has entries → restore the new top.
+    #   2. Stack drained but at least one entry was popped → restore the
+    #      *earliest* popped entry (i.e. the bottom-of-stack baseline).
+    #      Without this, a multi-step ``--steps 99`` overshoot would
+    #      leave env state stranded at the post-turn-N value while the
+    #      conversation correctly resets to the pre-turn-1 baseline.
+    #   3. Nothing popped (defensive) → fall back to initial_messages.
     if state.undo_stack:
         target = state.undo_stack[-1]
         target_messages = state.message_snapshots.get(target.id, [])
+    elif last_popped is not None:
+        target = last_popped
+        target_messages = state.message_snapshots.get(
+            last_popped.id, state.initial_messages or [],
+        )
     else:
         target = None
         target_messages = state.initial_messages or []

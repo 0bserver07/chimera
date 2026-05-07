@@ -614,6 +614,18 @@ class OtterServer:
         )
         self._httpd: ThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
+        # WHY (W14-2): PTY routes; one manager per server instance so
+        # ``shutdown()`` reaps any running pseudo-terminals.
+        self._pty_manager: Any = None
+
+    @property
+    def pty_manager(self) -> Any:
+        """Lazy :class:`chimera.otter.pty.PtyManager` (W14-2)."""
+        if self._pty_manager is None:
+            from chimera.otter.pty import PtyManager
+
+            self._pty_manager = PtyManager()
+        return self._pty_manager
 
     # ------------------------------------------------------------------
     # Public lifecycle
@@ -1715,6 +1727,27 @@ class OtterServer:
                         return self._handle_session_state(parts[2])
                     if len(parts) == 4 and parts[3] == "events":
                         return self._handle_session_events(parts[2])
+                    # WHY (W14-2): PTY routes layered under /session/<id>.
+                    # /session/<id>/pty/<pty_id>/output → drain stdout
+                    # /session/<id>/pty/<pty_id>/stream → SSE chunks
+                    if (
+                        len(parts) == 6
+                        and parts[3] == "pty"
+                        and parts[5] == "output"
+                    ):
+                        return self._handle_pty_output(parts[2], parts[4])
+                    if (
+                        len(parts) == 5
+                        and parts[3] == "pty"
+                        and parts[4] == "stream"
+                    ):
+                        return self._handle_pty_stream(parts[2], None)
+                    if (
+                        len(parts) == 6
+                        and parts[3] == "pty"
+                        and parts[5] == "stream"
+                    ):
+                        return self._handle_pty_stream(parts[2], parts[4])
                 self._send_json(404, {"error": "not_found", "path": path})
 
             def do_POST(self) -> None:  # noqa: N802 - stdlib API
@@ -1739,6 +1772,26 @@ class OtterServer:
                     #   parts == ["", "commands", "<name>", "invoke"]
                     if len(parts) == 4 and parts[3] == "invoke" and parts[2]:
                         return self._handle_command_invoke(parts[2])
+                # WHY (W14-2): PTY POST routes.
+                if path.startswith("/session/"):
+                    parts = path.split("/")
+                    # /session/<id>/pty/start
+                    if (
+                        len(parts) == 5
+                        and parts[3] == "pty"
+                        and parts[4] == "start"
+                    ):
+                        return self._handle_pty_start(parts[2])
+                    # /session/<id>/pty/<pty_id>/{input,resize,stop}
+                    if len(parts) == 6 and parts[3] == "pty":
+                        op = parts[5]
+                        pty_id = parts[4]
+                        if op == "input":
+                            return self._handle_pty_input(parts[2], pty_id)
+                        if op == "resize":
+                            return self._handle_pty_resize(parts[2], pty_id)
+                        if op == "stop":
+                            return self._handle_pty_stop(parts[2], pty_id)
                 self._send_json(404, {"error": "not_found", "path": path})
 
             def do_DELETE(self) -> None:  # noqa: N802 - stdlib API
@@ -2098,6 +2151,175 @@ class OtterServer:
                         "rendered": rendered,
                     },
                 )
+
+            # ------- PTY routes (W14-2) --------------------------------
+            def _handle_pty_start(self, session_id: str) -> None:
+                state = outer.get_session(session_id)
+                if state is None:
+                    self._send_json(404, {"error": "session_not_found"})
+                    return
+                body = self._read_json()
+                if body is None:
+                    return
+                command = body.get("command")
+                if not command:
+                    self._send_json(400, {"error": "missing_command"})
+                    return
+                cols = int(body.get("cols", 80) or 80)
+                rows = int(body.get("rows", 24) or 24)
+                env = body.get("env") if isinstance(body.get("env"), dict) else None
+                cwd = body.get("cwd") or state.working_dir or None
+                try:
+                    pty_session = outer.pty_manager.start(
+                        command,
+                        cols=cols,
+                        rows=rows,
+                        env=env,
+                        cwd=cwd,
+                    )
+                except (RuntimeError, ValueError) as exc:
+                    self._send_json(
+                        500, {"error": "pty_start_failed", "detail": str(exc)}
+                    )
+                    return
+                self._send_json(
+                    201,
+                    {
+                        "pty_id": pty_session.pty_id,
+                        "cols": pty_session.cols,
+                        "rows": pty_session.rows,
+                    },
+                )
+
+            def _handle_pty_input(self, session_id: str, pty_id: str) -> None:
+                state = outer.get_session(session_id)
+                if state is None:
+                    self._send_json(404, {"error": "session_not_found"})
+                    return
+                body = self._read_json()
+                if body is None:
+                    return
+                data = body.get("data")
+                if data is None:
+                    self._send_json(400, {"error": "missing_data"})
+                    return
+                try:
+                    written = outer.pty_manager.write(pty_id, str(data))
+                except KeyError:
+                    self._send_json(404, {"error": "pty_not_found"})
+                    return
+                self._send_json(200, {"written": written})
+
+            def _handle_pty_resize(self, session_id: str, pty_id: str) -> None:
+                state = outer.get_session(session_id)
+                if state is None:
+                    self._send_json(404, {"error": "session_not_found"})
+                    return
+                body = self._read_json()
+                if body is None:
+                    return
+                cols = int(body.get("cols", 0) or 0)
+                rows = int(body.get("rows", 0) or 0)
+                if cols <= 0 or rows <= 0:
+                    self._send_json(400, {"error": "invalid_dimensions"})
+                    return
+                try:
+                    outer.pty_manager.resize(pty_id, cols, rows)
+                except KeyError:
+                    self._send_json(404, {"error": "pty_not_found"})
+                    return
+                self._send_json(200, {"cols": cols, "rows": rows})
+
+            def _handle_pty_output(self, session_id: str, pty_id: str) -> None:
+                state = outer.get_session(session_id)
+                if state is None:
+                    self._send_json(404, {"error": "session_not_found"})
+                    return
+                try:
+                    data, exit_code = outer.pty_manager.read(pty_id)
+                except KeyError:
+                    self._send_json(404, {"error": "pty_not_found"})
+                    return
+                self._send_json(
+                    200,
+                    {
+                        "data": data.decode("utf-8", errors="replace"),
+                        "exit": exit_code,
+                    },
+                )
+
+            def _handle_pty_stop(self, session_id: str, pty_id: str) -> None:
+                state = outer.get_session(session_id)
+                if state is None:
+                    self._send_json(404, {"error": "session_not_found"})
+                    return
+                exit_code = outer.pty_manager.stop(pty_id, timeout=2.0)
+                if exit_code is None:
+                    self._send_json(404, {"error": "pty_not_found"})
+                    return
+                self._send_json(200, {"exit_code": exit_code})
+
+            def _handle_pty_stream(
+                self, session_id: str, pty_id: str | None
+            ) -> None:
+                """SSE stream of stdout chunks for a running PTY.
+
+                ``pty_id`` may be ``None`` (path ``/session/<id>/pty/stream``)
+                — in that case we require ``?pty_id=<...>`` on the query string,
+                so a browser-side ``EventSource`` can attach without a
+                non-trivial url builder.
+                """
+                state = outer.get_session(session_id)
+                if state is None:
+                    self._send_json(404, {"error": "session_not_found"})
+                    return
+                if pty_id is None:
+                    qs = self.path.split("?", 1)[1] if "?" in self.path else ""
+                    params = urllib.parse.parse_qs(qs)
+                    candidates = params.get("pty_id", [])
+                    if not candidates:
+                        self._send_json(400, {"error": "missing_pty_id"})
+                        return
+                    pty_id = candidates[0]
+                try:
+                    queue = outer.pty_manager.subscribe(pty_id)
+                except KeyError:
+                    self._send_json(404, {"error": "pty_not_found"})
+                    return
+
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream")
+                self.send_header("Cache-Control", "no-cache")
+                self.send_header("Connection", "keep-alive")
+                self.end_headers()
+                try:
+                    while True:
+                        chunk = queue.get()
+                        if not chunk:
+                            # End-of-stream marker pushed by the manager.
+                            try:
+                                self.wfile.write(b"event: end\ndata: {}\n\n")
+                                self.wfile.flush()
+                            except OSError:
+                                pass
+                            return
+                        payload = json.dumps(
+                            {
+                                "data": chunk.decode("utf-8", errors="replace"),
+                            }
+                        )
+                        try:
+                            self.wfile.write(
+                                f"data: {payload}\n\n".encode("utf-8")
+                            )
+                            self.wfile.flush()
+                        except OSError:
+                            return
+                finally:
+                    try:
+                        outer.pty_manager.unsubscribe(pty_id, queue)
+                    except KeyError:
+                        pass
 
         return _Handler
 
