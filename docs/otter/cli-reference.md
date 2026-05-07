@@ -252,6 +252,35 @@ chimera otter bench tau-bench --bench-domain mock --bench-limit 10
 
 `humaneval` runs out-of-the-box. `tau-bench` requires a local dataset staged under `~/.chimera/datasets/tau-bench/`; the runner emits a clear `NotImplementedError` with staging instructions when the dataset is absent.
 
+## Cost estimation
+
+Two flags wire pre-flight cost estimation into the one-shot `-p` path. Both rely on the longest-prefix-match pricing table in `chimera/providers/cost.py:PRICING`. Token counts use the chars-÷-4 rule of thumb — a useful ceiling, not a bill.
+
+```bash
+# Print an estimate and exit without running the agent:
+chimera otter -p "refactor utils.py" --estimate-cost --model glm-5
+# → Estimated cost: $0.0164 (5 input tokens, 2048 expected output tokens, glm-5)
+
+# JSON form (honors --output-format json):
+chimera otter -p "..." --estimate-cost --output-format json --model glm-5
+
+# Refuse to run when the estimate exceeds the cap:
+chimera otter -p "..." --max-cost 0.01 --model glm-5
+# → Refusing to run: estimated $0.0164 exceeds --max-cost $0.0100  (rc=2)
+```
+
+| Flag | Default | Description |
+|---|---|---|
+| `--estimate-cost` | off | Print a dollar/token estimate from the prompt + chosen model and exit `rc=0` without running the agent. |
+| `--max-cost USD` | unset | Refuse to run with `rc=2` when the pre-flight estimate exceeds USD. |
+
+Caveats:
+
+- **Pricing-table coverage**: only models listed in `PRICING` are estimable. Unknown models exit `rc=2` with a friendly stderr hint pointing at the pricing file. With `--max-cost` set against an uncosted model the gate fails closed.
+- **Token heuristic**: chars-÷-4 is good to ~10–20% on English prose; less accurate on dense code or non-Latin scripts. Use the reported number as a ceiling for budget guards, not as a final invoice.
+- **Scope**: A8 wires both flags only on the one-shot `-p` path. REPL gating (per-turn estimation in interactive mode) is intentionally deferred to keep this PR small; track in the wave-12 backlog.
+- **Output buckets**: the default `expected_output_tokens=2048` matches a typical agent reply with embedded tool calls. Tune in code (Python embedders) when pre-estimating long-form generation jobs.
+
 ## Exit codes
 
 | Code | Meaning |

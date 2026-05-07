@@ -107,8 +107,39 @@ async with app.run_test() as pilot:
     await pilot.pause()
 ```
 
+## Auto-launch behavior (wave 11)
+
+As of wave-11 the TUI is the default front-end whenever `chimera otter`
+detects an interactive terminal *and* the `[tui]` extra is importable.
+The dispatch in [`chimera/otter/cli.py`](../../chimera/otter/cli.py)
+runs through this priority order before deciding which path to take:
+
+1. `--no-tui` flag, or `CHIMERA_NO_TUI=1` in the environment →
+   readline REPL (no textual import attempted).
+2. `--tui` flag → textual TUI; if the extra is missing, a friendly
+   stderr error fires and the process exits with code `2`.
+3. `sys.stdout.isatty()` returns `True` *and* `import textual`
+   succeeds (cached at module scope) → textual TUI plus a one-line
+   stderr hint:
+
+   ```
+   otter: TUI activated. Use --no-tui to disable, or set CHIMERA_NO_TUI=1.
+   ```
+
+4. Anything else (non-TTY stdout, pipes, CI runners, missing `[tui]`
+   extra) → readline REPL.
+
+The `import textual` probe is cached in
+`chimera.otter.cli._TEXTUAL_AVAILABLE` so the negative branch is a
+single attribute read after the first call. Tests can reset that
+sentinel via `monkeypatch.setattr` to exercise either path
+deterministically — see `tests/otter/test_tui_default.py` for the
+canonical examples.
+
 ## Status
 
 - ![status: prototype](https://img.shields.io/badge/status-prototype-orange)
-- Default REPL stays readline-based; TUI is opt-in via `--tui`.
-- See `tests/otter/test_tui.py` for runnable usage examples.
+- TUI auto-launches on TTYs with `[tui]` installed; readline REPL is
+  the fallback (and the documented opt-out via `--no-tui`).
+- See `tests/otter/test_tui.py` for runnable usage examples and
+  `tests/otter/test_tui_default.py` for the dispatch decision tree.

@@ -5,7 +5,7 @@ description: Install otter, run your first one-shot turn, drop into the REPL, an
 
 # `chimera otter` Quickstart
 
-`chimera otter` is the second Chimera coding-agent CLI. Where [`chimera mink`](../mink/quickstart.md) mirrors a TUI-first agent, otter mirrors a server-first / multi-client open-source agent: a single ReAct loop that you can drive from a one-shot CLI, an interactive REPL, an HTTP server with SSE streaming, or an ACP JSON-RPC transport — backed by the same `LoopConfig`, tool registry, and event-sourced session store the rest of Chimera uses.
+`chimera otter` is the second Chimera coding-agent CLI. Where [`chimera mink`](../mink/quickstart.md) mirrors a TUI-first agent, otter mirrors a server-first / multi-client open-source agent: a single ReAct loop that you can drive from a one-shot CLI, an interactive REPL, an HTTP server with SSE streaming, or an ACP JSON-RPC transport — backed by the same `LoopConfig`, tool registry, and event-sourced session store the rest of Chimera uses. Run `chimera otter --help-long` to see verbose per-flag descriptions; `--help` itself stays under 50 lines for scannability.
 
 This page walks the four entry points end-to-end. For deeper dives, see:
 
@@ -174,6 +174,24 @@ Everything is local and plaintext. No remote telemetry. To purge old runs:
 ```bash
 rm -rf ~/.chimera/eventlog/otter-*
 ```
+
+## TUI default (wave 11)
+
+Bare `chimera otter` (no `-p`, no subcommand) picks one of two
+interactive front-ends:
+
+- **Textual TUI** when stdout is a TTY *and* the optional `[tui]` extra
+  is installed (`pip install chimera-run[tui]`). A one-line stderr
+  hint reminds you how to opt out.
+- **Readline REPL** otherwise — non-TTY stdout (CI, pipes, captured
+  output) falls back automatically, and so does any TTY where the
+  `[tui]` extra is missing.
+
+To force the readline REPL even on a TTY with the extra installed,
+pass `--no-tui` or set `CHIMERA_NO_TUI=1` in the environment. To force
+the textual TUI from a non-TTY context (e.g. tmux split), pass `--tui`
+explicitly. See [`tui.md`](tui.md) for the auto-launch decision tree
+and key bindings.
 
 ## Where to go next
 

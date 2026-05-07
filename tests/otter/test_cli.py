@@ -230,12 +230,32 @@ def test_run_dispatches_agents_subcommand(capsys) -> None:
     assert ".opencode/agent" in captured.err or "not found" in captured.err
 
 
-def test_run_with_no_args_emits_usage_hint(capsys) -> None:
-    """Bare ``chimera otter`` (no -p, no subcommand) should print a usage hint."""
+def test_run_with_no_args_routes_to_readline_repl(monkeypatch) -> None:
+    """Bare ``chimera otter`` (no -p, no subcommand) routes to the REPL.
+
+    Wave-11 A9 replaced the legacy "REPL not yet wired" placeholder with
+    a dispatch that picks the readline REPL on non-TTY stdout (the
+    pytest case) and the textual TUI on a TTY when ``[tui]`` is
+    available. We monkeypatch the readline sink so the test does not
+    actually drop into ``input()`` waiting on stdin.
+    """
+    calls: list[object] = []
+
+    def _fake_readline(args: object) -> int:
+        calls.append(args)
+        return 0
+
+    monkeypatch.setattr(otter_cli, "_run_readline_repl", _fake_readline)
+    # Force the auto-launch probe to "no textual" so this test stays
+    # deterministic regardless of whether the [tui] extra is installed
+    # in the developer's environment. pytest also captures stdout so
+    # ``isatty()`` is already False, but belt-and-braces.
+    monkeypatch.setattr(otter_cli, "_textual_available", lambda: False)
+    monkeypatch.delenv("CHIMERA_NO_TUI", raising=False)
+
     rc = otter_cli.run(_ns())
-    assert rc == 2
-    captured = capsys.readouterr()
-    assert "interactive REPL" in captured.err or "--print" in captured.err
+    assert rc == 0
+    assert len(calls) == 1
 
 
 # ---------------------------------------------------------------------------

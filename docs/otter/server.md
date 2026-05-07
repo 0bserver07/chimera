@@ -794,3 +794,131 @@ Pidfile management is opt-in: `OtterServer(pidfile_prefix="otter")` (or
 removes it on graceful shutdown. With `pidfile_prefix=None` (the
 default) no pidfile is touched, which is what you want for in-process
 test harnesses and library embedders.
+
+## Authentication (per-session tokens)
+
+Earlier sections cover the master `--auth-token` (a.k.a.
+`OTTER_SERVER_TOKEN`) Bearer model. Wave-11 layers per-session tokens
+on top so a multi-tenant front-end can hand a session-scoped credential
+to a less-privileged caller without leaking the master secret.
+
+### Token tiers
+
+| Tier | Source | Authorizes |
+|---|---|---|
+| Master | `--auth-token <SECRET>` (CLI flag) | Every route — admin, listing, every session, `rotate-token`. |
+| Per-session | Returned in `POST /session` response | Only `/session/<id>/...` routes for the *issuing* session id. |
+
+### `POST /session` response
+
+```json
+{
+  "session_id": "9c7b...",
+  "working_dir": "/repo",
+  "created_at": 1714500000.0,
+  "session_token": "Hk9-…43-byte-urlsafe-string"
+}
+```
+
+`session_token` is generated server-side by `secrets.token_urlsafe(32)`
+on every create — 32 bytes of entropy, URL-safe encoding. Each token is
+unique per session and unrelated to the master `--auth-token`.
+
+### Auth decision tree
+
+When `--auth-token` is configured:
+
+- `GET /healthz` — open (no auth required).
+- `POST /session`, `GET /session`, `GET /sessions`, `POST /tool/approve`,
+  `GET /commands*`, `POST /commands/<name>/invoke`, `GET /runs*` —
+  **master token only**.
+- `GET /session/<id>`, `POST /session/<id>/message`,
+  `POST /session/<id>/cancel`, `GET /session/<id>/events`,
+  `DELETE /session/<id>` — **master token OR session token for `<id>`**.
+- `POST /session/<id>/rotate-token` — **master token only**.
+  Presenting a session token returns `403 admin_only` (the request is
+  authenticated, just not privileged) rather than the generic `401
+  unauthorized` a wrong-session token receives.
+
+A session token presented for *another* session's id falls through to
+`401 unauthorized` — tokens are scoped to their issuing session id.
+
+### `POST /session/<id>/rotate-token`
+
+Rotates the per-session token. Master-token-only. Returns:
+
+```json
+{"session_token": "freshly-generated-token"}
+```
+
+The previous token is invalidated immediately — any subsequent request
+that still carries the old token returns `401 unauthorized`. Use this
+when handing off a session to a different operator, when a token is
+suspected leaked, or as part of a periodic rotation policy. `404
+session_not_found` when the session id is unknown.
+
+### Security note
+
+**Per-session tokens live in memory only.** They are *not* persisted to
+disk and are *not* recorded in the pidfile (which only stores a SHA-256
+hash of the master token). Restarting the server invalidates every
+outstanding session token along with every session, since the
+`OtterSessionManager` map is process-local. Clients that need to
+survive a restart should re-create their sessions and capture the new
+`session_token` from each `POST /session` response.
+
+### Library API
+
+```python
+from chimera.otter.server import OtterServer
+
+srv = OtterServer(agent_factory=..., auth_token="master-secret")
+srv.start(blocking=False)
+
+state = srv.create_session(working_dir="/repo")
+print(state.session_token)            # in-memory, scoped to state.session_id
+
+new = srv.rotate_session_token(state.session_id)
+assert new != state.session_token     # old token invalidated
+```
+
+`rotate_session_token` returns `None` for unknown ids; the HTTP route
+maps that to `404 session_not_found`.
+
+### Concurrency safety
+
+`write_pidfile` takes an exclusive **advisory file lock** when it
+opens the pidfile so two simultaneous `chimera otter serve --port
+5173` invocations cannot clobber each other's record. The locking
+primitive is `fcntl.flock(fd, LOCK_EX | LOCK_NB)` on POSIX and
+`msvcrt.locking(fd, LK_NBLCK, 1)` on Windows — both non-blocking, so
+the second invocation fails fast instead of hanging.
+
+When the lock is contended the function:
+
+1. Reads the existing PID off disk.
+2. If that PID names a *live* process, raises `PidfileLocked` with
+   the message `already running on port 5173, PID 12345`. The CLI
+   catches that exception and surfaces it to the user as the reason
+   `serve` refused to bind.
+3. If the PID is dead (the previous server crashed without
+   `remove_pidfile` running), the new caller takes over the lock and
+   overwrites the stale record. This keeps the pidfile self-healing
+   across crashes without requiring the user to delete it manually.
+
+The lock fd is held for the lifetime of the running server and
+released by `remove_pidfile` (LOCK_UN, then `close()`, then
+`unlink()`) on graceful shutdown — and again, automatically, when the
+process exits and the kernel closes the fd. The lock is therefore
+filesystem-level: a sibling process trying to `write_pidfile` on the
+same path sees `EAGAIN` immediately, regardless of any in-process
+state.
+
+**Windows caveat.** `msvcrt.locking` locks a single byte at the
+current offset and is mandatory (not advisory) on the locked range,
+so the contract is the same shape but the failure mode if a third
+party has the file open in a write mode may differ from POSIX. On
+exotic platforms where neither `fcntl` nor `msvcrt` is importable,
+locking degrades to a no-op and the function falls back to the
+pre-fix overwrite semantics — document this caveat for embedders
+deploying on minimal embedded runtimes.
