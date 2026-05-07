@@ -20,4 +20,8 @@ site/node_modules/
 site/.astro/
 runs/
 .chimera/
+.chimera_checkpoints/
 data/
+# research/ — uncommitted internal handoff, see research/POLICY.md
+research/*
+!research/POLICY.md
