@@ -34,6 +34,7 @@ import os
 import sys
 from typing import Any
 
+from chimera.cli.help_long import register_argument
 from chimera.errors import friendly_errors
 
 # WHY: stdlib + chimera at import time. Provider deps (anthropic, openai,
@@ -41,7 +42,7 @@ from chimera.errors import friendly_errors
 # helpers so ``chimera stoat --help`` and ``chimera stoat --version`` stay
 # cheap even when the SDKs aren't installed.
 
-_VERSION = "0.5.0"
+_VERSION = "0.6.0"
 """Stoat scaffold version. Independent of the chimera package version
 because stoat is a per-CLI release line (mirrors weasel/shrew)."""
 
@@ -168,6 +169,16 @@ _LONG_HELP: dict[str, str] = {
         "Chimera CLI (otter / ferret / weasel / shrew / mink / "
         "badger), not just stoat. Adds an ORIGIN column."
     ),
+    "-c / --continue": (
+        "Resume the most recent stoat session for the current cwd "
+        "(equivalent to '--session <newest-id>'). Mirrors otter / "
+        "ferret / weasel / shrew --continue semantics."
+    ),
+    "--session": (
+        "Resume an explicit stoat session by id "
+        "(e.g. stoat-20260507T101501-71032a5e). Wins over --continue "
+        "when both are passed."
+    ),
 }
 
 
@@ -175,7 +186,7 @@ def _resolve_version() -> str:
     """Return the stoat scaffold version for ``--version`` output.
 
     Returns:
-        ``"0.5.0"`` (the per-CLI release line) — independent of the
+        ``"0.6.0"`` (the per-CLI release line) — independent of the
         ``chimera-run`` package version. Mirrors weasel/shrew's per-CLI
         release cadence.
     """
@@ -220,87 +231,114 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     # WHY: env precedence is --model > $STOAT_MODEL > _DEFAULT_MODEL.
     # Lets CI / shells pin a model once while keeping ad-hoc --model
     # overrides cheap. Mirrors weasel's $WEASEL_MODEL pattern.
-    core.add_argument(
+    # W14-9: routed through ``register_argument`` so future verbose
+    # ``help=`` strings auto-promote to ``_LONG_HELP`` instead of bloating
+    # the 50-line ceiling on ``chimera stoat --help``.
+    register_argument(
+        core,
         "--model",
         default=os.environ.get("STOAT_MODEL") or _DEFAULT_MODEL,
+        long_help=_LONG_HELP,
         help=f"Model id (default: $STOAT_MODEL or {_DEFAULT_MODEL}).",
     )
-    core.add_argument(
+    register_argument(
+        core,
         "-p",
         "--print",
         dest="print_mode",
         metavar="PROMPT",
         default=None,
+        long_help=_LONG_HELP,
         help="One-shot: run PROMPT, print, exit.",
     )
-    core.add_argument(
+    register_argument(
+        core,
         "--mode",
         choices=list(_VALID_MODES),
         default="interactive",
+        long_help=_LONG_HELP,
         help="Mode (default: interactive).",
     )
     # WHY: shell-mode toggle is the headline feature. ``--shell-mode``
     # boots the REPL already in shell mode (Ctrl-X / /shell flips back).
-    behavior.add_argument(
+    register_argument(
+        behavior,
         "--shell-mode",
         dest="shell_mode",
         action="store_true",
         default=False,
+        long_help=_LONG_HELP,
         help="Start REPL in shell mode (toggle via /shell or Ctrl-X s).",
     )
-    behavior.add_argument(
+    register_argument(
+        behavior,
         "--plan-mode",
         dest="plan_mode",
         action="store_true",
         default=False,
+        long_help=_LONG_HELP,
         help="Start REPL in plan mode (planner posture, no actions).",
     )
-    core.add_argument(
+    register_argument(
+        core,
         "--cwd",
         default=None,
+        long_help=_LONG_HELP,
         help="Working directory (default: cwd).",
     )
-    behavior.add_argument(
+    register_argument(
+        behavior,
         "--max-steps",
         type=int,
         default=50,
         metavar="N",
+        long_help=_LONG_HELP,
         help="Max agent steps per turn (default: 50).",
     )
-    behavior.add_argument(
+    register_argument(
+        behavior,
         "--allowed-tools",
         default="",
         metavar="LIST",
+        long_help=_LONG_HELP,
         help="Comma tool allowlist (empty = all).",
     )
-    output.add_argument(
+    register_argument(
+        output,
         "--no-color",
         action="store_true",
         default=False,
+        long_help=_LONG_HELP,
         help="Disable ANSI colors (also honors $NO_COLOR).",
     )
-    output.add_argument(
+    register_argument(
+        output,
         "--no-rich",
         action="store_true",
         default=False,
+        long_help=_LONG_HELP,
         help="Force plain stream handler even on TTY.",
     )
-    output.add_argument(
+    register_argument(
+        output,
         "--json",
         dest="json_output",
         action="store_true",
         default=False,
+        long_help=_LONG_HELP,
         help="With -p: emit JSON envelope instead of text.",
     )
     # WHY: subcommand placeholders are positionals so the orchestrator
     # can route ``chimera stoat sessions list``, ``chimera stoat share
     # <id>``, etc. without re-parsing.
-    parser.add_argument(
+    register_argument(
+        parser,
         "subcommand",
         nargs="?",
         default=None,
         choices=list(_VALID_SUBCOMMANDS),
         metavar="SUBCOMMAND",
+        long_help=_LONG_HELP,
         help="serve | sessions | share | agents | bench.",
     )
     parser.add_argument(
@@ -320,60 +358,94 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     )
     # WHY: cost flags mirror mink/weasel/shrew so the rollup JSON/CSV/text
     # shape is byte-identical across CLIs.
-    persistence.add_argument(
+    register_argument(
+        persistence,
         "--since",
         dest="cost_since",
         default=None,
         metavar="WINDOW",
+        long_help=_LONG_HELP,
         help="sessions cost: cutoff (e.g. 7d / ISO).",
     )
-    persistence.add_argument(
+    register_argument(
+        persistence,
         "--cost-model",
         dest="cost_model",
         default=None,
         metavar="STR",
+        long_help=_LONG_HELP,
         help="sessions cost: model substring filter.",
     )
-    persistence.add_argument(
+    register_argument(
+        persistence,
         "--cost-format",
         dest="cost_format",
         choices=("text", "json", "csv"),
         default=None,
         metavar="FMT",
+        long_help=_LONG_HELP,
         help="sessions cost: text | json | csv.",
     )
-    persistence.add_argument(
+    register_argument(
+        persistence,
         "--cost-limit",
         dest="cost_limit",
         type=int,
         default=None,
         metavar="N",
+        long_help=_LONG_HELP,
         help="sessions cost: row cap (newest first).",
     )
     # Share knobs.
-    persistence.add_argument(
+    register_argument(
+        persistence,
         "--share-sink",
         dest="share_sink",
         choices=("file", "stdout"),
         default=None,
         metavar="SINK",
+        long_help=_LONG_HELP,
         help="share: file (default) | stdout.",
     )
-    persistence.add_argument(
+    register_argument(
+        persistence,
         "--share-format",
         dest="share_format",
         choices=("json", "md"),
         default=None,
         metavar="FMT",
+        long_help=_LONG_HELP,
         help="share: json (default) | md.",
     )
     # B9-W11: cross-CLI session listing.
-    persistence.add_argument(
+    register_argument(
+        persistence,
         "--all-clis",
         dest="sessions_all_clis",
         action="store_true",
         default=False,
+        long_help=_LONG_HELP,
         help="sessions list: include every Chimera CLI's sessions.",
+    )
+    # W14-3: --continue / --session — resume a prior stoat session.
+    register_argument(
+        persistence,
+        "-c",
+        "--continue",
+        dest="continue_latest",
+        action="store_true",
+        default=False,
+        long_help=_LONG_HELP,
+        help="Resume the newest stoat session for this cwd.",
+    )
+    register_argument(
+        persistence,
+        "--session",
+        dest="resume_session",
+        default=None,
+        metavar="ID",
+        long_help=_LONG_HELP,
+        help="Resume an explicit session id (wins over --continue).",
     )
 
 

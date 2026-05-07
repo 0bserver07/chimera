@@ -164,12 +164,15 @@ def test_run_entry_point_uses_namespace_attrs(monkeypatch) -> None:
             max_steps,
             start_in_shell_mode,
             start_in_plan_mode=False,
+            session_id="",
+            **_extra,
         ) -> None:
             captured["model"] = model
             captured["workdir"] = workdir
             captured["max_steps"] = max_steps
             captured["start_in_shell_mode"] = start_in_shell_mode
             captured["start_in_plan_mode"] = start_in_plan_mode
+            captured["session_id"] = session_id
 
         def run(self) -> int:
             return 0

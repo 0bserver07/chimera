@@ -53,7 +53,7 @@ _OLLAMA_BASE_URL = "http://127.0.0.1:11434"
 
 # WHY: cosmetic OpenRouter headers — same convention used by weasel.
 _OPENROUTER_DEFAULT_REFERER = "https://github.com/0bserver07/chimera"
-_OPENROUTER_DEFAULT_TITLE = "chimera stoat 0.5.0"
+_OPENROUTER_DEFAULT_TITLE = "chimera stoat 0.6.0"
 
 
 _NO_KEY_MESSAGE = (

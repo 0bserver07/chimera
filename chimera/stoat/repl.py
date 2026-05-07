@@ -31,6 +31,12 @@ import os
 import sys
 from typing import TYPE_CHECKING, Any, Callable, TextIO
 
+from chimera.stoat.hooks import (
+    build_emitter_from_path,
+    fire_session_end,
+    fire_session_start,
+    fire_user_prompt_submit,
+)
 from chimera.stoat.keybindings import ChordCallbacks, build_input_adapter
 from chimera.stoat.plan_mode import (
     Plan,
@@ -46,9 +52,25 @@ from chimera.stoat.shell_mode import (
 from chimera.stoat.slash import SlashPalette, build_default_palette
 
 if TYPE_CHECKING:
+    from chimera.hooks.emitter import HookEmitter
     from chimera.providers.base import Provider
 
-__all__ = ["StoatRepl", "run"]
+__all__ = [
+    "BRACKETED_PASTE_BEGIN",
+    "BRACKETED_PASTE_END",
+    "StoatRepl",
+    "coalesce_bracketed_paste",
+    "run",
+]
+
+
+# WHY: bracketed-paste mode (xterm) wraps multi-line pastes in these
+# escape sequences. Modern terminals enable it by default; the REPL
+# detects the markers and accumulates the wrapped chunk into a single
+# input event so users don't see one shell-mode subprocess per pasted
+# line.
+BRACKETED_PASTE_BEGIN = "\x1b[200~"
+BRACKETED_PASTE_END = "\x1b[201~"
 
 
 _BANNER_TEMPLATE = (
@@ -57,6 +79,69 @@ _BANNER_TEMPLATE = (
     "Type /help for commands, /exit to quit. "
     "Ctrl-X p / s / h for chord bindings (when prompt_toolkit installed).\n"
 )
+
+
+def coalesce_bracketed_paste(
+    line: str,
+    *,
+    read_more: Callable[[], str],
+) -> str:
+    """Collapse a bracketed-paste sequence into one logical input string.
+
+    When prompt_toolkit is unavailable we fall back to ``input()``,
+    which delivers one line per ``\\n`` even inside a paste. xterm-style
+    terminals wrap the whole paste in :data:`BRACKETED_PASTE_BEGIN` /
+    :data:`BRACKETED_PASTE_END` escape sequences, so we can detect the
+    start marker on the first line and keep calling ``read_more`` until
+    we see the end marker, then return the joined block (markers
+    stripped, internal newlines preserved).
+
+    The markers can also appear *inside* a single line when the entire
+    paste is short enough to land on one line — we handle that case
+    too. Lines without any markers are returned as-is.
+
+    Args:
+        line: The first line read from the user (typically the return
+            value of ``input(prompt)``).
+        read_more: Callable returning the next line of stdin. Invoked
+            until the closing marker is seen. ``EOFError`` propagates
+            so the REPL can shut down cleanly mid-paste.
+
+    Returns:
+        The coalesced input string. When ``line`` does not start with a
+        bracketed-paste marker, returns ``line`` unchanged.
+    """
+    # Fast path: no opening marker anywhere -> not a paste.
+    if BRACKETED_PASTE_BEGIN not in line:
+        return line
+
+    pre, _, after_begin = line.partition(BRACKETED_PASTE_BEGIN)
+    # Same line contains both markers (short paste fit on one line).
+    if BRACKETED_PASTE_END in after_begin:
+        body, _, post = after_begin.partition(BRACKETED_PASTE_END)
+        return f"{pre}{body}{post}"
+
+    chunks: list[str] = [after_begin]
+    trailing: str = ""
+    while True:
+        try:
+            nxt = read_more()
+        except EOFError:
+            # Treat unterminated pastes as "we got what we got" — better
+            # than swallowing a partial paste silently.
+            break
+        if BRACKETED_PASTE_END in nxt:
+            body, _, post = nxt.partition(BRACKETED_PASTE_END)
+            chunks.append(body)
+            # Post-marker text rejoins the line that contained the end
+            # marker rather than starting a new logical line, so
+            # ``BEFORE\x1b[200~line one\nline two\x1b[201~AFTER``
+            # collapses to ``BEFOREline one\nline twoAFTER`` (mirrors
+            # how the user sees the paste rendered).
+            trailing = post
+            break
+        chunks.append(nxt)
+    return pre + "\n".join(chunks) + trailing
 
 
 class StoatRepl:
@@ -83,6 +168,9 @@ class StoatRepl:
         start_in_shell_mode: bool = False,
         start_in_plan_mode: bool = False,
         stderr: TextIO | None = None,
+        hook_emitter: HookEmitter | None = None,
+        session_id: str = "",
+        bracketed_paste: bool = True,
     ) -> None:
         """Initialise the REPL state.
 
@@ -116,6 +204,17 @@ class StoatRepl:
         self.stderr: TextIO = stderr if stderr is not None else sys.stderr
         self._user_input_fn: Callable[[str], str] | None = input_fn
         self.history: list[tuple[str, str]] = []
+        self.bracketed_paste: bool = bool(bracketed_paste)
+        self.session_id: str = session_id
+        # WHY: when no emitter is wired explicitly, autoload from
+        # ~/.chimera/stoat/hooks.json so users get the documented hook
+        # surface without extra setup. Tests pass an explicit emitter
+        # (or None) to opt out.
+        self._hook_emitter: HookEmitter | None
+        if hook_emitter is None:
+            self._hook_emitter = build_emitter_from_path()
+        else:
+            self._hook_emitter = hook_emitter
 
         initial_mode = MODE_SHELL if start_in_shell_mode else MODE_AGENT
         self.shell_mode = ShellModeManager(mode=initial_mode)
@@ -198,10 +297,26 @@ class StoatRepl:
 
         Routes through the chord-aware :class:`InputAdapter` for real
         interactive use, or the test-injected ``input_fn`` when present.
+        Bracketed-paste sequences are coalesced into a single logical
+        input when :attr:`bracketed_paste` is on, so a multi-line paste
+        doesn't dispatch one shell-mode subprocess per line.
         """
         if self._user_input_fn is not None:
+            line = self._user_input_fn(prompt)
+        else:
+            assert self._adapter is not None  # set when input_fn is None
+            line = str(self._adapter.read_line())
+        if self.bracketed_paste and BRACKETED_PASTE_BEGIN in line:
+            line = coalesce_bracketed_paste(
+                line, read_more=lambda: self._raw_read_line(prompt)
+            )
+        return line
+
+    def _raw_read_line(self, prompt: str) -> str:
+        """Read one more line for paste-coalescing (no recursion through paste detection)."""
+        if self._user_input_fn is not None:
             return self._user_input_fn(prompt)
-        assert self._adapter is not None  # set when input_fn is None
+        assert self._adapter is not None
         return str(self._adapter.read_line())
 
     # ------------------------------------------------------------------
@@ -249,7 +364,10 @@ class StoatRepl:
         env.setup()
 
         cancel = CancellationToken()
-        config = LoopConfig(cancellation=cancel)
+        config = LoopConfig(
+            cancellation=cancel,
+            hook_emitter=self._hook_emitter,
+        )
         loop = ReAct(max_steps=self.max_steps, config=config)
         sys_prompt = Prompt.from_string(
             "You are Stoat, a Chimera coding agent with a shell-mode toggle. "
@@ -329,7 +447,10 @@ class StoatRepl:
         env.setup()
 
         cancel = CancellationToken()
-        config = LoopConfig(cancellation=cancel)
+        config = LoopConfig(
+            cancellation=cancel,
+            hook_emitter=self._hook_emitter,
+        )
         loop = ReAct(max_steps=self.max_steps, config=config)
         sys_prompt = Prompt.from_string(
             build_plan_system_prompt(
@@ -442,6 +563,16 @@ class StoatRepl:
                 self._write(result.text)
             return result.keep_going
 
+        # WHY (W14-3): UserPromptSubmit fires for every non-slash line
+        # the user types — slash commands are a CLI-internal surface so
+        # firing the hook for them would surprise users who declared
+        # the hook expecting prompt-style input.
+        fire_user_prompt_submit(
+            self._hook_emitter,
+            user_prompt=line,
+            session_id=self.session_id,
+        )
+
         self.shell_mode.record(line)
         # Posture precedence: plan > shell > agent. Plan wins because
         # it's the explicit "deliberate, don't act" override; shell
@@ -476,17 +607,54 @@ class StoatRepl:
             cwd=self.workdir,
         )
         self._write(banner)
-        while True:
-            keep_going = self.loop_once()
-            if not keep_going:
-                return 0
+        # WHY (W14-3): SessionStart fires once before the first prompt is
+        # rendered to the user. SessionEnd fires on /exit or EOF in a
+        # try/finally so a hook always sees the matching pair even
+        # when the user crashes out with Ctrl-D mid-turn.
+        fire_session_start(self._hook_emitter, session_id=self.session_id)
+        try:
+            while True:
+                keep_going = self.loop_once()
+                if not keep_going:
+                    return 0
+        finally:
+            fire_session_end(self._hook_emitter, session_id=self.session_id)
+
+
+def resolve_resume_session_id(args: argparse.Namespace) -> str | None:
+    """Resolve ``--session`` / ``--continue`` into a stoat session id.
+
+    Returns ``None`` when neither flag is set or no candidate session
+    exists for the current cwd. ``--session`` (explicit id) wins over
+    ``--continue``; this mirrors otter / ferret / weasel resume order.
+
+    Args:
+        args: Parsed stoat CLI namespace.
+
+    Returns:
+        Resume target session id (newest stoat-* dir for cwd when
+        ``--continue``; the explicit value of ``--session`` otherwise).
+    """
+    explicit = getattr(args, "resume_session", None)
+    if explicit:
+        return str(explicit)
+    if not getattr(args, "continue_latest", False):
+        return None
+    # Late-import: keep stoat REPL import light when no resume happens.
+    from chimera.sessions.eventlog.resume_helpers import find_latest_run
+
+    cwd = os.path.abspath(getattr(args, "cwd", None) or os.getcwd())
+    return find_latest_run("stoat-", cwd=cwd)
 
 
 def run(args: argparse.Namespace) -> int:
     """Entry point invoked by :mod:`chimera.stoat.cli`.
 
     Builds a :class:`StoatRepl` from the parsed CLI namespace and runs
-    it against ``sys.stdin`` / ``sys.stdout``.
+    it against ``sys.stdin`` / ``sys.stdout``. ``--session <id>`` and
+    ``--continue`` / ``-c`` resolve to a prior stoat session and
+    pre-render its prompt + last assistant turn into the REPL banner so
+    the user has context for their next message.
 
     Args:
         args: Parsed stoat CLI namespace. Reads ``model``, ``cwd``,
@@ -498,11 +666,38 @@ def run(args: argparse.Namespace) -> int:
     """
     workdir = getattr(args, "cwd", None) or os.getcwd()
     max_steps_raw = getattr(args, "max_steps", 50) or 50
+
+    # W14-3: --continue / --session resume.
+    resume_id = resolve_resume_session_id(args)
+    resumed_session_id = ""
+    resume_banner: str = ""
+    if resume_id:
+        try:
+            from chimera.stoat.sessions import get_session as _get_session
+
+            detail = _get_session(resume_id)
+            resumed_session_id = resume_id
+            s = detail.summary
+            resume_banner = (
+                f"[resumed session {resume_id}]\n"
+                f"  model: {s.get('model', '')}\n"
+                f"  prompt: {s.get('prompt', '')}\n"
+            )
+        except Exception as exc:  # noqa: BLE001 — never block REPL on resume err
+            sys.stderr.write(
+                f"stoat: --session resume failed for {resume_id!r}: {exc}\n"
+            )
+            resumed_session_id = ""
+
     repl = StoatRepl(
         model=getattr(args, "model", None),
         workdir=workdir,
         max_steps=int(max_steps_raw),
         start_in_shell_mode=bool(getattr(args, "shell_mode", False)),
         start_in_plan_mode=bool(getattr(args, "plan_mode", False)),
+        session_id=resumed_session_id,
     )
+    if resume_banner:
+        repl.out.write(resume_banner)
+        repl.out.flush()
     return repl.run()

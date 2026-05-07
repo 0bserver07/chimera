@@ -108,7 +108,7 @@ def test_version_subprocess_emits_zero_dot_five_dot_zero() -> None:
     assert proc.returncode == 0, proc.stderr
     out = (proc.stdout + proc.stderr).strip()
     assert out.startswith("chimera stoat ")
-    assert "0.5.0" in out
+    assert "0.6.0" in out
     assert _SEMVER_RE.search(out) is not None
 
 

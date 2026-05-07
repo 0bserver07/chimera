@@ -45,6 +45,7 @@ SLASH_COMMANDS: tuple[str, ...] = (
     "/plan",
     "/cost",
     "/history",
+    "/sessions",
 )
 """Canonical slash command list. Mirrored in tests and ``/help``."""
 
@@ -70,14 +71,15 @@ class SlashResult:
 
 _HELP_TEXT = (
     "Slash commands:\n"
-    "  /help            Show this help message.\n"
-    "  /exit            Exit the REPL.\n"
-    "  /clear           Reset conversation history.\n"
-    "  /model [<id>]    Show or set the active model id.\n"
-    "  /shell           Toggle between agent mode and shell mode.\n"
-    "  /plan            Toggle plan mode (planner posture, no actions).\n"
-    "  /cost            Show running cost for the current session.\n"
-    "  /history [<n>]   Show the last n submitted lines (default 10).\n"
+    "  /help                  Show this help message.\n"
+    "  /exit                  Exit the REPL.\n"
+    "  /clear                 Reset conversation history.\n"
+    "  /model [<id>]          Show or set the active model id.\n"
+    "  /shell                 Toggle between agent mode and shell mode.\n"
+    "  /plan                  Toggle plan mode (planner posture, no actions).\n"
+    "  /cost                  Show running cost for the current session.\n"
+    "  /history [<n>]         Show the last n submitted lines (default 10).\n"
+    "  /sessions [list|show]  List recent stoat sessions or show one by id.\n"
     "Chord (when prompt_toolkit is installed): Ctrl-X p / s / h.\n"
     "Anything else is sent to the model (agent mode), run as bash -c "
     "<line> (shell mode), or planned (plan mode)."
@@ -180,6 +182,92 @@ class SlashPalette:
         """``/cost`` — render running cost for the active session."""
         return SlashResult(text=f"cost: ${self.cost_usd:.4f}")
 
+    def cmd_sessions(self, arg: str) -> SlashResult:
+        """``/sessions`` — list recent stoat sessions or show one by id.
+
+        Forms:
+
+        * ``/sessions``                 — alias for ``/sessions list``.
+        * ``/sessions list [<n>]``      — render the latest ``n``
+          stoat sessions (default 10) as ``<short-date>  <id>  <prompt>``
+          rows so the user can copy/paste an id into ``--resume`` /
+          ``/sessions show``.
+        * ``/sessions show <id>``       — pretty-print one session's
+          summary block (model, started, ended, success, prompt).
+
+        Errors are surfaced inline via :class:`SlashResult` so the REPL
+        keeps looping (consistent with every other slash). Late-binds
+        :mod:`chimera.stoat.sessions` so importing this module stays
+        cheap when the user never opens the palette.
+        """
+        from chimera.stoat.sessions import (
+            iter_sessions as _iter_sessions,
+            get_session as _get_session,
+        )
+
+        target = arg.strip()
+        action: str
+        rest: str
+        if not target:
+            action, rest = "list", ""
+        else:
+            head, _, tail = target.partition(" ")
+            action, rest = head.strip().lower(), tail.strip()
+
+        if action == "list":
+            try:
+                limit = int(rest) if rest else 10
+            except ValueError:
+                return SlashResult(
+                    text=f"/sessions list: expected an integer, got {rest!r}",
+                )
+            if limit <= 0:
+                return SlashResult(text="(no sessions)")
+            try:
+                records = list(_iter_sessions())
+            except Exception as exc:  # noqa: BLE001 — REPL slash never crashes
+                return SlashResult(text=f"/sessions: {exc}")
+            if not records:
+                return SlashResult(text="(no stoat sessions found)")
+            records = records[:limit]
+            lines: list[str] = []
+            for r in records:
+                started = (r.started_at or "").replace("T", " ")[:16]
+                prompt = (r.prompt or "").replace("\n", " ")[:60]
+                lines.append(f"{started}  {r.session_id}  {prompt}")
+            lines.append("")
+            lines.append(f"{len(records)} session(s)")
+            return SlashResult(text="\n".join(lines))
+
+        if action == "show":
+            if not rest:
+                return SlashResult(
+                    text="/sessions show: missing session id",
+                )
+            try:
+                detail = _get_session(rest)
+            except FileNotFoundError as exc:
+                return SlashResult(text=f"/sessions show: {exc}")
+            except Exception as exc:  # noqa: BLE001
+                return SlashResult(text=f"/sessions show: {exc}")
+            s = detail.summary
+            block = (
+                f"session {detail.session_id}\n"
+                f"started  {s.get('started_at', '')}\n"
+                f"ended    {s.get('ended_at', '')}\n"
+                f"model    {s.get('model', '')}\n"
+                f"success  {s.get('success', False)}\n"
+                f"prompt:  {s.get('prompt', '')}"
+            )
+            return SlashResult(text=block)
+
+        return SlashResult(
+            text=(
+                f"/sessions: unknown action {action!r} "
+                "(use 'list' or 'show <id>')"
+            ),
+        )
+
     def cmd_history(self, arg: str) -> SlashResult:
         """``/history`` — render the last ``n`` submitted lines."""
         target = arg.strip()
@@ -227,6 +315,7 @@ class SlashPalette:
             "/plan": self.cmd_plan,
             "/cost": self.cmd_cost,
             "/history": self.cmd_history,
+            "/sessions": self.cmd_sessions,
         }
         handler = handlers.get(head)
         if handler is None:
