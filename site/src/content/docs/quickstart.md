@@ -55,23 +55,27 @@ print(f"Converged: {result.converged} in {result.iterations} iterations")
 
 ## Use a preset
 
+The canonical, fully-assembled stack is `CodingAgent.from_preset(...)`:
+
 ```python
-import chimera
+from chimera.assembly.coding_agent import CodingAgent
 
-provider = chimera.create_provider()
-
-# SWE-Agent style (retry loop, minimal tools)
-agent = chimera.AgentPreset.SWE_AGENT.build(provider)
-
-# Aider style (lint feedback loop)
-agent = chimera.AgentPreset.AIDER.build(provider)
-
-# Cline style (plan then execute)
-agent = chimera.AgentPreset.CLINE.build(provider)
+# SWE-bench style (minimal scaffold, root-cause focus)
+agent = CodingAgent.from_preset("swebench")
 
 # Codex style (full tool suite)
-agent = chimera.AgentPreset.CODEX.build(provider)
+agent = CodingAgent.from_preset("codex")
+
+# Kimi style (action-first, KISS)
+agent = CodingAgent.from_preset("kimi")
+
+# Default full-featured coding agent
+agent = CodingAgent.from_preset("coding_agent")
 ```
+
+> The legacy `chimera.AgentPreset.SWE_AGENT.build(provider)` family
+> emits a `DeprecationWarning` and will be removed in v0.7.0. See
+> [Migration: AgentPreset → CodingAgent](/chimera/migrations/v0.4-to-v0.5/#agentpresetbuild--codingagentfrom_preset).
 
 ## Next steps
 

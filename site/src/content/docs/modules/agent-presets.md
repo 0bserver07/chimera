@@ -7,57 +7,69 @@ description: "Agent Presets"
 the architecture of well-known coding agents by composing the right tools,
 loop type, and system prompt from Chimera's layered stack.
 
+> **Deprecated.** `AgentPreset.build(provider)` emits `DeprecationWarning`
+> and will be removed in v0.7.0. The canonical replacement is
+> `chimera.assembly.coding_agent.CodingAgent.from_preset(...)`. See the
+> [migration guide](/chimera/migrations/v0.4-to-v0.5/#agentpresetbuild--codingagentfrom_preset).
+
 ## Key Classes
 
 | Class | Description |
 |-------|-------------|
-| `AgentPreset` | Named configuration that builds a fully-wired `Agent` via `build()` |
+| `AgentPreset` | Named configuration; legacy factory ([deprecated](/chimera/migrations/v0.4-to-v0.5/#agentpresetbuild--codingagentfrom_preset)) |
+| `CodingAgent` | Canonical fully-assembled stack — use `CodingAgent.from_preset(name)` |
 
 ## Available Presets
 
-| Preset | Loop | Tools | Style |
-|--------|------|-------|-------|
-| `AgentPreset.SWE_AGENT` | `RetryLoop` (3 retries) | Minimal: read, edit, bash, search, list | Benchmark-focused, methodical |
-| `AgentPreset.CODEX` | `ReAct` (50 steps) | `AGENT_TOOLS` (full set) | Memory-aware, full access |
-| `AgentPreset.AIDER` | `LintFeedbackLoop` (ruff) | Edit-focused + git, test, repo_map | Pair-programming, lint-aware |
-| `AgentPreset.CLINE` | `PlanActLoop` (8 plan steps) | `AGENT_TOOLS` (full set) | IDE-like, plan then execute |
+The legacy `AgentPreset` enums and their `CodingAgent.from_preset(...)` analogues:
 
-## Quick Start
+| Legacy preset | Canonical replacement | Loop | Style |
+|---------------|-----------------------|------|-------|
+| `AgentPreset.SWE_AGENT` | `CodingAgent.from_preset("swebench")` | `RetryLoop` (legacy) / `AgentLoop` (new) | Benchmark-focused, root-cause |
+| `AgentPreset.CODEX`     | `CodingAgent.from_preset("codex")`    | `ReAct` (legacy) / `AgentLoop` (new) | Memory-aware, full access |
+| `AgentPreset.AIDER`     | `CodingAgent.from_preset("coding_agent")` | `LintFeedbackLoop` (legacy) / `AgentLoop` (new) | Pair-programming |
+| `AgentPreset.CLINE`     | `CodingAgent.from_preset("coding_agent")` | `PlanActLoop` (legacy) / `AgentLoop` (new) | IDE-like, plan first |
+
+## Quick Start (canonical)
 
 ```python
-from chimera.agents.presets.agent_styles import AgentPreset
+from chimera.assembly.coding_agent import CodingAgent
 
-agent = AgentPreset.SWE_AGENT.build(provider)
-result = agent.run("Fix the failing test in test_utils.py", env=env)
+agent = CodingAgent.from_preset("swebench")
+async for event in agent.run("Fix the failing test in test_utils.py"):
+    print(event)
 ```
 
 ## Choosing a Preset
 
-- **SWE_AGENT** -- Best for benchmarks and well-defined bug fixes. Retries
-  with scoring ensure convergence.
-- **CODEX** -- General-purpose with full tool access. Good default for
-  open-ended tasks.
-- **AIDER** -- Best for edit-heavy workflows. Automatic lint checking catches
-  style issues after each turn.
-- **CLINE** -- Best for complex tasks that benefit from exploration before
-  action. Read-only planning prevents accidental mutations.
+- **swebench** -- Best for benchmarks and well-defined bug fixes. Minimal
+  scaffold, no transcripts/compaction, focuses on root cause.
+- **codex** -- General-purpose with full tool access. Good default for
+  open-ended tasks. Permissions on, hooks off.
+- **kimi** -- Action-first, KISS. Iterates on failures.
+- **coding_agent** -- Default canonical stack. Permissions, hooks,
+  transcripts, content replacement, compaction, streaming all enabled.
+- **minimal** / **explore** -- Restricted toolsets for low-risk runs.
 
 ## Custom Presets
 
-Create your own preset by instantiating `AgentPreset`:
+Define a custom `AssemblyConfig` and register it in `PRESETS`:
 
 ```python
-my_preset = AgentPreset(
+from chimera.assembly.presets import AssemblyConfig, PRESETS
+from chimera.assembly.coding_agent import CodingAgent
+
+PRESETS["my_agent"] = AssemblyConfig(
     name="my_agent",
-    description="Custom agent with retry and lint.",
-    tool_names=["read_file", "edit_file", "bash", "test"],
-    loop_type="retry",
-    loop_kwargs={"max_retries": 5},
-    max_steps=40,
-    system_prompt="You are a test-driven developer. Always run tests first.",
+    description="Custom agent: lint-aware, transcript on, full tools.",
+    tool_set="coding",
+    permissions=True,
+    hooks=False,
+    transcripts=True,
+    max_turns=40,
 )
 
-agent = my_preset.build(provider)
+agent = CodingAgent.from_preset("my_agent")
 ```
 
 ## Supported Loop Types

@@ -31,9 +31,12 @@ result = chimera.synthesize(
     tests="python -m pytest tests/",
 )
 
-# Or build a custom agent
-agent = chimera.AgentPreset.SWE_AGENT.build(provider)
-result = agent.run("Fix the authentication bug", env=env)
+# Or build a custom agent (canonical, fully-assembled stack)
+from chimera.assembly.coding_agent import CodingAgent
+
+agent = CodingAgent.from_preset("swebench")
+async for event in agent.run("Fix the authentication bug"):
+    print(event)
 ```
 
 ## Key Features

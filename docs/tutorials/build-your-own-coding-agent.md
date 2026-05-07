@@ -119,25 +119,28 @@ Now you have:
 
 ## Step 4: Use a Preset (4 lines)
 
-Instead of configuring everything, use a preset that matches a known agent:
+Instead of configuring everything, use a named preset on `CodingAgent`:
 
 ```python
-import chimera
+from chimera.assembly.coding_agent import CodingAgent
 
-provider = chimera.create_provider()
-
-# SWE-Agent style: retry loop, minimal tools
-agent = chimera.AgentPreset.SWE_AGENT.build(provider)
-
-# Aider style: lint feedback loop, catches syntax errors
-agent = chimera.AgentPreset.AIDER.build(provider)
-
-# Cline style: plan first (read-only), then execute
-agent = chimera.AgentPreset.CLINE.build(provider)
+# SWE-bench style: minimal scaffold, root-cause focus
+agent = CodingAgent.from_preset("swebench")
 
 # Codex style: full tool suite
-agent = chimera.AgentPreset.CODEX.build(provider)
+agent = CodingAgent.from_preset("codex")
+
+# Kimi style: action-first, KISS, iterate on failures
+agent = CodingAgent.from_preset("kimi")
+
+# Default: full-featured coding agent
+agent = CodingAgent.from_preset("coding_agent")
 ```
+
+> **Migrating from v0.4 / v0.5?** `chimera.AgentPreset.SWE_AGENT.build(provider)`
+> and its `AIDER` / `CODEX` / `CLINE` siblings emit a `DeprecationWarning` and
+> will be removed in v0.7.0. Use `CodingAgent.from_preset(...)` above. See
+> [`docs/migrations/agent-preset-to-coding-agent.md`](../migrations/agent-preset-to-coding-agent.md).
 
 ## Step 5: Compose Your Own Architecture
 

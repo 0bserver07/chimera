@@ -245,9 +245,11 @@ def test_preset_with_wire_monitoring(provider, workdir):
 
     config = LoopConfig(wire=wire)
 
-    # L4: AgentPreset builds the agent, we inject our LoopConfig
+    # L4: AgentPreset builds the agent, we inject our LoopConfig.
+    # _compose() is the non-deprecated path equivalent to .build();
+    # used here so the test doesn't pin itself to the v0.7.0 removal target.
     preset = AgentPreset.CODEX
-    agent = preset.build(provider)
+    agent = preset._compose(provider)
     # Override loop config to add wire
     agent.loop.config = config
 

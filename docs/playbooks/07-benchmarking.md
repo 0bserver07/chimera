@@ -131,13 +131,26 @@ Four built-in presets that compose Chimera primitives to replicate well-known ag
 | `AIDER` | Lint Feedback | read, edit, bash, search, list_files, git, test, repo_map | 20 | Auto-lint after edits, git-aware, pair-programming style |
 | `CLINE` | Plan/Act | All agent tools | 25 | Read-only planning phase, then full execution |
 
-Each preset defines a `system_prompt` tuned for its approach. Build any preset with one call:
+Each preset defines a `system_prompt` tuned for its approach. The canonical
+fully-assembled stack is `CodingAgent.from_preset(...)`:
 
 ```python
-from chimera.agents.presets.agent_styles import AgentPreset
+from chimera.assembly.coding_agent import CodingAgent
 
-agent = AgentPreset.SWE_AGENT.build(provider)
+agent = CodingAgent.from_preset("swebench")
 ```
+
+> The legacy `AgentPreset.SWE_AGENT.build(provider)` factory is deprecated and
+> slated for removal in v0.7.0. The four legacy preset enums map to:
+>
+> | Legacy | Replacement |
+> |--------|-------------|
+> | `AgentPreset.SWE_AGENT.build(p)` | `CodingAgent.from_preset("swebench")` |
+> | `AgentPreset.CODEX.build(p)`     | `CodingAgent.from_preset("codex")` |
+> | `AgentPreset.AIDER.build(p)`     | `CodingAgent.from_preset("coding_agent")` |
+> | `AgentPreset.CLINE.build(p)`     | `CodingAgent.from_preset("coding_agent")` |
+>
+> See [`docs/migrations/agent-preset-to-coding-agent.md`](../migrations/agent-preset-to-coding-agent.md).
 
 ## Configuration Reference
 
@@ -276,7 +289,7 @@ class ProjectBenchmark(Benchmark):
 To determine which agent style works best for your codebase:
 
 1. Define a benchmark with 10-20 representative tasks
-2. Build agents from each preset: `AgentPreset.SWE_AGENT.build(provider)`, etc.
+2. Build agents from each preset: `CodingAgent.from_preset("swebench")`, `CodingAgent.from_preset("codex")`, etc.
 3. Run each agent through the harness
 4. Compare pass_rate, total_cost, and average steps per task
 5. Use `ActionSampler` with the winning preset to determine optimal sample count

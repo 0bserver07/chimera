@@ -35,36 +35,39 @@ def test_cline_preset_exists():
 
 
 def test_build_swe_agent():
-    agent = AgentPreset.SWE_AGENT.build(_mock_provider())
+    # _compose() is the non-deprecated path; .build() emits the v0.7.0
+    # removal warning and delegates here. Tests use _compose() so they
+    # don't pin themselves to the deprecated surface.
+    agent = AgentPreset.SWE_AGENT._compose(_mock_provider())
     assert agent is not None
     assert len(agent.tools) >= 3  # minimal tool set
 
 
 def test_build_codex():
-    agent = AgentPreset.CODEX.build(_mock_provider())
+    agent = AgentPreset.CODEX._compose(_mock_provider())
     assert len(agent.tools) >= 10  # AGENT_TOOLS = 13
 
 
 def test_build_aider():
-    agent = AgentPreset.AIDER.build(_mock_provider())
+    agent = AgentPreset.AIDER._compose(_mock_provider())
     assert agent is not None
 
 
 def test_build_cline():
-    agent = AgentPreset.CLINE.build(_mock_provider())
+    agent = AgentPreset.CLINE._compose(_mock_provider())
     assert agent is not None
 
 
 def test_swe_agent_runs():
     provider = _mock_provider()
-    agent = AgentPreset.SWE_AGENT.build(provider)
+    agent = AgentPreset.SWE_AGENT._compose(provider)
     result = agent.run("Fix the bug", env=None)
     assert result.success
 
 
 def test_codex_runs():
     provider = _mock_provider()
-    agent = AgentPreset.CODEX.build(provider)
+    agent = AgentPreset.CODEX._compose(provider)
     result = agent.run("Write code", env=None)
     assert result.success
 
@@ -78,7 +81,7 @@ def test_custom_preset():
         max_steps=10,
         system_prompt="You are custom.",
     )
-    agent = custom.build(_mock_provider())
+    agent = custom._compose(_mock_provider())
     assert len(agent.tools) == 2
 
 

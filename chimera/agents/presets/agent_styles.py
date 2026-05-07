@@ -3,14 +3,21 @@
 Each preset recreates the architecture of a well-known coding agent by
 selecting the right combination of primitives from Chimera's layered stack.
 
-Usage::
+.. deprecated:: 0.5
+   :meth:`AgentPreset.build` is deprecated and will be removed in v0.7.0.
+   Use :class:`chimera.assembly.coding_agent.CodingAgent` and
+   :meth:`CodingAgent.from_preset` for the canonical, fully-assembled stack.
+   Internally, :func:`AgentPreset._compose` is the non-deprecated escape
+   hatch used by the test suite to keep exercising the legacy
+   ``Agent`` + loop wiring without triggering the removal warning.
 
-    from chimera.agents.presets.agent_styles import AgentPreset
+Usage (canonical)::
 
-    agent = AgentPreset.SWE_AGENT.build(provider)
-    agent = AgentPreset.AIDER.build(provider)
-    agent = AgentPreset.CODEX.build(provider)
-    agent = AgentPreset.CLINE.build(provider)
+    from chimera.assembly.coding_agent import CodingAgent
+
+    agent = CodingAgent.from_preset("swebench")   # SWE_AGENT analogue
+    agent = CodingAgent.from_preset("codex")      # CODEX analogue
+    agent = CodingAgent.from_preset("coding_agent")  # AIDER / CLINE analogue
 """
 
 from __future__ import annotations
@@ -30,11 +37,12 @@ class AgentPreset:
     Each preset composes the right tools, loop, context strategy,
     and prompt to recreate a specific agent's architecture.
 
-    Usage:
-        agent = AgentPreset.SWE_AGENT.build(provider)
-        agent = AgentPreset.AIDER.build(provider)
-        agent = AgentPreset.CODEX.build(provider)
-        agent = AgentPreset.CLINE.build(provider)
+    .. deprecated:: 0.5
+       :meth:`build` emits a :class:`DeprecationWarning` and will be removed
+       in v0.7.0. Use :meth:`chimera.assembly.coding_agent.CodingAgent.from_preset`
+       for the canonical, fully-assembled stack. The private :meth:`_compose`
+       remains as a non-warning escape hatch for tests of the legacy
+       ``Agent`` + loop wiring.
 
     Args:
         name: Short identifier for this preset.
@@ -75,6 +83,13 @@ class AgentPreset:
     def build(self, provider: Provider, env: Environment | None = None) -> Agent:
         """Build an Agent from this preset.
 
+        .. deprecated:: 0.5
+           Use :meth:`chimera.assembly.coding_agent.CodingAgent.from_preset`
+           for the canonical replacement. This method will be removed in
+           v0.7.0; internal callers (e.g., the test suite) use
+           :meth:`_compose` to keep exercising the legacy ``Agent`` + loop
+           wiring without the warning.
+
         Args:
             provider: LLM provider for completions.
             env: Optional execution environment (unused during construction
@@ -93,7 +108,31 @@ class AgentPreset:
             DeprecationWarning,
             stacklevel=2,
         )
-        # Keep existing implementation working
+        return self._compose(provider, env)
+
+    def _compose(
+        self, provider: Provider, env: Environment | None = None
+    ) -> Agent:
+        """Construct an Agent from this preset without emitting the
+        :class:`DeprecationWarning` raised by :meth:`build`.
+
+        This is the non-deprecated escape hatch used by the test suite to
+        verify that the legacy ``Agent`` + loop wiring still composes
+        correctly. End users should migrate to
+        :meth:`chimera.assembly.coding_agent.CodingAgent.from_preset` — when
+        :meth:`build` is removed in v0.7.0 this method may also be removed
+        as part of the broader ``AgentPreset`` deprecation cleanup.
+
+        Args:
+            provider: LLM provider for completions.
+            env: Optional execution environment (unused during construction
+                but accepted for API symmetry with :meth:`build`).
+
+        Returns:
+            A fully-wired :class:`~chimera.core.agent.Agent`.
+        """
+        # `env` is kept for API symmetry with the historical build() signature.
+        del env
         from chimera.core.agent import Agent
         from chimera.core.prompt import Prompt
 

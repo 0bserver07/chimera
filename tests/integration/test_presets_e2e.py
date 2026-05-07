@@ -81,7 +81,9 @@ def test_preset_swe_agent_fixes_bug():
                 "Fixed: changed - to +",           # attempt 1 done
             )
 
-        agent = AgentPreset.SWE_AGENT.build(provider)
+        # _compose() is the non-deprecated path equivalent to .build();
+        # used here so the test doesn't pin itself to the v0.7.0 removal target.
+        agent = AgentPreset.SWE_AGENT._compose(provider)
         result = agent.run("Fix the bug in calc.py so test_add passes.", env=env)
 
         assert result.success
@@ -119,7 +121,7 @@ def test_preset_aider_lint_feedback():
                 "Done.",
             )
 
-        agent = AgentPreset.AIDER.build(provider)
+        agent = AgentPreset.AIDER._compose(provider)
         result = agent.run(
             "Create a utils.py file with a greet(name) function that returns 'Hello {name}'.",
             env=env,
@@ -156,7 +158,7 @@ def test_preset_cline_plan_then_act():
                 "Created calculator module with tests. All passing.",
             )
 
-        agent = AgentPreset.CLINE.build(provider)
+        agent = AgentPreset.CLINE._compose(provider)
         result = agent.run(
             "Create a simple calculator module with add and subtract functions, plus tests.",
             env=env,
@@ -193,7 +195,7 @@ def test_preset_codex_full_task():
                 "Output: Hello from Codex preset!",
             )
 
-        agent = AgentPreset.CODEX.build(provider)
+        agent = AgentPreset.CODEX._compose(provider)
         result = agent.run(
             "Create hello.py that prints 'Hello from Codex preset!' and run it.",
             env=env,
@@ -226,7 +228,7 @@ def test_custom_preset():
     else:
         provider = _mock_provider("The current directory contains: README.md, setup.py")
 
-    agent = custom.build(provider)
+    agent = custom._compose(provider)
     with tempfile.TemporaryDirectory() as d:
         env = chimera.LocalEnvironment(workdir=d)
         env.setup()
@@ -256,7 +258,7 @@ def test_all_presets_buildable():
     """Every preset builds without errors."""
     provider = _mock_provider("ok")
     for preset in [AgentPreset.SWE_AGENT, AgentPreset.CODEX, AgentPreset.AIDER, AgentPreset.CLINE]:
-        agent = preset.build(provider)
+        agent = preset._compose(provider)
         assert agent is not None
         assert len(agent.tools) > 0
         assert agent.prompt is not None
@@ -265,8 +267,8 @@ def test_all_presets_buildable():
 def test_swe_agent_has_minimal_tools():
     """SWE_AGENT should have fewer tools than CODEX."""
     provider = _mock_provider("ok")
-    swe = AgentPreset.SWE_AGENT.build(provider)
-    codex = AgentPreset.CODEX.build(provider)
+    swe = AgentPreset.SWE_AGENT._compose(provider)
+    codex = AgentPreset.CODEX._compose(provider)
     assert len(swe.tools) < len(codex.tools)
 
 
