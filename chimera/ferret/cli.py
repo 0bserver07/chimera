@@ -55,6 +55,15 @@ _VALID_SUBCOMMANDS = (
     "agents",
     "bench",
     "bridge",
+    # WHY (W14-1): codex-style top-level subcommands. ``apply`` /
+    # ``review`` / ``fork`` / ``mcp-server`` / ``mcp`` ship as siblings
+    # of the original ferret surface so the cli stays a single subparser
+    # without nested ``add_subparsers`` plumbing.
+    "apply",
+    "review",
+    "fork",
+    "mcp-server",
+    "mcp",
 )
 _VALID_SUB_ACTIONS = (
     None,
@@ -67,6 +76,10 @@ _VALID_SUB_ACTIONS = (
     # accepts them across every ferret subcommand.
     "status",
     "stop",
+    # WHY (W14-1): ``ferret mcp add`` / ``ferret mcp remove`` reuse the
+    # ``sub_action`` slot. ``list`` is already declared above.
+    "add",
+    "remove",
 )
 _VALID_SANDBOX_MODES = (
     "read-only",
@@ -211,7 +224,19 @@ _LONG_HELP: dict[str, str] = {
     "subcommand": (
         "Optional positional: 'serve' (ACP/HTTP server), 'sessions' "
         "(list/show), 'share' (export a session), 'agents' (list/"
-        "show), 'bench' (benchmark suites), 'bridge' (cloud bridge)."
+        "show), 'bench' (benchmark suites), 'bridge' (cloud bridge), "
+        "'apply' (apply latest agent diff via git apply), 'review' "
+        "(non-interactive code review of a path or rev-spec), 'fork' "
+        "(fork an existing session by id, --last, or --all), "
+        "'mcp-server' (run ferret as an MCP server on stdio), 'mcp' "
+        "(add/list/remove MCP server launchers in "
+        "~/.chimera/ferret/mcp_servers.json)."
+    ),
+    "--last": (
+        "With 'apply': apply the latest patch from the most-recent "
+        "ferret session only. With 'fork': fork the newest session "
+        "under the current cwd. Mutually exclusive with an explicit "
+        "<session-id> on 'fork'."
     ),
     "--all": (
         "With 'serve stop': stop every backgrounded ferret server. "
@@ -585,30 +610,56 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         default=None,
         choices=list(_VALID_SUBCOMMANDS),
         metavar="SUBCOMMAND",
-        help="serve | sessions | share | agents | bench | bridge.",
+        help="serve|sessions|apply|review|fork|mcp (--help-long).",
     )
+    # WHY (W14-1): we deliberately drop ``choices=`` on ``sub_action`` here
+    # so codex-style subcommands (``review <path>``, ``fork <session-id>``)
+    # can pass freeform strings into the second positional without
+    # tripping argparse validation. Each per-subcommand dispatcher
+    # validates its slot. The historical valid set is documented in
+    # :data:`_VALID_SUB_ACTIONS` and surfaced via ``--help-long``.
     parser.add_argument(
         "sub_action",
         nargs="?",
         default=None,
-        choices=list(_VALID_SUB_ACTIONS),
         metavar="ACTION",
-        help="list | show | <suite> | status | stop.",
+        help="list | show | add | remove | <suite> | status | stop | <target>.",
     )
     parser.add_argument(
         "sub_target",
         nargs="?",
         default=None,
         metavar="TARGET",
-        help="Run/session id for show/share.",
+        help="Run/session id for show/share/mcp-name.",
     )
-    # WHY (server-mgmt): ``serve stop`` knobs.
+    # WHY (W14-1): ``ferret mcp add <name> <command>`` needs a 4th
+    # positional. Kept ``nargs="?"`` so existing 1-3 positional flows
+    # are unchanged.
+    parser.add_argument(
+        "sub_extra",
+        nargs="?",
+        default=None,
+        metavar="EXTRA",
+        help=argparse.SUPPRESS,
+    )
+    # WHY (server-mgmt): ``serve stop`` knobs. Also reused by W14-1
+    # ``ferret fork --all`` for cross-cwd session selection — the same
+    # spelling, different semantics depending on the active subcommand.
     serve_grp.add_argument(
         "--all",
         dest="serve_stop_all",
         action="store_true",
         default=False,
-        help="serve stop: stop every backgrounded ferret server.",
+        help="serve stop / fork: stop-all / cross-cwd selector.",
+    )
+    # WHY (W14-1): ``--last`` selects the most-recent ferret session
+    # (``apply``, ``fork``). Hidden from short help (E6-W13 ceiling).
+    behavior.add_argument(
+        "--last",
+        dest="last",
+        action="store_true",
+        default=False,
+        help=argparse.SUPPRESS,
     )
     serve_grp.add_argument(
         "--serve-timeout",
@@ -1176,6 +1227,28 @@ _SUBCOMMAND_DISPATCH: dict[str, Any] = {
     "bench": _dispatch_bench,
     "bridge": _dispatch_bridge,
 }
+
+
+def _register_w14_subcommands() -> None:
+    """Wire the W14-1 codex-style subcommands into ``_SUBCOMMAND_DISPATCH``.
+
+    Late-binding the import keeps ``chimera.ferret.cli`` cheap to import
+    when the user only wants ``--help`` or ``--version``: the
+    :mod:`chimera.ferret.subcommands` package itself stays light, but
+    its sibling modules pull in :mod:`subprocess`, :mod:`json`, and the
+    review orchestrator only when actually dispatched.
+    """
+    try:
+        from chimera.ferret.subcommands import HANDLERS
+    except Exception:  # noqa: BLE001
+        # Subcommands package missing — fall through; the cli still
+        # works for the historical subcommands.
+        return
+    for name, handler in HANDLERS.items():
+        _SUBCOMMAND_DISPATCH.setdefault(name, handler)
+
+
+_register_w14_subcommands()
 
 
 # ---------------------------------------------------------------------------

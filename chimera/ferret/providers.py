@@ -71,7 +71,7 @@ _OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 # are cosmetic — the API works without them — but setting them is the
 # polite default. Users override via the matching env vars.
 _OPENROUTER_DEFAULT_REFERER = "https://github.com/0bserver07/chimera"
-_OPENROUTER_DEFAULT_TITLE = "chimera ferret 0.5.0"
+_OPENROUTER_DEFAULT_TITLE = "chimera ferret 0.6.0"
 
 
 def _openrouter_extra_headers() -> dict[str, str]:
