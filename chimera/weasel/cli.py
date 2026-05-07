@@ -28,6 +28,7 @@ import os
 import sys
 from typing import Any
 
+from chimera.cli.help_long import register_argument
 from chimera.errors import friendly_errors
 
 # WHY: stdlib only at import time. The interactive path delegates to
@@ -35,7 +36,7 @@ from chimera.errors import friendly_errors
 # ``chimera weasel --help`` / ``--version`` stays cheap even when the
 # Anthropic / OpenAI SDKs aren't installed.
 
-_VERSION = "0.5.0"
+_VERSION = "0.6.0"
 """Weasel scaffold version. Independent of the chimera package version
 because weasel is a per-CLI release line."""
 
@@ -66,6 +67,21 @@ _LONG_HELP: dict[str, str] = {
     "--json": (
         "When paired with -p, emit a single JSON object on stdout "
         "({output, success, model}) instead of plain text."
+    ),
+    "--stream-json": (
+        "When paired with -p, emit one JSON object per LoopEvent "
+        "(newline-delimited) on stdout. Schema is the standard "
+        "{type, turn, data} envelope shared with chimera mink so "
+        "downstream consumers can use one parser across CLIs. "
+        "Wins over --json when both are set."
+    ),
+    "--thinking": (
+        "Enable extended thinking on supported providers (Anthropic + "
+        "Anthropic-compatible). Accepts one of off/minimal/low/medium/"
+        "high/max (mapped to the chimera.providers.thinking budget "
+        "table) or a raw integer token budget. Bare --thinking with "
+        "no value defaults to medium. Quietly no-ops on providers "
+        "without an _enable_thinking attribute (e.g. OpenAI)."
     ),
     "--list-models": (
         "List models recognised by chimera.providers.cost.PRICING and "
@@ -144,7 +160,7 @@ def _resolve_version() -> str:
     """Return the weasel scaffold version string for ``--version``.
 
     Returns:
-        ``"0.5.0"`` (the per-CLI release line) — independent of the
+        ``"0.6.0"`` (the per-CLI release line) — independent of the
         ``chimera-run`` package version. Mirrors the four-mode harness's
         own per-CLI release cadence.
     """
@@ -184,83 +200,133 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     persistence = parser.add_argument_group("Persistence")
 
     # WHY: env precedence is --model > $WEASEL_MODEL > _DEFAULT_MODEL.
-    core.add_argument(
+    # W14-9: routed through ``register_argument`` so a future contributor
+    # who pastes a verbose ``help=`` string here cannot silently bloat
+    # ``chimera weasel --help`` past the 50-line ceiling — auto-promotion
+    # to ``_LONG_HELP`` keeps the short surface tight.
+    register_argument(
+        core,
         "--model",
         default=os.environ.get("WEASEL_MODEL") or _DEFAULT_MODEL,
         metavar="MODEL",
+        long_help=_LONG_HELP,
         help=f"Model id (default: $WEASEL_MODEL or {_DEFAULT_MODEL}).",
     )
     # WHY: the four-mode philosophy.
-    core.add_argument(
+    register_argument(
+        core,
         "--mode",
         choices=list(_VALID_MODES),
         default="interactive",
         metavar="MODE",
+        long_help=_LONG_HELP,
         help="interactive | print | rpc | sdk (default: interactive).",
     )
-    core.add_argument(
+    # WHY (W14-5): ``-p`` is repeatable; each value becomes one sequential
+    # turn. Single-use is preserved (the list collapses to a 1-element list
+    # before the dispatch helpers normalize it). Existing tests that pass
+    # ``print_mode=None`` keep working because the default is still ``None``.
+    register_argument(
+        core,
         "-p",
         "--print",
         dest="print_mode",
+        action="append",
         default=None,
         metavar="PROMPT",
-        help="One-shot: run PROMPT, print, exit.",
+        long_help=_LONG_HELP,
+        help="One-shot: run PROMPT, print, exit. Repeatable for multi-turn.",
     )
-    output.add_argument(
+    register_argument(
+        output,
         "--json",
         dest="json_output",
         action="store_true",
         default=False,
+        long_help=_LONG_HELP,
         help="With -p: emit JSON envelope instead of text.",
     )
+    # WHY (W14-5): ``--stream-json`` and ``--thinking`` are hidden from the
+    # short help via ``argparse.SUPPRESS`` so the 50-line ceiling stays
+    # firm. They surface normally under ``--help-long`` via ``_LONG_HELP``.
     output.add_argument(
+        "--stream-json",
+        dest="stream_json",
+        action="store_true",
+        default=False,
+        help=argparse.SUPPRESS,
+    )
+    behavior.add_argument(
+        "--thinking",
+        dest="thinking",
+        nargs="?",
+        const="",  # bare flag w/o value resolves to medium in parse_thinking_arg
+        default=None,
+        metavar="LEVEL",
+        help=argparse.SUPPRESS,
+    )
+    register_argument(
+        output,
         "--list-models",
         dest="list_models",
         action="store_true",
         default=False,
+        long_help=_LONG_HELP,
         help="List recognised model ids and exit.",
     )
-    core.add_argument(
+    register_argument(
+        core,
         "--cwd",
         default=None,
+        long_help=_LONG_HELP,
         help="Working directory (default: cwd).",
     )
-    behavior.add_argument(
+    register_argument(
+        behavior,
         "--max-steps",
         type=int,
         default=50,
         metavar="N",
+        long_help=_LONG_HELP,
         help="Max agent steps per turn (default: 50).",
     )
     # WHY (B1, wave 11): align weasel with the wave-10 G3 default flip.
-    behavior.add_argument(
+    register_argument(
+        behavior,
         "--legacy-react",
         dest="legacy_react",
         action="store_true",
         default=False,
+        long_help=_LONG_HELP,
         help="Use legacy ReAct (opt out of CodingAgent default).",
     )
     # WHY (C1, wave 9): --resume / --continue mirror mink's flag pair.
-    persistence.add_argument(
+    register_argument(
+        persistence,
         "--resume",
         default=None,
         metavar="ID",
+        long_help=_LONG_HELP,
         help="Resume a persisted weasel run by id.",
     )
-    persistence.add_argument(
+    register_argument(
+        persistence,
         "-c",
         "--continue",
         dest="continue_latest",
         action="store_true",
         default=False,
+        long_help=_LONG_HELP,
         help="Resume the newest weasel run under cwd.",
     )
-    parser.add_argument(
+    register_argument(
+        parser,
         "subcommand",
         nargs="?",
         default=None,
         choices=list(_VALID_SUBCOMMANDS),
         metavar="SUBCOMMAND",
+        long_help=_LONG_HELP,
         help="sessions | share.",
     )
     parser.add_argument(
@@ -277,72 +343,90 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         metavar="TARGET",
         help="Session id for sessions show.",
     )
-    persistence.add_argument(
+    register_argument(
+        persistence,
         "--since",
         dest="cost_since",
         default=None,
         metavar="WINDOW",
+        long_help=_LONG_HELP,
         help="sessions cost: cutoff (e.g. 7d / ISO).",
     )
-    persistence.add_argument(
+    register_argument(
+        persistence,
         "--cost-model",
         dest="cost_model",
         default=None,
         metavar="STR",
+        long_help=_LONG_HELP,
         help="sessions cost: model substring filter.",
     )
-    persistence.add_argument(
+    register_argument(
+        persistence,
         "--cost-format",
         dest="cost_format",
         choices=("text", "json", "csv"),
         default=None,
         metavar="FMT",
+        long_help=_LONG_HELP,
         help="sessions cost: text | json | csv.",
     )
-    persistence.add_argument(
+    register_argument(
+        persistence,
         "--cost-limit",
         dest="cost_limit",
         type=int,
         default=None,
         metavar="N",
+        long_help=_LONG_HELP,
         help="sessions cost: row cap (newest first).",
     )
-    persistence.add_argument(
+    register_argument(
+        persistence,
         "--share-sink",
         dest="share_sink",
         choices=("file", "stdout"),
         default=None,
         metavar="SINK",
+        long_help=_LONG_HELP,
         help="share: file (default) | stdout.",
     )
-    persistence.add_argument(
+    register_argument(
+        persistence,
         "--share-format",
         dest="share_format",
         choices=("json", "md"),
         default=None,
         metavar="FMT",
+        long_help=_LONG_HELP,
         help="share: json (default) | md.",
     )
-    behavior.add_argument(
+    register_argument(
+        behavior,
         "--theme",
         dest="theme",
         default=os.environ.get("WEASEL_THEME") or None,
         metavar="NAME",
+        long_help=_LONG_HELP,
         help="REPL theme (default: $WEASEL_THEME or 'default').",
     )
-    behavior.add_argument(
+    register_argument(
+        behavior,
         "--prompt-template",
         dest="prompt_template",
         default=os.environ.get("WEASEL_PROMPT_TEMPLATE") or None,
         metavar="NAME",
+        long_help=_LONG_HELP,
         help="System prompt template (default: 'default').",
     )
     # B9-W11: cross-CLI session listing.
-    persistence.add_argument(
+    register_argument(
+        persistence,
         "--all-clis",
         dest="sessions_all_clis",
         action="store_true",
         default=False,
+        long_help=_LONG_HELP,
         help="sessions list: include every Chimera CLI's sessions.",
     )
 
@@ -499,20 +583,29 @@ def _resolve_theme(args: argparse.Namespace, cwd: str) -> Any:
 
 
 def _run_print_mode(args: argparse.Namespace) -> int:
-    """Execute a single turn and emit results in the requested format.
+    """Execute one or more turns and emit results in the requested format.
 
     Builds a minimal :class:`Agent` directly (no MCP / LSP wiring, no
     rules ingestion, no checkpointing — that's the weasel point), then
     layers in any extensions discovered under
     ``<cwd>/.weasel/extensions/`` and ``~/.weasel/extensions/`` (W3).
-    When ``--json`` is set, emits a single JSON object on stdout;
-    otherwise prints the plain-text output.
+
+    W14-5 wiring:
+
+    * ``-p`` is repeatable — each value runs as one sequential turn.
+    * Piped stdin substitutes for ``-p`` when no flag was given.
+    * ``@/path/to/file`` references in any prompt are inlined.
+    * ``--thinking [level]`` enables extended reasoning when the
+      provider supports it.
+    * ``--stream-json`` emits one JSON line per loop event; ``--json``
+      keeps emitting one envelope per turn; otherwise plain text.
 
     Args:
         args: Parsed CLI namespace from :func:`add_arguments`.
 
     Returns:
-        Process exit code (``0`` on agent success, ``1`` otherwise).
+        Process exit code (``0`` on success across all turns, ``1`` if
+        any turn failed, ``2`` on missing prompt, ``130`` on cancel).
     """
     import asyncio
     import json
@@ -524,9 +617,28 @@ def _run_print_mode(args: argparse.Namespace) -> int:
     from chimera.core.prompt import Prompt
     from chimera.core.tool_group import AGENT_TOOLS
     from chimera.env.local import LocalEnvironment
+    from chimera.weasel import print_mode as _pm
     from chimera.weasel.providers import build_provider as _build_provider
 
     cwd = os.path.abspath(args.cwd or os.getcwd())
+
+    # W14-5: normalize the list of prompts. Multi-message via repeated
+    # ``-p``, single string via legacy ``-p PROMPT``, or piped stdin
+    # when neither flag is set. ``@file`` expansion happens here so
+    # downstream paths see the inlined contents.
+    prompts = _pm.normalize_prompts(args, base_dir=cwd)
+    if not prompts:
+        sys.stderr.write(
+            "weasel: --print/-p PROMPT required (or pipe stdin).\n"
+        )
+        return 2
+
+    # W14-5: parse --thinking once; applied to the provider after build.
+    try:
+        thinking_spec = _pm.parse_thinking_arg(getattr(args, "thinking", None))
+    except ValueError as exc:
+        sys.stderr.write(f"weasel: {exc}\n")
+        return 2
 
     try:
         # WHY: weasel.providers.build_provider knows about the full chain
@@ -538,6 +650,16 @@ def _run_print_mode(args: argparse.Namespace) -> int:
     except Exception as exc:  # noqa: BLE001 — surface provider auth errors cleanly
         print(f"weasel: provider error: {exc}", file=sys.stderr)
         return 1
+
+    # W14-5: apply --thinking to the provider in place. No-op when the
+    # provider doesn't carry the underscore-prefixed thinking attributes
+    # (e.g. OpenAI), so users with non-Anthropic chains see no error.
+    _pm.apply_thinking_to_provider(provider, thinking_spec)
+    if thinking_spec.enabled:
+        sys.stderr.write(
+            f"[weasel] thinking enabled: level={thinking_spec.level} "
+            f"budget={thinking_spec.budget}\n"
+        )
 
     env = LocalEnvironment(workdir=cwd)
     env.setup()
@@ -578,12 +700,9 @@ def _run_print_mode(args: argparse.Namespace) -> int:
             pass
 
     # WHY (W2, wave 9): a prompt template may declare a ``user_prefix``
-    # that gets spliced in front of every user turn. We resolve it
-    # here and concatenate before the resume-prefix wrapper so the
-    # template prefix lands closest to the user's actual input.
-    effective_user = args.print_mode
-    if template.user_prefix:
-        effective_user = f"{template.user_prefix}{effective_user}"
+    # that gets spliced in front of every user turn. The W14-5 multi-
+    # prompt loop below applies it per-turn (only on idx==0 to match the
+    # historical single-prompt behavior).
 
     # WHY (W2, wave 9): stash the resolved theme on the agent so
     # downstream renderers (REPL, future styled print formatters) can
@@ -596,37 +715,61 @@ def _run_print_mode(args: argparse.Namespace) -> int:
     except Exception:  # noqa: BLE001 — defensive
         pass
 
-    # WHY (C1, wave 9): apply ``--resume`` / ``-c`` before dispatching to
-    # the agent so a one-shot run can pick up the prior weasel context.
-    effective_prompt = _apply_weasel_resume_prefix(
-        args, default_prompt=effective_user,
-    )
+    # W14-5: select output strategy once. ``stream-json`` wins over
+    # ``json`` (it's strictly richer) when both flags are set.
+    strategy = _pm.select_prompt_strategy(args)
 
-    result: Any = None
+    # W14-5: multi-prompt loop. The first prompt also gets the resume
+    # prefix wrap (so resumed conversations pick up the prior weasel
+    # context). Subsequent prompts run in the same env and against the
+    # same agent so the in-memory context grows across turns.
+    overall_success = True
+    last_result: Any = None
     try:
-        result = asyncio.run(agent.async_run(effective_prompt, env=env))
-    except KeyboardInterrupt:
-        cancel.cancel()
-        print("\n[cancelled]", file=sys.stderr)
-        return 130
+        for idx, raw_prompt in enumerate(prompts):
+            base = raw_prompt
+            if idx == 0 and template.user_prefix:
+                base = f"{template.user_prefix}{base}"
+            if idx == 0:
+                base = _apply_weasel_resume_prefix(args, default_prompt=base)
+
+            if strategy == "stream-json":
+                rc = _pm.run_streaming_json_turn(
+                    agent, base, env, cancel=cancel,
+                )
+                if rc == 130:
+                    return 130
+                overall_success = overall_success and (rc == 0)
+                continue
+
+            try:
+                last_result = asyncio.run(agent.async_run(base, env=env))
+            except KeyboardInterrupt:
+                cancel.cancel()
+                print("\n[cancelled]", file=sys.stderr)
+                return 130
+
+            turn_success = bool(getattr(last_result, "success", False))
+            overall_success = overall_success and turn_success
+            output = getattr(last_result, "output", "") or ""
+
+            if strategy == "json":
+                payload = {
+                    "output": output,
+                    "success": turn_success,
+                    "model": getattr(provider, "model_name", args.model),
+                    "turn": idx,
+                }
+                json.dump(payload, sys.stdout)
+                sys.stdout.write("\n")
+                sys.stdout.flush()
+            else:  # text
+                if output:
+                    print(output)
     finally:
         env.cleanup()
 
-    success = bool(getattr(result, "success", False))
-    output = getattr(result, "output", "") or ""
-
-    if getattr(args, "json_output", False):
-        payload = {
-            "output": output,
-            "success": success,
-            "model": getattr(provider, "model_name", args.model),
-        }
-        json.dump(payload, sys.stdout)
-        sys.stdout.write("\n")
-    else:
-        if output:
-            print(output)
-    return 0 if success else 1
+    return 0 if overall_success else 1
 
 
 def _apply_weasel_resume_prefix(

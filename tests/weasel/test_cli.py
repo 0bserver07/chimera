@@ -154,13 +154,13 @@ def test_version_flag_prints_zero_five_zero() -> None:
     assert proc.returncode == 0, proc.stderr
     out = proc.stdout + proc.stderr
     assert "chimera weasel" in out
-    assert "0.5.0" in out
+    assert "0.6.0" in out
     assert _SEMVER_RE.search(out)
 
 
 def test_resolve_version_string() -> None:
     """The internal helper returns the minted semver."""
-    assert weasel_cli._resolve_version() == "0.5.0"  # noqa: SLF001
+    assert weasel_cli._resolve_version() == "0.6.0"  # noqa: SLF001
 
 
 # ---------------------------------------------------------------------------
