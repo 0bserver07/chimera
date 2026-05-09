@@ -566,6 +566,102 @@ def cmd_ultraplan(session: Any, _env: Any, args: str, out: PrintFn) -> None:
 
 
 # ---------------------------------------------------------------------------
+# W15-2 P2 (CLAW G23): /teleport — symbol/path resolver
+# ---------------------------------------------------------------------------
+
+
+def _teleport_resolve(target: str, cwd: str | None) -> list[tuple[str, str]]:
+    """Resolve *target* to a list of ``(path, summary)`` candidates.
+
+    Resolution strategy (cheap, stdlib-only):
+
+    1. If *target* names an existing file/dir, return it directly.
+    2. Otherwise, walk the working tree (skipping ``.git`` /
+       ``node_modules`` / ``__pycache__`` / ``.venv``) and grep for
+       lines matching ``def <target>`` or ``class <target>`` in
+       ``.py`` files; ``def <target>(`` / ``function <target>(`` in
+       ``.js`` / ``.ts`` / ``.tsx``; ``fn <target>`` in ``.rs``.
+    3. Cap the result at 25 hits so the slash never spams.
+    """
+    import os
+    from pathlib import Path
+
+    base = Path(cwd or os.getcwd())
+    direct = base / target
+    if direct.exists():
+        kind = "directory" if direct.is_dir() else "file"
+        return [(str(direct), kind)]
+
+    if not target or any(c in target for c in (" ", "\t", "\n")):
+        return []
+
+    py_pat = (f"def {target}", f"class {target}")
+    js_pat = (f"function {target}(", f"function {target} ", f"const {target} =")
+    rs_pat = (f"fn {target}",)
+    skip_dirs = {".git", "node_modules", "__pycache__", ".venv", "dist", "build"}
+    hits: list[tuple[str, str]] = []
+    max_hits = 25
+
+    for root, dirs, files in os.walk(base):
+        dirs[:] = [d for d in dirs if d not in skip_dirs]
+        for fname in files:
+            if len(hits) >= max_hits:
+                break
+            ext = Path(fname).suffix.lower()
+            patterns: tuple[str, ...]
+            if ext == ".py":
+                patterns = py_pat
+            elif ext in (".js", ".ts", ".tsx", ".jsx", ".mjs"):
+                patterns = js_pat
+            elif ext == ".rs":
+                patterns = rs_pat
+            else:
+                continue
+            full = Path(root) / fname
+            try:
+                with full.open("r", encoding="utf-8", errors="ignore") as fh:
+                    for lineno, line in enumerate(fh, 1):
+                        if any(p in line for p in patterns):
+                            rel = full.relative_to(base)
+                            summary = line.strip()[:120]
+                            hits.append((f"{rel}:{lineno}", summary))
+                            if len(hits) >= max_hits:
+                                break
+            except OSError:
+                continue
+        if len(hits) >= max_hits:
+            break
+    return hits
+
+
+def cmd_teleport(_session: Any, env: Any, args: str, out: PrintFn) -> None:
+    """``/teleport <symbol-or-path>`` — locate a symbol or file in the repo.
+
+    Bridges the upstream agent's ``/teleport`` symbol picker. Returns up
+    to 25 ``path:line`` hits with a one-line summary so the operator can
+    paste a target into their next prompt without leaving the REPL.
+
+    Args (CLI tokens):
+        symbol-or-path: file/directory path or Python/JS/TS/Rust symbol.
+    """
+    target = (args or "").strip()
+    if not target:
+        out("/teleport: missing symbol-or-path argument")
+        return
+    cwd = getattr(env, "workdir", None) if env is not None else None
+    hits = _teleport_resolve(target, cwd)
+    if not hits:
+        out(f"/teleport: no results for {target!r}")
+        return
+    out(f"/teleport: {len(hits)} result(s) for {target!r}")
+    for location, summary in hits:
+        if summary:
+            out(f"  {location}    {summary}")
+        else:
+            out(f"  {location}")
+
+
+# ---------------------------------------------------------------------------
 # The palette
 # ---------------------------------------------------------------------------
 
@@ -602,6 +698,8 @@ BADGER_SLASH_COMMANDS: dict[str, SlashHandler] = {
     # W14-4: workflows
     "bughunter": cmd_bughunter,
     "ultraplan": cmd_ultraplan,
+    # W15-2 P2 (CLAW G23): symbol/path resolver
+    "teleport": cmd_teleport,
     # System
     "help": _cmd_help,
     "status": _cmd_status,
@@ -638,6 +736,7 @@ BADGER_SLASH_HELP: dict[str, str] = {
     "git branch": "git branch (args forwarded)",
     "bughunter": "kick off a multi-perspective bug-hunting workflow",
     "ultraplan": "kick off a five-phase planning workflow",
+    "teleport": "locate a symbol or path in the repo (Python/JS/TS/Rust)",
     "help": "show this list",
     "status": "one-screen status summary",
     "doctor": "environment health checks",

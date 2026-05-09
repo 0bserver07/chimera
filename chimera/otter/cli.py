@@ -62,6 +62,11 @@ _VALID_SUBCOMMANDS = (
     "export",
     "import",
     "skills",
+    # W15-2 P2 (OPENCODE G16 / G18): non-conversational generate +
+    # top-level models listing. Both are thin shims that map onto the
+    # existing one-shot path / provider catalog.
+    "generate",
+    "models",
 )
 # WHY (O18): ``bench`` repurposes the ``sub_action`` positional slot for
 # the benchmark name (``humaneval`` / ``tau-bench``). The choices below
@@ -2658,6 +2663,56 @@ def _dispatch_skills(args: argparse.Namespace) -> int:
     return 0
 
 
+def _dispatch_generate(args: argparse.Namespace) -> int:
+    """Wire ``chimera otter generate <PROMPT>`` (W15-2 P2 / OPENCODE G16).
+
+    Non-conversational one-shot text generation. This is a thin shim that
+    re-routes to the existing print-mode path with ``--no-save`` semantics
+    so the run is not persisted to the eventlog. The prompt comes from
+    ``sub_action`` (the positional after ``generate``); when missing we
+    print a usage message and exit rc=2.
+
+    The handler degrades gracefully — passing through to ``_run_print_mode``
+    means every existing flag (``--model``, ``--max-steps``,
+    ``--output-format``) keeps working unchanged.
+    """
+    prompt = getattr(args, "sub_action", None)
+    if not prompt:
+        print(
+            "otter generate: missing PROMPT argument "
+            "(usage: chimera otter generate \"<prompt>\")",
+            file=sys.stderr,
+        )
+        return 2
+    args.print_mode = prompt
+    args.no_save = True
+    args.subcommand = None
+    return int(_run_print_mode(args))
+
+
+def _dispatch_models(args: argparse.Namespace) -> int:
+    """Wire ``chimera otter models`` (W15-2 P2 / OPENCODE G18).
+
+    Lists every model name registered in the shared provider catalog. The
+    output is one-model-per-line, sorted, suitable for piping into
+    ``grep`` / completions / shell scripts. ``--sessions-format json``
+    flips to a JSON array (reusing the existing flag for consistency).
+    """
+    from chimera.providers.catalog import ProviderCatalog
+
+    catalog = ProviderCatalog.default()
+    names = sorted(catalog.models)
+    fmt = (getattr(args, "sessions_format", None) or "text").lower()
+    if fmt == "json":
+        import json
+        json.dump(names, sys.stdout)
+        sys.stdout.write("\n")
+    else:
+        for name in names:
+            print(name)
+    return 0
+
+
 _SUBCOMMAND_DISPATCH: dict[str, Any] = {
     "serve": _dispatch_serve,
     "sessions": _dispatch_sessions,
@@ -2670,6 +2725,9 @@ _SUBCOMMAND_DISPATCH: dict[str, Any] = {
     "export": _dispatch_export,
     "import": _dispatch_import,
     "skills": _dispatch_skills,
+    # W15-2 P2 — opencode parity (G16 / G18)
+    "generate": _dispatch_generate,
+    "models": _dispatch_models,
 }
 
 

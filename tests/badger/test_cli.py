@@ -3,7 +3,7 @@
 Covers:
 
 * ``add_arguments`` registers the documented flag surface.
-* ``chimera badger --version`` prints ``chimera badger 0.6.0``.
+* ``chimera badger --version`` prints ``chimera badger 0.7.0``.
 * ``chimera badger --help`` exits 0 and lists the load-bearing flags.
 * Subcommand placeholders route through :func:`chimera.badger.cli.run`.
 * ``--output-format`` is validated by argparse's ``choices``.
@@ -150,7 +150,7 @@ def test_subprocess_version_matches_release() -> None:
         text=True,
     )
     assert res.returncode == 0
-    assert "chimera badger 0.6.0" == res.stdout.strip()
+    assert "chimera badger 0.7.0" == res.stdout.strip()
 
 
 def test_subprocess_help_exits_zero() -> None:

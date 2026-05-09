@@ -775,6 +775,56 @@ def cmd_quit(session: Any, env: Any, args: str, out: PrintFn) -> None:
 
 
 # ---------------------------------------------------------------------------
+# W15-2 P2 (OPENCODE G24): /plan + /exec mode toggles
+# ---------------------------------------------------------------------------
+#
+# Plan-mode is a soft toggle: ``/plan`` flips ``session.plan_mode`` to
+# ``True`` and prints a one-line confirmation; ``/exec`` flips it back.
+# The REPL surfaces this state in the prompt, and a one-shot ``/plan
+# <task>`` form is also accepted — it sets the flag *and* echoes the task
+# back so the operator's next message is read in plan-mode context.
+
+
+def cmd_plan(session: Any, _env: Any, args: str, out: PrintFn) -> None:
+    """Enter plan-mode. Optional argument is echoed as the planning seed.
+
+    Plan-mode discourages destructive tool use. The actual restriction
+    lives in the loop's permission policy (the REPL reads
+    ``session.plan_mode`` to compose a stricter policy when the flag is
+    on); this slash command only flips the flag and echoes a confirmation.
+    Already-on plan-mode is idempotent: bare ``/plan`` simply prints the
+    current state.
+    """
+    seed = (args or "").strip()
+    already = bool(getattr(session, "plan_mode", False))
+    try:
+        setattr(session, "plan_mode", True)
+    except (AttributeError, TypeError):
+        out("/plan: session does not accept a plan_mode flag")
+        return
+    if seed:
+        out(f"/plan: entered plan-mode (seed: {seed!r})")
+    elif already:
+        out("/plan: already in plan-mode")
+    else:
+        out("/plan: entered plan-mode (read-only tool surface)")
+
+
+def cmd_exec(session: Any, _env: Any, _args: str, out: PrintFn) -> None:
+    """Leave plan-mode and resume the standard execution surface."""
+    was_on = bool(getattr(session, "plan_mode", False))
+    try:
+        setattr(session, "plan_mode", False)
+    except (AttributeError, TypeError):
+        out("/exec: session does not accept a plan_mode flag")
+        return
+    if was_on:
+        out("/exec: left plan-mode")
+    else:
+        out("/exec: not in plan-mode")
+
+
+# ---------------------------------------------------------------------------
 # /permissions: declarative permission-rule management (W13 G6)
 # ---------------------------------------------------------------------------
 #
@@ -1107,6 +1157,9 @@ OTTER_SLASH_COMMANDS: dict[str, SlashHandler] = {
     "init": _cmd_init,
     "themes": cmd_themes,
     "permissions": cmd_permissions,
+    # W15-2 P2 (OPENCODE G24): plan-mode toggles
+    "plan": cmd_plan,
+    "exec": cmd_exec,
     "exit": _cmd_exit,
     "quit": cmd_quit,
     # Prompt
@@ -1149,6 +1202,9 @@ OTTER_SLASH_HELP: dict[str, str] = {
     "init": "summarise the project",
     "themes": "switch the REPL theme (coming soon)",
     "permissions": "list/add/remove declarative permission rules",
+    # W15-2 P2: plan-mode toggles
+    "plan": "enter plan-mode (read-only tool surface; arg = seed task)",
+    "exec": "leave plan-mode and resume the standard execution surface",
     "exit": "leave the REPL",
     "quit": "leave the REPL",
     # Prompt

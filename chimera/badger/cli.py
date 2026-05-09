@@ -56,6 +56,39 @@ _VALID_SUB_ACTIONS = (None, "list", "show", "humaneval", "tau-bench")
 # :class:`chimera.permissions.base.PermissionPolicy` via ``policy_for_mode``.
 _VALID_PERMISSION_MODES = ("read-only", "suggest", "auto", "yolo", "strict")
 
+# W15-2 P2 (CLAW G14): three named discipline presets.
+#
+# * ``strict`` — read-only permission mode, max_steps=15, rerun-on-failure
+#   on, max_reruns=2. Locks the agent to the most cautious posture so a
+#   review-only run never accidentally writes.
+# * ``balanced`` — suggest mode (default), max_steps=25, rerun on, two
+#   reruns. Equivalent to today's defaults; explicit for documentation.
+# * ``yolo`` — yolo mode, max_steps=50, rerun off. The "I'm pairing
+#   loosely" preset.
+#
+# A profile fills *unset* slots only; explicit flags always win.
+_VALID_PROFILES = ("strict", "balanced", "yolo")
+_PROFILE_DEFAULTS: dict[str, dict[str, object]] = {
+    "strict": {
+        "permission_mode": "read-only",
+        "max_steps": 15,
+        "rerun_on_failure": True,
+        "max_reruns": 2,
+    },
+    "balanced": {
+        "permission_mode": "suggest",
+        "max_steps": 25,
+        "rerun_on_failure": True,
+        "max_reruns": 2,
+    },
+    "yolo": {
+        "permission_mode": "yolo",
+        "max_steps": 50,
+        "rerun_on_failure": False,
+        "max_reruns": 0,
+    },
+}
+
 # A10-W11: parser ref for ``--help-long`` rendering and the per-flag
 # long-form descriptions printed below the standard help.
 _PARSER: argparse.ArgumentParser | None = None
@@ -224,7 +257,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         default=os.environ.get("BADGER_MODEL") or _DEFAULT_MODEL,
         metavar="MODEL",
         long_help=_LONG_HELP,
-        help=f"Model id (default: $BADGER_MODEL or {_DEFAULT_MODEL}).",
+        help=f"Model id (default: ${{BADGER_MODEL}}|{_DEFAULT_MODEL}).",
     )
     register_argument(
         core,
@@ -305,6 +338,21 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         metavar="MODE",
         long_help=_LONG_HELP,
         help="5-mode approval (default: suggest).",
+    )
+    # W15-2 P2 (CLAW G14): named profiles bundle permission-mode +
+    # max-steps + rerun-on-failure + auto-approve so users can pick
+    # one term ("strict" / "balanced" / "yolo") instead of three flags.
+    # Profile values fill *unset* flags only — explicit flags always
+    # win, so ``--profile strict --max-steps 50`` keeps max-steps=50.
+    register_argument(
+        behavior,
+        "--profile",
+        dest="profile",
+        choices=list(_VALID_PROFILES),
+        default=None,
+        metavar="PROFILE",
+        long_help=_LONG_HELP,
+        help="discipline preset (strict | balanced | yolo).",
     )
     register_argument(
         output,
@@ -767,6 +815,42 @@ def _run_print_mode(args: argparse.Namespace) -> int:
 # ---------------------------------------------------------------------------
 
 
+def apply_profile(args: argparse.Namespace) -> argparse.Namespace:
+    """Fold ``--profile`` defaults onto *args* in-place (W15-2 P2 / CLAW G14).
+
+    A profile fills only flags that the operator left at their default
+    values. Detection is per-key:
+
+    * ``permission_mode``: default is ``"suggest"``; non-``suggest`` value
+      is treated as explicit.
+    * ``max_steps``: default is :data:`_DEFAULT_MAX_STEPS`; any other
+      value is treated as explicit.
+    * ``rerun_on_failure`` / ``max_reruns``: ``False`` / ``0`` is the
+      default — the profile fills only when those defaults are seen.
+
+    The function is a no-op when ``args.profile`` is unset, so adding
+    the call to ``run`` is safe for existing test fixtures.
+    """
+    profile = getattr(args, "profile", None)
+    if not profile:
+        return args
+    defaults = _PROFILE_DEFAULTS.get(profile)
+    if defaults is None:
+        return args
+    if getattr(args, "permission_mode", "suggest") == "suggest":
+        args.permission_mode = defaults["permission_mode"]
+    if getattr(args, "max_steps", _DEFAULT_MAX_STEPS) == _DEFAULT_MAX_STEPS:
+        args.max_steps = defaults["max_steps"]
+    if not getattr(args, "rerun_on_failure", False):
+        args.rerun_on_failure = bool(defaults["rerun_on_failure"])
+    if not getattr(args, "max_reruns", 0):
+        max_reruns_default = defaults["max_reruns"]
+        args.max_reruns = int(max_reruns_default) if isinstance(
+            max_reruns_default, (int, float, str)
+        ) else 0
+    return args
+
+
 @friendly_errors
 def run(args: argparse.Namespace) -> int:
     """Entry point invoked by ``chimera badger``.
@@ -785,6 +869,9 @@ def run(args: argparse.Namespace) -> int:
 
         print_help_long(_PARSER, _LONG_HELP)
         return 0
+
+    # W15-2 P2 (CLAW G14): apply --profile defaults before dispatch.
+    apply_profile(args)
 
     sub = getattr(args, "subcommand", None)
     if sub in _SUBCOMMAND_DISPATCH:
@@ -818,5 +905,6 @@ def run(args: argparse.Namespace) -> int:
 
 __all__ = [
     "add_arguments",
+    "apply_profile",
     "run",
 ]

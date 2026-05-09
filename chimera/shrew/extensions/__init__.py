@@ -29,9 +29,26 @@ Public surface (what S1's ``cli.py`` imports late):
 """
 from __future__ import annotations
 
+from chimera.shrew.extensions.checkpoint import (
+    CheckpointInfo,
+    checkpoint_root,
+    list_checkpoints,
+    restore_file,
+    snapshot_file,
+)
 from chimera.shrew.extensions.error_simplifier import (
     is_known_error,
     simplify_error,
+)
+from chimera.shrew.extensions.permission_gate import (
+    DANGEROUS_PATTERNS,
+    READ_ONLY_PREFIXES,
+    Decision,
+    GateMode,
+    RiskLevel,
+    classify_command,
+    evaluate_command,
+    resolve_mode,
 )
 from chimera.shrew.extensions.file_chunker import (
     Chunk,
@@ -77,29 +94,42 @@ from chimera.shrew.extensions.turn_budgeter import (
 )
 
 __all__ = [
+    "DANGEROUS_PATTERNS",
     "MOE_MODEL_CATALOG",
+    "READ_ONLY_PREFIXES",
     "SMALL_MODEL_THRESHOLD_B",
     "TINY_MODEL_THRESHOLD_B",
     "TOOLS_TO_DROP_FOR_TINY",
     "Attempt",
+    "CheckpointInfo",
     "Chunk",
+    "Decision",
+    "GateMode",
     "MoEModelProfile",
+    "RiskLevel",
     "build_hint",
     "check_budget",
+    "checkpoint_root",
     "chunk_text",
+    "classify_command",
     "compute_optimal_context_window",
     "detect_short_loop",
     "estimate_tokens",
+    "evaluate_command",
     "filter_tools_for_model",
     "format_budget_warning",
     "format_chunk_header",
     "has_thinking",
     "inject_hint",
     "is_known_error",
+    "list_checkpoints",
     "model_size_billions",
+    "resolve_mode",
+    "restore_file",
     "should_inject_hint",
     "should_short_circuit",
     "simplify_error",
+    "snapshot_file",
     "strip_thinking",
     "truncate_output",
     "wrap_for_small_model",

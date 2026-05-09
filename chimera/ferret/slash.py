@@ -70,9 +70,12 @@ __all__ = [
     "build_custom_command_handler",
     "clear_undo_state",
     "cmd_approval",
+    "cmd_copy",
     "cmd_diff",
     "cmd_help",
+    "cmd_rename",
     "cmd_sandbox",
+    "cmd_status",
     "get_command_origin",
     "get_undo_state",
     "mark_origin",
@@ -413,11 +416,15 @@ def cmd_diff(session: Any, env: Any, _args: str, out: PrintFn) -> None:
        ``env.pending_diff()`` / ``env.diff()`` / ``env.git_diff()``
        (best-effort, late-bound). The first one that returns text is
        printed.
-    3. Otherwise, a friendly "no pending changes" notice.
+    3. **W15-2 P2 (CODEX #25):** Fallback to ``git diff`` plus
+       ``git ls-files --others --exclude-standard`` so untracked files
+       show up (the upstream agent's ``/diff`` includes untracked).
+    4. Otherwise, a friendly "no pending changes" notice.
 
-    No diff is ever computed inline — this handler is a *display* surface
-    over whichever tracker subsystem is wired up; computing a diff lives
-    with FF2/FF4.
+    No diff is ever computed inline at the session layer — this handler
+    is a *display* surface over whichever tracker subsystem is wired up;
+    computing a diff lives with FF2/FF4. The git-fallback path runs in a
+    best-effort subprocess and degrades silently when ``git`` is absent.
     """
     tracker = getattr(session, "file_tracker", None)
     if tracker is not None:
@@ -445,7 +452,68 @@ def cmd_diff(session: Any, env: Any, _args: str, out: PrintFn) -> None:
                 out(rendered.rstrip())
                 return
 
+    # W15-2 P2 (CODEX #25): git-backed fallback that includes untracked files.
+    workdir = getattr(env, "workdir", None) if env is not None else None
+    rendered = _git_diff_with_untracked(workdir)
+    if rendered:
+        out(rendered.rstrip())
+        return
+
     out("/diff: no pending changes")
+
+
+def _git_diff_with_untracked(cwd: str | None) -> str | None:
+    """Best-effort git diff + untracked-file listing.
+
+    Returns the combined text (``git diff`` output and a ``Untracked
+    files:`` section) when the working directory is a git repo with any
+    pending changes, ``None`` otherwise. Never raises — a missing ``git``
+    binary, non-repo directory, or subprocess error all degrade to
+    ``None``.
+
+    Args:
+        cwd: Directory to run git in. ``None`` falls back to ``os.getcwd()``.
+    """
+    import subprocess
+
+    try:
+        cwd_arg = cwd or None
+        diff_proc = subprocess.run(
+            ["git", "diff", "--no-color"],
+            cwd=cwd_arg,
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+        untracked_proc = subprocess.run(
+            ["git", "ls-files", "--others", "--exclude-standard"],
+            cwd=cwd_arg,
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except (FileNotFoundError, OSError, subprocess.SubprocessError):
+        return None
+    if diff_proc.returncode != 0 and untracked_proc.returncode != 0:
+        return None
+    pieces: list[str] = []
+    diff_text = (diff_proc.stdout or "").strip()
+    if diff_text:
+        pieces.append(diff_text)
+    untracked = [
+        ln for ln in (untracked_proc.stdout or "").splitlines() if ln.strip()
+    ]
+    if untracked:
+        if pieces:
+            pieces.append("")
+        pieces.append("Untracked files:")
+        for path in untracked:
+            pieces.append(f"  {path}")
+    if not pieces:
+        return None
+    return "\n".join(pieces)
 
 
 # ---------------------------------------------------------------------------
@@ -639,6 +707,170 @@ def cmd_quit(session: Any, env: Any, args: str, out: PrintFn) -> None:
 
 
 # ---------------------------------------------------------------------------
+# W15-2 P2 (CODEX #26 / #38 / #39): /copy, /status (ferret-shaped), /rename
+# ---------------------------------------------------------------------------
+
+
+def _last_assistant_text(session: Any) -> str | None:
+    """Return the most recent assistant turn's text, or ``None``.
+
+    Walks ``session.context.messages`` (or ``session.messages``) from the
+    end and returns the first ``role == 'assistant'`` message's content.
+    Both ``str`` and ``list``-shaped content blocks are flattened.
+    """
+    ctx = getattr(session, "context", None)
+    msgs = getattr(ctx, "messages", None) if ctx is not None else None
+    if msgs is None:
+        msgs = getattr(session, "messages", None)
+    if not msgs:
+        return None
+    for msg in reversed(list(msgs)):
+        role = getattr(msg, "role", None) or (
+            msg.get("role") if isinstance(msg, dict) else None
+        )
+        if role != "assistant":
+            continue
+        content = getattr(msg, "content", None)
+        if content is None and isinstance(msg, dict):
+            content = msg.get("content")
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            parts: list[str] = []
+            for block in content:
+                if isinstance(block, str):
+                    parts.append(block)
+                elif isinstance(block, dict):
+                    text = block.get("text")
+                    if isinstance(text, str):
+                        parts.append(text)
+                else:
+                    text = getattr(block, "text", None)
+                    if isinstance(text, str):
+                        parts.append(text)
+            if parts:
+                return "\n".join(parts)
+    return None
+
+
+def _copy_to_clipboard(text: str) -> tuple[bool, str]:
+    """Send *text* to the platform clipboard.
+
+    Tries ``pbcopy`` (macOS), ``xclip -selection clipboard`` (X11),
+    ``wl-copy`` (Wayland), and ``clip.exe`` (Windows / WSL) in order.
+    Returns ``(ok, tool_name_or_error)`` so the caller can surface a
+    helpful message.
+    """
+    import subprocess
+
+    candidates: list[list[str]] = [
+        ["pbcopy"],
+        ["xclip", "-selection", "clipboard"],
+        ["wl-copy"],
+        ["clip.exe"],
+    ]
+    last_err = "no clipboard tool found (pbcopy / xclip / wl-copy / clip.exe)"
+    for argv in candidates:
+        try:
+            subprocess.run(
+                argv,
+                input=text,
+                text=True,
+                check=True,
+                timeout=5,
+            )
+            return True, argv[0]
+        except FileNotFoundError:
+            continue
+        except (subprocess.SubprocessError, OSError) as exc:
+            last_err = f"{argv[0]}: {exc}"
+            continue
+    return False, last_err
+
+
+def cmd_copy(session: Any, _env: Any, _args: str, out: PrintFn) -> None:
+    """Copy the latest assistant output to the system clipboard.
+
+    Scans the session message log for the most recent assistant turn and
+    pipes its text to the platform's clipboard tool. The handler never
+    raises: missing clipboard binaries, empty output, or absent message
+    history surface as one-line ``/copy: ...`` errors.
+    """
+    text = _last_assistant_text(session)
+    if not text:
+        out("/copy: nothing to copy (no assistant output yet)")
+        return
+    ok, info = _copy_to_clipboard(text)
+    if ok:
+        out(f"/copy: copied {len(text)} chars via {info}")
+    else:
+        out(f"/copy: failed: {info}")
+
+
+def cmd_rename(session: Any, _env: Any, args: str, out: PrintFn) -> None:
+    """Rename the current ferret session.
+
+    Stores the new title on the session object (``session.title``,
+    falling back to ``session.name``). The eventlog persistence layer
+    picks up ``session.title`` via the existing summary-write path.
+    Bare ``/rename`` (no argument) prints the current title.
+    """
+    new_title = (args or "").strip()
+    if not new_title:
+        current = (
+            getattr(session, "title", None)
+            or getattr(session, "name", None)
+            or "(untitled)"
+        )
+        out(f"/rename: current title: {current}")
+        out("/rename: usage: /rename <new title>")
+        return
+    if len(new_title) > 200:
+        new_title = new_title[:200]
+    set_via = None
+    for attr in ("title", "name"):
+        if hasattr(session, attr):
+            try:
+                setattr(session, attr, new_title)
+                set_via = attr
+                break
+            except (AttributeError, TypeError):
+                continue
+    if set_via is None:
+        try:
+            setattr(session, "title", new_title)
+            set_via = "title"
+        except (AttributeError, TypeError):
+            out("/rename: session does not accept a title attribute")
+            return
+    out(f"/rename: title set to {new_title!r} (session.{set_via})")
+
+
+def cmd_status(session: Any, env: Any, args: str, out: PrintFn) -> None:
+    """Ferret-shaped one-screen status (extends shared ``/status``).
+
+    Calls the shared ``/status`` first (model / mode / tools / cwd /
+    session / cost / messages) and then appends the ferret-specific
+    posture lines: sandbox mode, approval preset, and the workspace's
+    AGENTS.md presence flag (mirroring the upstream agent's status pane).
+    """
+    _cmd_status(session, env, args, out)
+    sandbox_mode = getattr(session, "sandbox_mode", None)
+    approval_preset = getattr(session, "approval_preset", None)
+    if sandbox_mode is not None or approval_preset is not None:
+        out("Ferret posture:")
+        if sandbox_mode is not None:
+            out(f"  sandbox:    {sandbox_mode}")
+        if approval_preset is not None:
+            out(f"  approval:   {approval_preset}")
+    workdir = getattr(env, "workdir", None)
+    if workdir:
+        from pathlib import Path
+        agents_md = Path(workdir) / "AGENTS.md"
+        out(f"  AGENTS.md:  {'present' if agents_md.exists() else 'absent'}")
+
+
+# ---------------------------------------------------------------------------
 # Command origin tracking + grouped /help
 # ---------------------------------------------------------------------------
 
@@ -751,9 +983,13 @@ FERRET_SLASH_COMMANDS: dict[str, SlashHandler] = {
     "sandbox": cmd_sandbox,
     "approval": cmd_approval,
     "diff": cmd_diff,
+    # W15-2 P2 (CODEX #26 / #39): clipboard + rename
+    "copy": cmd_copy,
+    "rename": cmd_rename,
     # System
     "help": cmd_help,
-    "status": _cmd_status,
+    # W15-2 P2 (CODEX #38): ferret-shaped status (adds sandbox/approval/AGENTS.md)
+    "status": cmd_status,
     "doctor": _cmd_doctor,
     "config": _cmd_config,
     "cost": _cmd_cost,
@@ -785,10 +1021,13 @@ FERRET_SLASH_HELP: dict[str, str] = {
     # Ferret-specific
     "sandbox": "show or cycle the sandbox mode (read-only / workspace-write / workspace-write-network)",
     "approval": "show or cycle the approval preset (read-only / auto / full)",
-    "diff": "show pending file diffs from the running agent",
+    "diff": "show pending file diffs from the running agent (incl. untracked)",
+    # W15-2 P2: clipboard + rename
+    "copy": "copy the latest assistant output to the clipboard",
+    "rename": "rename the current session (no arg = show current title)",
     # System
     "help": "show this list",
-    "status": "one-screen status summary",
+    "status": "one-screen status summary (sandbox + approval + AGENTS.md)",
     "doctor": "environment health checks",
     "config": "print effective merged settings",
     "cost": "show cumulative cost",

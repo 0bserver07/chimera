@@ -40,7 +40,7 @@ from chimera.errors import friendly_errors
 # ``chimera shrew --help`` / ``--version`` stays cheap even when the
 # Anthropic / OpenAI SDKs aren't installed.
 
-_VERSION = "0.6.0"
+_VERSION = "0.7.0"
 """Shrew scaffold version. Independent of the chimera package version
 because shrew is a per-CLI release line that mirrors weasel's cadence."""
 
@@ -174,7 +174,7 @@ def _resolve_version() -> str:
     """Return the shrew scaffold version string for ``--version``.
 
     Returns:
-        ``"0.6.0"`` (the per-CLI release line) — independent of the
+        ``"0.7.0"`` (the per-CLI release line) — independent of the
         ``chimera-run`` package version. Mirrors weasel's per-CLI release
         cadence so the two CLIs version-bump in lockstep until shrew
         diverges.
