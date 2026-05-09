@@ -1,10 +1,16 @@
 # Migration: `AgentPreset` -> `CodingAgent.from_preset`
 
-**Status:** `AgentPreset.build()` is deprecated. **Removal target: v0.7.0.**
+**Status (v0.7.0):** `AgentPreset.build()` has been **removed**. Calling
+`AgentPreset.SWE_AGENT.build(provider)` (or any sibling) now raises
+`AttributeError`. This page remains as a historical migration record;
+the recipe below is what you want to land on. For an in-tree benchmark
+or test that absolutely needs the bare-`Agent` profile (no permissions /
+hooks / transcripts / compaction / snapshots), call
+`AgentPreset._compose(provider)` instead — it's the same code path the
+old `build()` delegated to (private now, but still supported).
 
-Calling `AgentPreset.SWE_AGENT.build(provider)` (or any sibling) now raises a
-`DeprecationWarning` pointing at the canonical replacement. The old API still
-works for now — the warning is loud, not fatal.
+> Pre-0.7.0 readers: the entries below describe the deprecation that
+> was active in v0.5 / v0.6. The migration recipe still applies.
 
 ## Why two preset systems exist
 
@@ -114,5 +120,9 @@ After v0.7.0 the import itself will be removed.
 
 ## Removal target
 
-**v0.7.0** — `AgentPreset` and `chimera.agents.presets.agent_styles` will be
-deleted. Track the removal in the v0.7.0 milestone.
+**v0.7.0 (shipped 2026-05-09).** `AgentPreset.build()` was removed in
+v0.7.0; the wrapper class `AgentPreset` itself remains so the in-tree
+`_compose()` escape hatch keeps working. The
+`chimera.agents.presets.agent_styles` module is therefore still
+importable; the only contract that broke is the public `build()`
+method.

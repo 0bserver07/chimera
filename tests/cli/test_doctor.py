@@ -220,19 +220,19 @@ def test_check_optional_extras_all_installed() -> None:
 
 def test_check_cli_versions_all_ok() -> None:
     def runner(cmd: list[str]) -> Any:
-        return _fake_completed(0, f"{cmd[-2]} 0.6.0\n")
+        return _fake_completed(0, f"{cmd[-2]} 0.7.0\n")
 
     checks = doctor.check_cli_versions(runner=runner)
     assert len(checks) == 7
     assert all(c.status == doctor.OK for c in checks)
-    assert all("0.6.0" in c.detail for c in checks)
+    assert all("0.7.0" in c.detail for c in checks)
 
 
 def test_check_cli_versions_one_missing() -> None:
     def runner(cmd: list[str]) -> Any:
         if "ferret" in cmd:
             return _fake_completed(2, "", "scaffold not yet built")
-        return _fake_completed(0, "version 0.6.0\n")
+        return _fake_completed(0, "version 0.7.0\n")
 
     checks = doctor.check_cli_versions(runner=runner)
     by_name = {c.name: c for c in checks}

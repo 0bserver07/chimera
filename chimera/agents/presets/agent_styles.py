@@ -3,13 +3,10 @@
 Each preset recreates the architecture of a well-known coding agent by
 selecting the right combination of primitives from Chimera's layered stack.
 
-.. deprecated:: 0.5
-   :meth:`AgentPreset.build` is deprecated and will be removed in v0.7.0.
-   Use :class:`chimera.assembly.coding_agent.CodingAgent` and
-   :meth:`CodingAgent.from_preset` for the canonical, fully-assembled stack.
-   Internally, :func:`AgentPreset._compose` is the non-deprecated escape
-   hatch used by the test suite to keep exercising the legacy
-   ``Agent`` + loop wiring without triggering the removal warning.
+The canonical user-facing API is
+:meth:`chimera.assembly.coding_agent.CodingAgent.from_preset`. The
+:class:`AgentPreset` class below is retained for tests of the legacy
+``Agent`` + loop wiring; new code should use ``CodingAgent.from_preset``.
 
 Usage (canonical)::
 
@@ -37,12 +34,10 @@ class AgentPreset:
     Each preset composes the right tools, loop, context strategy,
     and prompt to recreate a specific agent's architecture.
 
-    .. deprecated:: 0.5
-       :meth:`build` emits a :class:`DeprecationWarning` and will be removed
-       in v0.7.0. Use :meth:`chimera.assembly.coding_agent.CodingAgent.from_preset`
-       for the canonical, fully-assembled stack. The private :meth:`_compose`
-       remains as a non-warning escape hatch for tests of the legacy
-       ``Agent`` + loop wiring.
+    The user-facing entry point is
+    :meth:`chimera.assembly.coding_agent.CodingAgent.from_preset`; the
+    :meth:`_compose` method here is the in-tree escape hatch used by
+    tests of the legacy ``Agent`` + loop wiring.
 
     Args:
         name: Short identifier for this preset.
@@ -80,53 +75,22 @@ class AgentPreset:
         self.system_prompt = system_prompt
         self.max_steps = max_steps
 
-    def build(self, provider: Provider, env: Environment | None = None) -> Agent:
-        """Build an Agent from this preset.
-
-        .. deprecated:: 0.5
-           Use :meth:`chimera.assembly.coding_agent.CodingAgent.from_preset`
-           for the canonical replacement. This method will be removed in
-           v0.7.0; internal callers (e.g., the test suite) use
-           :meth:`_compose` to keep exercising the legacy ``Agent`` + loop
-           wiring without the warning.
-
-        Args:
-            provider: LLM provider for completions.
-            env: Optional execution environment (unused during construction
-                but accepted for API symmetry with other factory functions).
-
-        Returns:
-            A fully-wired :class:`~chimera.core.agent.Agent`.
-        """
-        import warnings
-        warnings.warn(
-            f"AgentPreset.build() will be removed in v0.7.0. "
-            f"Use chimera.assembly.coding_agent.CodingAgent.from_preset() "
-            f"instead. See docs/architecture.md or research notes.\n"
-            f"  from chimera.assembly.coding_agent import CodingAgent\n"
-            f"  agent = CodingAgent.from_preset('{self.name}')",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return self._compose(provider, env)
-
     def _compose(
         self, provider: Provider, env: Environment | None = None
     ) -> Agent:
-        """Construct an Agent from this preset without emitting the
-        :class:`DeprecationWarning` raised by :meth:`build`.
+        """Construct an Agent from this preset.
 
-        This is the non-deprecated escape hatch used by the test suite to
+        This is the in-tree escape hatch used by the test suite to
         verify that the legacy ``Agent`` + loop wiring still composes
-        correctly. End users should migrate to
-        :meth:`chimera.assembly.coding_agent.CodingAgent.from_preset` — when
-        :meth:`build` is removed in v0.7.0 this method may also be removed
-        as part of the broader ``AgentPreset`` deprecation cleanup.
+        correctly. End users should use
+        :meth:`chimera.assembly.coding_agent.CodingAgent.from_preset`
+        instead; this method is intentionally private.
 
         Args:
             provider: LLM provider for completions.
             env: Optional execution environment (unused during construction
-                but accepted for API symmetry with :meth:`build`).
+                but accepted for API symmetry with the historical factory
+                signature).
 
         Returns:
             A fully-wired :class:`~chimera.core.agent.Agent`.

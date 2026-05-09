@@ -35,9 +35,10 @@ def test_cline_preset_exists():
 
 
 def test_build_swe_agent():
-    # _compose() is the non-deprecated path; .build() emits the v0.7.0
-    # removal warning and delegates here. Tests use _compose() so they
-    # don't pin themselves to the deprecated surface.
+    # _compose() is the in-tree path used by tests of the legacy
+    # Agent + loop wiring. End users should call
+    # CodingAgent.from_preset("swebench") instead — the public
+    # AgentPreset.build() shim was removed in v0.7.0.
     agent = AgentPreset.SWE_AGENT._compose(_mock_provider())
     assert agent is not None
     assert len(agent.tools) >= 3  # minimal tool set
