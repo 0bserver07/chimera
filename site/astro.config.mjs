@@ -33,7 +33,7 @@ export default defineConfig({
 				},
 				{
 					tag: 'script',
-					attrs: { src: '/mermaid-init.js', type: 'module', defer: true },
+					attrs: { src: '/chimera/mermaid-init.js', type: 'module', defer: true },
 				},
 			],
 			sidebar: [

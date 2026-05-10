@@ -30,6 +30,61 @@ Chimera gives you two things:
 
 2. **A Python library** for building your own coding agents from modular pieces — pick your LLM, pick your tools, pick your strategy, wire them together.
 
+## How It Works
+
+```mermaid
+graph TD
+    User["You<br/>(prompt + repo)"]
+    User --> Loop
+
+    subgraph Loop["Agent Loop (Phase 1)"]
+        direction LR
+        Think["Reason<br/>(LLM call)"] --> Act["Act<br/>(tool call)"] --> Obs["Observe<br/>(tool result)"] --> Think
+    end
+
+    Loop -->|reads/writes| FS["Your filesystem"]
+    Loop -->|fires events| Hooks["Hooks · Permissions · Sessions"]
+
+    Loop --> Provider{"Provider routing"}
+    Provider -- "claude-* / glm-* / kimi-*" --> Anth["Anthropic-compat"]
+    Provider -- "gpt-* / o1 / o3" --> OAI["OpenAI"]
+    Provider -- "gemini-*" --> G["Google"]
+    Provider -- "qwen-* / llama-* / *:cloud" --> Oll["Ollama"]
+    Provider -- "grok-*" --> X["xAI"]
+
+    Tools["24 built-in tools<br/>read · write · edit · bash · search · git · test ·<br/>web_fetch · apply_patch · think · todo · todo · …"]
+    Loop -.uses.-> Tools
+
+    classDef loop fill:#352b5e,stroke:#7c3aed,color:#fff
+    classDef provider fill:#1e3a2a,stroke:#22c55e,color:#fff
+    class Think,Act,Obs loop
+    class Anth,OAI,G,Oll,X provider
+```
+
+Seven CLIs share one substrate. Each codename is a thin posture — different defaults, different tool subset, different transport — over the same agent loop, the same provider factory, the same event-sourced session store.
+
+```mermaid
+graph LR
+    Core["Shared core<br/>(loop · providers · tools · sessions · hooks · permissions)"]
+
+    Core --> Mink["mink<br/>TUI-first"]
+    Core --> Otter["otter<br/>multi-client server<br/>(REPL + HTTP + ACP)"]
+    Core --> Ferret["ferret<br/>sandbox-first<br/>(--sandbox / --approval)"]
+    Core --> Weasel["weasel<br/>minimal harness<br/>(REPL · -p · RPC · SDK)"]
+    Core --> Shrew["shrew<br/>small local models<br/>(llama.cpp default)"]
+    Core --> Stoat["stoat<br/>shell-mode toggle<br/>(/shell · Ctrl-X)"]
+    Core --> Badger["badger<br/>strict harness<br/>(--rerun-on-failure)"]
+
+    classDef core fill:#3b2e20,stroke:#fbbf24,color:#fff
+    classDef cli fill:#352b5e,stroke:#7c3aed,color:#fff
+    class Core core
+    class Mink,Otter,Ferret,Weasel,Shrew,Stoat,Badger cli
+```
+
+`chimera which --task "build a TUI dashboard"` recommends the right codename for a given task. `chimera agents` lists all seven with one-liner pitches and the upstream tool that inspired each.
+
+See [docs/architecture.md](docs/architecture.md) for the full 8-phase decomposition (state, sub-agents, permissions, prompts, hooks, commands, infrastructure, snapshots) and per-phase entry points.
+
 ## Install
 
 Latest release: **v0.7.0** ([release notes](https://github.com/0bserver07/chimera/releases/tag/v0.7.0) · [PyPI](https://pypi.org/project/chimera-run/0.7.0/)).
