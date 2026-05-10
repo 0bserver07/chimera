@@ -290,7 +290,18 @@ export default defineConfig({
 					label: 'Releases',
 					collapsed: true,
 					items: [
-						{ label: '0.5.0 — Five-Strong Family', slug: 'releases/0.5.0' },
+						{ label: '0.7.0 — PyPI release + deprecation cuts', link: '/releases/0.7.0/' },
+						{ label: '0.6.0 — P0 gap closure + benchmarks', link: '/releases/0.6.0/' },
+						{ label: '0.5.0 — Five-Strong Family', link: '/releases/0.5.0/' },
+					],
+				},
+				{
+					label: 'Migrations',
+					collapsed: true,
+					items: [
+						{ label: 'v0.6 → v0.7', link: '/migrations/v0.6-to-v0.7/' },
+						{ label: 'v0.5 → v0.6', link: '/migrations/v0.5-to-v0.6/' },
+						{ label: 'v0.4 → v0.5', link: '/migrations/v0.4-to-v0.5/' },
 					],
 				},
 			],
