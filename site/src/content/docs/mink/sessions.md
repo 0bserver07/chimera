@@ -1,6 +1,6 @@
 ---
-title: "Mink Sessions and Compaction"
-description: "How chimera mink persists conversations so they can be replayed, resumed, and compacted."
+title: Mink Sessions and Compaction
+description: How chimera mink persists conversations so they can be replayed, resumed, and compacted.
 ---
 
 # Sessions, Resume, and Compaction
@@ -108,3 +108,16 @@ to the same working set.
   a no-op on the message list.
 - `tests/mink/test_mink_cli.py` — REPL slash command smoke tests for
   the mink subcommand.
+
+## Cross-CLI sessions
+
+Mink shares `~/.chimera/eventlog/` with every other Chimera CLI —
+`mink-<utc>-<uuid>/` directories sit alongside `otter-`, `ferret-`,
+`weasel-`, `shrew-`, `stoat-`, and `badger-` prefixes. Per-CLI
+`sessions list` commands default to filtering on their own prefix (the
+historic behavior). Pass `--all-clis` to drop the filter and surface a
+combined chronological view with an `ORIGIN` column. Every per-CLI
+`sessions show <id>` resolves a session by directory name regardless of
+origin, so an operator can inspect any CLI's session transcript by id
+alone. The shared walker lives at
+`chimera/sessions/eventlog/cross_cli.py`.

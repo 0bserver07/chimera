@@ -1,13 +1,26 @@
 ---
-title: "Mink Parity Matrix"
-description: "Feature-by-feature parity table between chimera mink and the upstream open-source coding agent it mirrors."
+title: Mink Parity Matrix
+description: Feature-by-feature parity table between chimera mink and the upstream open-source coding agent it mirrors.
 ---
 
 # `chimera mink` Parity Matrix
 
 **Source baseline:** `research/mink/24-gap-analysis.md` (Apr 23 2026).
 **Updated:** 2026-04-25, after v0.4.0 ship (M0–M5 + wave-2 follow-ups).
+Refreshed 2026-04-30 by D1 at the wave-9 close — mink rows themselves
+are unchanged (no carry-over items targeted mink directly), but the
+cross-CLI `chimera completion` generator (O5) now covers `chimera
+mink` and the family grew from 5 to 7 (stoat, badger).
 **Legend:** GREEN = shipped / at parity (or superset); YELLOW = partial; RED = deferred.
+
+> **Wave-9 close (2026-04-30, D1).** Wave-9 batched 24 agents across
+> the family. Mink itself was untouched — the only mink-relevant
+> deliverable is O5 (the cross-CLI `chimera completion bash|zsh|fish
+> [--cli all|<animal>]` generator), which walks the live argparse
+> tree and now emits a working completion script for `chimera mink`
+> alongside its six siblings. The trademark scrub at the
+> codename-aggregate level still exits OK (`passed: 7`). Mink stays
+> a **superset** Tier-1 CLI in the now-seven-strong family.
 
 ## Subsystems
 
@@ -108,3 +121,7 @@ the discovery path set `CHIMERA_MINK_SETTINGS_PATH` or pass `--cwd` to
 point at a different project. YELLOW rows degrade gracefully (and emit
 a warning where the gap is user-visible). RED rows raise
 `NotImplementedError` with a pointer to the follow-up issue.
+
+## Cross-links
+
+- [Chimera architecture (8-phase map)](../architecture.md) — where the rows in this matrix live in the shared library.

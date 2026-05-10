@@ -1,6 +1,6 @@
 ---
-title: "Mink Benchmarks"
-description: "Benchmark adapters that ship with Chimera and how to drive them through the eval harness."
+title: Mink Benchmarks
+description: Benchmark adapters that ship with Chimera and how to drive them through the eval harness.
 ---
 
 # Benchmarks
@@ -47,7 +47,9 @@ Status below was reconstructed from `research/mink/A{9,10,11,14,17}-REPORT.md`
 | MBPP                   | #94   | scaffolded  | `chimera/eval/benchmarks/mbpp.py`                     | local JSON loader; sanitized split recommended    |
 | LiveCodeBench          | #95   | scaffolded  | `chimera/eval/benchmarks/livecodebench.py`            | date-window filter for contamination control      |
 | MATH-500 / AIMO        | #96   | scaffolded  | `chimera/eval/benchmarks/math500.py`, `aimo.py`       | AIMO has live-LLM tests; MATH-500 loader-only     |
+| WebArena               | n/a   | scaffolded  | `chimera/eval/benchmarks/webarena.py`                 | string_match + url_match; no upstream sandbox     |
 | HumanEval (base)       | n/a   | validated   | `chimera/eval/benchmarks/human_eval.py`               | 66.5% (109/164) GLM-5.1; raw in `data/`           |
+| Aider Polyglot         | n/a   | scaffolded  | `chimera/eval/benchmarks/aider_polyglot.py`           | 6 langs; diff-match + test-cmd; shrew wrapper     |
 | Custom                 | n/a   | validated   | `chimera/eval/benchmarks/custom.py`                   | user-defined tasks; in-tree tests                 |
 
 Issue links: `https://github.com/0bserver07/chimera/issues/<N>`.
@@ -321,6 +323,68 @@ seven competition-math subjects.
   optional `sympy` symbolic equivalence when installed.
 - Run: `chimera eval --benchmark aimo --dataset path/to/aimo.json`.
 
+### WebArena
+
+Web-agent benchmark: realistic tasks across self-hosted e-commerce,
+GitLab, CMS, and Reddit sandbox sites. Each task carries an `intent`
+(natural-language goal), `start_url`, and an `eval_types` list
+declaring how success is judged: `string_match` (against a
+`reference_answer` or compound `reference_answers` map),
+`url_match` (against `reference_url`), and `program_html`
+(programmatic DOM checks).
+
+- File: `chimera/eval/benchmarks/webarena.py`
+- Tests: `tests/eval/benchmarks/test_webarena.py` (47 unit tests
+  covering dataset-absent skip, JSON / JSONL load, scoring round-trip
+  for both `string_match` and `url_match`, compound
+  `reference_answers`, combined eval-types AND semantics, and the
+  upstream `env` escape hatch).
+- Status: scaffolded — `string_match` + `url_match` scorers are wired
+  in-process. `program_html` is recognised but deferred (fails closed
+  so a stub never falsely scores). Full execution requires the
+  upstream sandbox sites (Docker — heavyweight) plus the upstream
+  `webarena` package for DOM/accessibility observations. We do **not**
+  vendor or pip-install upstream — the licence on the task corpus is
+  unclear.
+
+#### Setup
+
+```bash
+# 1. Clone upstream tasks (read-only — we never pip install it):
+git clone https://github.com/web-arena-x/webarena /tmp/webarena
+
+# 2. Stage the JSON task config dump under the default dataset dir:
+mkdir -p ~/.chimera/datasets/webarena
+cp /tmp/webarena/config_files/test.raw.json \
+   ~/.chimera/datasets/webarena/test.json
+
+# 3. Stand up the upstream sandbox sites (Docker, heavyweight):
+#    https://github.com/web-arena-x/webarena/blob/main/environment_docker/README.md
+```
+
+Override the dataset directory with `CHIMERA_WEBARENA_PATH=/path/to/dir`.
+
+#### Scoring
+
+The agent's output may be either a JSON envelope
+`{"answer": "...", "url": "..."}` or two named lines:
+
+```
+ANSWER: Widget Pro Max
+URL: http://shop.example.test/p/widget-pro-max
+```
+
+`url_match` compares scheme + netloc + path (query + fragment
+ignored, trailing slash normalised). `string_match` lowercases and
+collapses whitespace before comparing; the upstream
+`reference_answers.must_include` / `fuzzy_match` / `exact_match`
+shape is honoured. When multiple eval types are declared, **all**
+must pass.
+
+When an upstream `env` exposing `evaluate_task(task, output)` is
+passed in, the adapter delegates to it — same escape hatch as
+tau-bench.
+
 ### HumanEval (base, validated)
 
 Original HumanEval — 164 hand-written Python problems.
@@ -331,6 +395,79 @@ Original HumanEval — 164 hand-written Python problems.
   `data/humaneval-glm51-results.json`. (Earlier 90.9% GLM-5 figure
   from project memory predates the recorded raw data.)
 - Run: `chimera eval --benchmark human-eval --dataset path/to/humaneval.json`.
+
+### Aider Polyglot
+
+Multi-language coding benchmark from
+`github.com/Aider-AI/polyglot-benchmark`. Drawn from Exercism exercises
+across six target languages: Python, JavaScript, Rust, Go, Java, C++.
+Each task ships a stub plus a read-only test file; the agent fills in
+the stub and is graded by either expected-file diff-match or by running
+the language's test command and checking the exit code.
+
+This adapter is the **general** flavour usable by every Chimera CLI
+(otter / weasel / shrew / mink / ferret). The shrew flavour at
+`chimera/shrew/benchmarks/aider_polyglot.py` is a thin subclass that
+exposes a small-model-friendly default language subset
+(`SHREW_DEFAULT_LANGUAGES = python, javascript, rust, go`) — Java and
+C++ need toolchains that aren't always installed on a small-model
+laptop.
+
+- File: `chimera/eval/benchmarks/aider_polyglot.py`
+- Tests: `tests/eval/benchmarks/test_aider_polyglot.py` (26 unit tests
+  covering ABC conformance, dataset loading, single + multi-language
+  filters, env-var override, diff-match scorer, test-command scorer).
+- Dataset: not vendored — licenses are mixed. Stage locally under
+  `~/.chimera/datasets/aider-polyglot/` or override with
+  `CHIMERA_AIDER_POLYGLOT_PATH=/abs/path`.
+- Constructor: `AiderPolyglot(dataset_path=None, limit=None,
+  languages=None, language=None)`. The list-form `languages=[...]`
+  filter wins when both are supplied; the single-form `language="..."`
+  is preserved for back-compat.
+- Run (loader only):
+  ```python
+  from chimera.eval.benchmarks import AiderPolyglot
+
+  bench = AiderPolyglot(languages=["python", "rust"], limit=10)
+  for task in bench.tasks():
+      ...  # drive the agent; bench.evaluate(task, output, env) -> bool
+  ```
+
+#### Setup
+
+```bash
+# 1. Clone upstream (read-only — we never pip install it):
+git clone https://github.com/Aider-AI/polyglot-benchmark /tmp/polyglot
+
+# 2. Stage tasks.json under the default dataset dir:
+mkdir -p ~/.chimera/datasets/aider-polyglot
+# (author tasks.json from the upstream tree — see the adapter docstring
+#  for the per-task schema)
+
+# 3. Smoke-run via shrew:
+chimera shrew bench aider-polyglot --bench-limit 5 --language python
+```
+
+#### Schema
+
+Per task in `tasks.json`:
+
+```json
+{
+  "id": "python/hello-world",
+  "language": "python",
+  "prompt": "Implement hello().",
+  "expected_files": {"hello_world.py": "def hello():\n    return 'Hello, World!'\n"},
+  "test_command": "pytest -x -q",
+  "exercise_dir": "hello-world",
+  "timeout_s": 90
+}
+```
+
+Either `expected_files` or `test_command` (or both) must be present.
+When both are set, diff-match is tried first; the test command is the
+fallback. The `exercise_dir` is the subdir under
+`<dataset_root>/exercises/` to use as the cwd for `test_command`.
 
 ### Custom (validated)
 

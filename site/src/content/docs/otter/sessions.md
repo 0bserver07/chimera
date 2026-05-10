@@ -47,6 +47,7 @@ Written once per session by `chimera/otter/cli.py:_write_run_summary`
   "agent": "otter",
   "model": "claude-sonnet-4-6",
   "prompt": "list files then read README",
+  "title": "Investigate flaky test #4711",
   "cwd": "/Users/yad/repos/chimera",
   "started_at": "2026-04-25T09:12:01Z",
   "ended_at": "2026-04-25T09:12:14Z",
@@ -66,6 +67,9 @@ Notes:
   either (`chimera/otter/sessions.py:_summary_to_record`).
 - `agent: "otter"` lets a future cross-agent viewer (otter + mink) tell
   flavors apart with one read.
+- `title` is optional. It is written by `chimera otter -p --title "..."`
+  and `chimera otter sessions rename`. Listings fall back to the
+  truncated `prompt` when the field is absent or blank.
 - `cost_usd: 0.0` does not mean "free" — it means the provider did not
   surface pricing. See [`models.md`](models.md) for which providers
   emit cost.
@@ -179,6 +183,109 @@ The id format the loader accepts is the **directory name**:
 `otter-20260425T091201-71032a5e`. The leading `otter-` is required so
 the loader can disambiguate from mink runs in the same eventlog root.
 
+## `chimera otter sessions cost`
+
+Aggregate `cost_usd` and `total_tokens` across persisted otter sessions
+under `~/.chimera/eventlog/otter-*/`. The same rollup the
+[`GET /runs/cost`](server.md) HTTP route exposes, served from the CLI:
+
+```bash
+chimera otter sessions cost
+```
+
+Flags (all optional):
+
+```bash
+chimera otter sessions cost --since 7d
+chimera otter sessions cost --since 24h
+chimera otter sessions cost --since 2026-04-01
+chimera otter sessions cost --sessions-model glm-5.1
+chimera otter sessions cost --sessions-limit 50
+chimera otter sessions cost --format json
+chimera otter sessions cost --format csv
+```
+
+`--since`, `--sessions-model`, and `--sessions-limit` mirror
+`sessions list` semantics so users only learn the filter once. `--format`
+selects the output renderer:
+
+- `text` (default) — a totals overview plus a `by model` breakdown.
+  Uses `rich` when installed, falls back to a plain ASCII table.
+- `json` — the same JSON shape as `chimera mink runs cost --format json`
+  and `GET /runs/cost`: `totals`, `filters`, `by_model`, `rows`. Each
+  `rows[*].run_id` carries the full `otter-<utc>-<uuid>` id.
+- `csv` — per-session rows only (no totals); columns match `CostRow`
+  so spreadsheet pivots can re-derive aggregates locally.
+
+Aggregation reuses `chimera.mink.cost.compute_summary` (the same engine
+behind `mink runs cost` and the HTTP route), pointed at otter session
+dirs through the new `iter_session_run_records()` helper. Schema-wise
+the `summary.json` fields read are exactly those `_write_run_summary`
+writes today: `run_id` / `session_id`, `started_at`, `model`, `cost_usd`,
+`total_tokens`, `success`, `steps`. Optional token-breakdown fields
+(`input_tokens`, `output_tokens`, `cache_tokens`) are surfaced when the
+schema reports them and default to zero otherwise.
+
+Errors:
+
+- Unparseable `--since` → exit 2 with a clear stderr message naming the
+  expected forms (`7d`, `24h`, `30m`, or ISO-8601).
+- Unknown `--format` → exit 2 listing the supported values.
+
+Empty corpora return exit 0 with a zero-row totals block (text) or an
+empty `rows: []` array (json/csv) so scripts can poll without special
+casing "no sessions yet".
+
+## Naming a session
+
+By default `chimera otter sessions list` displays the truncated prompt
+in the `TITLE` column — the same heuristic mink uses. For long-lived
+sessions (or when the prompt is a generated transcript-prefix that
+isn't useful at a glance) you can attach a hand-authored label.
+
+### `--title` on a one-shot run
+
+```bash
+chimera otter -p "trace the bug in foo.py" \
+  --title "Investigate flaky test #4711"
+```
+
+The label is written into `summary.json` under the `title` key
+alongside the existing `prompt` field. `sessions list` surfaces it in
+the new `TITLE` column; `sessions show` adds a `title:` line to the
+summary block. When `--title` is unset (the default), `summary.json`
+omits the key and the listing falls back to the truncated prompt — so
+existing fixtures and pre-O4 sessions render identically.
+
+### `chimera otter sessions rename <id> <title...>`
+
+Already-saved sessions can be re-titled in place:
+
+```bash
+chimera otter sessions rename otter-20260425T091201-71032a5e \
+  Refactor the cost rollup
+```
+
+The new title can be multi-word without quoting (the variadic
+positional joins with spaces). Pass an empty string to clear the
+title and revert to the prompt-fallback heuristic:
+
+```bash
+chimera otter sessions rename otter-20260425T091201-71032a5e ""
+```
+
+Errors:
+
+- Unknown id → exit 2 with `error: session not found: <id>` plus a
+  hint to run `chimera otter sessions list`.
+- Session has no `summary.json` (aborted before write) → exit 2.
+- Malformed `summary.json` → exit 2 with the JSON parse error.
+
+The implementation is a single in-place rewrite of `summary.json`
+(`chimera/otter/sessions.py:rename_session`); no event files are
+touched and the directory name is preserved so existing share links
+and resume ids continue to work.
+
 ## REPL `/sessions` slash command
 
 Inside the REPL, `/sessions` calls into the same loader. The default
@@ -251,8 +358,22 @@ is a follow-up tracked in the parity matrix.
 Otter and mink share `~/.chimera/eventlog/`. They never collide because
 the directory prefix disambiguates: `mink-*` for mink, `otter-*` for
 otter. `chimera mink runs list` skips `otter-*`; `chimera otter sessions
-list` skips `mink-*`. A future combined viewer can read both with one
-`iter()` and dispatch on the prefix.
+list` skips `mink-*` by default — but the `--all-clis` flag (B9-W11)
+opts into a combined view.
+
+## Cross-CLI sessions
+
+By default `chimera otter sessions list` filters to `otter-*` directories,
+matching the historic per-CLI scope. Pass `--all-clis` to fold in every
+other Chimera CLI's sessions (`mink-`, `ferret-`, `weasel-`, `shrew-`,
+`stoat-`, `badger-`) into one chronological view; the table grows an
+`ORIGIN` column so you can tell which CLI wrote each row, and `--json`
+output adds a top-level `cli_origin` field per record. `sessions show
+<id>` already resolves a session by directory name regardless of which
+CLI created it, so an otter operator can pull up a ferret session
+transcript with the id alone — no flag required. The shared walker
+lives at `chimera/sessions/eventlog/cross_cli.py` and is consumed by
+every per-CLI `sessions.py` via `iter_sessions(all_clis=True)`.
 
 ## See also
 

@@ -1,5 +1,5 @@
 ---
-title: "Mink Remote Execution"
+title: Mink Remote Execution
 description: "Route chimera mink file and bash tool calls through an SSH connection with --remote ssh://user@host."
 ---
 
@@ -48,10 +48,27 @@ launching `chimera mink`.
 
 | Variable                 | Effect                                    |
 |--------------------------|-------------------------------------------|
+| `CHIMERA_SSH_BACKEND`    | Selects the SSH backend. Set to `async` to opt in to the asyncssh-backed `AsyncSSHEnvironment` (native SFTP, persistent connection, ProxyJump). Any other value — including unset — keeps the subprocess `SSHEnvironment` default. The async path requires the `ssh` extra (`pip install 'chimera-run[ssh]'`); when `asyncssh` is missing, mink silently falls back to the subprocess backend so you never get a hard crash from a stray env var. |
 | `CHIMERA_SSH_TEST_HOST`  | Enables the live integration tests in `tests/env/test_ssh_environment.py`. Set to a reachable `user@host`. |
 | `SSH_AUTH_SOCK`          | Standard agent socket; `ssh` uses it.     |
 
-No new env vars are introduced by this scaffold beyond the test toggle.
+### Picking a backend
+
+```bash
+# Default — subprocess / OpenSSH, zero extra deps.
+chimera mink --remote ssh://deploy@host:/srv/app -p "ls"
+
+# Opt in to asyncssh (native SFTP, persistent conn, ProxyJump chains).
+pip install 'chimera-run[ssh]'
+CHIMERA_SSH_BACKEND=async chimera mink \
+    --remote ssh://deploy@host:/srv/app -p "ls"
+```
+
+The async backend is preferable for chatty workflows (many small file
+reads/writes, multi-hop bastion topologies, or long-running sessions
+where the per-call OpenSSH handshake becomes the bottleneck). The
+subprocess backend remains the right default for one-off invocations
+and environments where installing `asyncssh` isn't worth it.
 
 ## What gets routed
 
@@ -64,13 +81,17 @@ remain local.
 
 ## Limitations (deferred to follow-up)
 
-- **No SFTP.** File I/O uses `ssh cat` / `ssh tee`, which is fine for
-  text but not binary-safe.
-- **No persistent connection.** Every call spawns a fresh `ssh`. For
-  high-volume workflows, configure `ControlMaster auto` in your SSH
-  config to amortize the connection cost.
-- **No checkpoint/restore.** Use git on the remote host instead.
-- **No password / passphrase prompts.** Unlock keys with `ssh-add`.
+- **No SFTP** in the subprocess backend. File I/O uses `ssh cat` /
+  `ssh tee`, which is fine for text but not binary-safe. Switch to
+  `CHIMERA_SSH_BACKEND=async` for native SFTP.
+- **No persistent connection** in the subprocess backend by default.
+  Every call spawns a fresh `ssh`. For high-volume workflows, either
+  configure `ControlMaster auto` in your SSH config or switch to
+  `CHIMERA_SSH_BACKEND=async` (one persistent connection for the
+  session).
+- **No password / passphrase prompts** in the subprocess backend.
+  Unlock keys with `ssh-add`. The async backend accepts `password=` /
+  `passphrase=` when constructed programmatically.
 - **No sudo escalation.** Run as a user with the right permissions.
 - **`run_tests()` returns raw output.** Pytest output parsing is local-only.
 
@@ -92,6 +113,90 @@ try:
     print(result.stdout)
 finally:
     env.cleanup()
+```
+
+## Live testing
+
+The unit tests in `tests/env/test_ssh.py` and
+`tests/env/test_ssh_environment.py` run against mocked
+`subprocess.run`, which catches argv-shape regressions but can't
+exercise the wire format end-to-end. For that, an opt-in suite in
+`tests/env/test_ssh_live.py` boots a real `linuxserver/openssh-server`
+container (via the `docker_sshd` fixture in `tests/env/conftest.py`)
+and runs `SSHEnvironment` against it.
+
+### Opt in
+
+```bash
+uv run pytest -m live_ssh                  # only the live SSH tests
+uv run pytest tests/env/ -m "not live_ssh" # explicit opt-out
+```
+
+When Docker isn't installed or its daemon is unreachable, the live
+tests are **skipped with a helpful message** — they never fail
+spuriously on a host without Docker.
+
+### Requirements
+
+- A reachable Docker daemon (`docker info` exits 0).
+- The `linuxserver/openssh-server:latest` image. The fixture pulls it
+  on first use; offline runs need it cached locally.
+- `ssh-keygen` on `PATH` — the fixture generates a fresh ed25519
+  keypair per session and discards it at teardown.
+
+### What the fixture does
+
+1. Probes Docker via `docker info`. Daemon down → skip with message.
+2. Generates an ephemeral ed25519 keypair into a session-scoped tmp dir.
+3. Runs:
+
+   ```
+   docker run -d --rm \
+     -p 0:2222 \
+     -e USER_NAME=test \
+     -e PUBLIC_KEY=<generated> \
+     -e PASSWORD_ACCESS=false \
+     -e SUDO_ACCESS=false \
+     linuxserver/openssh-server:latest
+   ```
+
+   Port `0` lets the kernel pick a free host port; the fixture reads
+   the mapping back via `docker port <id> 2222/tcp`.
+4. Waits up to 30 s for the SSH banner before yielding.
+5. Tears the container down via `docker rm -f` in the finalizer
+   (with `--rm` as belt-and-suspenders cleanup if pytest is killed
+   mid-run).
+
+The fixture yields an `SshdEndpoint(host, port, username, key_path,
+container_id)` namedtuple that tests pass straight to
+`SSHEnvironment(...)`.
+
+### Adding new live tests
+
+Tag the test with `@pytest.mark.live_ssh` (or apply
+`pytestmark = pytest.mark.live_ssh` at module scope), then accept the
+`docker_sshd` fixture:
+
+```python
+import pytest
+from chimera.env.ssh import SSHEnvironment
+
+@pytest.mark.live_ssh
+def test_remote_whoami(docker_sshd):
+    env = SSHEnvironment(
+        host=f"{docker_sshd.username}@{docker_sshd.host}",
+        port=docker_sshd.port,
+        identity_file=docker_sshd.key_path,
+        ssh_options={
+            "StrictHostKeyChecking": "no",
+            "UserKnownHostsFile": "/dev/null",
+        },
+    )
+    env.setup()
+    try:
+        assert env.run_bash("whoami").stdout.strip() == "test"
+    finally:
+        env.cleanup()
 ```
 
 ## Related

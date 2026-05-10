@@ -1,13 +1,13 @@
 ---
-title: "Mink Quickstart"
-description: "Install chimera mink, run the walking skeleton, and drive a real ReAct loop end-to-end against Ollama or Anthropic."
+title: Mink Quickstart
+description: Install chimera mink, run the walking skeleton, and drive a real ReAct loop end-to-end against Ollama or Anthropic.
 ---
 
 # `chimera mink` Quickstart
 
 ## What this is
 
-`chimera mink` is a coding-agent REPL built on Chimera's existing `AgentLoop`, `LoopConfig`, tool registry, permissions, and session primitives. Its default backend is Ollama with `glm-5.1:cloud` (or `kimi-k2.6:cloud` for the walking-skeleton example). The runtime is a single-process script that drives a real ReAct loop end-to-end with streamed text + tool calls, the `chimera mink` subcommand and slash-command surface, drop-in `settings.json` ingest (permissions + hooks), and a rich markdown TUI.
+`chimera mink` is a coding-agent REPL built on Chimera's existing `AgentLoop`, `LoopConfig`, tool registry, permissions, and session primitives. Its default backend is Ollama with `glm-5.1:cloud` (or `kimi-k2.6:cloud` for the walking-skeleton example). The runtime is a single-process script that drives a real ReAct loop end-to-end with streamed text + tool calls, the `chimera mink` subcommand and slash-command surface, drop-in `settings.json` ingest (permissions + hooks), and a rich markdown TUI. Run `chimera mink --help-long` to see verbose per-flag descriptions; `--help` itself stays under 50 lines for scannability.
 
 ## Provider choice
 
@@ -275,6 +275,28 @@ pipelines.
 | `<cwd>/.claude/settings.json`, `~/.claude/settings.json` | Permissions + hooks (CC-format settings) |
 
 Everything is local-only and plaintext. No remote telemetry.
+
+## Permission mode (5-mode standard)
+
+Mink's `--permission-mode` flag now accepts both the historical
+ecosystem-parity choices **and** the cross-CLI five-mode standard
+(shared with `chimera ferret` and `chimera badger`):
+
+| Mode         | Reads | Edits | Bash / Git | Notes                                |
+| ------------ | ----- | ----- | ---------- | ------------------------------------ |
+| `read-only`  | allow | deny  | deny       | New name for `plan`.                 |
+| `suggest`    | allow | ask   | ask        | New name for `default`.              |
+| `auto`       | allow | allow | ask        | New name for `acceptEdits`.          |
+| `yolo`       | allow | allow | allow      | New name for `bypassPermissions`.    |
+| `strict`     | ask   | ask   | ask        | Confirm every tool call.             |
+
+Both spelling families work — `--permission-mode plan` and
+`--permission-mode read-only` produce identical policies. Use whichever
+is easier to remember. The 5-mode names are recommended for new
+scripts because they match the flag values you would type at
+`chimera ferret` and `chimera badger`. See
+[`permissions.md`](permissions.md) for the full mapping table and
+[`settings.md`](settings.md) for the matching settings-file keys.
 
 ## What to do if it doesn't work
 

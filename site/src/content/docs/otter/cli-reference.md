@@ -34,7 +34,7 @@ chimera otter [-h] [--version] [--model MODEL] [-p PRINT_MODE]
 | Argument | Choices | Meaning |
 |---|---|---|
 | `SUBCOMMAND` | `serve`, `sessions`, `share`, `agents`, `bench` | Pick a non-REPL entry point. Optional. |
-| `ACTION` | `list`, `show`, `humaneval`, `tau-bench` | With `sessions` or `agents`: `list` or `show <name>`. With `bench`: the benchmark name. |
+| `ACTION` | `list`, `show`, `cost`, `humaneval`, `tau-bench` | With `sessions` or `agents`: `list`, `show <name>`, or (`sessions` only) `cost`. With `bench`: the benchmark name. |
 | `TARGET` | (free-form) | Run/session id consumed by `show` or `share` actions. |
 
 ## Top-level flags
@@ -47,6 +47,7 @@ These flags apply to every entry point. Where a flag is only meaningful for one 
 | `--version` | — | Show the program's version number and exit. |
 | `--model MODEL` | `$OTTER_MODEL` or `claude-sonnet-4-6` | Model identifier. Resolved through `chimera.providers.factory.create_provider`. See [`providers.md`](providers.md) and [`models.md`](models.md). |
 | `-p, --print PRINT_MODE` | (unset) | One-shot: run a single turn with `PROMPT`, print, exit. |
+| `-f, --file PATH` | (unset, repeatable) | With `-p`: attach a file's contents to the prompt as a `<file path="X" lines="N"> ... </file>` block, prepended *before* the `-p` text. Pass multiple times to stack attachments. Use `-` to read from stdin. Per-file 100 KB / cumulative 500 KB soft caps emit a `[otter]` warning to stderr; the cumulative cap also truncates with a `<!-- truncated -->` marker. See the "File attachments" section below. |
 | `--output-format {text,json,stream-json}` | `text` | One-shot output format. `stream-json` prints one JSON line per `LoopEvent`; `json` prints a single result object on exit. |
 | `--max-steps MAX_STEPS` | `50` | Maximum agent steps per turn. |
 | `--cwd CWD` | current directory | Working directory. |
@@ -104,6 +105,37 @@ chimera otter --no-color -p "..." | tee otter.log
 
 See [`quickstart.md`](quickstart.md) for output shapes and [`sessions.md`](sessions.md) for the persisted run directory layout.
 
+### File attachments (`-f` / `--file`)
+
+`-f PATH` attaches the contents of a file to the one-shot prompt without copy-paste. Each attachment is wrapped in an XML-like block and prepended *before* the `-p` text:
+
+```text
+<file path="/abs/path/to/file.py" lines="42">
+<full content of the file>
+</file>
+
+<your -p text here>
+```
+
+Multiple `-f` flags stack in the order they appear:
+
+```bash
+chimera otter -p "explain the diff" -f main.py -f main_test.py
+```
+
+Pass `-` to read from stdin (consumed once):
+
+```bash
+git diff | chimera otter -p "review this diff" -f -
+```
+
+Size policy:
+
+- **Per-file soft cap:** 100 KB. Files at or above this size still attach in full, but emit a `[otter] -f '...': N bytes exceeds 102400-byte per-file soft cap` warning to stderr.
+- **Cumulative cap:** 500 KB across all `-f` attachments. The *current* file (not earlier ones) gets truncated to fit the remaining budget and the truncated body ends with a `<!-- truncated -->` marker line before `</file>`. A second `[otter]` warning is written to stderr.
+
+The effective prompt (attachments + your `-p` text) is what gets persisted to `~/.chimera/eventlog/<run_id>/`, so saved runs replay exactly what the model saw.
+
 ## `chimera otter serve`
 
 Bring up otter as a headless multi-client server. HTTP by default; ACP JSON-RPC over stdio with `--acp`.
@@ -142,6 +174,9 @@ chimera otter sessions list --json
 chimera otter sessions show otter-20260425T091201-71032a5e
 chimera otter sessions show <id> --json
 chimera otter sessions show <id> --full
+chimera otter sessions cost
+chimera otter sessions cost --since 7d --format json
+chimera otter sessions cost --sessions-model glm-5.1 --format csv
 ```
 
 | Action | Flag | Default | Description |
@@ -152,8 +187,12 @@ chimera otter sessions show <id> --full
 | `list` | `--json` | off | Emit `SessionRecord.to_dict()` as a JSON array. |
 | `show <id>` | `--json` | off | Emit the full record as a single JSON object. |
 | `show <id>` | `--full` | off | Print every event inline rather than a summary. |
+| `cost` | `--since <duration\|date>` | (unset) | Aggregation window: `Ns`/`Nm`/`Nh`/`Nd`/`Nw` shorthand or ISO-8601. |
+| `cost` | `--sessions-model NAME` | (unset) | Case-insensitive substring match on the session's model. |
+| `cost` | `--sessions-limit N` | (unset) | Cap on rows considered (newest first). |
+| `cost` | `--format text\|json\|csv` | `text` | Output format. JSON shape mirrors `GET /runs/cost` and `mink runs cost --format json`. |
 
-Full layout, summary schema, and resume guidance in [`sessions.md`](sessions.md).
+Full layout, summary schema, cost rollup details, and resume guidance in [`sessions.md`](sessions.md).
 
 ## `chimera otter share`
 
@@ -212,6 +251,54 @@ chimera otter bench tau-bench --bench-domain mock --bench-limit 10
 | `--bench-domain {airline,retail,telecom,banking,mock}` | `airline` | Only meaningful with `tau-bench`. |
 
 `humaneval` runs out-of-the-box. `tau-bench` requires a local dataset staged under `~/.chimera/datasets/tau-bench/`; the runner emits a clear `NotImplementedError` with staging instructions when the dataset is absent.
+
+## Cost estimation
+
+Two flags wire pre-flight cost estimation into the one-shot `-p` path. Both rely on the longest-prefix-match pricing table in `chimera/providers/cost.py:PRICING`. Token counts use the chars-÷-4 rule of thumb — a useful ceiling, not a bill.
+
+```bash
+# Print an estimate and exit without running the agent:
+chimera otter -p "refactor utils.py" --estimate-cost --model glm-5
+# → Estimated cost: $0.0164 (5 input tokens, 2048 expected output tokens, glm-5)
+
+# JSON form (honors --output-format json):
+chimera otter -p "..." --estimate-cost --output-format json --model glm-5
+
+# Refuse to run when the estimate exceeds the cap:
+chimera otter -p "..." --max-cost 0.01 --model glm-5
+# → Refusing to run: estimated $0.0164 exceeds --max-cost $0.0100  (rc=2)
+```
+
+| Flag | Default | Description |
+|---|---|---|
+| `--estimate-cost` | off | Print a dollar/token estimate from the prompt + chosen model and exit `rc=0` without running the agent. |
+| `--max-cost USD` | unset | Refuse turns whose pre-flight estimate exceeds USD. With `-p` the run exits `rc=2`; in the REPL the turn is refused and you stay at the prompt. |
+
+### REPL gating (W12-9)
+
+`--max-cost` also applies to the interactive REPL. Each typed turn is estimated against the active cap before the agent runs; turns whose estimate exceeds the cap are refused with a stderr message:
+
+```text
+> implement a 1500-line refactor
+Refusing turn: estimated $0.0184 exceeds --max-cost $0.0100. Type
+/max-cost <usd> to raise the cap or send anyway with /force-send
+```
+
+Two slash commands manage the cap mid-session:
+
+| Command | Effect |
+|---|---|
+| `/max-cost` | Print the current cap (or `unset`). |
+| `/max-cost <usd>` | Raise / lower the cap (e.g. `/max-cost 0.05`). `0` refuses every priced turn. |
+| `/max-cost off` | Clear the cap entirely; gating turns off. |
+| `/force-send` | Bypass the cap for the next turn only. The cap re-arms after that turn fires. |
+
+Caveats:
+
+- **Pricing-table coverage**: only models listed in `PRICING` are estimable. Unknown models exit `rc=2` (or refuse the REPL turn) with a friendly stderr hint pointing at the pricing file. With `--max-cost` set against an uncosted model the gate fails closed.
+- **Token heuristic**: chars-÷-4 is good to ~10–20% on English prose; less accurate on dense code or non-Latin scripts. Use the reported number as a ceiling for budget guards, not as a final invoice.
+- **Output buckets**: the default `expected_output_tokens=2048` matches a typical agent reply with embedded tool calls. Tune in code (Python embedders) when pre-estimating long-form generation jobs.
+- **Cumulative cost**: the gate is per-turn. Use `/cost` to see cumulative spend; combine with `/max-cost` for budget pacing across turns.
 
 ## Exit codes
 

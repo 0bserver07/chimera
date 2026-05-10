@@ -42,7 +42,7 @@ from chimera.errors import friendly_errors
 # helpers so ``chimera stoat --help`` and ``chimera stoat --version`` stay
 # cheap even when the SDKs aren't installed.
 
-_VERSION = "0.6.0"
+_VERSION = "0.7.0"
 """Stoat scaffold version. Independent of the chimera package version
 because stoat is a per-CLI release line (mirrors weasel/shrew)."""
 
@@ -186,7 +186,7 @@ def _resolve_version() -> str:
     """Return the stoat scaffold version for ``--version`` output.
 
     Returns:
-        ``"0.6.0"`` (the per-CLI release line) — independent of the
+        ``"0.7.0"`` (the per-CLI release line) — independent of the
         ``chimera-run`` package version. Mirrors weasel/shrew's per-CLI
         release cadence.
     """

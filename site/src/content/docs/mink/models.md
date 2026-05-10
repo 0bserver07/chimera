@@ -234,6 +234,34 @@ If you want a session-wide default, alias it:
 alias mink="chimera mink --model glm-5.1:cloud"
 ```
 
+## Catalog refresh — wave 13 (2026-05)
+
+The default `ProviderCatalog` (`chimera/providers/catalog.py`) ships
+explicit `ModelConfig` bindings for the seven model families below.
+Routing inference (`chimera/providers/factory.py:_infer_provider`) is
+covered by `tests/providers/test_catalog_refresh.py`.
+
+| Model id | Provider | Endpoint / env | Pricing (in/out per Mtok) | Notes |
+| --- | --- | --- | --- | --- |
+| `qwen3-coder` | ollama | `$OLLAMA_HOST` | `$0` / `$0` | Local Ollama tag (Alibaba). DashScope API path: pass `provider_type="compatible"` + `base_url=https://dashscope-intl.aliyuncs.com/compatible-mode/v1`. |
+| `qwen3-coder-30b` | ollama | `$OLLAMA_HOST` | `$0` / `$0` | Same family, 30B coder. |
+| `qwen3-32b` | ollama | `$OLLAMA_HOST` | `$0` / `$0` | Same family, 32B general. |
+| `glm-4.6` | anthropic | `https://api.z.ai/api/anthropic` + `$ANTHROPIC_AUTH_TOKEN` | `$0.6` / `$2.2` *(placeholder)* | Zhipu Anthropic-compat. TODO: confirm rates against [docs.z.ai](https://docs.z.ai/api-reference/llm/chat-completion). |
+| `glm-5.1` | anthropic | `https://api.z.ai/api/anthropic` + `$ANTHROPIC_AUTH_TOKEN` | `$2` / `$8` *(mirrors glm-5)* | Same endpoint as glm-5; pricing TODO until Zhipu publishes 5.1 sheet. |
+| `deepseek-v3.1-terminus` | compatible | `https://api.deepseek.com/v1` + `$DEEPSEEK_API_KEY` | `$0.27` / `$1.10` *(placeholder)* | DeepSeek hosted OpenAI-compat. |
+| `deepseek-coder-v3` | compatible | `https://api.deepseek.com/v1` + `$DEEPSEEK_API_KEY` | `$0.27` / `$1.10` *(placeholder)* | Coder line; longest-prefix matched ahead of `deepseek-chat`. |
+| `gpt-oss-120b` | ollama | `$OLLAMA_HOST` | `$0` / `$0` | OpenAI open weights via Ollama. Routed to ollama by an explicit `gpt-oss` prefix that fires *before* the `gpt-*` → OpenAI rule. |
+| `gpt-oss-20b` | ollama | `$OLLAMA_HOST` | `$0` / `$0` | Smaller OSS sibling. |
+| `kimi-k2-0905-preview` | anthropic | `https://api.moonshot.ai/anthropic` + `$MOONSHOT_API_KEY` | `$0.6` / `$2.5` *(placeholder)* | Moonshot Anthropic-compat. `:cloud` Kimi tags stay served by Ollama. |
+| `kimi-k2.5` | anthropic | `https://api.moonshot.ai/anthropic` + `$MOONSHOT_API_KEY` | `$0.6` / `$2.5` *(placeholder)* | Same endpoint, k2.5 GA line. |
+| `mistral-codestral-2511` | ollama | `$OLLAMA_HOST` | `$0` / `$0` | Mistral coder. For Mistral hosted API, override with `provider_type="compatible"` + `base_url=https://api.mistral.ai/v1` + `$MISTRAL_API_KEY`. |
+| `gemma3-27b-instruct` | ollama | `$OLLAMA_HOST` | `$0` / `$0` | Google open weights. Routed via a new `gemma` prefix; hosted Gemini stays on the `gemini-*` → Google branch. |
+
+Pricing entries flagged *(placeholder)* are educated guesses — refresh
+once the upstream vendor publishes per-SKU rates. Local Ollama tags
+report `$0` because `/api/chat` does not surface a price field; the
+real cost is hardware + electricity.
+
 ## Reproducing this report
 
 Every smoke in this report was run against a live Ollama daemon at

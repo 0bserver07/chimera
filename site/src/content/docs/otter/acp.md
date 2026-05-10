@@ -200,6 +200,100 @@ chimera otter serve --acp --allowed-tools Read,Grep,Bash
   alive.
 - Concurrent `session/message` calls queue per session.
 
+## Resume after disconnect
+
+The HTTP server (`chimera otter serve --http`) honors the SSE
+`Last-Event-ID` header so a reconnecting client picks up exactly where
+it left off. ACP runs over **stdio** — there's no HTTP header surface
+to read — so the equivalent is a plain JSON-RPC method:
+
+```json
+{"jsonrpc":"2.0","id":7,"method":"session/resume","params":{"sessionId":"otter-...","sinceEventId":2}}
+```
+
+The server replays every retained `session/update` notification whose
+monotonic `eventId` is strictly greater than the cursor, in original
+order, then returns:
+
+```json
+{
+  "sessionId":"otter-...",
+  "replayed":3,
+  "lastEventId":5,
+  "truncated":false
+}
+```
+
+Replayed notifications come back as plain `session/update` frames
+(same wire shape as the live stream) so the client's normal handler
+can process them with no second code path.
+
+### Event ids
+
+Every `session/update` notification carries an `eventId` field — a
+1-based monotonic counter scoped to the session. The first emitted
+notification is `eventId: 1`, the second `eventId: 2`, and so on. The
+counter is independent of JSON-RPC request `id`s.
+
+```json
+{
+  "jsonrpc":"2.0",
+  "method":"session/update",
+  "params":{
+    "sessionId":"otter-abc",
+    "eventId":17,
+    "update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"..."}}
+  }
+}
+```
+
+### Bounded history
+
+The server keeps the most recent `OTTER_ACP_DEFAULT_HISTORY_SIZE`
+(default 1024) notifications per session. Older entries are evicted
+FIFO so a long-lived session doesn't grow unbounded. If the client's
+`sinceEventId` cursor is older than the oldest retained id, the
+resume reply sets `truncated: true` so the client knows it may have
+missed events that fell out of the buffer. The cap is configurable
+via the `history_limit` constructor argument on `OtterACPServer`.
+
+### Cursor edge cases
+
+- `sinceEventId: 0` (or omitted) replays everything still buffered.
+- `sinceEventId` at or above the latest id replays nothing.
+- Negative cursors clamp to `0`.
+- Non-integer cursors are treated as `0` (full replay).
+
+### Capability advertisement
+
+`initialize` advertises the new resume surface so clients can
+feature-detect:
+
+```json
+{
+  "agentCapabilities":{
+    "promptCapabilities":{"text":true},
+    "sessionCapabilities":{"cancel":true,"resume":true},
+    "toolApproval":true,
+    "eventIds":true
+  }
+}
+```
+
+`OTTER_ACP_PROTOCOL_VERSION` is `2` for builds that ship the resume
+method; clients negotiating against version `1` should fall back to
+full-replay reconnects.
+
+## Transport security (TLS)
+
+ACP runs exclusively over stdio in this implementation — the server
+reads JSON-RPC frames from stdin and writes them to stdout. There is
+no TCP listener, so TLS is **not applicable** at this layer. Clients
+that need transport security should wrap the subprocess invocation
+(e.g. SSH, mTLS over a Unix-domain socket relay) in their own
+launcher. The HTTP server (`chimera/otter/server.py`) is the surface
+that exposes a `--tls` flag.
+
 ## See also
 
 - `chimera/otter/acp.py` — implementation.

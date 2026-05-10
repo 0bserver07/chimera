@@ -280,6 +280,66 @@ payloads as the SSE `data:` field.
 ACP does not honor `OTTER_SERVER_TOKEN` — the trust model is "the
 parent process spawned us, so the parent process is authorized."
 
+## File-level undo
+
+`chimera otter` ships true filesystem-level `/undo` and `/redo` —
+modifying a file with the `write` tool, then running `/undo`, restores
+the file to its prior on-disk contents. This is implemented by a
+content-addressed shadow store at:
+
+```
+~/.chimera/snapshots/<session-id>/
+    blobs/<sha256>                # deduplicated file payloads
+    snaps/<snap-id>/manifest.json # {abs_path: sha256 | null}
+```
+
+Set `CHIMERA_SNAPSHOT_ROOT` to redirect the shadow root (CI / sandboxed
+environments).
+
+### How it works
+
+After every assistant turn:
+
+1. The REPL drains any modified files from the active
+   [`FileTracker`](../api/core.md#filetracker) (the canonical surface
+   `Session._agent.loop.config.file_tracker`).
+2. Each modified file's current bytes are SHA-256 hashed and copied
+   into `blobs/`. Identical content across turns shares a single blob
+   (so a 1MB file edited in 10 turns costs ~1MB on disk, not 10MB).
+3. A per-snap manifest records `{abs_path: sha256 | null}`. `null`
+   means "did not exist at snap time" — `/undo` will delete the file
+   on rewind, mirroring `git checkout` semantics.
+
+### Slash commands
+
+| Command | Behavior |
+|---|---|
+| `/undo` | Rewind one turn (messages + files). |
+| `/undo --steps N` | Rewind N turns. Bare `/undo 3` works too. |
+| `/redo` | Replay one rewound turn. |
+| `/redo --steps N` | Replay N turns at once. |
+
+Each handler prints e.g. `/undo: rewound 1 turn, 2 files restored
+(0 remaining)` so the user can see what changed.
+
+### Storage limits
+
+- Files larger than 25 MiB are recorded as `null` (the shadow refuses
+  to swallow runaway logs).
+- A new turn after `/undo` invalidates the redo stack and discards the
+  orphaned redo entries' file snaps so the shadow doesn't grow without
+  bound under heavy branching.
+- `/new` (or session teardown) wipes the entire session subdirectory
+  via `FileSnapshotStore.clear()`.
+
+### HTTP / ACP transport
+
+The same hook fires whether the session is driven via the REPL, the
+HTTP `POST /sessions/<id>/turns` endpoint, or the ACP JSON-RPC stdio
+transport — `OtterServer._snap_after_turn(state)` is called once per
+finalized turn on every transport. Callers can therefore drive
+`/undo` over HTTP (forthcoming endpoint) without a forked code path.
+
 ## Operational notes
 
 - One process holds one `Provider` for its lifetime; restart to swap.
@@ -398,3 +458,527 @@ Browser clients connecting over HTTPS still face the `EventSource`
 limitation noted in the auth section — terminate TLS at a reverse
 proxy if you need it to inject the `Authorization` header for an
 in-browser SSE consumer.
+
+## Custom slash commands over HTTP
+
+Wave-3 (F4) lifts the otter REPL's `.opencode/command/*.md` palette onto
+the HTTP surface so a TUI / IDE / web client gets parity with the
+in-process slash dispatcher. Two routes:
+
+### `GET /commands`
+
+List every custom slash command discovered under the server's
+commands cwd (`commands_cwd` constructor arg, defaulting to
+`os.getcwd()` resolved per-call). Project scope (`<cwd>/.opencode/command/*.md`)
+overrides user scope (`~/.opencode/command/*.md`) on name conflicts —
+matching the upstream's last-wins precedence ladder used by the REPL.
+
+Response shape:
+
+```json
+{
+  "commands": [
+    {
+      "name": "summarize",
+      "description": "Summarize $1 about $TARGET",
+      "args": [
+        {"name": "target", "description": "subject of the summary"}
+      ],
+      "source": "/abs/path/.opencode/command/summarize.md"
+    }
+  ]
+}
+```
+
+Empty palette returns `200 OK` with `{"commands": []}` (not 404), so
+client UIs that pre-populate a command picker on startup can render an
+empty palette without special-casing the missing-directory branch.
+
+### `POST /commands/<name>/invoke`
+
+Render a custom command template and push the rendered prompt as a
+new user turn into an existing session — the same code path
+`POST /session/<id>/message` exercises, including SSE fan-out.
+
+Body:
+
+```json
+{
+  "session_id": "abc123",
+  "args": ["chapter-7"],
+  "kwargs": {"target": "the otter REPL"}
+}
+```
+
+| Field         | Required | Notes                                                     |
+|---------------|----------|-----------------------------------------------------------|
+| `session_id`  | yes      | Existing session id from `POST /session`.                 |
+| `args`        | no       | Positional args. Map to `$1`, `$2`, … in the template.    |
+| `kwargs`      | no       | Named args. Map to `$ARG_NAME` (case-insensitive).        |
+
+Response (`202 Accepted`):
+
+```json
+{
+  "message_id": "…",
+  "name": "summarize",
+  "rendered": "Please summarize chapter-7 — focus on the otter REPL."
+}
+```
+
+The rendered prompt is forwarded to `submit_message`, so SSE clients on
+`GET /session/<id>/events` see `user_message` followed by the same
+`loop_event` / `result` stream a direct prompt would have produced. The
+HTTP route is the network-level mirror of
+`chimera.otter.slash.build_custom_command_handler` — same precedence
+ladder, same render semantics, same drop-into-the-session behavior.
+
+| Status | Body                                                | Cause                                |
+|--------|-----------------------------------------------------|--------------------------------------|
+| 202    | `{message_id, name, rendered}`                      | Render + submit succeeded.           |
+| 400    | `{"error": "missing_session_id"}`                   | Body lacks `session_id`.             |
+| 400    | `{"error": "args_must_be_list"}`                    | `args` is not a JSON list.           |
+| 400    | `{"error": "kwargs_must_be_object"}`                | `kwargs` is not a JSON object.       |
+| 404    | `{"error": "session_not_found"}`                    | Unknown `session_id`.                |
+| 404    | `{"error": "command_not_found", "name": "<name>"}`  | No `.md` file matches `<name>`.      |
+| 500    | `{"error": "command_invoke_failed", "detail": …}`   | Renderer or submit raised.           |
+
+## Cost rollups across persisted runs
+
+Wave-4 (L6) lifts the M4 `chimera mink runs cost` aggregation onto the
+HTTP surface so a TUI / IDE / web client can pull the same rollups
+without shelling out to the CLI. Both routes walk
+`~/.chimera/eventlog/mink-*` **and** `~/.chimera/eventlog/otter-*` so
+the two persistence corpora are reported together. Bearer auth applies
+identically to every other endpoint (`OTTER_SERVER_TOKEN`).
+
+The eventlog root is taken from
+`chimera.mink.runs.default_eventlog_root()` per request so the routes
+always reflect the live filesystem; tests inject a `tmp_path` via the
+`OtterServer(eventlog_root=...)` constructor argument.
+
+### `GET /runs`
+
+Lightweight list of run summaries. One row per persisted run, newest
+first.
+
+Query parameters:
+
+| Param   | Notes                                                                  |
+|---------|------------------------------------------------------------------------|
+| `since` | `7d` / `24h` / `30m` shorthand or any ISO-8601 date / datetime.        |
+| `model` | Case-insensitive substring filter on the model name. `all` = no filter.|
+| `limit` | Cap row count (newest first). Non-integer values return `400`.         |
+
+Response shape:
+
+```json
+{
+  "total_runs": 4,
+  "runs": [
+    {
+      "run_id": "otter-20260425T120300-aaaa1111",
+      "started_at": "2026-04-25T12:03:00Z",
+      "ended_at": "2026-04-25T12:03:30Z",
+      "model": "glm-5.1:cloud",
+      "prompt": "do the thing",
+      "success": true,
+      "cost_usd": 0.07,
+      "steps": 4,
+      "tool_calls": 3,
+      "source": "otter"
+    }
+  ]
+}
+```
+
+`source` is `"mink"` or `"otter"` so the client can render the two
+corpora distinctly without re-parsing the run id.
+
+### `GET /runs/cost`
+
+Cost rollup for the same corpus. Same query parameters as `/runs`. The
+response carries both the flat top-level shape promised in the task
+contract and a strict-superset `totals` block that mirrors `chimera
+mink runs cost --format json` for clients already integrated against
+the CLI.
+
+```json
+{
+  "total_runs": 4,
+  "total_cost": 0.22,
+  "total_tokens": 3800,
+  "by_model": {
+    "glm-5.1:cloud":     {"runs": 2, "cost_usd": 0.10, "tokens": 1800},
+    "claude-sonnet-4-6": {"runs": 2, "cost_usd": 0.12, "tokens": 2000}
+  },
+  "by_run": [
+    {
+      "run_id": "otter-20260425T120300-aaaa1111",
+      "started_at": "2026-04-25T12:03:00Z",
+      "model": "glm-5.1:cloud",
+      "cost_usd": 0.07,
+      "total_tokens": 1200,
+      "input_tokens": 800,
+      "output_tokens": 350,
+      "cache_tokens": 50,
+      "success": true,
+      "steps": 4,
+      "source": "otter"
+    }
+  ],
+  "totals": {
+    "runs": 4,
+    "successful_runs": 3,
+    "failed_runs": 1,
+    "cost_usd": 0.22,
+    "tokens": 3800,
+    "input_tokens": 800,
+    "output_tokens": 350,
+    "cache_tokens": 50,
+    "avg_cost_usd": 0.055,
+    "p50_cost_usd": 0.05,
+    "p95_cost_usd": 0.12
+  },
+  "filters": {"since": null, "model": null}
+}
+```
+
+Worked example:
+
+```bash
+curl -s -H "Authorization: Bearer $OTTER_SERVER_TOKEN" \
+  "http://127.0.0.1:5173/runs/cost?since=7d&model=glm-5.1:cloud&limit=50" \
+  | jq '{runs: .total_runs, cost: .total_cost, by_model}'
+```
+
+| Status | Body                                              | Cause                                |
+|--------|---------------------------------------------------|--------------------------------------|
+| 200    | `{total_runs, total_cost, total_tokens, …}`       | Aggregation succeeded.               |
+| 400    | `{"error": "invalid_query", "detail": …}`         | Malformed `since` / `limit`.         |
+| 401    | `{"error": "unauthorized"}`                       | Missing or wrong bearer token.       |
+| 500    | `{"error": "runs_cost_failed", "detail": …}`      | Filesystem or aggregator raised.     |
+
+## Multi-session support
+
+`chimera otter serve` is **multi-session out of the box**. A single
+server process owns many concurrent `OtterSessionState` objects in
+parallel — a TUI client, an IDE plugin, an evals harness, and a web UI
+can all drive the same server simultaneously without contending on a
+global lock.
+
+Sessions are owned by an `OtterSessionManager` (a thin layer over a
+`dict[str, OtterSessionState]` plus a `threading.Lock`). The manager's
+lock guards *only* the dict; agent runs hold no manager-wide lock, so
+two sessions running ReAct loops in parallel never wait on each other.
+
+### TTL eviction
+
+Idle sessions are reaped after `OtterSessionManager.ttl` seconds (one
+hour by default — `DEFAULT_SESSION_TTL`). Every observable activity
+bumps the session's `last_touched` timestamp:
+
+* `POST /session` — create
+* `GET /session/<id>` — state snapshot
+* `POST /session/<id>/message` — agent dispatch
+* `POST /session/<id>/cancel` — cooperative cancel
+* `GET /session/<id>/events` — SSE subscribe (full + reconnect replay)
+* every `emit_event` fan-out (server-driven activity)
+
+Eviction is opportunistic: every public mutation on the manager calls
+`evict_idle()` first, so callers don't need a background sweeper. When
+a session is evicted, its SSE subscribers receive the `None` sentinel
+(generators exit cleanly), pending permission gates are released, and
+its cancellation token is flipped so any in-flight agent thread halts
+on its next yield.
+
+To disable TTL eviction (interactive REPL clients that may sit idle
+overnight), pass `session_ttl=None` when instantiating the server, or
+inject a manager built with `OtterSessionManager(ttl=None)`.
+
+### `GET /sessions`
+
+Multi-session listing — returns metadata for every active session,
+newest-touched first:
+
+```json
+{
+  "sessions": [
+    {
+      "session_id": "9c1...",
+      "working_dir": "/path/to/project",
+      "created_at": 1745000000.0,
+      "last_touched": 1745000123.0,
+      "event_count": 42
+    }
+  ]
+}
+```
+
+```bash
+curl -s -H "Authorization: Bearer $OTTER_SERVER_TOKEN" \
+  http://127.0.0.1:5173/sessions \
+  | jq '.sessions[] | {id: .session_id, idle: (now - .last_touched)}'
+```
+
+`GET /session` (singular) still returns the bare-id list for
+back-compat with existing clients.
+
+### `DELETE /session/<id>`
+
+Explicit teardown. Returns `204 No Content` on hit, `404` on miss.
+Wakes SSE subscribers, releases pending permission gates, cancels any
+in-flight agent run, and removes the session from the manager:
+
+```bash
+curl -s -X DELETE \
+  -H "Authorization: Bearer $OTTER_SERVER_TOKEN" \
+  http://127.0.0.1:5173/session/9c1...
+```
+
+| Status | Body                                | Cause                       |
+|--------|-------------------------------------|-----------------------------|
+| 204    | (empty)                             | Session torn down.          |
+| 404    | `{"error": "session_not_found"}`    | Unknown session id.         |
+| 401    | `{"error": "unauthorized"}`         | Missing/wrong bearer token. |
+
+### Per-session SSE replay buffer
+
+Every session owns an independent `state.events` list — the SSE replay
+buffer for `GET /session/<id>/events`. Two concurrent sessions
+therefore have entirely disjoint event histories: a `Last-Event-ID`
+reconnect on session A only ever replays A's frames, and `emit_event`
+on B never reaches A's subscribers. This is asserted end-to-end by
+`tests/otter/test_server_multi_session.py`.
+
+### Configuring multi-session behaviour
+
+`OtterServer` accepts:
+
+* `session_manager: OtterSessionManager | None` — inject a shared
+  manager (handy in tests with a deterministic clock, or to share a
+  manager across an HTTP and ACP front-end on the same process).
+* `session_ttl: float | None` — TTL for the auto-built manager when
+  `session_manager` is `None`. Defaults to `DEFAULT_SESSION_TTL`
+  (3600s). `None` or `0` disables eviction.
+
+```python
+from chimera.otter.server import OtterServer, OtterSessionManager
+
+# Custom 10-minute idle TTL.
+srv = OtterServer(agent_factory=..., session_ttl=600.0)
+
+# Or inject a manager directly.
+mgr = OtterSessionManager(ttl=600.0)
+srv = OtterServer(agent_factory=..., session_manager=mgr)
+```
+
+## Managing backgrounded servers (`serve status` / `serve stop`)
+
+When `chimera otter serve` is launched in the background (e.g. `&` in a
+shell, a `tmux` pane, or a launchd job), the running PID, port, and a
+SHA-256 of the auth token are recorded in
+`~/.chimera/run/otter-<port>.pid`. Two subcommands consume that on-disk
+record so a separate shell can list and graceful-stop those servers
+without hand-rolling `ps` / `lsof` parsing.
+
+### `chimera otter serve status`
+
+Lists every backgrounded otter server discovered under
+`~/.chimera/run/`. One line per pidfile:
+
+```text
+otter port=5173 pid=12345 alive=yes scheme=https auth=yes /Users/you/.chimera/run/otter-5173.pid
+otter port=5183 pid=88888 alive=no (stale) scheme=http auth=no /Users/you/.chimera/run/otter-5183.pid
+```
+
+`alive=no (stale)` flags a pidfile whose process has exited without a
+clean shutdown — `serve stop` will reap it idempotently.
+
+### `chimera otter serve stop [--port N | --all] [--serve-timeout N]`
+
+Gracefully terminates one or every running otter server.
+
+- **No arguments**: if exactly one otter pidfile exists, stop it. If
+  more than one is running, exit 2 with a "disambiguate" error.
+- **`--port N`**: target only the matching `otter-<N>.pid` record.
+- **`--all`**: stop every backgrounded otter server.
+- **`--serve-timeout N`**: seconds to wait between SIGTERM and the
+  SIGKILL escalation. Default `10.0`.
+
+The shutdown sequence is **graceful first**, per the project rule
+(`CLAUDE.md`): `SIGTERM` → wait up to `--serve-timeout` seconds → only
+escalate to `SIGKILL` when the process is still alive after the wait.
+`SIGKILL` is never the first signal sent.
+
+Exit codes: `0` on every targeted process stopping (or no pidfiles to
+match — idempotent), `1` when at least one process refused both signals,
+`2` on a usage error (`stop` with multiple servers and no
+`--port` / `--all`).
+
+### Pidfile schema
+
+```json
+{
+  "pid": 12345,
+  "host": "127.0.0.1",
+  "port": 5173,
+  "prefix": "otter",
+  "auth_token_hash": "sha256:9c…",
+  "started_at": 1714500000.0,
+  "scheme": "https"
+}
+```
+
+`auth_token_hash` is `null` when the server runs without `--auth-token`.
+Storing only the SHA-256 keeps the bearer secret off disk while still
+letting future tooling assert the caller knows the token.
+
+### Library API
+
+The same primitives are exported under `chimera.otter.server_pidfile`
+for embedders that drive the server programmatically:
+
+```python
+from chimera.otter import server_pidfile
+
+# List every running server.
+records = server_pidfile.list_pidfiles(prefix="otter")
+
+# Stop the otter server on port 5173 with a 5-second SIGTERM window.
+server_pidfile.stop_all(prefix="otter", port=5173, timeout=5.0)
+```
+
+Pidfile management is opt-in: `OtterServer(pidfile_prefix="otter")` (or
+`serve_http(pidfile_prefix="otter")`) writes the record on bind and
+removes it on graceful shutdown. With `pidfile_prefix=None` (the
+default) no pidfile is touched, which is what you want for in-process
+test harnesses and library embedders.
+
+## Authentication (per-session tokens)
+
+Earlier sections cover the master `--auth-token` (a.k.a.
+`OTTER_SERVER_TOKEN`) Bearer model. Wave-11 layers per-session tokens
+on top so a multi-tenant front-end can hand a session-scoped credential
+to a less-privileged caller without leaking the master secret.
+
+### Token tiers
+
+| Tier | Source | Authorizes |
+|---|---|---|
+| Master | `--auth-token <SECRET>` (CLI flag) | Every route — admin, listing, every session, `rotate-token`. |
+| Per-session | Returned in `POST /session` response | Only `/session/<id>/...` routes for the *issuing* session id. |
+
+### `POST /session` response
+
+```json
+{
+  "session_id": "9c7b...",
+  "working_dir": "/repo",
+  "created_at": 1714500000.0,
+  "session_token": "Hk9-…43-byte-urlsafe-string"
+}
+```
+
+`session_token` is generated server-side by `secrets.token_urlsafe(32)`
+on every create — 32 bytes of entropy, URL-safe encoding. Each token is
+unique per session and unrelated to the master `--auth-token`.
+
+### Auth decision tree
+
+When `--auth-token` is configured:
+
+- `GET /healthz` — open (no auth required).
+- `POST /session`, `GET /session`, `GET /sessions`, `POST /tool/approve`,
+  `GET /commands*`, `POST /commands/<name>/invoke`, `GET /runs*` —
+  **master token only**.
+- `GET /session/<id>`, `POST /session/<id>/message`,
+  `POST /session/<id>/cancel`, `GET /session/<id>/events`,
+  `DELETE /session/<id>` — **master token OR session token for `<id>`**.
+- `POST /session/<id>/rotate-token` — **master token only**.
+  Presenting a session token returns `403 admin_only` (the request is
+  authenticated, just not privileged) rather than the generic `401
+  unauthorized` a wrong-session token receives.
+
+A session token presented for *another* session's id falls through to
+`401 unauthorized` — tokens are scoped to their issuing session id.
+
+### `POST /session/<id>/rotate-token`
+
+Rotates the per-session token. Master-token-only. Returns:
+
+```json
+{"session_token": "freshly-generated-token"}
+```
+
+The previous token is invalidated immediately — any subsequent request
+that still carries the old token returns `401 unauthorized`. Use this
+when handing off a session to a different operator, when a token is
+suspected leaked, or as part of a periodic rotation policy. `404
+session_not_found` when the session id is unknown.
+
+### Security note
+
+**Per-session tokens live in memory only.** They are *not* persisted to
+disk and are *not* recorded in the pidfile (which only stores a SHA-256
+hash of the master token). Restarting the server invalidates every
+outstanding session token along with every session, since the
+`OtterSessionManager` map is process-local. Clients that need to
+survive a restart should re-create their sessions and capture the new
+`session_token` from each `POST /session` response.
+
+### Library API
+
+```python
+from chimera.otter.server import OtterServer
+
+srv = OtterServer(agent_factory=..., auth_token="master-secret")
+srv.start(blocking=False)
+
+state = srv.create_session(working_dir="/repo")
+print(state.session_token)            # in-memory, scoped to state.session_id
+
+new = srv.rotate_session_token(state.session_id)
+assert new != state.session_token     # old token invalidated
+```
+
+`rotate_session_token` returns `None` for unknown ids; the HTTP route
+maps that to `404 session_not_found`.
+
+### Concurrency safety
+
+`write_pidfile` takes an exclusive **advisory file lock** when it
+opens the pidfile so two simultaneous `chimera otter serve --port
+5173` invocations cannot clobber each other's record. The locking
+primitive is `fcntl.flock(fd, LOCK_EX | LOCK_NB)` on POSIX and
+`msvcrt.locking(fd, LK_NBLCK, 1)` on Windows — both non-blocking, so
+the second invocation fails fast instead of hanging.
+
+When the lock is contended the function:
+
+1. Reads the existing PID off disk.
+2. If that PID names a *live* process, raises `PidfileLocked` with
+   the message `already running on port 5173, PID 12345`. The CLI
+   catches that exception and surfaces it to the user as the reason
+   `serve` refused to bind.
+3. If the PID is dead (the previous server crashed without
+   `remove_pidfile` running), the new caller takes over the lock and
+   overwrites the stale record. This keeps the pidfile self-healing
+   across crashes without requiring the user to delete it manually.
+
+The lock fd is held for the lifetime of the running server and
+released by `remove_pidfile` (LOCK_UN, then `close()`, then
+`unlink()`) on graceful shutdown — and again, automatically, when the
+process exits and the kernel closes the fd. The lock is therefore
+filesystem-level: a sibling process trying to `write_pidfile` on the
+same path sees `EAGAIN` immediately, regardless of any in-process
+state.
+
+**Windows caveat.** `msvcrt.locking` locks a single byte at the
+current offset and is mandatory (not advisory) on the locked range,
+so the contract is the same shape but the failure mode if a third
+party has the file open in a write mode may differ from POSIX. On
+exotic platforms where neither `fcntl` nor `msvcrt` is importable,
+locking degrades to a no-op and the function falls back to the
+pre-fix overwrite semantics — document this caveat for embedders
+deploying on minimal embedded runtimes.

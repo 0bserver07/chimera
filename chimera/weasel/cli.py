@@ -36,7 +36,7 @@ from chimera.errors import friendly_errors
 # ``chimera weasel --help`` / ``--version`` stays cheap even when the
 # Anthropic / OpenAI SDKs aren't installed.
 
-_VERSION = "0.6.0"
+_VERSION = "0.7.0"
 """Weasel scaffold version. Independent of the chimera package version
 because weasel is a per-CLI release line."""
 
@@ -160,7 +160,7 @@ def _resolve_version() -> str:
     """Return the weasel scaffold version string for ``--version``.
 
     Returns:
-        ``"0.6.0"`` (the per-CLI release line) — independent of the
+        ``"0.7.0"`` (the per-CLI release line) — independent of the
         ``chimera-run`` package version. Mirrors the four-mode harness's
         own per-CLI release cadence.
     """
