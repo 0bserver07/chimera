@@ -1,0 +1,751 @@
+<!DOCTYPE html><html lang="en" dir="ltr" data-theme="dark" data-has-toc data-has-sidebar class="astro-fk4wox5s"> <head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><title>Otter Parity Matrix | Chimera</title><link rel="canonical" href="https://0bserver07.github.io/chimera/otter/parity-matrix/"/><link rel="sitemap" href="/chimera/sitemap-index.xml"/><script>
+						// Default to dark theme
+						if (!localStorage.getItem('starlight-theme')) {
+							localStorage.setItem('starlight-theme', 'dark');
+						}
+					</script><script src="/mermaid-init.js" type="module" defer></script><link rel="shortcut icon" href="/chimera/favicon.svg" type="image/svg+xml"/><meta name="generator" content="Astro v6.0.6"/><meta name="generator" content="Starlight v0.38.1"/><meta property="og:title" content="Otter Parity Matrix"/><meta property="og:type" content="article"/><meta property="og:url" content="https://0bserver07.github.io/chimera/otter/parity-matrix/"/><meta property="og:locale" content="en"/><meta property="og:description" content="Feature-by-feature parity table between chimera otter and the upstream open-source coding agent it mirrors."/><meta property="og:site_name" content="Chimera"/><meta name="twitter:card" content="summary_large_image"/><meta name="description" content="Feature-by-feature parity table between chimera otter and the upstream open-source coding agent it mirrors."/><script>
+	window.StarlightThemeProvider = (() => {
+		const storedTheme =
+			typeof localStorage !== 'undefined' && localStorage.getItem('starlight-theme');
+		const theme =
+			storedTheme ||
+			(window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+		document.documentElement.dataset.theme = theme === 'light' ? 'light' : 'dark';
+		return {
+			updatePickers(theme = storedTheme || 'auto') {
+				document.querySelectorAll('starlight-theme-select').forEach((picker) => {
+					const select = picker.querySelector('select');
+					if (select) select.value = theme;
+					/** @type {HTMLTemplateElement | null} */
+					const tmpl = document.querySelector(`#theme-icons`);
+					const newIcon = tmpl && tmpl.content.querySelector('.' + theme);
+					if (newIcon) {
+						const oldIcon = picker.querySelector('svg.label-icon');
+						if (oldIcon) {
+							oldIcon.replaceChildren(...newIcon.cloneNode(true).childNodes);
+						}
+					}
+				});
+			},
+		};
+	})();
+</script><template id="theme-icons"><svg aria-hidden="true" class="light astro-bmbo4loj" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M5 12a1 1 0 0 0-1-1H3a1 1 0 0 0 0 2h1a1 1 0 0 0 1-1Zm.64 5-.71.71a1 1 0 0 0 0 1.41 1 1 0 0 0 1.41 0l.71-.71A1 1 0 0 0 5.64 17ZM12 5a1 1 0 0 0 1-1V3a1 1 0 0 0-2 0v1a1 1 0 0 0 1 1Zm5.66 2.34a1 1 0 0 0 .7-.29l.71-.71a1 1 0 1 0-1.41-1.41l-.66.71a1 1 0 0 0 0 1.41 1 1 0 0 0 .66.29Zm-12-.29a1 1 0 0 0 1.41 0 1 1 0 0 0 0-1.41l-.71-.71a1.004 1.004 0 1 0-1.43 1.41l.73.71ZM21 11h-1a1 1 0 0 0 0 2h1a1 1 0 0 0 0-2Zm-2.64 6A1 1 0 0 0 17 18.36l.71.71a1 1 0 0 0 1.41 0 1 1 0 0 0 0-1.41l-.76-.66ZM12 6.5a5.5 5.5 0 1 0 5.5 5.5A5.51 5.51 0 0 0 12 6.5Zm0 9a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Zm0 3.5a1 1 0 0 0-1 1v1a1 1 0 0 0 2 0v-1a1 1 0 0 0-1-1Z"/></svg><svg aria-hidden="true" class="dark astro-bmbo4loj" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M21.64 13a1 1 0 0 0-1.05-.14 8.049 8.049 0 0 1-3.37.73 8.15 8.15 0 0 1-8.14-8.1 8.59 8.59 0 0 1 .25-2A1 1 0 0 0 8 2.36a10.14 10.14 0 1 0 14 11.69 1 1 0 0 0-.36-1.05Zm-9.5 6.69A8.14 8.14 0 0 1 7.08 5.22v.27a10.15 10.15 0 0 0 10.14 10.14 9.784 9.784 0 0 0 2.1-.22 8.11 8.11 0 0 1-7.18 4.32v-.04Z"/></svg><svg aria-hidden="true" class="auto astro-bmbo4loj" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M21 14h-1V7a3 3 0 0 0-3-3H7a3 3 0 0 0-3 3v7H3a1 1 0 0 0-1 1v2a3 3 0 0 0 3 3h14a3 3 0 0 0 3-3v-2a1 1 0 0 0-1-1ZM6 7a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v7H6V7Zm14 10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-1h16v1Z"/></svg></template><link rel="stylesheet" href="/chimera/_astro/print.DNXP8c50.css" media="print"><link rel="stylesheet" href="/chimera/_astro/common.BotC5wA0.css">
+<link rel="stylesheet" href="/chimera/_astro/Code.BX69WHZb.css"><script type="module" src="/chimera/_astro/page.BIhdncjw.js"></script></head> <body class="astro-fk4wox5s"> <a href="#_top" class="astro-x354bvry">Skip to content</a> <div class="page sl-flex astro-prtflpwz"> <header class="header astro-prtflpwz"><div class="header astro-pwx6nfdt"> <div class="title-wrapper sl-flex astro-pwx6nfdt"> <a href="/chimera/" class="site-title sl-flex astro-h6d4xfw7">  <img class="light:sl-hidden print:hidden astro-h6d4xfw7" alt src="/chimera/_astro/logo-dark.C1Bv7g5P.svg" width="28" height="28"> <img class="dark:sl-hidden print:block astro-h6d4xfw7" alt src="/chimera/_astro/logo-light.D5XCMOsW.svg" width="28" height="28"> <span class="astro-h6d4xfw7" translate="no"> Chimera </span> </a> </div> <div class="sl-flex print:hidden astro-pwx6nfdt"> <site-search class="astro-pwx6nfdt astro-7nc6raww" data-translations="{&#34;placeholder&#34;:&#34;Search&#34;}"> <button data-open-modal disabled aria-label="Search" aria-keyshortcuts="Control+K" class="astro-7nc6raww"> <svg aria-hidden="true" class="astro-7nc6raww astro-bmbo4loj" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M21.71 20.29 18 16.61A9 9 0 1 0 16.61 18l3.68 3.68a.999.999 0 0 0 1.42 0 1 1 0 0 0 0-1.39ZM11 18a7 7 0 1 1 0-14 7 7 0 0 1 0 14Z"/></svg> <span class="sl-hidden md:sl-block astro-7nc6raww" aria-hidden="true">Search</span> <kbd class="sl-hidden md:sl-flex astro-7nc6raww" style="display: none;"> <kbd class="astro-7nc6raww">Ctrl</kbd><kbd class="astro-7nc6raww">K</kbd> </kbd> </button> <dialog style="padding:0" aria-label="Search" class="astro-7nc6raww"> <div class="dialog-frame sl-flex astro-7nc6raww">  <button data-close-modal class="sl-flex md:sl-hidden astro-7nc6raww"> Cancel </button> <div class="search-container astro-7nc6raww"> <div id="starlight__search" class="astro-7nc6raww"></div> </div> </div> </dialog> </site-search>  <script>
+	(() => {
+		const openBtn = document.querySelector('button[data-open-modal]');
+		const shortcut = openBtn?.querySelector('kbd');
+		if (!openBtn || !(shortcut instanceof HTMLElement)) return;
+		const platformKey = shortcut.querySelector('kbd');
+		if (platformKey && /(Mac|iPhone|iPod|iPad)/i.test(navigator.platform)) {
+			platformKey.textContent = '⌘';
+			openBtn.setAttribute('aria-keyshortcuts', 'Meta+K');
+		}
+		shortcut.style.display = '';
+	})();
+</script> <script type="module" src="/chimera/_astro/Search.astro_astro_type_script_index_0_lang.DZBHi7yp.js"></script>  </div> <div class="sl-hidden md:sl-flex print:hidden right-group astro-pwx6nfdt"> <div class="sl-flex social-icons astro-pwx6nfdt"> <a href="https://github.com/0bserver07/chimera" rel="me" class="sl-flex astro-ktd4evgt"><span class="sr-only astro-ktd4evgt">GitHub</span><svg aria-hidden="true" class="astro-ktd4evgt astro-bmbo4loj" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M12 .3a12 12 0 0 0-3.8 23.38c.6.12.83-.26.83-.57L9 21.07c-3.34.72-4.04-1.61-4.04-1.61-.55-1.39-1.34-1.76-1.34-1.76-1.08-.74.09-.73.09-.73 1.2.09 1.83 1.24 1.83 1.24 1.08 1.83 2.81 1.3 3.5 1 .1-.78.42-1.31.76-1.61-2.67-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.14-.3-.54-1.52.1-3.18 0 0 1-.32 3.3 1.23a11.5 11.5 0 0 1 6 0c2.28-1.55 3.29-1.23 3.29-1.23.64 1.66.24 2.88.12 3.18a4.65 4.65 0 0 1 1.23 3.22c0 4.61-2.8 5.63-5.48 5.92.42.36.81 1.1.81 2.22l-.01 3.29c0 .31.2.69.82.57A12 12 0 0 0 12 .3Z"/></svg></a> </div> <starlight-theme-select>  <label style="--sl-select-width: 6.25em" class="astro-srfpcmg6"> <span class="sr-only astro-srfpcmg6">Select theme</span> <svg aria-hidden="true" class="icon label-icon astro-srfpcmg6 astro-bmbo4loj" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M21 14h-1V7a3 3 0 0 0-3-3H7a3 3 0 0 0-3 3v7H3a1 1 0 0 0-1 1v2a3 3 0 0 0 3 3h14a3 3 0 0 0 3-3v-2a1 1 0 0 0-1-1ZM6 7a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v7H6V7Zm14 10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-1h16v1Z"/></svg> <select autocomplete="off" class="astro-srfpcmg6"> <option value="dark" class="astro-srfpcmg6">Dark</option><option value="light" class="astro-srfpcmg6">Light</option><option value="auto" selected class="astro-srfpcmg6">Auto</option> </select> <svg aria-hidden="true" class="icon caret astro-srfpcmg6 astro-bmbo4loj" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M17 9.17a1 1 0 0 0-1.41 0L12 12.71 8.46 9.17a1 1 0 1 0-1.41 1.42l4.24 4.24a1.002 1.002 0 0 0 1.42 0L17 10.59a1.002 1.002 0 0 0 0-1.42Z"/></svg> </label> </starlight-theme-select>  <script>
+	StarlightThemeProvider.updatePickers();
+</script> <script type="module">const r="starlight-theme",o=e=>e==="auto"||e==="dark"||e==="light"?e:"auto",c=()=>o(typeof localStorage<"u"&&localStorage.getItem(r));function n(e){typeof localStorage<"u"&&localStorage.setItem(r,e==="light"||e==="dark"?e:"")}const l=()=>matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";function t(e){StarlightThemeProvider.updatePickers(e),document.documentElement.dataset.theme=e==="auto"?l():e,n(e)}matchMedia("(prefers-color-scheme: light)").addEventListener("change",()=>{c()==="auto"&&t("auto")});class s extends HTMLElement{constructor(){super(),t(c()),this.querySelector("select")?.addEventListener("change",a=>{a.currentTarget instanceof HTMLSelectElement&&t(o(a.currentTarget.value))})}}customElements.define("starlight-theme-select",s);</script> <script type="module">class s extends HTMLElement{constructor(){super();const e=this.querySelector("select");e&&(e.addEventListener("change",t=>{t.currentTarget instanceof HTMLSelectElement&&(window.location.pathname=t.currentTarget.value)}),window.addEventListener("pageshow",t=>{if(!t.persisted)return;const n=e.querySelector("option[selected]")?.index;n!==e.selectedIndex&&(e.selectedIndex=n??0)}))}}customElements.define("starlight-lang-select",s);</script> </div> </div></header> <nav class="sidebar print:hidden astro-prtflpwz" aria-label="Main"> <starlight-menu-button class="print:hidden astro-2ngszexi"> <button aria-expanded="false" aria-label="Menu" aria-controls="starlight__sidebar" class="sl-flex md:sl-hidden astro-2ngszexi"> <svg aria-hidden="true" class="open-menu astro-2ngszexi astro-bmbo4loj" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M3 8h18a1 1 0 1 0 0-2H3a1 1 0 0 0 0 2Zm18 8H3a1 1 0 0 0 0 2h18a1 1 0 0 0 0-2Zm0-5H3a1 1 0 0 0 0 2h18a1 1 0 0 0 0-2Z"/></svg> <svg aria-hidden="true" class="close-menu astro-2ngszexi astro-bmbo4loj" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="m13.41 12 6.3-6.29a1.004 1.004 0 1 0-1.42-1.42L12 10.59l-6.29-6.3a1.004 1.004 0 0 0-1.42 1.42l6.3 6.29-6.3 6.29a1 1 0 0 0 0 1.42.998.998 0 0 0 1.42 0l6.29-6.3 6.29 6.3a.999.999 0 0 0 1.42 0 1 1 0 0 0 0-1.42L13.41 12Z"/></svg> </button> </starlight-menu-button> <script type="module">class s extends HTMLElement{constructor(){super(),this.btn=this.querySelector("button"),this.btn.addEventListener("click",()=>this.toggleExpanded());const t=this.closest("nav");t&&t.addEventListener("keyup",e=>this.closeOnEscape(e))}setExpanded(t){this.setAttribute("aria-expanded",String(t)),document.body.toggleAttribute("data-mobile-menu-expanded",t)}toggleExpanded(){this.setExpanded(this.getAttribute("aria-expanded")!=="true")}closeOnEscape(t){t.code==="Escape"&&(this.setExpanded(!1),this.btn.focus())}}customElements.define("starlight-menu-button",s);</script>  <div id="starlight__sidebar" class="sidebar-pane astro-prtflpwz"> <div class="sidebar-content sl-flex astro-prtflpwz"> <sl-sidebar-state-persist data-hash="1j6y5iq" class="astro-gfvh6gxo"> <script aria-hidden="true">
+		(() => {
+			try {
+				if (!matchMedia('(min-width: 50em)').matches) return;
+				/** @type {HTMLElement | null} */
+				const target = document.querySelector('sl-sidebar-state-persist');
+				const state = JSON.parse(sessionStorage.getItem('sl-sidebar-state') || '0');
+				if (!target || !state || target.dataset.hash !== state.hash) return;
+				window._starlightScrollRestore = state.scroll;
+				customElements.define(
+					'sl-sidebar-restore',
+					class SidebarRestore extends HTMLElement {
+						connectedCallback() {
+							try {
+								const idx = parseInt(this.dataset.index || '');
+								const details = this.closest('details');
+								if (details && typeof state.open[idx] === 'boolean') details.open = state.open[idx];
+							} catch {}
+						}
+					}
+				);
+			} catch {}
+		})();
+	</script>  <ul class="top-level astro-tidgokvg"> <li class="astro-tidgokvg"> <details open class="astro-tidgokvg"> <summary class="astro-tidgokvg"> <span class="group-label astro-tidgokvg"> <span class="large astro-tidgokvg">Getting Started</span>  </span> <svg aria-hidden="true" class="caret astro-tidgokvg astro-bmbo4loj" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg> </summary> <sl-sidebar-restore data-index="0"></sl-sidebar-restore> <ul class="astro-tidgokvg"> <li class="astro-tidgokvg"> <a href="/chimera/getting-started/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Introduction</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/quickstart/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Quickstart</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/architecture/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Architecture</span>  </a> </li> </ul> </details> </li><li class="astro-tidgokvg"> <details open class="astro-tidgokvg"> <summary class="astro-tidgokvg"> <span class="group-label astro-tidgokvg"> <span class="large astro-tidgokvg">Concepts</span>  </span> <svg aria-hidden="true" class="caret astro-tidgokvg astro-bmbo4loj" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg> </summary> <sl-sidebar-restore data-index="1"></sl-sidebar-restore> <ul class="astro-tidgokvg"> <li class="astro-tidgokvg"> <a href="/chimera/concepts/agents/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Agents</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/concepts/environments/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Environments</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/concepts/loops/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Loops</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/concepts/providers/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Providers</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/concepts/tools/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Tools</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/concepts/training/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Training</span>  </a> </li> </ul> </details> </li><li class="astro-tidgokvg"> <details open class="astro-tidgokvg"> <summary class="astro-tidgokvg"> <span class="group-label astro-tidgokvg"> <span class="large astro-tidgokvg">Guides</span>  </span> <svg aria-hidden="true" class="caret astro-tidgokvg astro-bmbo4loj" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg> </summary> <sl-sidebar-restore data-index="2"></sl-sidebar-restore> <ul class="astro-tidgokvg"> <li class="astro-tidgokvg"> <a href="/chimera/guides/add-custom-tool/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Add a Custom Tool</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/guides/add-security-policies/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Add Security Policies</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/guides/automate-ci-fixes/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Automate CI Fixes</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/guides/build-a-coding-agent/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Build a Coding Agent</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/guides/build-a-plugin/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Build a Plugin</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/guides/compose-agents/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Compose Agents</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/guides/configure-permissions/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Configure Permissions</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/guides/connect-external-agents/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Connect External Agents via ACP</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/guides/module-integration-checklist/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Module Integration Checklist</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/guides/use-the-repl/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Use the REPL</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/guides/use-with-ollama/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Use with Ollama</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/guides/use-with-third-party-providers/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Use with Third-Party Providers</span>  </a> </li> </ul> </details> </li><li class="astro-tidgokvg"> <details class="astro-tidgokvg"> <summary class="astro-tidgokvg"> <span class="group-label astro-tidgokvg"> <span class="large astro-tidgokvg">Modules</span>  </span> <svg aria-hidden="true" class="caret astro-tidgokvg astro-bmbo4loj" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg> </summary> <sl-sidebar-restore data-index="3"></sl-sidebar-restore> <ul class="astro-tidgokvg"> <li class="astro-tidgokvg"> <a href="/chimera/modules/acp/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Agent Client Protocol (ACP)</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/modules/agent-presets/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Agent Presets</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/modules/agent-tools/" class="astro-tidgokvg"> <span class="astro-tidgokvg">AGENT_TOOLS</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/modules/agents-config/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Agents &amp; Config</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/modules/auth/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Auth</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/modules/cancellation/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Cancellation</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/modules/checkpoints/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Checkpoints</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/modules/cli/" class="astro-tidgokvg"> <span class="astro-tidgokvg">CLI &amp; REPL</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/modules/compaction/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Compaction</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/modules/config/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Config</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/modules/context-aware-tools/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Context-Aware Tools</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/modules/context-mention/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Context Mention</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/modules/cost-tracking/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Cost Tracking</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/modules/critic/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Critic</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/modules/definition-lookup/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Definition Lookup</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/modules/demonstration-prompt/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Demonstration Prompt</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/modules/detection/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Detection</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/modules/dmail/" class="astro-tidgokvg"> <span class="astro-tidgokvg">D-Mail</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/modules/events/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Events</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/modules/fault-localization/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Fault Localization</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/modules/file-tracker/" class="astro-tidgokvg"> <span class="astro-tidgokvg">File Tracker</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/modules/flow-skills/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Flow Skills</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/modules/focus-chain/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Focus Chain</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/modules/history-processor/" class="astro-tidgokvg"> <span class="astro-tidgokvg">History Processor</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/modules/impact-analysis/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Impact Analysis</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/modules/instruction-layer/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Instruction Layer</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/modules/lint-feedback-loop/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Lint Feedback Loop</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/modules/long-term-memory/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Long-Term Memory</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/modules/lsp/" class="astro-tidgokvg"> <span class="astro-tidgokvg">LSP (Language Server Protocol)</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/modules/mcp/" class="astro-tidgokvg"> <span class="astro-tidgokvg">MCP (Model Context Protocol)</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/modules/message-queues/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Message Queues</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/modules/mutation-testing/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Mutation Testing</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/modules/operations/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Operations</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/modules/oracle/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Oracle</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/modules/permissions/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Permissions</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/modules/plan-act-loop/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Plan/Act Loop</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/modules/plugins/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Plugins</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/modules/provider-registry/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Provider Registry</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/modules/proxy-provider/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Proxy Provider</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/modules/regularization/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Regularization</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/modules/retry-loop/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Retry Loop</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/modules/rpc/" class="astro-tidgokvg"> <span class="astro-tidgokvg">RPC</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/modules/sandbox-policy/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Sandbox Policy</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/modules/secrets/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Secrets</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/modules/security/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Security</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/modules/session-tree/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Session Tree</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/modules/sessions/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Sessions</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/modules/sketch/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Sketch</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/modules/skill-discovery/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Skill Discovery</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/modules/spec-inference/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Spec Inference</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/modules/streaming/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Streaming</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/modules/thinking-levels/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Thinking Levels</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/modules/tree-sitter-parser/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Tree-Sitter Parser</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/modules/tuner/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Tuner</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/modules/validation/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Validation</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/modules/wire/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Wire</span>  </a> </li> </ul> </details> </li><li class="astro-tidgokvg"> <details open class="astro-tidgokvg"> <summary class="astro-tidgokvg"> <span class="group-label astro-tidgokvg"> <span class="large astro-tidgokvg">Workflows</span>  </span> <svg aria-hidden="true" class="caret astro-tidgokvg astro-bmbo4loj" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg> </summary> <sl-sidebar-restore data-index="4"></sl-sidebar-restore> <ul class="astro-tidgokvg"> <li class="astro-tidgokvg"> <a href="/chimera/workflows/ci-fix/" class="astro-tidgokvg"> <span class="astro-tidgokvg">CI Fix Workflow</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/workflows/docgen/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Doc Generation Workflow</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/workflows/migration/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Migration Workflow</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/workflows/research/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Research Workflow</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/workflows/review/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Code Review Workflow</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/workflows/testgen/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Test Generation Workflow</span>  </a> </li> </ul> </details> </li><li class="astro-tidgokvg"> <details class="astro-tidgokvg"> <summary class="astro-tidgokvg"> <span class="group-label astro-tidgokvg"> <span class="large astro-tidgokvg">API Reference</span>  </span> <svg aria-hidden="true" class="caret astro-tidgokvg astro-bmbo4loj" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg> </summary> <sl-sidebar-restore data-index="5"></sl-sidebar-restore> <ul class="astro-tidgokvg"> <li class="astro-tidgokvg"> <a href="/chimera/architecture/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Architecture (8 phases)</span>  </a> </li><li class="astro-tidgokvg"> <details class="astro-tidgokvg"> <summary class="astro-tidgokvg"> <span class="group-label astro-tidgokvg"> <span class="large astro-tidgokvg">Generated reference</span>  </span> <svg aria-hidden="true" class="caret astro-tidgokvg astro-bmbo4loj" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg> </summary> <sl-sidebar-restore data-index="6"></sl-sidebar-restore> <ul class="astro-tidgokvg"> <li class="astro-tidgokvg"> <a href="/chimera/reference/acp/" class="astro-tidgokvg"> <span class="astro-tidgokvg">ACP API Reference</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/reference/agents/" class="astro-tidgokvg"> <span class="astro-tidgokvg">chimera.agents</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/reference/auth/" class="astro-tidgokvg"> <span class="astro-tidgokvg">chimera.auth</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/reference/checkpoints/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Checkpoints API Reference</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/reference/cli/" class="astro-tidgokvg"> <span class="astro-tidgokvg">CLI &amp; REPL API Reference</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/reference/compaction/" class="astro-tidgokvg"> <span class="astro-tidgokvg">chimera.compaction</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/reference/composition/" class="astro-tidgokvg"> <span class="astro-tidgokvg">chimera.composition</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/reference/config/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Config API Reference</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/reference/core/" class="astro-tidgokvg"> <span class="astro-tidgokvg">chimera.core</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/reference/cost-tracking/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Cost Tracking API Reference</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/reference/critic/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Critic API Reference</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/reference/detection/" class="astro-tidgokvg"> <span class="astro-tidgokvg">chimera.detection</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/reference/env/" class="astro-tidgokvg"> <span class="astro-tidgokvg">chimera.env</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/reference/eval/" class="astro-tidgokvg"> <span class="astro-tidgokvg">chimera.eval</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/reference/events/" class="astro-tidgokvg"> <span class="astro-tidgokvg">chimera.events</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/reference/lsp/" class="astro-tidgokvg"> <span class="astro-tidgokvg">LSP API Reference</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/reference/mcp/" class="astro-tidgokvg"> <span class="astro-tidgokvg">MCP API Reference</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/reference/permissions/" class="astro-tidgokvg"> <span class="astro-tidgokvg">chimera.permissions</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/reference/plugins/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Plugins API Reference</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/reference/providers/" class="astro-tidgokvg"> <span class="astro-tidgokvg">chimera.providers</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/reference/secrets/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Secrets API Reference</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/reference/security/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Security API Reference</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/reference/sessions/" class="astro-tidgokvg"> <span class="astro-tidgokvg">chimera.sessions</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/reference/streaming/" class="astro-tidgokvg"> <span class="astro-tidgokvg">chimera.streaming</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/reference/tools/" class="astro-tidgokvg"> <span class="astro-tidgokvg">chimera.tools</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/reference/training/" class="astro-tidgokvg"> <span class="astro-tidgokvg">chimera.training</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/reference/types/" class="astro-tidgokvg"> <span class="astro-tidgokvg">chimera.types</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/reference/workflows/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Workflows API Reference</span>  </a> </li> </ul> </details> </li> </ul> </details> </li><li class="astro-tidgokvg"> <details class="astro-tidgokvg"> <summary class="astro-tidgokvg"> <span class="group-label astro-tidgokvg"> <span class="large astro-tidgokvg">Mink</span>  </span> <svg aria-hidden="true" class="caret astro-tidgokvg astro-bmbo4loj" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg> </summary> <sl-sidebar-restore data-index="7"></sl-sidebar-restore> <ul class="astro-tidgokvg"> <li class="astro-tidgokvg"> <details open class="astro-tidgokvg"> <summary class="astro-tidgokvg"> <span class="group-label astro-tidgokvg"> <span class="large astro-tidgokvg">Core</span>  </span> <svg aria-hidden="true" class="caret astro-tidgokvg astro-bmbo4loj" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg> </summary> <sl-sidebar-restore data-index="8"></sl-sidebar-restore> <ul class="astro-tidgokvg"> <li class="astro-tidgokvg"> <a href="/chimera/mink/quickstart/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Quickstart</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/mink/providers/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Providers</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/mink/models/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Models</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/mink/sessions/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Sessions</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/mink/runs/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Runs</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/mink/settings/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Settings</span>  </a> </li> </ul> </details> </li><li class="astro-tidgokvg"> <details open class="astro-tidgokvg"> <summary class="astro-tidgokvg"> <span class="group-label astro-tidgokvg"> <span class="large astro-tidgokvg">Per-Area</span>  </span> <svg aria-hidden="true" class="caret astro-tidgokvg astro-bmbo4loj" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg> </summary> <sl-sidebar-restore data-index="9"></sl-sidebar-restore> <ul class="astro-tidgokvg"> <li class="astro-tidgokvg"> <a href="/chimera/mink/parity-matrix/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Parity Matrix</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/mink/slash-commands/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Slash Commands</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/mink/tools/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Tools</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/mink/permissions/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Permissions</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/mink/output-formats/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Output Formats</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/mink/mcp-advanced/" class="astro-tidgokvg"> <span class="astro-tidgokvg">MCP Advanced</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/mink/subagents/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Subagents</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/mink/agent-teams/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Agent Teams</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/mink/memory/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Memory</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/mink/benchmarks/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Benchmarks</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/mink/remote/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Remote</span>  </a> </li> </ul> </details> </li><li class="astro-tidgokvg"> <details open class="astro-tidgokvg"> <summary class="astro-tidgokvg"> <span class="group-label astro-tidgokvg"> <span class="large astro-tidgokvg">Policy</span>  </span> <svg aria-hidden="true" class="caret astro-tidgokvg astro-bmbo4loj" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg> </summary> <sl-sidebar-restore data-index="10"></sl-sidebar-restore> <ul class="astro-tidgokvg"> <li class="astro-tidgokvg"> <a href="/chimera/mink/security-and-licenses/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Security and Licenses</span>  </a> </li> </ul> </details> </li> </ul> </details> </li><li class="astro-tidgokvg"> <details open class="astro-tidgokvg"> <summary class="astro-tidgokvg"> <span class="group-label astro-tidgokvg"> <span class="large astro-tidgokvg">Otter</span>  </span> <svg aria-hidden="true" class="caret astro-tidgokvg astro-bmbo4loj" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg> </summary> <sl-sidebar-restore data-index="11"></sl-sidebar-restore> <ul class="astro-tidgokvg"> <li class="astro-tidgokvg"> <details open class="astro-tidgokvg"> <summary class="astro-tidgokvg"> <span class="group-label astro-tidgokvg"> <span class="large astro-tidgokvg">Core</span>  </span> <svg aria-hidden="true" class="caret astro-tidgokvg astro-bmbo4loj" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg> </summary> <sl-sidebar-restore data-index="12"></sl-sidebar-restore> <ul class="astro-tidgokvg"> <li class="astro-tidgokvg"> <a href="/chimera/otter/quickstart/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Quickstart</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/otter/cli-reference/" class="astro-tidgokvg"> <span class="astro-tidgokvg">CLI Reference</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/otter/providers/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Providers</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/otter/models/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Models</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/otter/sessions/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Sessions</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/otter/share/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Share</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/otter/server/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Server</span>  </a> </li> </ul> </details> </li><li class="astro-tidgokvg"> <details open class="astro-tidgokvg"> <summary class="astro-tidgokvg"> <span class="group-label astro-tidgokvg"> <span class="large astro-tidgokvg">Per-Area</span>  </span> <svg aria-hidden="true" class="caret astro-tidgokvg astro-bmbo4loj" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg> </summary> <sl-sidebar-restore data-index="13"></sl-sidebar-restore> <ul class="astro-tidgokvg"> <li class="astro-tidgokvg"> <a href="/chimera/otter/parity-matrix/" aria-current="page" class="astro-tidgokvg"> <span class="astro-tidgokvg">Parity Matrix</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/otter/agents/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Agents</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/otter/commands/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Commands</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/otter/rules/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Rules</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/otter/slash-commands/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Slash Commands</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/otter/mcp/" class="astro-tidgokvg"> <span class="astro-tidgokvg">MCP</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/otter/lsp/" class="astro-tidgokvg"> <span class="astro-tidgokvg">LSP</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/otter/acp/" class="astro-tidgokvg"> <span class="astro-tidgokvg">ACP</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/otter/plugins/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Plugins</span>  </a> </li> </ul> </details> </li><li class="astro-tidgokvg"> <details open class="astro-tidgokvg"> <summary class="astro-tidgokvg"> <span class="group-label astro-tidgokvg"> <span class="large astro-tidgokvg">Policy</span>  </span> <svg aria-hidden="true" class="caret astro-tidgokvg astro-bmbo4loj" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg> </summary> <sl-sidebar-restore data-index="14"></sl-sidebar-restore> <ul class="astro-tidgokvg"> <li class="astro-tidgokvg"> <a href="/chimera/otter/security-and-trademarks/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Security and Trademarks</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/otter/trademark-policy/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Trademark Policy</span>  </a> </li> </ul> </details> </li> </ul> </details> </li><li class="astro-tidgokvg"> <details class="astro-tidgokvg"> <summary class="astro-tidgokvg"> <span class="group-label astro-tidgokvg"> <span class="large astro-tidgokvg">Ferret</span>  </span> <svg aria-hidden="true" class="caret astro-tidgokvg astro-bmbo4loj" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg> </summary> <sl-sidebar-restore data-index="15"></sl-sidebar-restore> <ul class="astro-tidgokvg"> <li class="astro-tidgokvg"> <details open class="astro-tidgokvg"> <summary class="astro-tidgokvg"> <span class="group-label astro-tidgokvg"> <span class="large astro-tidgokvg">Core</span>  </span> <svg aria-hidden="true" class="caret astro-tidgokvg astro-bmbo4loj" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg> </summary> <sl-sidebar-restore data-index="16"></sl-sidebar-restore> <ul class="astro-tidgokvg"> <li class="astro-tidgokvg"> <a href="/chimera/ferret/quickstart/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Quickstart</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/ferret/providers/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Providers</span>  </a> </li> </ul> </details> </li><li class="astro-tidgokvg"> <details open class="astro-tidgokvg"> <summary class="astro-tidgokvg"> <span class="group-label astro-tidgokvg"> <span class="large astro-tidgokvg">Per-Area</span>  </span> <svg aria-hidden="true" class="caret astro-tidgokvg astro-bmbo4loj" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg> </summary> <sl-sidebar-restore data-index="17"></sl-sidebar-restore> <ul class="astro-tidgokvg"> <li class="astro-tidgokvg"> <a href="/chimera/ferret/parity-matrix/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Parity Matrix</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/ferret/sandbox/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Sandbox</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/ferret/approval/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Approval</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/ferret/ide/" class="astro-tidgokvg"> <span class="astro-tidgokvg">IDE Bridge</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/ferret/cloud-bridge/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Cloud Bridge</span>  </a> </li> </ul> </details> </li><li class="astro-tidgokvg"> <details open class="astro-tidgokvg"> <summary class="astro-tidgokvg"> <span class="group-label astro-tidgokvg"> <span class="large astro-tidgokvg">Policy</span>  </span> <svg aria-hidden="true" class="caret astro-tidgokvg astro-bmbo4loj" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg> </summary> <sl-sidebar-restore data-index="18"></sl-sidebar-restore> <ul class="astro-tidgokvg"> <li class="astro-tidgokvg"> <a href="/chimera/ferret/security-and-trademarks/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Security and Trademarks</span>  </a> </li> </ul> </details> </li> </ul> </details> </li><li class="astro-tidgokvg"> <details class="astro-tidgokvg"> <summary class="astro-tidgokvg"> <span class="group-label astro-tidgokvg"> <span class="large astro-tidgokvg">Weasel</span>  </span> <svg aria-hidden="true" class="caret astro-tidgokvg astro-bmbo4loj" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg> </summary> <sl-sidebar-restore data-index="19"></sl-sidebar-restore> <ul class="astro-tidgokvg"> <li class="astro-tidgokvg"> <details open class="astro-tidgokvg"> <summary class="astro-tidgokvg"> <span class="group-label astro-tidgokvg"> <span class="large astro-tidgokvg">Core</span>  </span> <svg aria-hidden="true" class="caret astro-tidgokvg astro-bmbo4loj" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg> </summary> <sl-sidebar-restore data-index="20"></sl-sidebar-restore> <ul class="astro-tidgokvg"> <li class="astro-tidgokvg"> <a href="/chimera/weasel/quickstart/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Quickstart</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/weasel/providers/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Providers</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/weasel/modes/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Modes</span>  </a> </li> </ul> </details> </li><li class="astro-tidgokvg"> <details open class="astro-tidgokvg"> <summary class="astro-tidgokvg"> <span class="group-label astro-tidgokvg"> <span class="large astro-tidgokvg">Per-Area</span>  </span> <svg aria-hidden="true" class="caret astro-tidgokvg astro-bmbo4loj" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg> </summary> <sl-sidebar-restore data-index="21"></sl-sidebar-restore> <ul class="astro-tidgokvg"> <li class="astro-tidgokvg"> <a href="/chimera/weasel/sdk/" class="astro-tidgokvg"> <span class="astro-tidgokvg">SDK</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/weasel/extensions/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Extensions</span>  </a> </li> </ul> </details> </li> </ul> </details> </li><li class="astro-tidgokvg"> <details class="astro-tidgokvg"> <summary class="astro-tidgokvg"> <span class="group-label astro-tidgokvg"> <span class="large astro-tidgokvg">Shrew</span>  </span> <svg aria-hidden="true" class="caret astro-tidgokvg astro-bmbo4loj" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg> </summary> <sl-sidebar-restore data-index="22"></sl-sidebar-restore> <ul class="astro-tidgokvg"> <li class="astro-tidgokvg"> <details open class="astro-tidgokvg"> <summary class="astro-tidgokvg"> <span class="group-label astro-tidgokvg"> <span class="large astro-tidgokvg">Core</span>  </span> <svg aria-hidden="true" class="caret astro-tidgokvg astro-bmbo4loj" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg> </summary> <sl-sidebar-restore data-index="23"></sl-sidebar-restore> <ul class="astro-tidgokvg"> <li class="astro-tidgokvg"> <a href="/chimera/shrew/quickstart/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Quickstart</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/shrew/small-model-setup/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Small-Model Setup</span>  </a> </li> </ul> </details> </li><li class="astro-tidgokvg"> <details open class="astro-tidgokvg"> <summary class="astro-tidgokvg"> <span class="group-label astro-tidgokvg"> <span class="large astro-tidgokvg">Per-Area</span>  </span> <svg aria-hidden="true" class="caret astro-tidgokvg astro-bmbo4loj" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg> </summary> <sl-sidebar-restore data-index="24"></sl-sidebar-restore> <ul class="astro-tidgokvg"> <li class="astro-tidgokvg"> <a href="/chimera/shrew/parity-matrix/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Parity Matrix</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/shrew/skills/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Skills</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/shrew/extensions/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Extensions</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/shrew/benchmarks/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Benchmarks</span>  </a> </li> </ul> </details> </li><li class="astro-tidgokvg"> <details open class="astro-tidgokvg"> <summary class="astro-tidgokvg"> <span class="group-label astro-tidgokvg"> <span class="large astro-tidgokvg">Policy</span>  </span> <svg aria-hidden="true" class="caret astro-tidgokvg astro-bmbo4loj" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg> </summary> <sl-sidebar-restore data-index="25"></sl-sidebar-restore> <ul class="astro-tidgokvg"> <li class="astro-tidgokvg"> <a href="/chimera/shrew/security-and-trademarks/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Security and Trademarks</span>  </a> </li> </ul> </details> </li> </ul> </details> </li><li class="astro-tidgokvg"> <details class="astro-tidgokvg"> <summary class="astro-tidgokvg"> <span class="group-label astro-tidgokvg"> <span class="large astro-tidgokvg">Stoat</span>  </span> <svg aria-hidden="true" class="caret astro-tidgokvg astro-bmbo4loj" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg> </summary> <sl-sidebar-restore data-index="26"></sl-sidebar-restore> <ul class="astro-tidgokvg"> <li class="astro-tidgokvg"> <details open class="astro-tidgokvg"> <summary class="astro-tidgokvg"> <span class="group-label astro-tidgokvg"> <span class="large astro-tidgokvg">Core</span>  </span> <svg aria-hidden="true" class="caret astro-tidgokvg astro-bmbo4loj" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg> </summary> <sl-sidebar-restore data-index="27"></sl-sidebar-restore> <ul class="astro-tidgokvg"> <li class="astro-tidgokvg"> <a href="/chimera/stoat/quickstart/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Quickstart</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/stoat/shell-mode/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Shell Mode</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/stoat/providers/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Providers</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/stoat/sessions/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Sessions</span>  </a> </li> </ul> </details> </li><li class="astro-tidgokvg"> <details open class="astro-tidgokvg"> <summary class="astro-tidgokvg"> <span class="group-label astro-tidgokvg"> <span class="large astro-tidgokvg">Per-Area</span>  </span> <svg aria-hidden="true" class="caret astro-tidgokvg astro-bmbo4loj" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg> </summary> <sl-sidebar-restore data-index="28"></sl-sidebar-restore> <ul class="astro-tidgokvg"> <li class="astro-tidgokvg"> <a href="/chimera/stoat/slash-commands/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Slash Commands</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/stoat/parity-matrix/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Parity Matrix</span>  </a> </li> </ul> </details> </li><li class="astro-tidgokvg"> <details open class="astro-tidgokvg"> <summary class="astro-tidgokvg"> <span class="group-label astro-tidgokvg"> <span class="large astro-tidgokvg">Policy</span>  </span> <svg aria-hidden="true" class="caret astro-tidgokvg astro-bmbo4loj" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg> </summary> <sl-sidebar-restore data-index="29"></sl-sidebar-restore> <ul class="astro-tidgokvg"> <li class="astro-tidgokvg"> <a href="/chimera/stoat/security-and-trademarks/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Security and Trademarks</span>  </a> </li> </ul> </details> </li> </ul> </details> </li><li class="astro-tidgokvg"> <details class="astro-tidgokvg"> <summary class="astro-tidgokvg"> <span class="group-label astro-tidgokvg"> <span class="large astro-tidgokvg">Badger</span>  </span> <svg aria-hidden="true" class="caret astro-tidgokvg astro-bmbo4loj" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg> </summary> <sl-sidebar-restore data-index="30"></sl-sidebar-restore> <ul class="astro-tidgokvg"> <li class="astro-tidgokvg"> <details open class="astro-tidgokvg"> <summary class="astro-tidgokvg"> <span class="group-label astro-tidgokvg"> <span class="large astro-tidgokvg">Core</span>  </span> <svg aria-hidden="true" class="caret astro-tidgokvg astro-bmbo4loj" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg> </summary> <sl-sidebar-restore data-index="31"></sl-sidebar-restore> <ul class="astro-tidgokvg"> <li class="astro-tidgokvg"> <a href="/chimera/badger/quickstart/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Quickstart</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/badger/providers/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Providers</span>  </a> </li> </ul> </details> </li><li class="astro-tidgokvg"> <details open class="astro-tidgokvg"> <summary class="astro-tidgokvg"> <span class="group-label astro-tidgokvg"> <span class="large astro-tidgokvg">Per-Area</span>  </span> <svg aria-hidden="true" class="caret astro-tidgokvg astro-bmbo4loj" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg> </summary> <sl-sidebar-restore data-index="32"></sl-sidebar-restore> <ul class="astro-tidgokvg"> <li class="astro-tidgokvg"> <a href="/chimera/badger/harness-discipline/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Harness Discipline</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/badger/parity/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Parity</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/badger/rerun-on-failure/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Rerun on Failure</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/badger/parity-matrix/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Parity Matrix</span>  </a> </li> </ul> </details> </li><li class="astro-tidgokvg"> <details open class="astro-tidgokvg"> <summary class="astro-tidgokvg"> <span class="group-label astro-tidgokvg"> <span class="large astro-tidgokvg">Policy</span>  </span> <svg aria-hidden="true" class="caret astro-tidgokvg astro-bmbo4loj" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg> </summary> <sl-sidebar-restore data-index="33"></sl-sidebar-restore> <ul class="astro-tidgokvg"> <li class="astro-tidgokvg"> <a href="/chimera/badger/security-and-trademarks/" class="astro-tidgokvg"> <span class="astro-tidgokvg">Security and Trademarks</span>  </a> </li> </ul> </details> </li> </ul> </details> </li><li class="astro-tidgokvg"> <details class="astro-tidgokvg"> <summary class="astro-tidgokvg"> <span class="group-label astro-tidgokvg"> <span class="large astro-tidgokvg">Releases</span>  </span> <svg aria-hidden="true" class="caret astro-tidgokvg astro-bmbo4loj" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg> </summary> <sl-sidebar-restore data-index="34"></sl-sidebar-restore> <ul class="astro-tidgokvg"> <li class="astro-tidgokvg"> <a href="/chimera/releases/0.7.0/" class="astro-tidgokvg"> <span class="astro-tidgokvg">0.7.0 — PyPI release + deprecation cuts</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/releases/0.6.0/" class="astro-tidgokvg"> <span class="astro-tidgokvg">0.6.0 — P0 gap closure + benchmarks</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/releases/0.5.0/" class="astro-tidgokvg"> <span class="astro-tidgokvg">0.5.0 — Five-Strong Family</span>  </a> </li> </ul> </details> </li><li class="astro-tidgokvg"> <details class="astro-tidgokvg"> <summary class="astro-tidgokvg"> <span class="group-label astro-tidgokvg"> <span class="large astro-tidgokvg">Migrations</span>  </span> <svg aria-hidden="true" class="caret astro-tidgokvg astro-bmbo4loj" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg> </summary> <sl-sidebar-restore data-index="35"></sl-sidebar-restore> <ul class="astro-tidgokvg"> <li class="astro-tidgokvg"> <a href="/chimera/migrations/v0.6-to-v0.7/" class="astro-tidgokvg"> <span class="astro-tidgokvg">v0.6 → v0.7</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/migrations/v0.5-to-v0.6/" class="astro-tidgokvg"> <span class="astro-tidgokvg">v0.5 → v0.6</span>  </a> </li><li class="astro-tidgokvg"> <a href="/chimera/migrations/v0.4-to-v0.5/" class="astro-tidgokvg"> <span class="astro-tidgokvg">v0.4 → v0.5</span>  </a> </li> </ul> </details> </li> </ul>  <script aria-hidden="true">
+		(() => {
+			const scroller = document.getElementById('starlight__sidebar');
+			if (!window._starlightScrollRestore || !scroller) return;
+			scroller.scrollTop = window._starlightScrollRestore;
+			delete window._starlightScrollRestore;
+		})();
+	</script> </sl-sidebar-state-persist> <div class="md:sl-hidden"> <div class="mobile-preferences sl-flex astro-edbu46ct"> <div class="social-icons astro-edbu46ct"> <a href="https://github.com/0bserver07/chimera" rel="me" class="sl-flex astro-ktd4evgt"><span class="sr-only astro-ktd4evgt">GitHub</span><svg aria-hidden="true" class="astro-ktd4evgt astro-bmbo4loj" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M12 .3a12 12 0 0 0-3.8 23.38c.6.12.83-.26.83-.57L9 21.07c-3.34.72-4.04-1.61-4.04-1.61-.55-1.39-1.34-1.76-1.34-1.76-1.08-.74.09-.73.09-.73 1.2.09 1.83 1.24 1.83 1.24 1.08 1.83 2.81 1.3 3.5 1 .1-.78.42-1.31.76-1.61-2.67-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.14-.3-.54-1.52.1-3.18 0 0 1-.32 3.3 1.23a11.5 11.5 0 0 1 6 0c2.28-1.55 3.29-1.23 3.29-1.23.64 1.66.24 2.88.12 3.18a4.65 4.65 0 0 1 1.23 3.22c0 4.61-2.8 5.63-5.48 5.92.42.36.81 1.1.81 2.22l-.01 3.29c0 .31.2.69.82.57A12 12 0 0 0 12 .3Z"/></svg></a> </div> <starlight-theme-select>  <label style="--sl-select-width: 6.25em" class="astro-srfpcmg6"> <span class="sr-only astro-srfpcmg6">Select theme</span> <svg aria-hidden="true" class="icon label-icon astro-srfpcmg6 astro-bmbo4loj" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M21 14h-1V7a3 3 0 0 0-3-3H7a3 3 0 0 0-3 3v7H3a1 1 0 0 0-1 1v2a3 3 0 0 0 3 3h14a3 3 0 0 0 3-3v-2a1 1 0 0 0-1-1ZM6 7a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v7H6V7Zm14 10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-1h16v1Z"/></svg> <select autocomplete="off" class="astro-srfpcmg6"> <option value="dark" class="astro-srfpcmg6">Dark</option><option value="light" class="astro-srfpcmg6">Light</option><option value="auto" selected class="astro-srfpcmg6">Auto</option> </select> <svg aria-hidden="true" class="icon caret astro-srfpcmg6 astro-bmbo4loj" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M17 9.17a1 1 0 0 0-1.41 0L12 12.71 8.46 9.17a1 1 0 1 0-1.41 1.42l4.24 4.24a1.002 1.002 0 0 0 1.42 0L17 10.59a1.002 1.002 0 0 0 0-1.42Z"/></svg> </label> </starlight-theme-select>  <script>
+	StarlightThemeProvider.updatePickers();
+</script>   </div> </div> </div> </div> </nav> <div class="main-frame astro-prtflpwz">  <script type="module">const a=document.getElementById("starlight__sidebar"),n=a?.querySelector("sl-sidebar-state-persist"),o="sl-sidebar-state",i=()=>{let t=[];const e=n?.dataset.hash||"";try{const s=sessionStorage.getItem(o),r=JSON.parse(s||"{}");Array.isArray(r.open)&&r.hash===e&&(t=r.open)}catch{}return{hash:e,open:t,scroll:a?.scrollTop||0}},c=t=>{try{sessionStorage.setItem(o,JSON.stringify(t))}catch{}},d=()=>c(i()),l=(t,e)=>{const s=i();s.open[e]=t,c(s)};n?.addEventListener("click",t=>{if(!(t.target instanceof Element))return;const e=t.target.closest("summary")?.closest("details");if(!e)return;const s=e.querySelector("sl-sidebar-restore"),r=parseInt(s?.dataset.index||"");isNaN(r)||l(!e.open,r)});addEventListener("visibilitychange",()=>{document.visibilityState==="hidden"&&d()});addEventListener("pageHide",d);</script> <div class="lg:sl-flex astro-q7c2b7ey"> <aside class="right-sidebar-container print:hidden astro-q7c2b7ey"> <div class="right-sidebar astro-q7c2b7ey"> <script type="module" src="/chimera/_astro/MobileTableOfContents.astro_astro_type_script_index_0_lang.hwBsy0Mo.js"></script><script type="module" src="/chimera/_astro/TableOfContents.astro_astro_type_script_index_0_lang.FuRcXuRY.js"></script><div class="lg:sl-hidden astro-ftzuubd5"><mobile-starlight-toc data-min-h="2" data-max-h="3" class="astro-rodg67yr"><nav aria-labelledby="starlight__on-this-page--mobile" class="astro-rodg67yr"><details id="starlight__mobile-toc" class="astro-rodg67yr"><summary id="starlight__on-this-page--mobile" class="sl-flex astro-rodg67yr"><span class="toggle sl-flex astro-rodg67yr">On this page<svg aria-hidden="true" class="caret astro-rodg67yr astro-bmbo4loj" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg></span><span class="display-current astro-rodg67yr"></span></summary><div class="dropdown astro-rodg67yr"><ul class="isMobile astro-w2xgp7h3" style="--depth: 0;"> <li class="astro-w2xgp7h3" style="--depth: 0;"> <a href="#_top" class="astro-w2xgp7h3" style="--depth: 0;"> <span class="astro-w2xgp7h3" style="--depth: 0;">Overview</span> </a>  </li><li class="astro-w2xgp7h3" style="--depth: 0;"> <a href="#top-level-cli-subcommands" class="astro-w2xgp7h3" style="--depth: 0;"> <span class="astro-w2xgp7h3" style="--depth: 0;">Top-level CLI subcommands</span> </a>  </li><li class="astro-w2xgp7h3" style="--depth: 0;"> <a href="#run-and-chimera-otter--p-flag-map" class="astro-w2xgp7h3" style="--depth: 0;"> <span class="astro-w2xgp7h3" style="--depth: 0;">run (and chimera otter -p) flag map</span> </a>  </li><li class="astro-w2xgp7h3" style="--depth: 0;"> <a href="#slash-command-palette-repl" class="astro-w2xgp7h3" style="--depth: 0;"> <span class="astro-w2xgp7h3" style="--depth: 0;">Slash-command palette (REPL)</span> </a>  </li><li class="astro-w2xgp7h3" style="--depth: 0;"> <a href="#plugin-hooks-server-side" class="astro-w2xgp7h3" style="--depth: 0;"> <span class="astro-w2xgp7h3" style="--depth: 0;">Plugin hooks (server-side)</span> </a>  </li><li class="astro-w2xgp7h3" style="--depth: 0;"> <a href="#configuration-keys-opencodeconfigjson" class="astro-w2xgp7h3" style="--depth: 0;"> <span class="astro-w2xgp7h3" style="--depth: 0;">Configuration keys (~/.opencode/config.json)</span> </a>  </li><li class="astro-w2xgp7h3" style="--depth: 0;"> <a href="#counts" class="astro-w2xgp7h3" style="--depth: 0;"> <span class="astro-w2xgp7h3" style="--depth: 0;">Counts</span> </a>  </li><li class="astro-w2xgp7h3" style="--depth: 0;"> <a href="#chimera-only-capabilities-do-not-regress" class="astro-w2xgp7h3" style="--depth: 0;"> <span class="astro-w2xgp7h3" style="--depth: 0;">Chimera-only capabilities (do not regress)</span> </a>  </li><li class="astro-w2xgp7h3" style="--depth: 0;"> <a href="#follow-up-issues-to-file-or-already-filed" class="astro-w2xgp7h3" style="--depth: 0;"> <span class="astro-w2xgp7h3" style="--depth: 0;">Follow-up issues to file (or already filed)</span> </a>  </li><li class="astro-w2xgp7h3" style="--depth: 0;"> <a href="#how-to-use" class="astro-w2xgp7h3" style="--depth: 0;"> <span class="astro-w2xgp7h3" style="--depth: 0;">How to use</span> </a>  </li><li class="astro-w2xgp7h3" style="--depth: 0;"> <a href="#cross-links" class="astro-w2xgp7h3" style="--depth: 0;"> <span class="astro-w2xgp7h3" style="--depth: 0;">Cross-links</span> </a>  </li> </ul></div></details></nav></mobile-starlight-toc></div><div class="right-sidebar-panel sl-hidden lg:sl-block astro-ftzuubd5"><div class="sl-container astro-ftzuubd5"><starlight-toc data-min-h="2" data-max-h="3"><nav aria-labelledby="starlight__on-this-page"><h2 id="starlight__on-this-page">On this page</h2><ul class="astro-w2xgp7h3" style="--depth: 0;"> <li class="astro-w2xgp7h3" style="--depth: 0;"> <a href="#_top" class="astro-w2xgp7h3" style="--depth: 0;"> <span class="astro-w2xgp7h3" style="--depth: 0;">Overview</span> </a>  </li><li class="astro-w2xgp7h3" style="--depth: 0;"> <a href="#top-level-cli-subcommands" class="astro-w2xgp7h3" style="--depth: 0;"> <span class="astro-w2xgp7h3" style="--depth: 0;">Top-level CLI subcommands</span> </a>  </li><li class="astro-w2xgp7h3" style="--depth: 0;"> <a href="#run-and-chimera-otter--p-flag-map" class="astro-w2xgp7h3" style="--depth: 0;"> <span class="astro-w2xgp7h3" style="--depth: 0;">run (and chimera otter -p) flag map</span> </a>  </li><li class="astro-w2xgp7h3" style="--depth: 0;"> <a href="#slash-command-palette-repl" class="astro-w2xgp7h3" style="--depth: 0;"> <span class="astro-w2xgp7h3" style="--depth: 0;">Slash-command palette (REPL)</span> </a>  </li><li class="astro-w2xgp7h3" style="--depth: 0;"> <a href="#plugin-hooks-server-side" class="astro-w2xgp7h3" style="--depth: 0;"> <span class="astro-w2xgp7h3" style="--depth: 0;">Plugin hooks (server-side)</span> </a>  </li><li class="astro-w2xgp7h3" style="--depth: 0;"> <a href="#configuration-keys-opencodeconfigjson" class="astro-w2xgp7h3" style="--depth: 0;"> <span class="astro-w2xgp7h3" style="--depth: 0;">Configuration keys (~/.opencode/config.json)</span> </a>  </li><li class="astro-w2xgp7h3" style="--depth: 0;"> <a href="#counts" class="astro-w2xgp7h3" style="--depth: 0;"> <span class="astro-w2xgp7h3" style="--depth: 0;">Counts</span> </a>  </li><li class="astro-w2xgp7h3" style="--depth: 0;"> <a href="#chimera-only-capabilities-do-not-regress" class="astro-w2xgp7h3" style="--depth: 0;"> <span class="astro-w2xgp7h3" style="--depth: 0;">Chimera-only capabilities (do not regress)</span> </a>  </li><li class="astro-w2xgp7h3" style="--depth: 0;"> <a href="#follow-up-issues-to-file-or-already-filed" class="astro-w2xgp7h3" style="--depth: 0;"> <span class="astro-w2xgp7h3" style="--depth: 0;">Follow-up issues to file (or already filed)</span> </a>  </li><li class="astro-w2xgp7h3" style="--depth: 0;"> <a href="#how-to-use" class="astro-w2xgp7h3" style="--depth: 0;"> <span class="astro-w2xgp7h3" style="--depth: 0;">How to use</span> </a>  </li><li class="astro-w2xgp7h3" style="--depth: 0;"> <a href="#cross-links" class="astro-w2xgp7h3" style="--depth: 0;"> <span class="astro-w2xgp7h3" style="--depth: 0;">Cross-links</span> </a>  </li> </ul></nav></starlight-toc></div></div> </div> </aside> <div class="main-pane astro-q7c2b7ey">  <main data-pagefind-body class="astro-fk4wox5s" lang="en" dir="ltr">    <div class="content-panel astro-sijrx5za"> <div class="sl-container astro-sijrx5za"> <h1 id="_top" class="astro-hzlbomeo">Otter Parity Matrix</h1> </div> </div> <div class="content-panel astro-sijrx5za"> <div class="sl-container astro-sijrx5za"> <div class="sl-markdown-content"> <div class="sl-heading-wrapper level-h1"><h1 id="chimera-otter-parity-matrix"><code dir="auto">chimera otter</code> Parity Matrix</h1><a class="sl-anchor-link" href="#chimera-otter-parity-matrix"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentcolor" d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 0 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 1 0-1.42-1.42Zm8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 0 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 1 0 1.42 1.42l3.88-3.89a4.49 4.49 0 0 0 0-6.33ZM8.83 15.17a1 1 0 0 0 1.1.22 1 1 0 0 0 .32-.22l4.92-4.92a1 1 0 0 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42Z"></path></svg></span><span class="sr-only" data-pagefind-ignore="">Section titled “chimera otter Parity Matrix”</span></a></div>
+<p><strong>Source baseline:</strong> <code dir="auto">research/otter/SPEC.md</code> (Apr 25 2026), upstream tree
+walk under <code dir="auto">packages/opencode/src/</code> (cli, agent, command, mcp, lsp, acp,
+plugin, config, permission).
+<strong>Updated:</strong> 2026-04-25, after wave-1 ship (O1–O15). Refreshed 2026-04-30
+by D1 at the wave-9 close — five YELLOW rows promoted to GREEN as the
+wave-9 batch (O1/O2/O3/O4/O5) closed the carry-over gaps.
+<strong>Legend:</strong> GREEN = shipped / at parity (or superset); YELLOW = partial; RED = deferred.</p>
+<blockquote>
+<p><strong>Wave-9 close (2026-04-30, D1).</strong> Five carry-over items from the
+wave-1 follow-up list landed in this wave:</p>
+<ul>
+<li><code dir="auto">agents create</code> (interactive scaffolder) — O1/W9, <code dir="auto">chimera/otter/agents.py</code>.</li>
+<li><code dir="auto">mcp add</code> / <code dir="auto">mcp auth</code> (live add + OAuth device-flow) — O2/W9,
+<code dir="auto">chimera/otter/mcp_cli.py</code>.</li>
+<li><code dir="auto">-f</code> / <code dir="auto">--file</code> (one-shot file attachment, stdin via <code dir="auto">-</code>, 100 KB
+warn / 500 KB cap) — O3/W9, <code dir="auto">chimera/otter/cli.py</code>.</li>
+<li><code dir="auto">--title</code> + <code dir="auto">sessions rename</code> (titleable runs) — O4/W9,
+<code dir="auto">chimera/otter/cli.py</code> + <code dir="auto">chimera/otter/sessions.py</code>.</li>
+<li><code dir="auto">chimera completion bash|zsh|fish [--cli all|&#x3C;animal>]</code> —
+O5/W9 cross-CLI shell-completion generator, <code dir="auto">chimera/cli/completion.py</code>.</li>
+</ul>
+<p>All five reports live under <code dir="auto">research/otter/{O1..O4}-W9-REPORT.md</code> and
+<code dir="auto">research/O5-COMPLETION.md</code>. Live tests against the new files pass:
+10 (<code dir="auto">test_agents_create.py</code>) + 25 (<code dir="auto">test_mcp_cli.py</code>) + 16
+(<code dir="auto">test_file_attachment.py</code>) + 19 (<code dir="auto">test_session_title.py</code>) + 25
+(<code dir="auto">test_completion.py</code>) = 95 new tests. The trademark scrub still
+exits OK at the codename-aggregate level (<code dir="auto">passed: 7</code>).</p>
+</blockquote>
+<blockquote>
+<p><strong>Trademark hygiene.</strong> Throughout this document the upstream project is
+referred to as “the open-source coding agent” or “the upstream”. Live
+references to filesystem paths such as <code dir="auto">~/.opencode/config.json</code> are
+kept because they are facts (the directory <code dir="auto">chimera otter</code> reads from
+on disk), not brand claims. See <code dir="auto">docs/otter/security-and-trademarks.md</code>.</p>
+</blockquote>
+<div class="sl-heading-wrapper level-h2"><h2 id="top-level-cli-subcommands">Top-level CLI subcommands</h2><a class="sl-anchor-link" href="#top-level-cli-subcommands"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentcolor" d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 0 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 1 0-1.42-1.42Zm8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 0 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 1 0 1.42 1.42l3.88-3.89a4.49 4.49 0 0 0 0-6.33ZM8.83 15.17a1 1 0 0 0 1.1.22 1 1 0 0 0 .32-.22l4.92-4.92a1 1 0 0 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42Z"></path></svg></span><span class="sr-only" data-pagefind-ignore="">Section titled “Top-level CLI subcommands”</span></a></div>
+<p>The upstream CLI registers about twenty top-level commands (see
+<code dir="auto">packages/opencode/src/index.ts</code>). Otter’s surface is intentionally
+narrower: the long tail of <code dir="auto">account</code> / <code dir="auto">db</code> / <code dir="auto">github</code> / <code dir="auto">pr</code> / <code dir="auto">upgrade</code>
+/ <code dir="auto">uninstall</code> / <code dir="auto">web</code> / <code dir="auto">import</code> / <code dir="auto">export</code> / <code dir="auto">generate</code> / <code dir="auto">stats</code> /
+<code dir="auto">debug</code> is out of scope for wave-1 because Chimera already covers those
+flows through different surfaces (<code dir="auto">chimera mink runs</code>, <code dir="auto">chimera eval</code>,
+<code dir="auto">pyproject.toml</code> install, etc.). Wave-1 focuses on the six surfaces that
+make otter useful as a coding-agent driver.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Upstream surface</th><th>Otter status</th><th>File</th><th>Notes</th></tr></thead><tbody><tr><td><code dir="auto">run [message..]</code></td><td>GREEN</td><td><code dir="auto">chimera/otter/cli.py</code> (<code dir="auto">-p</code>/<code dir="auto">--print</code>)</td><td>Mirrors the one-shot <code dir="auto">run</code> flow: prompt arg, <code dir="auto">--model</code>, <code dir="auto">--output-format text|json|stream-json</code>, <code dir="auto">--cwd</code>, <code dir="auto">--allowed-tools</code>, <code dir="auto">--no-save</code>, <code dir="auto">--run-id</code>.</td></tr><tr><td><code dir="auto">serve</code> (HTTP)</td><td>GREEN</td><td><code dir="auto">chimera/otter/server.py</code>, dispatched from <code dir="auto">cli.py</code></td><td>Minimum REST + SSE surface (<code dir="auto">/healthz</code>, <code dir="auto">/session</code>, <code dir="auto">/turn</code>, <code dir="auto">/events</code>). Backs an out-of-tree TUI client.</td></tr><tr><td><code dir="auto">acp</code></td><td>GREEN</td><td><code dir="auto">chimera/otter/acp.py</code> (invoked via <code dir="auto">serve --acp</code>)</td><td>JSON-RPC 2.0 over stdio. <code dir="auto">initialize</code>, <code dir="auto">session/new</code>, <code dir="auto">session/message</code>, <code dir="auto">session/cancel</code>, permission round-trip.</td></tr><tr><td><code dir="auto">session list | delete</code></td><td>GREEN / YELLOW</td><td><code dir="auto">chimera/otter/sessions.py</code>, <code dir="auto">cli.py</code></td><td><code dir="auto">sessions list</code> + <code dir="auto">sessions show &#x3C;id></code> shipped (read-only). <code dir="auto">delete</code> not yet wired (covered by <code dir="auto">rm -rf &#x3C;eventlog-dir></code>).</td></tr><tr><td><code dir="auto">agent create | &#x3C;list></code></td><td>GREEN</td><td><code dir="auto">chimera/otter/agents.py</code> (<code dir="auto">cmd_agents_create</code>)</td><td><code dir="auto">agents list/show</code> (read-only) + <code dir="auto">agents create [&#x3C;name>] [--user]</code> interactive scaffolder shipped. Stdlib-only (no <code dir="auto">$EDITOR</code>, no readline); writes <code dir="auto">.opencode/agent/&#x3C;name>.md</code>. <strong>Wave-9 close (O1/W9).</strong></td></tr><tr><td><code dir="auto">mcp list | add | auth</code></td><td>GREEN</td><td><code dir="auto">chimera/otter/mcp.py</code> + <code dir="auto">chimera/otter/mcp_cli.py</code></td><td><code dir="auto">mcp list</code> walks user + project scopes; <code dir="auto">mcp add &#x3C;name> [-- &#x3C;command...>]</code> (or <code dir="auto">--mcp-http</code>) writes the entry atomically to the chosen scope’s config; <code dir="auto">mcp auth &#x3C;name></code> runs <code dir="auto">OAuthDeviceFlow</code> for HTTP entries with manual paste fallback. <strong>Wave-9 close (O2/W9).</strong></td></tr><tr><td><code dir="auto">models [provider]</code></td><td>GREEN</td><td><code dir="auto">chimera/otter/providers.py</code></td><td><code dir="auto">--model provider/model</code> honored everywhere; <code dir="auto">OTTER_MODEL</code> env var pinned. Refresh-cache flag deferred.</td></tr><tr><td><code dir="auto">providers</code> (auth login/list)</td><td>YELLOW</td><td><code dir="auto">chimera/otter/providers.py</code></td><td>Default chain (Anthropic → OpenRouter → OpenAI); device-flow OAuth ridden via <code dir="auto">chimera.auth</code>. Plugin-driven auth methods deferred.</td></tr><tr><td><code dir="auto">stats</code></td><td>GREEN</td><td><code dir="auto">chimera otter sessions cost</code> (G6)</td><td><code dir="auto">sessions cost --since 7d --format json</code> aggregates <code dir="auto">~/.chimera/eventlog/otter-*/summary.json</code>. Same rollup the <code dir="auto">GET /runs/cost</code> HTTP route serves.</td></tr><tr><td><code dir="auto">export</code> / <code dir="auto">import</code></td><td>YELLOW</td><td><code dir="auto">chimera/otter/share_cmd.py</code> covers export</td><td><code dir="auto">share &#x3C;id> --sink file --format json</code> writes a portable transcript. Import flow deferred.</td></tr><tr><td><code dir="auto">pr &#x3C;number></code> (PR checkout)</td><td>RED</td><td>n/a</td><td>Out of scope for wave-1; users run <code dir="auto">gh pr checkout</code> then <code dir="auto">chimera otter</code>.</td></tr><tr><td><code dir="auto">github</code> (CI bot)</td><td>RED</td><td>n/a</td><td>Defer; orthogonal to coding-agent runtime.</td></tr><tr><td><code dir="auto">db</code> (sqlite shell)</td><td>RED</td><td>n/a</td><td>Otter persists JSONL eventlogs, not sqlite. No equivalent needed.</td></tr><tr><td><code dir="auto">account</code> (auth/team)</td><td>RED</td><td>n/a</td><td>Single-tenant; no central account service.</td></tr><tr><td><code dir="auto">upgrade</code> / <code dir="auto">uninstall</code></td><td>RED</td><td><code dir="auto">pip install -U chimera-run</code> covers upgrade</td><td>Use the upstream packaging story.</td></tr><tr><td><code dir="auto">web</code> (web tunnel)</td><td>RED</td><td>n/a</td><td>Out of scope.</td></tr><tr><td><code dir="auto">generate</code> (OpenAPI dump)</td><td>RED</td><td>n/a</td><td>Defer; generated when needed via <code dir="auto">chimera/otter/server.py</code>.</td></tr><tr><td><code dir="auto">tui thread | attach</code></td><td>YELLOW</td><td><code dir="auto">chimera otter</code> REPL</td><td>Interactive REPL ships; multi-window thread mode deferred.</td></tr><tr><td><code dir="auto">plugin</code> (install/list/…)</td><td>GREEN</td><td><code dir="auto">chimera/otter/plugins.py</code></td><td>Reads <code dir="auto">~/.opencode/plugin/&#x3C;name>/</code> and project-level overrides; agents/commands/MCP entries are forwarded to existing Chimera registries.</td></tr><tr><td><code dir="auto">completion</code></td><td>GREEN</td><td><code dir="auto">chimera/cli/completion.py</code> (<code dir="auto">chimera completion bash|zsh|fish</code>)</td><td>Cross-CLI shell-completion generator, walks the live argparse tree. Honors <code dir="auto">--cli all|&#x3C;animal></code>. <strong>Wave-9 close (O5).</strong></td></tr></tbody></table>
+<div class="sl-heading-wrapper level-h2"><h2 id="run-and-chimera-otter--p-flag-map"><code dir="auto">run</code> (and <code dir="auto">chimera otter -p</code>) flag map</h2><a class="sl-anchor-link" href="#run-and-chimera-otter--p-flag-map"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentcolor" d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 0 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 1 0-1.42-1.42Zm8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 0 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 1 0 1.42 1.42l3.88-3.89a4.49 4.49 0 0 0 0-6.33ZM8.83 15.17a1 1 0 0 0 1.1.22 1 1 0 0 0 .32-.22l4.92-4.92a1 1 0 0 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42Z"></path></svg></span><span class="sr-only" data-pagefind-ignore="">Section titled “run (and chimera otter -p) flag map”</span></a></div>
+<p>The upstream <code dir="auto">RunCommand</code> (see <code dir="auto">packages/opencode/src/cli/cmd/run.ts</code>)
+exposes 17 flags. Otter mirrors the ones that affect agent semantics
+and skips the ones that depend on opencode-specific server/session
+plumbing.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Upstream flag</th><th>Otter status</th><th>Otter equivalent</th><th>Notes</th></tr></thead><tbody><tr><td><code dir="auto">--command</code></td><td>YELLOW</td><td><code dir="auto">/&#x3C;custom-command></code> in REPL</td><td>One-shot <code dir="auto">--command</code> invocation deferred; custom commands run in REPL today.</td></tr><tr><td><code dir="auto">--continue</code>/<code dir="auto">-c</code></td><td>YELLOW</td><td><code dir="auto">chimera otter sessions show &#x3C;id></code> + manual resume</td><td>Wave-2 will add <code dir="auto">--continue</code> flag wired to <code dir="auto">EventSourcedSession.resume</code>.</td></tr><tr><td><code dir="auto">--session</code>/<code dir="auto">-s</code></td><td>YELLOW</td><td><code dir="auto">chimera otter sessions show &#x3C;id></code></td><td>Same as above; live one-shot resume deferred.</td></tr><tr><td><code dir="auto">--fork</code></td><td>RED</td><td>n/a</td><td>Requires the <code dir="auto">--continue</code> story; deferred.</td></tr><tr><td><code dir="auto">--share</code></td><td>YELLOW</td><td><code dir="auto">chimera otter share &#x3C;id></code></td><td>Out-of-band share subcommand instead of in-line flag.</td></tr><tr><td><code dir="auto">--model</code>/<code dir="auto">-m</code></td><td>GREEN</td><td><code dir="auto">--model</code>, <code dir="auto">$OTTER_MODEL</code></td><td>Identical syntax: <code dir="auto">provider/model</code>.</td></tr><tr><td><code dir="auto">--agent</code></td><td>GREEN</td><td>shimmed via <code dir="auto">chimera.cli.code</code> agent resolution</td><td>Honors <code dir="auto">chimera otter agents list</code>.</td></tr><tr><td><code dir="auto">--format</code></td><td>GREEN</td><td><code dir="auto">--output-format text|json|stream-json</code></td><td>Adds <code dir="auto">stream-json</code> (one event per line) on top of upstream’s <code dir="auto">default|json</code>.</td></tr><tr><td><code dir="auto">--file</code>/<code dir="auto">-f</code></td><td>GREEN</td><td><code dir="auto">-f / --file PATH</code> (repeatable; <code dir="auto">-</code> for stdin)</td><td>Stacks via <code dir="auto">action="append"</code>; wraps each file in <code dir="auto">&#x3C;file path="X" lines="N">…&#x3C;/file></code> and prepends to <code dir="auto">-p</code> prompt. 100 KB per-file warn, 500 KB cumulative cap with truncation marker. <strong>Wave-9 close (O3/W9).</strong></td></tr><tr><td><code dir="auto">--title</code></td><td>GREEN</td><td><code dir="auto">--title "..."</code> + <code dir="auto">sessions rename &#x3C;id> &#x3C;title...></code></td><td>Persists in <code dir="auto">summary.json</code>, surfaces in <code dir="auto">sessions list</code> (TITLE column) + <code dir="auto">sessions show</code> (<code dir="auto">title:</code> line). Empty title clears the label. <strong>Wave-9 close (O4/W9).</strong></td></tr><tr><td><code dir="auto">--attach</code></td><td>RED</td><td>n/a</td><td>Remote-server attach is covered by <code dir="auto">chimera mink --remote ssh://...</code> instead.</td></tr><tr><td><code dir="auto">--password</code>/<code dir="auto">-p</code></td><td>RED</td><td>basic auth managed via reverse proxy</td><td>Otter server is unauthenticated by default; production deployments front it with the user’s reverse proxy.</td></tr><tr><td><code dir="auto">--dir</code></td><td>GREEN</td><td><code dir="auto">--cwd</code></td><td>Same semantics.</td></tr><tr><td><code dir="auto">--port</code></td><td>GREEN</td><td><code dir="auto">chimera otter serve --port</code></td><td>Same.</td></tr><tr><td><code dir="auto">--variant</code></td><td>YELLOW</td><td>n/a</td><td>Provider-specific reasoning effort flag deferred.</td></tr><tr><td><code dir="auto">--thinking</code></td><td>YELLOW</td><td>env var <code dir="auto">CHIMERA_THINKING_LEVEL</code></td><td>Surface via env var instead of flag for now.</td></tr><tr><td><code dir="auto">--print-logs</code>/<code dir="auto">--log-level</code></td><td>YELLOW</td><td><code dir="auto">CHIMERA_LOG_LEVEL</code> env var</td><td>Otter inherits chimera-wide log handling.</td></tr><tr><td><code dir="auto">--pure</code></td><td>RED</td><td>n/a</td><td>Otter has no equivalent of opencode’s “no external plugins” mode; use <code dir="auto">--allowed-tools</code> to narrow surface.</td></tr></tbody></table>
+<div class="sl-heading-wrapper level-h2"><h2 id="slash-command-palette-repl">Slash-command palette (REPL)</h2><a class="sl-anchor-link" href="#slash-command-palette-repl"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentcolor" d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 0 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 1 0-1.42-1.42Zm8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 0 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 1 0 1.42 1.42l3.88-3.89a4.49 4.49 0 0 0 0-6.33ZM8.83 15.17a1 1 0 0 0 1.1.22 1 1 0 0 0 .32-.22l4.92-4.92a1 1 0 0 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42Z"></path></svg></span><span class="sr-only" data-pagefind-ignore="">Section titled “Slash-command palette (REPL)”</span></a></div>
+<p>The upstream TUI registers about thirty slash-eligible commands (see
+<code dir="auto">packages/opencode/src/cli/cmd/tui/app.tsx</code>). Otter ships the
+core conversational subset (twenty-five) and skips terminal-window
+controls that don’t apply to a CLI REPL.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Upstream slash</th><th>Otter status</th><th>Otter handler</th></tr></thead><tbody><tr><td><code dir="auto">/help</code></td><td>GREEN</td><td><code dir="auto">cmd_help</code> (shared registry)</td></tr><tr><td><code dir="auto">/exit</code> (<code dir="auto">/quit</code>, <code dir="auto">/q</code>)</td><td>GREEN</td><td><code dir="auto">cmd_exit</code>, <code dir="auto">cmd_quit</code></td></tr><tr><td><code dir="auto">/sessions</code> (<code dir="auto">/resume</code>, <code dir="auto">/continue</code>)</td><td>GREEN</td><td><code dir="auto">cmd_sessions</code> (<code dir="auto">chimera/otter/slash.py</code>)</td></tr><tr><td><code dir="auto">/new</code> (<code dir="auto">/clear</code>)</td><td>GREEN</td><td><code dir="auto">cmd_new</code>, <code dir="auto">cmd_clear</code></td></tr><tr><td><code dir="auto">/share</code></td><td>GREEN</td><td><code dir="auto">cmd_share</code> -> <code dir="auto">chimera/otter/share_cmd.py</code></td></tr><tr><td><code dir="auto">/models</code></td><td>GREEN</td><td><code dir="auto">cmd_models</code> (alias of shared <code dir="auto">/model</code>)</td></tr><tr><td><code dir="auto">/agents</code></td><td>GREEN</td><td><code dir="auto">cmd_agents</code> (alias of shared <code dir="auto">/agent</code>)</td></tr><tr><td><code dir="auto">/agent</code></td><td>GREEN</td><td>shared <code dir="auto">cmd_agent</code></td></tr><tr><td><code dir="auto">/model</code></td><td>GREEN</td><td>shared <code dir="auto">cmd_model</code></td></tr><tr><td><code dir="auto">/init</code></td><td>GREEN</td><td>shared <code dir="auto">cmd_init</code></td></tr><tr><td><code dir="auto">/cost</code></td><td>GREEN</td><td>shared <code dir="auto">cmd_cost</code></td></tr><tr><td><code dir="auto">/tools</code></td><td>GREEN</td><td>shared <code dir="auto">cmd_tools</code></td></tr><tr><td><code dir="auto">/mcp</code> / <code dir="auto">/mcps</code></td><td>GREEN</td><td>shared <code dir="auto">cmd_mcp</code>, <code dir="auto">cmd_mcps</code></td></tr><tr><td><code dir="auto">/connect</code></td><td>YELLOW</td><td><code dir="auto">cmd_connect</code> (late-binds providers)</td></tr><tr><td><code dir="auto">/status</code></td><td>GREEN</td><td>shared <code dir="auto">cmd_status</code></td></tr><tr><td><code dir="auto">/themes</code></td><td>YELLOW</td><td><code dir="auto">cmd_themes</code> stub</td></tr><tr><td><code dir="auto">/yolo</code></td><td>GREEN</td><td>shared <code dir="auto">cmd_yolo</code></td></tr><tr><td><code dir="auto">/compact</code></td><td>GREEN</td><td>shared <code dir="auto">cmd_compact</code></td></tr><tr><td><code dir="auto">/doctor</code></td><td>GREEN</td><td>shared <code dir="auto">cmd_doctor</code></td></tr><tr><td><code dir="auto">/config</code></td><td>GREEN</td><td>shared <code dir="auto">cmd_config</code></td></tr><tr><td><code dir="auto">/undo</code></td><td>YELLOW</td><td><code dir="auto">cmd_undo</code> stub</td></tr><tr><td><code dir="auto">/redo</code></td><td>YELLOW</td><td><code dir="auto">cmd_redo</code> stub</td></tr><tr><td><code dir="auto">/edit</code></td><td>YELLOW</td><td><code dir="auto">cmd_edit</code> stub</td></tr><tr><td><code dir="auto">/variants</code></td><td>RED</td><td>n/a</td></tr><tr><td><code dir="auto">/workspaces</code></td><td>RED</td><td>n/a (single-cwd model)</td></tr><tr><td>terminal-title toggle</td><td>RED</td><td>n/a</td></tr><tr><td>heap-snapshot / debug overlay</td><td>RED</td><td>n/a</td></tr></tbody></table>
+<div class="sl-heading-wrapper level-h2"><h2 id="plugin-hooks-server-side">Plugin hooks (server-side)</h2><a class="sl-anchor-link" href="#plugin-hooks-server-side"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentcolor" d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 0 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 1 0-1.42-1.42Zm8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 0 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 1 0 1.42 1.42l3.88-3.89a4.49 4.49 0 0 0 0-6.33ZM8.83 15.17a1 1 0 0 0 1.1.22 1 1 0 0 0 .32-.22l4.92-4.92a1 1 0 0 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42Z"></path></svg></span><span class="sr-only" data-pagefind-ignore="">Section titled “Plugin hooks (server-side)”</span></a></div>
+<p>The upstream’s plugin SDK defines a <code dir="auto">Hooks</code> interface with sixteen
+extension points (see the upstream’s <code dir="auto">plugin/index.ts</code> server module
+and SDK <code dir="auto">index.ts</code>). Otter maps each to existing Chimera primitives.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Upstream hook</th><th>Otter status</th><th>Mapping</th></tr></thead><tbody><tr><td><code dir="auto">event</code></td><td>GREEN</td><td><code dir="auto">chimera.events.EventBus</code></td></tr><tr><td><code dir="auto">config</code></td><td>YELLOW</td><td><code dir="auto">chimera.config.config_file.ChimeraConfig.load</code></td></tr><tr><td><code dir="auto">tool</code> (custom tool registration)</td><td>GREEN</td><td><code dir="auto">chimera.plugins.PluginExtensionRegistry.tools</code></td></tr><tr><td><code dir="auto">auth</code></td><td>YELLOW</td><td><code dir="auto">chimera.auth</code> (device flow, OAuth); plugin-driven providers TODO</td></tr><tr><td><code dir="auto">chat.message</code></td><td>GREEN</td><td><code dir="auto">Hook</code> with <code dir="auto">event="chat.message"</code> in <code dir="auto">chimera.hooks.events</code></td></tr><tr><td><code dir="auto">chat.params</code></td><td>YELLOW</td><td>not yet emitted (provider params bypass hooks today)</td></tr><tr><td><code dir="auto">chat.headers</code></td><td>YELLOW</td><td>not yet emitted</td></tr><tr><td><code dir="auto">permission.ask</code></td><td>GREEN</td><td><code dir="auto">chimera.permissions.audit</code> + <code dir="auto">ConfirmationPolicy</code></td></tr><tr><td><code dir="auto">command.execute.before</code></td><td>YELLOW</td><td><code dir="auto">chimera.hooks</code> <code dir="auto">PreCommand</code> event TODO</td></tr><tr><td><code dir="auto">tool.execute.before</code></td><td>GREEN</td><td><code dir="auto">Hook</code> <code dir="auto">event="tool.execute.before"</code> (PreToolUse)</td></tr><tr><td><code dir="auto">tool.execute.after</code></td><td>GREEN</td><td><code dir="auto">Hook</code> <code dir="auto">event="tool.execute.after"</code> (PostToolUse)</td></tr><tr><td><code dir="auto">shell.env</code></td><td>YELLOW</td><td><code dir="auto">BashOps.env</code> injection point exists; plugin event TODO</td></tr><tr><td><code dir="auto">experimental.chat.messages.transform</code></td><td>RED</td><td>not exposed</td></tr><tr><td><code dir="auto">experimental.chat.system.transform</code></td><td>YELLOW</td><td>system-prompt rules ingest covers static case</td></tr><tr><td><code dir="auto">experimental.session.compacting</code></td><td>YELLOW</td><td><code dir="auto">chimera.compaction</code> ABC supports custom strategies</td></tr><tr><td><code dir="auto">experimental.text.complete</code></td><td>RED</td><td>not exposed</td></tr><tr><td><code dir="auto">tool.definition</code> (tool description rewrite)</td><td>YELLOW</td><td><code dir="auto">ToolGroup</code> middleware can wrap definitions</td></tr></tbody></table>
+<div class="sl-heading-wrapper level-h2"><h2 id="configuration-keys-opencodeconfigjson">Configuration keys (<code dir="auto">~/.opencode/config.json</code>)</h2><a class="sl-anchor-link" href="#configuration-keys-opencodeconfigjson"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentcolor" d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 0 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 1 0-1.42-1.42Zm8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 0 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 1 0 1.42 1.42l3.88-3.89a4.49 4.49 0 0 0 0-6.33ZM8.83 15.17a1 1 0 0 0 1.1.22 1 1 0 0 0 .32-.22l4.92-4.92a1 1 0 0 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42Z"></path></svg></span><span class="sr-only" data-pagefind-ignore="">Section titled “Configuration keys (~/.opencode/config.json)”</span></a></div>
+<p>Upstream’s config schema (see <code dir="auto">packages/opencode/src/config/config.ts</code>)
+defines roughly sixty top-level keys. Otter ingests the subset that
+maps onto first-class Chimera primitives and ignores keys that drive
+TUI-only chrome.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Upstream key</th><th>Otter status</th><th>Notes</th></tr></thead><tbody><tr><td><code dir="auto">mcp</code></td><td>GREEN</td><td>Read by <code dir="auto">chimera/otter/mcp.py</code>. Both <code dir="auto">local</code> (stdio) and <code dir="auto">remote</code> (http) transports honored.</td></tr><tr><td><code dir="auto">agent</code></td><td>GREEN</td><td>Combined with <code dir="auto">.opencode/agent/*.md</code> markdown agents.</td></tr><tr><td><code dir="auto">command</code></td><td>GREEN</td><td>Combined with <code dir="auto">.opencode/command/*.md</code>.</td></tr><tr><td><code dir="auto">provider</code></td><td>YELLOW</td><td>Default-chain wiring lives in <code dir="auto">chimera/otter/providers.py</code>; per-provider overrides honored opportunistically.</td></tr><tr><td><code dir="auto">permission</code></td><td>GREEN</td><td>Mapped to <code dir="auto">chimera.permissions</code> rules at session bootstrap.</td></tr><tr><td><code dir="auto">instructions</code></td><td>GREEN</td><td>Concatenated by <code dir="auto">chimera/otter/rules.py</code>.</td></tr><tr><td><code dir="auto">keybinds</code></td><td>RED</td><td>Otter is a CLI; no keybinds.</td></tr><tr><td><code dir="auto">theme</code></td><td>RED</td><td>TUI chrome only.</td></tr><tr><td><code dir="auto">share</code></td><td>YELLOW</td><td><code dir="auto">chimera otter share</code> covers the export sink; <code dir="auto">auto</code>-share toggle deferred.</td></tr><tr><td><code dir="auto">plugin</code></td><td>GREEN</td><td>Spec list resolved by <code dir="auto">chimera/otter/plugins.py</code>.</td></tr><tr><td><code dir="auto">disabled_providers</code></td><td>YELLOW</td><td>Honored opportunistically when the env-var presence check fires.</td></tr><tr><td><code dir="auto">experimental.*</code></td><td>RED</td><td>Defer until the upstream stabilizes them.</td></tr></tbody></table>
+<div class="sl-heading-wrapper level-h2"><h2 id="counts">Counts</h2><a class="sl-anchor-link" href="#counts"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentcolor" d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 0 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 1 0-1.42-1.42Zm8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 0 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 1 0 1.42 1.42l3.88-3.89a4.49 4.49 0 0 0 0-6.33ZM8.83 15.17a1 1 0 0 0 1.1.22 1 1 0 0 0 .32-.22l4.92-4.92a1 1 0 0 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42Z"></path></svg></span><span class="sr-only" data-pagefind-ignore="">Section titled “Counts”</span></a></div>
+<ul>
+<li><strong>Top-level CLI subcommands:</strong> 10 GREEN, 2 YELLOW, 8 RED of the 20 upstream commands (refreshed at wave-9 close — <code dir="auto">agent create</code>, <code dir="auto">mcp add/auth</code>, and <code dir="auto">completion</code> promoted to GREEN). Coverage focuses on the agent runtime; admin/install/account flows are intentionally not mirrored.</li>
+<li><strong><code dir="auto">run</code> flags:</strong> 7 GREEN, 5 YELLOW, 5 RED of the 17 upstream flags (refreshed at wave-9 close — <code dir="auto">--file/-f</code> and <code dir="auto">--title</code> promoted to GREEN).</li>
+<li><strong>Slash commands:</strong> 17 GREEN, 7 YELLOW, 4 RED of the 28 reviewed.</li>
+<li><strong>Plugin hooks:</strong> 5 GREEN, 8 YELLOW, 4 RED of the 17 reviewed.</li>
+<li><strong>Config keys:</strong> 6 GREEN, 4 YELLOW, 4 RED of the 14 reviewed.</li>
+</ul>
+<div class="sl-heading-wrapper level-h2"><h2 id="chimera-only-capabilities-do-not-regress">Chimera-only capabilities (do not regress)</h2><a class="sl-anchor-link" href="#chimera-only-capabilities-do-not-regress"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentcolor" d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 0 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 1 0-1.42-1.42Zm8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 0 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 1 0 1.42 1.42l3.88-3.89a4.49 4.49 0 0 0 0-6.33ZM8.83 15.17a1 1 0 0 0 1.1.22 1 1 0 0 0 .32-.22l4.92-4.92a1 1 0 0 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42Z"></path></svg></span><span class="sr-only" data-pagefind-ignore="">Section titled “Chimera-only capabilities (do not regress)”</span></a></div>
+<p>Wave-1 of otter inherits the same Chimera-only superset that mink
+already advertises: cooperative <code dir="auto">CancellationToken</code>, mid-turn
+<code dir="auto">MessageQueues</code> steering, loop detection, ghost commits, instruction
+anchor, learning store, discipline guards, <code dir="auto">EventSourcedSession</code>
+crash recovery, <code dir="auto">FileAwareCompaction</code>, <code dir="auto">SessionTree</code> in-place
+branching, <code dir="auto">RedactionMiddleware</code>, <code dir="auto">CostTracker</code> with cache/reasoning
+breakdown, the 26-event <code dir="auto">EventBus</code>, and the multi-tier
+<code dir="auto">AgentConfig.from_markdown()</code> registry.</p>
+<div class="sl-heading-wrapper level-h2"><h2 id="follow-up-issues-to-file-or-already-filed">Follow-up issues to file (or already filed)</h2><a class="sl-anchor-link" href="#follow-up-issues-to-file-or-already-filed"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentcolor" d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 0 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 1 0-1.42-1.42Zm8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 0 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 1 0 1.42 1.42l3.88-3.89a4.49 4.49 0 0 0 0-6.33ZM8.83 15.17a1 1 0 0 0 1.1.22 1 1 0 0 0 .32-.22l4.92-4.92a1 1 0 0 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42Z"></path></svg></span><span class="sr-only" data-pagefind-ignore="">Section titled “Follow-up issues to file (or already filed)”</span></a></div>
+<ol>
+<li><code dir="auto">chimera otter --continue</code> / <code dir="auto">--session &#x3C;id></code> / <code dir="auto">--fork</code> (one-shot resume).</li>
+<li><del><code dir="auto">chimera otter agents create</code> (interactive agent scaffolder).</del> Shipped at wave-9 close (O1/W9).</li>
+<li><del><code dir="auto">chimera otter mcp add</code> / <code dir="auto">chimera otter mcp auth &#x3C;name></code> (live add + OAuth).</del> Shipped at wave-9 close (O2/W9).</li>
+<li><code dir="auto">chimera otter session delete &#x3C;id></code> (currently <code dir="auto">rm -rf</code> the eventlog dir).</li>
+<li>Plugin-driven provider auth (mirror the upstream <code dir="auto">Hooks.auth</code> flow).</li>
+<li><del><code dir="auto">chimera otter stats --since=&#x3C;duration></code> aggregating <code dir="auto">summary.json</code> across <code dir="auto">~/.chimera/eventlog/otter-*/</code>.</del> Shipped as <code dir="auto">chimera otter sessions cost</code> (G6).</li>
+<li><del>File-attachment flag (<code dir="auto">--file &#x3C;path></code>) for one-shot prompts.</del> Shipped at wave-9 close (O3/W9; <code dir="auto">-f</code> / <code dir="auto">--file PATH</code>, repeatable, stdin via <code dir="auto">-</code>).</li>
+<li>Theme switcher (<code dir="auto">/themes</code>) for the REPL once a TUI palette lands.</li>
+<li>Workspace mode (multiple cwds in a single session).</li>
+<li><del>Shell-completion script generation (<code dir="auto">chimera otter completion</code>).</del> Shipped at wave-9 close as the cross-CLI <code dir="auto">chimera completion bash|zsh|fish [--cli all|&#x3C;animal>]</code> generator (O5).</li>
+<li>Session titles. <del>Add a <code dir="auto">--title "..."</code> flag and <code dir="auto">sessions rename &#x3C;id> &#x3C;title></code> subcommand.</del> Shipped at wave-9 close (O4/W9).</li>
+</ol>
+<div class="sl-heading-wrapper level-h2"><h2 id="how-to-use">How to use</h2><a class="sl-anchor-link" href="#how-to-use"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentcolor" d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 0 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 1 0-1.42-1.42Zm8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 0 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 1 0 1.42 1.42l3.88-3.89a4.49 4.49 0 0 0 0-6.33ZM8.83 15.17a1 1 0 0 0 1.1.22 1 1 0 0 0 .32-.22l4.92-4.92a1 1 0 0 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42Z"></path></svg></span><span class="sr-only" data-pagefind-ignore="">Section titled “How to use”</span></a></div>
+<p>When a user runs <code dir="auto">chimera otter</code> from a project that already contains
+<code dir="auto">.opencode/config.json</code>, every GREEN row above is expected to behave
+in lockstep with the upstream open-source coding agent at the
+black-box level (one-shot prompt, slash command, MCP server discovery,
+agent / command / rules ingest, plugin loading). YELLOW rows degrade
+gracefully and emit a hint where the gap is user-visible. RED rows
+are not implemented and will return a “not yet wired” notice with a
+pointer to the issue tracker entry.</p>
+<div class="sl-heading-wrapper level-h2"><h2 id="cross-links">Cross-links</h2><a class="sl-anchor-link" href="#cross-links"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentcolor" d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 0 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 1 0-1.42-1.42Zm8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 0 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 1 0 1.42 1.42l3.88-3.89a4.49 4.49 0 0 0 0-6.33ZM8.83 15.17a1 1 0 0 0 1.1.22 1 1 0 0 0 .32-.22l4.92-4.92a1 1 0 0 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42Z"></path></svg></span><span class="sr-only" data-pagefind-ignore="">Section titled “Cross-links”</span></a></div>
+<ul>
+<li><a href="../architecture.md">Chimera architecture (8-phase map)</a> — where the rows in this matrix live in the shared library.</li>
+</ul> </div> <footer class="sl-flex astro-zmvlxfpi"> <div class="meta sl-flex astro-zmvlxfpi">   </div> <div class="pagination-links print:hidden astro-racnve7y" dir="ltr"> <a href="/chimera/otter/server/" rel="prev" class="astro-racnve7y"> <svg aria-hidden="true" class="astro-racnve7y astro-bmbo4loj" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.5rem;"><path d="M17 11H9.41l3.3-3.29a1.004 1.004 0 1 0-1.42-1.42l-5 5a1 1 0 0 0-.21.33 1 1 0 0 0 0 .76 1 1 0 0 0 .21.33l5 5a1.002 1.002 0 0 0 1.639-.325 1 1 0 0 0-.219-1.095L9.41 13H17a1 1 0 0 0 0-2Z"/></svg> <span class="astro-racnve7y"> Previous <br class="astro-racnve7y"> <span class="link-title astro-racnve7y">Server</span> </span> </a> <a href="/chimera/otter/agents/" rel="next" class="astro-racnve7y"> <svg aria-hidden="true" class="astro-racnve7y astro-bmbo4loj" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.5rem;"><path d="M17.92 11.62a1.001 1.001 0 0 0-.21-.33l-5-5a1.003 1.003 0 1 0-1.42 1.42l3.3 3.29H7a1 1 0 0 0 0 2h7.59l-3.3 3.29a1.002 1.002 0 0 0 .325 1.639 1 1 0 0 0 1.095-.219l5-5a1 1 0 0 0 .21-.33 1 1 0 0 0 0-.76Z"/></svg> <span class="astro-racnve7y"> Next <br class="astro-racnve7y"> <span class="link-title astro-racnve7y">Agents</span> </span> </a> </div>  </footer> </div> </div>  </main> </div> </div> </div> </div> </body></html>
