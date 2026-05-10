@@ -56,6 +56,15 @@ export default defineConfig({
 					autogenerate: { directory: 'guides' },
 				},
 				{
+					label: 'Tools',
+					autogenerate: { directory: 'tools' },
+				},
+				{
+					label: 'Benchmarks',
+					collapsed: true,
+					autogenerate: { directory: 'benchmarks' },
+				},
+				{
 					label: 'Modules',
 					collapsed: true,
 					autogenerate: { directory: 'modules' },
