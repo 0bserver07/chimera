@@ -2,9 +2,11 @@
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 
+const BASE = '/chimera';
+
 export default defineConfig({
 	site: 'https://0bserver07.github.io',
-	base: '/chimera',
+	base: BASE,
 	integrations: [
 		starlight({
 			title: 'Chimera',
@@ -33,7 +35,7 @@ export default defineConfig({
 				},
 				{
 					tag: 'script',
-					attrs: { src: '/chimera/mermaid-init.js', type: 'module', defer: true },
+					attrs: { src: `${BASE}/mermaid-init.js`, type: 'module', defer: true },
 				},
 			],
 			sidebar: [
