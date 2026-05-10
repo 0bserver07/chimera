@@ -2760,7 +2760,7 @@ def _textual_available() -> bool:
     global _TEXTUAL_AVAILABLE
     if _TEXTUAL_AVAILABLE is None:
         try:
-            import textual  # noqa: F401
+            import textual  # type: ignore[import-not-found]  # optional [tui] extra  # noqa: F401
             _TEXTUAL_AVAILABLE = True
         except ImportError:
             _TEXTUAL_AVAILABLE = False

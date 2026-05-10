@@ -1,13 +1,13 @@
-"""Shrew bash permission gate (W15-2 P2 / LITTLE-CODER GAP-EXT-7).
+"""Shrew bash permission gate (W15-2 P2 / shrew GAP-EXT-7).
 
 Small models routinely propose dangerous bash commands when the prompt
 nudges them in that direction (``rm -rf .``, ``curl | sh``, ``sudo
-chown -R``). The upstream little-coder ships a 3-mode env-var gate
-(``LITTLE_CODER_PERMISSION_MODE=auto/manual/accept-all``) that classifies
+chown -R``). This extension provides a 3-mode env-var gate
+(``SHREW_PERMISSION_MODE=auto/manual/accept-all``) that classifies
 each invocation against a built-in risk table and either auto-approves,
 prompts the operator, or auto-denies.
 
-This module is the shrew port. It is stdlib-only and does *not* execute
+This module is stdlib-only and does *not* execute
 any commands — callers feed in a candidate command string and read back
 a decision tag (``allow`` / ``ask`` / ``deny``). The integration site is
 shrew's tool wrapper; tests below exercise the classifier in isolation
@@ -33,7 +33,7 @@ __all__ = [
 ]
 
 GateMode = Literal["auto", "manual", "accept-all"]
-"""Three operating modes mirroring upstream's ``LITTLE_CODER_PERMISSION_MODE``."""
+"""Three operating modes for the bash permission gate."""
 
 RiskLevel = Literal["safe", "moderate", "dangerous"]
 """Risk classification for a candidate command."""
@@ -160,8 +160,7 @@ def resolve_mode(env: dict[str, str] | None = None) -> GateMode:
 
     Args:
         env: Optional explicit env mapping (defaults to :data:`os.environ`).
-            Lookup precedence: ``SHREW_PERMISSION_MODE`` >
-            ``LITTLE_CODER_PERMISSION_MODE`` (upstream alias) > ``"auto"``.
+            Lookup precedence: ``SHREW_PERMISSION_MODE`` > ``"auto"``.
 
     Returns:
         One of the three :data:`GateMode` literals. An unknown value is
@@ -170,7 +169,6 @@ def resolve_mode(env: dict[str, str] | None = None) -> GateMode:
     src = env if env is not None else os.environ
     raw = (
         src.get("SHREW_PERMISSION_MODE")
-        or src.get("LITTLE_CODER_PERMISSION_MODE")
         or "auto"
     ).strip().lower()
     if raw in ("auto", "manual", "accept-all"):

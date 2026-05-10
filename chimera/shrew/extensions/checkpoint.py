@@ -1,13 +1,12 @@
-"""Shrew file-snapshot checkpoint helper (W15-2 P2 / LITTLE-CODER GAP-EXT-5).
+"""Shrew file-snapshot checkpoint helper (W15-2 P2 / shrew GAP-EXT-5).
 
 Small models are prone to over-eager Write tool calls that destroy
 useful files (the `write-guard` invariant addresses one shape of this;
-file checkpoints address the other). The upstream little-coder ships an
-extension that snapshots a file's pre-edit contents to
-``~/.little-coder/checkpoints/<session>/<sha>`` before each Write or
-Edit so the operator can roll back without leaving the REPL.
+file checkpoints address the other). This extension snapshots a file's
+pre-edit contents before each Write or Edit so the operator can roll
+back without leaving the REPL.
 
-This module is the shrew port. It is stdlib-only and persists snapshots
+This module is stdlib-only and persists snapshots
 under ``~/.shrew/checkpoints/<session>/`` (XDG-friendly: respects
 ``$SHREW_CHECKPOINT_DIR`` when set). The on-disk layout is:
 

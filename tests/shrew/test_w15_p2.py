@@ -63,10 +63,6 @@ def test_resolve_mode_reads_shrew_env() -> None:
     assert gate.resolve_mode({"SHREW_PERMISSION_MODE": "accept-all"}) == "accept-all"
 
 
-def test_resolve_mode_falls_back_to_upstream_alias() -> None:
-    assert gate.resolve_mode({"LITTLE_CODER_PERMISSION_MODE": "manual"}) == "manual"
-
-
 def test_resolve_mode_coerces_unknown_to_auto() -> None:
     assert gate.resolve_mode({"SHREW_PERMISSION_MODE": "weird"}) == "auto"
 
