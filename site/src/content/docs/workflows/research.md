@@ -85,6 +85,23 @@ Dataclass with fields: `title`, `summary`, `sources` (list of `Source`), `confid
 
 Dataclass with fields: `name`, `content`, `url` (str, optional), `relevance` (float, 0-1).
 
+## Integration
+
+- `Researcher.run()` calls `Agent.run()` once with the synthesised
+  prompt; the agent's tool list (default: `DEFAULT_TOOLS`) decides
+  what investigation surface is available.
+- `search_codebase(query, files)` is a pure-Python TF-IDF-style
+  matcher over the in-memory `files` dict. Pair it with `WriteOps` /
+  `SearchOps` for live filesystem use, or feed an in-memory snapshot
+  for fully reproducible runs.
+- The CLI `chimera research --question "..." --workdir ./notes/` is a
+  thin wrapper around `Researcher.run()` that writes the final report
+  to `<workdir>/report.md` and per-finding sources to
+  `<workdir>/sources/`.
+- For multi-stage research that interleaves planning and execution,
+  pair `Researcher` with `Pipeline` ([Composition](/modules/composition/))
+  and use a planner agent to refine the question between rounds.
+
 ## Import
 
 ```python

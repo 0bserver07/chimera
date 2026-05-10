@@ -92,8 +92,47 @@ if info:
 - **Environment**: `CheckpointManager` delegates to `Environment.checkpoint()` (which returns a raw ID string) and `Environment.restore(id)`. The `GitEnvironment` uses git commits; `DockerEnvironment` uses container snapshots; `LocalEnvironment` uses filesystem copies.
 - **auto_checkpoint**: Set `manager.auto_checkpoint = True` to enable automatic checkpoint creation (the loop or calling code must check this flag and call `create()` accordingly).
 
+## Ghost Commits — file-undo (W13-G5)
+
+`chimera.checkpoints_ghost.GhostCommitManager` is a finer-grained
+sibling of `CheckpointManager`. It snapshots individual file contents
+*before* every file-modifying tool call, exposing a stack-shaped
+`undo()` that the REPL `/undo` slash command consumes.
+
+| Method / Property | Description |
+|-------------------|-------------|
+| `snapshot(label, paths=None)` | Record file contents (or absence) under a stack entry |
+| `undo(n=1)` | Pop the last N entries and restore each file to its prior state |
+| `peek()` | Most recent `GhostSnapshot` without popping |
+| `depth` | Number of snapshots in the stack |
+| `history` | All snapshots, oldest first |
+| `clear()` | Empty the stack |
+
+```python
+from chimera.checkpoints_ghost import GhostCommitManager
+from chimera.core.loop_config import LoopConfig
+
+ghost = GhostCommitManager(workdir="/path/to/project", max_snapshots=50)
+config = LoopConfig(ghost_commits=ghost)
+
+# After the loop runs:
+ghost.snapshot("write_file: main.py", paths=["main.py"])
+# ... main.py modified ...
+ghost.undo()  # restores main.py
+```
+
+`max_snapshots` defaults to `50`; older snapshots are evicted FIFO.
+Both git repos (commit on a hidden ref) and plain directories (file
+copies in memory) are supported transparently.
+
 ## Import Reference
 
 ```python
 from chimera.checkpoints import CheckpointInfo, CheckpointManager
+from chimera.checkpoints_ghost import GhostCommitManager, GhostSnapshot
 ```
+
+## Related
+
+- [LoopConfig](/modules/loop-config/) — `checkpoint_manager` + `ghost_commits` fields
+- [File Tracker](/modules/file-tracker/) — what was read / modified across compaction

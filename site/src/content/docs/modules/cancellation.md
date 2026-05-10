@@ -47,9 +47,36 @@ token = CancellationToken()
 signal.signal(signal.SIGINT, lambda *_: token.cancel())
 
 agent = Agent(provider=provider, tools=tools)
-config = LoopConfig(cancellation_token=token)
+config = LoopConfig(cancellation=token)
 result = agent.run("Refactor the auth module", loop_config=config)
 ```
 
 The REPL (`chimera code`) wires a `CancellationToken` automatically so
 Ctrl+C cancels the running turn without killing the process.
+
+## AbortSignal (AgentLoop)
+
+`AgentLoop` (the modern async-generator loop) takes an
+`AbortSignal` rather than a `CancellationToken`:
+
+```python
+from chimera.core.abort import AbortSignal
+from chimera.core.agent_loop import AgentLoop
+
+abort = AbortSignal()
+loop = AgentLoop()
+async for event in loop.run(
+    messages=msgs, tools=tools, provider=provider,
+    system_prompt="...", abort_signal=abort,
+):
+    if user_pressed_ctrl_c:
+        abort.set()
+```
+
+Both surfaces are cooperative — tools call `check()`/`is_set()` at
+safe yield points and raise `OperationCancelled` to unwind cleanly.
+
+## Related
+
+- [LoopConfig](/modules/loop-config/) — `cancellation` field plumbing
+- [Loops](/modules/loops/) — `ReAct` (token) vs `AgentLoop` (signal)

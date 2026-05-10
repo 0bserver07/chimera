@@ -164,3 +164,104 @@ branch.chat("Now add authentication.")  # Diverges from original
 
 session.chat("Now add logging.")       # Independent path
 ```
+
+## Cross-CLI session sharing (W11 B9)
+
+Per-CLI eventlogs live under `~/.chimera/eventlog/<cli>-<utc>-<uuid>/`.
+Wave 11 (`B9-W11-CROSS-CLI-SESSIONS`) added a shared walker so any
+CLI can list and inspect sessions minted by any of the seven
+codenames (`mink`, `otter`, `ferret`, `weasel`, `shrew`, `stoat`,
+`badger`).
+
+```python
+from chimera.sessions.eventlog.cross_cli import (
+    iter_all_sessions,
+    iter_sessions_for_cli,
+    find_session_dir,
+    parse_cli_origin,
+    SessionRecord,
+)
+
+# Newest-first walk across every known prefix
+for record in iter_all_sessions():
+    print(record.session_id, record.cli_origin, record.summary.get("title"))
+
+# Single-CLI filter (default behaviour for `<cli> sessions list`)
+otter_records = list(iter_sessions_for_cli("otter"))
+
+# By-id lookup that doesn't care which CLI minted the run
+session_dir = find_session_dir("ferret-2026-05-08-abc12345")
+```
+
+Each per-CLI `sessions.py` module also accepts `--all-clis` on
+`<cli> sessions list`, surfaces a new `ORIGIN` column when set, and
+round-trips `cli_origin` through `--json`. `<cli> sessions show <id>`
+resolves cross-CLI ids without any further changes because the
+loader keys off `root / session_id`, not the prefix.
+
+`KNOWN_CLI_ORIGINS = {mink, otter, ferret, weasel, shrew, stoat,
+badger}`; unknown prefixes (`backup-…`, `shares-…`, plugin output)
+return `""` from `parse_cli_origin` and are silently skipped.
+
+### Top-level resume (W11 B12)
+
+`chimera resume <id>` (and `chimera resume` with no id) auto-detects
+the originating codename from the run-id prefix and dispatches to that
+CLI's `--resume <id>`. The newest-across-all picker sorts on the
+`<utc>-<uuid8>` tail rather than the full string, so chronologically
+newer runs from alphabetically-earlier codenames beat older ones. See
+`chimera/cli/resume_cmd.py::find_latest_across_all`.
+
+```bash
+chimera resume                              # newest run, any CLI
+chimera resume otter-2026-05-08-7f3a91c2   # explicit id
+chimera resume ferret-... -- --max-cost 1.0 # passthrough flags after --
+```
+
+## Otter file-level undo (W13 G5)
+
+`chimera otter` ships a content-addressed file-snapshot store on top
+of the FileTracker hooks. `/undo` and `/redo` rewind both the
+conversation transcript *and* the bytes of every file the agent
+touched, regardless of the underlying environment (works for
+`LocalEnvironment`, not just Docker / Git environments).
+
+```python
+from chimera.otter.snapshot import (
+    FileSnapshotStore,
+    FileSnapshot,
+    default_snapshot_root,
+)
+
+store = FileSnapshotStore(root=default_snapshot_root("session-id"))
+store.snap(["src/main.py", "tests/test_main.py"])  # SHA-256 keyed blob copies
+snap = store.latest()                              # FileSnapshot manifest
+store.restore(snap)                                # atomic tempfile+rename
+store.gc_blobs()                                   # drop unreferenced blobs
+```
+
+Layout: `~/.chimera/snapshots/<session-id>/blobs/<sha>/` for blobs,
+`snaps/<turn-id>.json` for per-turn manifests. Cumulative manifests
+mean editing a 1 MiB file across 10 turns costs ~1 MiB on disk, not
+10 MiB — same shape as git's loose object store, but no `git` binary
+is invoked. Slash commands accept `--steps N` to rewind multiple
+turns at once.
+
+## Otter session tooling (W14)
+
+Wave 14 (`W14-2-OTTER-POLISH`) added five Tier-1 commands that round
+out otter's session surface:
+
+| Command | Module | What it does |
+|---|---|---|
+| `chimera otter worktree {create,list,remove}` | `chimera/otter/worktree.py` | Manifest-backed `git worktree` wrapper. Persists `~/.chimera/worktrees/index.json`. |
+| `chimera otter stats` | `chimera/otter/stats.py` | Composes `chimera.mink.cost.compute_summary` over both `mink-*` and `otter-*` eventlog dirs. Renders text + JSON + flat `StatsReport` dataclass. |
+| `chimera otter export <id> [--format json\|md\|html]` | `chimera/otter/export_import.py` | `ExportEnvelope` lossless JSON, Markdown / HTML renderers. |
+| `chimera otter import <file>` | `chimera/otter/export_import.py` | Round-trips an exported envelope back into a session. |
+| `POST /session/<id>/pty/start`, SSE `pty/stream`, `pty/{input,output,resize,stop}` | `chimera/otter/pty.py` + `chimera/otter/server.py` | POSIX-only `PtyManager` over `pty.openpty` + `subprocess.Popen`. Reader thread streams chunks to a buffer and per-subscriber SSE queues. |
+
+The skill marketplace also gained remote download
+(`fetch_remote_index`, `download_remote_skills`,
+`chimera otter skills fetch <URL>`) so plugin authors can publish
+SKILL.md bundles to a static URL and have agents pull them at
+runtime.

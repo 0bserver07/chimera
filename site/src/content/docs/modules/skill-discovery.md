@@ -35,15 +35,63 @@ Name must match `^[a-z0-9][a-z0-9-]{0,63}$`.  Missing `name` or
 | Function | Description |
 |----------|-------------|
 | `discover_skills(search_paths)` | Walk directories for `SKILL.md` files; later paths override earlier ones by name |
-| `default_search_paths(workdir)` | Return `[{workdir}/.chimera/skills/, ~/.chimera/skills/]` in priority order |
+| `default_search_paths(workdir)` | Return the three default skill paths in priority order |
+| `bundled_algorithms_path()` | Return the path to the bundled algorithm skills shipped with the package |
 | `format_skills_for_prompt(skills)` | Render a `## Available Skills` bullet list for system prompt injection |
+| `default_remote_cache()` | Return `~/.chimera/cache/skills` (the default remote cache root) |
+| `fetch_remote_index(index_url)` | Download and parse a remote `index.json` skill manifest |
+| `download_remote_skills(index_url)` | Download every skill from a remote index into the local cache and return them |
 
 ## Search path priority
 
-1. `{workdir}/.chimera/skills/` — project-local (highest priority)
-2. `~/.chimera/skills/` — user global
+1. `bundled_algorithms_path()` — bundled chimera algorithm skills (G12), read-only
+2. `{workdir}/.chimera/skills/` — project-local
+3. `~/.chimera/skills/` — user global
 
-When the same skill name appears in multiple paths, the last path wins.
+When the same skill name appears in multiple paths, the **later** path
+wins.  This mirrors the rest of Chimera's project-over-user precedence
+model: a project skill named `algo-binary-search` overrides the bundled
+version, and a user skill of the same name overrides the project
+version.
+
+## Bundled algorithm skills (G12)
+
+`chimera.skills.algorithms` ships 13 algorithm cheat-sheet skills
+covering binary search, dynamic programming, BFS, DFS, hash, two
+pointers, sliding window, sorting, greedy, recursion, graph traversal,
+math tricks, and string algorithms.  Each lives in its own subdirectory
+with one `SKILL.md`, picked up automatically via
+`default_search_paths()`.
+
+## Remote skill index
+
+`download_remote_skills()` fetches an `index.json` manifest, downloads
+each entry's `SKILL.md` into a local cache, and returns the freshly-cached
+`Skill` list.  The expected manifest schema is:
+
+```json
+{
+  "skills": [
+    {"name": "lint-feedback", "description": "...", "url": "https://example.com/skills/lint-feedback/SKILL.md"},
+    {"name": "test-coverage", "description": "...", "url": "https://example.com/skills/test-coverage/SKILL.md"}
+  ]
+}
+```
+
+A bare list (`[{...}, ...]`) without the envelope is also accepted.
+Names must match `^[a-z0-9][a-z0-9-]{0,63}$`; URLs must use `http`/`https`.
+Individual download failures are skipped so one broken entry never
+poisons the index.
+
+```python
+from chimera.skills.discovery import download_remote_skills
+
+skills = download_remote_skills(
+    "https://example.com/chimera-skills/index.json",
+    overwrite=False,           # skip skills already cached
+    timeout=10.0,
+)
+```
 
 ## Example
 

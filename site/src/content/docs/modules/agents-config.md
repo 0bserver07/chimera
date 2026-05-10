@@ -4,9 +4,17 @@ description: "Agents & Config"
 ---
 
 `chimera.agents` provides a declarative system for defining and building
-agents.  An `AgentConfig` dataclass describes what an agent needs -- tools,
-loop, permissions, model -- and the `build()` method resolves everything by
-name through internal registries.
+agents. An `AgentConfig` dataclass describes what an agent needs —
+tools, loop, permissions, model — and the `build()` method resolves
+everything by name through internal registries.
+
+> **Heads-up.** For full coding-agent assemblies (permissions, hooks,
+> transcripts, compaction, streaming wired together) prefer
+> `chimera.assembly.coding_agent.CodingAgent.from_preset(...)`. This
+> page covers the lower-level `AgentConfig` building block — useful
+> when you want to spell out the exact tool / loop / permission set
+> yourself or load it from Markdown frontmatter. See
+> [Agent Presets](/modules/agent-presets/) for the high-level path.
 
 ## AgentConfig dataclass
 
@@ -18,13 +26,13 @@ name through internal registries.
 | `tools` | `list[str]` | `[]` | Tool names resolved from `_TOOL_REGISTRY` |
 | `permissions` | `str` | `"auto_approve"` | Permission preset name |
 | `loop` | `str` | `"react"` | Loop type name |
-| `max_steps` | `int` | `50` | Max ReAct iterations |
+| `max_steps` | `int` | `50` | Max loop iterations |
 | `model` | `str \| None` | `None` | Model override |
 
 ### from_markdown(path)
 
-Parses a `.md` file with YAML frontmatter.  The body after the second `---`
-delimiter becomes the `system_prompt`.
+Parses a `.md` file with YAML frontmatter. The body after the second
+`---` delimiter becomes the `system_prompt`.
 
 ```markdown
 ---
@@ -41,20 +49,21 @@ Always confirm before deleting files.
 
 ### build(provider, env)
 
-Constructs a fully wired `Agent` by resolving all names through the registries:
+Constructs a fully wired `Agent` by resolving all names through the
+registries:
 
 ```python
 from chimera.agents import AgentConfig
-from chimera.providers.anthropic import AnthropicProvider
+from chimera.providers import create_provider
 
 config = AgentConfig.from_markdown("agents/my-agent.md")
-agent = config.build(AnthropicProvider())
+agent = config.build(create_provider())
 result = agent.run("Refactor the utils module.")
 ```
 
 ## Registries
 
-Three internal dictionaries map string names to import paths:
+Three internal dictionaries map string names to import paths.
 
 ### Tool Registry (`_TOOL_REGISTRY`)
 
@@ -73,6 +82,12 @@ Three internal dictionaries map string names to import paths:
 | `verify` | `chimera.tools:verify` |
 | `repo_map` | `chimera.tools.repo_map:RepoMapTool` |
 
+For the full agent tool set (23 tools including `apply_patch`,
+`write_guard`, `notebook_edit`, `enter_worktree` / `exit_worktree`,
+`cron_create` / `cron_list` / `cron_delete`) use
+`chimera.AGENT_TOOLS` directly instead of resolving by name. See
+[AGENT_TOOLS](/modules/agent-tools/).
+
 ### Loop Registry (`_LOOP_REGISTRY`)
 
 | Name | Import path |
@@ -80,6 +95,11 @@ Three internal dictionaries map string names to import paths:
 | `react` | `chimera.core.loop:ReAct` |
 | `plan_execute` | `chimera.core.loops.plan_execute:PlanAndExecute` |
 | `reflexion` | `chimera.core.loops.reflexion:Reflexion` |
+
+The other loop variants (`AgentLoop`, `RetryLoop`, `LintFeedbackLoop`,
+`PlanActLoop`, `TreeOfThought`, `AutonomousLoop`) are not currently
+spellable from frontmatter; instantiate them directly. See
+[Loops](/modules/loops/).
 
 ### Permission Registry (`_PERMISSION_REGISTRY`)
 
@@ -89,6 +109,11 @@ Three internal dictionaries map string names to import paths:
 | `always_deny` | `chimera.permissions.presets:AlwaysDeny` |
 | `read_only` | `chimera.permissions.presets:ReadOnly` |
 | `interactive` | `chimera.permissions.presets:Interactive` |
+
+For the standard 5-mode `--permission-mode` surface
+(`read-only` / `suggest` / `auto` / `yolo` / `strict`) use
+`chimera.permissions.modes.policy_for_mode(...)` instead. See
+[Permissions](/modules/permissions/).
 
 ## AgentRegistry
 
@@ -111,9 +136,22 @@ config = registry.get("my-agent")
 agent = config.build(provider)
 ```
 
+## Default Registry (`create_default_registry`)
+
+`chimera.agents.loader.create_default_registry()` returns a registry
+pre-loaded with **9** agents:
+
+- 5 long-lived presets: `build`, `explore`, `general`, `plan`, `review`
+- 4 packaged subagent profiles (W13-G8): `planner`, `researcher`,
+  `executor`, `reviewer`
+
+This is the registry consumed by every CLI's `/agent` slash command
+and the `--agent <name>` flag. See [Agent Spawner](/modules/agent-spawner/)
+for the subagent contract.
+
 ## Preset agents
 
-Five factory functions create pre-configured agents.  Each wraps an
+Five factory functions create pre-configured agents. Each wraps an
 `AgentConfig` and accepts `**overrides` to customise fields.
 
 | Factory | Tools | Permissions | Loop |
@@ -126,9 +164,9 @@ Five factory functions create pre-configured agents.  Each wraps an
 
 ```python
 from chimera.agents import BuildAgent, ExploreAgent
-from chimera.providers.anthropic import AnthropicProvider
+from chimera.providers import create_provider
 
-provider = AnthropicProvider()
+provider = create_provider()
 
 # Default build agent
 agent = BuildAgent(provider)
@@ -136,3 +174,10 @@ agent = BuildAgent(provider)
 # Explore agent with custom step limit
 agent = ExploreAgent(provider, max_steps=20)
 ```
+
+## Related
+
+- [Agent Presets](/modules/agent-presets/) — high-level `CodingAgent.from_preset(...)`
+- [Agent Spawner](/modules/agent-spawner/) — sub-agent dispatch + 4 default subagents
+- [Extension Loader](/modules/extension-loader/) — `~/.chimera/agents/` discovery
+- [AGENT_TOOLS](/modules/agent-tools/) — the 23-tool default group

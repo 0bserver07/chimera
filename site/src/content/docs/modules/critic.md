@@ -222,3 +222,9 @@ from chimera.critic import (
     CriticMixin,
 )
 ```
+
+## Related
+
+- [LoopConfig](/modules/loop-config/) — wire a critic into any loop
+- [Loops](/modules/loops/) — `RetryLoop` / `Reflexion` are critic-aware
+- [Events](/modules/events/) — subscribe to `CriticEvent` from the EventBus

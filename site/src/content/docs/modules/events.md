@@ -35,24 +35,28 @@ for `"*"` to receive every event.
 
 ## Event types
 
-Nine concrete event dataclasses are defined in `chimera.events.types`:
+`chimera.events.types` defines 32 concrete event dataclasses across five
+categories: core dispatch, lifecycle, advanced, team coordination, and
+session persistence.
+
+### Core dispatch (9)
 
 | Class | `type` field | Key fields |
 |-------|-------------|------------|
 | `ToolCallEvent` | `tool_call` | `tool_name`, `arguments`, `call_id` |
-| `ToolResultEvent` | `tool_result` | `call_id`, `output`, `success` |
+| `ToolResultEvent` | `tool_result` | `call_id`, `output`, `success`, `tool_metadata` |
 | `StepEvent` | `step` | `step_number`, `content` |
 | `TextDeltaEvent` | `text_delta` | `content` |
 | `ErrorEvent` | `error` | `error`, `recoverable` |
 | `LoopDetectedEvent` | `loop_detected` | `pattern` |
 | `CompactionEvent` | `compaction` | `messages_before`, `messages_after` |
-| `PermissionEvent` | `permission` | `tool_name`, `action`, `granted` |
+| `PermissionEvent` | `permission` | `tool_name`, `action`, `granted`, `call_id` |
 | `SessionEvent` | `session` | `action`, `session_id` |
 
-## New event types (pi-mono)
+### Lifecycle (10)
 
-Ten additional event dataclasses cover the full agent lifecycle, including
-per-request telemetry, turn tracking, streaming, and cancellation:
+Cover the full agent lifecycle, including per-request telemetry, turn
+tracking, streaming, and cancellation.
 
 | Class | `type` field | Key fields |
 |-------|-------------|------------|
@@ -66,6 +70,37 @@ per-request telemetry, turn tracking, streaming, and cancellation:
 | `AgentEndEvent` | `agent_end` | `steps`, `success`, `total_cost` |
 | `SteeringEvent` | `steering` | `content` |
 | `CancellationEvent` | `cancellation` | `at_step` |
+
+### Advanced (6)
+
+| Class | `type` field | Key fields |
+|-------|-------------|------------|
+| `CriticEvent` | `critic` | `score`, `passed`, `feedback`, `iteration` |
+| `SecurityEvent` | `security` | `tool_name`, `arguments`, `risk`, `action` |
+| `StepCostEvent` | `step_cost` | `step_index`, `cost`, `input_tokens`, `output_tokens`, `reasoning_tokens`, `cache_hit_rate`, `duration` |
+| `ExternalAgentStartEvent` | `external_agent_start` | `agent_name`, `task` |
+| `ExternalAgentCompleteEvent` | `external_agent_complete` | `agent_name`, `response_text`, `cost`, `tool_calls_count` |
+| `ExternalAgentToolCallEvent` | `external_agent_tool_call` | `agent_name`, `tool_call_id`, `title`, `status` |
+
+### Team coordination (4)
+
+Emitted by the multi-agent task and messaging layer.
+
+| Class | `type` field | Key fields |
+|-------|-------------|------------|
+| `TeammateIdleEvent` | `teammate_idle` | `team`, `agent_id` |
+| `TaskCreatedEvent` | `task_created` | `team`, `task_id`, `description`, `created_by` |
+| `TaskCompletedEvent` | `task_completed` | `team`, `task_id`, `agent_id`, `result` |
+| `TeammateMessageEvent` | `teammate_message` | `team`, `sender`, `recipient`, `content` |
+
+### Session persistence (3)
+
+Used by event-sourced session storage and hook integrations.
+
+| Class | `type` field | Key fields |
+|-------|-------------|------------|
+| `TodoWriteEvent` | `todo_write` | `todos`, `op` (`"add"`/`"complete"`/`"set"`/`"remove"`), `session_id` |
+| `HookUpdatedInputEvent` | `hook_updated_input` | `tool_name`, `call_id`, `original`, `updated` |
 
 Subscribe to any of these using their `type` string or the `"*"` wildcard:
 

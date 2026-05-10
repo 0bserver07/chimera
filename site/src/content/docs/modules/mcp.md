@@ -158,11 +158,56 @@ result = client.call_tool(
 )
 ```
 
+## Built-in MCP servers
+
+Chimera bundles six MCP servers under `chimera/mcp_servers/`. All
+speak JSON-RPC 2.0 over stdin/stdout and are listed in
+`chimera-plugin/plugin.json` with both a subprocess command and a
+direct `module` field.
+
+| Server | Module | Tools exposed |
+|---|---|---|
+| `search_server` | `chimera.mcp_servers.search_server` | `CodebaseIndex` TF-IDF search, symbol lookup, path validation. |
+| `review_server` | `chimera.mcp_servers.review_server` | Multi-perspective code review (8 perspectives + composite). |
+| `testgen_server` | `chimera.mcp_servers.testgen_server` | Test skeleton generation, coverage-gap detection. |
+| `migration_server` | `chimera.mcp_servers.migration_server` | Scan / apply / list-presets for `MigrationPlanner` (`python2-to-3`, `commonjs-to-esm`, custom). |
+| `rag_server` | `chimera.mcp_servers.rag_server` | Doc search, API lookup, grounded answers. |
+| `benchmark_server` | `chimera.mcp_servers.benchmark_server` | Eval harness + HumanEval problem fetcher. |
+
+Run a server directly:
+
+```bash
+python3 -m chimera.mcp_servers.search_server
+```
+
+Or wire it into an agent via `MCPClient`:
+
+```python
+from chimera.mcp import MCPClient
+from chimera.core.agent import Agent
+from chimera.core.tool_group import DEFAULT_TOOLS
+
+client = MCPClient()
+client.add_stdio(
+    "chimera-search",
+    "python3",
+    ["-m", "chimera.mcp_servers.search_server"],
+)
+client.connect_all()
+
+agent = Agent(tools=list(DEFAULT_TOOLS) + client.tools)
+result = agent.run("Find every callsite of CostTracker.record_usage")
+```
+
+For the loaded set in any project, install
+[`chimera-plugin`](/modules/plugins/#chimera-plugin-manifest-wave-13-e1)
+and the directory loader registers all six automatically.
+
 ## Integration
 
 - **Agent tools**: `MCPClient.tools` returns `MCPTool` instances that extend `BaseTool`. Add them to any agent's tool list alongside `DEFAULT_TOOLS`.
 - **REPL**: The `chimera code` REPL automatically loads MCP servers from `~/.chimera/mcp.json` on startup.
-- **Plugin system**: MCP servers can be configured via `.mcp.json` in the project root or through the plugin directory loader (`chimera.plugins.dir_loader`).
+- **Plugin system**: MCP servers can be configured via `.mcp.json` in the project root or through the plugin directory loader (`chimera.plugins.dir_loader`). The directory loader also reads `mcp_servers{}` blocks from `plugin.json`.
 - **Config format**: The `.mcp.json` file uses the `{"servers": {"name": {"command": "...", "args": [...]}}}` format, supporting both stdio and HTTP servers.
 
 ## Import Reference

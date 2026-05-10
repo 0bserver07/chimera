@@ -59,6 +59,19 @@ Dataclass with fields: `title` (str), `content` (str), `subsections` (list of `D
 
 **Methods:** `to_markdown(level=1) -> str` -- renders the section and its subsections as markdown with appropriate heading levels.
 
+## Integration
+
+- AST-based — does not run the source. Safe to point at any Python
+  tree without side effects.
+- `scan(extensions=...)` accepts a tuple of suffixes; the default
+  `(".py",)` covers Python only. Add other extensions if your tree
+  has companion source you want documented.
+- The CLI `chimera docs --source <dir> --output <dir>` is a thin
+  wrapper around `DocGenerator.scan()` + `DocGenerator.write()`.
+- For multi-language API docs, pair `DocGenerator` (Python) with the
+  language-specific equivalents (e.g. JSDoc, rustdoc) and stitch the
+  output trees together at the `index.md` level.
+
 ## Import
 
 ```python

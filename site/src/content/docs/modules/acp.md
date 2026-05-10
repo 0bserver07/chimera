@@ -3,11 +3,12 @@ title: "Agent Client Protocol (ACP)"
 description: "Agent Client Protocol (ACP)"
 ---
 
-`chimera.acp` implements the Agent Client Protocol -- a JSON-RPC 2.0 interface
-for communicating with external AI agents over subprocess stdio.  It lets a
-Chimera agent delegate tasks to any ACP-compatible agent (including other
-Chimera instances, Claude Code, or custom agents) and collect their responses,
-tool calls, and cost data as first-class objects.
+`chimera.acp` implements the Agent Client Protocol — a JSON-RPC 2.0
+interface for communicating with external AI agents over subprocess
+stdio. It lets a Chimera agent delegate tasks to any ACP-compatible
+agent (other Chimera instances, IDE-shaped coding agents, or custom
+servers) and collect their responses, tool calls, and cost data as
+first-class objects.
 
 ## Quick Start
 
@@ -46,8 +47,8 @@ Configure how the ACP server subprocess is spawned:
 from chimera.acp import ACPSessionConfig
 
 config = ACPSessionConfig(
-    command=["npx", "-y", "claude-code-acp"],
-    args=["--model", "claude-sonnet-4-20250514"],
+    command=["npx", "-y", "<acp-bridge-pkg>"],
+    args=["--model", "claude-sonnet-4-6"],
     env={"ANTHROPIC_API_KEY": "sk-ant-..."},
     working_dir="/path/to/repo",
     notification_drain_delay=0.1,
@@ -151,7 +152,7 @@ from chimera.providers import create_provider
 
 # Configure the external agent
 config = ACPSessionConfig(
-    command=["npx", "-y", "claude-code-acp"],
+    command=["npx", "-y", "<acp-bridge-pkg>"],
     working_dir="/path/to/frontend",
 )
 
@@ -235,3 +236,9 @@ from chimera.acp import (
     ExternalAgentTool,
 )
 ```
+
+## Related
+
+- [Agent Spawner](/modules/agent-spawner/) — in-process sub-agent dispatch
+- [MCP](/modules/mcp/) — alternative protocol for tool/server integration
+- [Events](/modules/events/) — `ExternalAgentStartEvent` / `…ToolCallEvent` / `…CompleteEvent`

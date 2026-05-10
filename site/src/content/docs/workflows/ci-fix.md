@@ -21,7 +21,7 @@ from chimera.core.agent import Agent
 from chimera.env.local import LocalEnvironment
 from chimera.providers.factory import create_provider
 
-agent = Agent(provider=create_provider(model="claude-sonnet-4-20250514"))
+agent = Agent(provider=create_provider(model="glm-5"))
 env = LocalEnvironment(".")
 
 workflow = CIFixWorkflow(max_attempts=3, budget=1.0)
@@ -59,8 +59,22 @@ Dataclass with fields: `failures` (list of `FailureInfo`), `prompt`, `success`, 
 
 Standalone function that extracts failures from raw CI output. Handles pytest (`FAILED path::test`), Jest (`FAIL path`), Go (`--- FAIL: TestName`), Cargo (`test name ... FAILED`), and generic `Error:` patterns as fallback.
 
+## Integration
+
+- Wires through `chimera.core.agent.Agent.run()` once per attempt;
+  the workflow itself is provider-agnostic and inherits whatever
+  `Agent` you pass in.
+- `parse_ci_log()` is exposed as a standalone function for tools that
+  want CI-failure parsing without the full workflow (used internally
+  by `chimera ci-fix --log`).
+- `FixAttempt` records are appended to `workflow.attempts` on every
+  retry, including failed ones — useful for budget tracking and
+  reproducibility reports.
+- The `chimera ci-fix` CLI is a thin wrapper around this workflow; see
+  [CLI & REPL → Synthesis & evaluation subcommands](/modules/cli/#synthesis--evaluation-subcommands).
+
 ## Import
 
 ```python
-from chimera.ci import CIFixWorkflow, FailureInfo, parse_ci_log
+from chimera.ci import CIFixWorkflow, FailureInfo, FixAttempt, parse_ci_log
 ```

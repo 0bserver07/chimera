@@ -68,8 +68,29 @@ Dataclass with fields: `file`, `line`, `severity` (`Severity` enum), `message`, 
 
 Enum: `INFO`, `SUGGESTION`, `WARNING`, `ERROR`, `CRITICAL`.
 
+## Integration
+
+- The orchestrator is a specialised two-agent
+  [composition](/modules/composition/) (reviewer + author iteration);
+  drop it into a `Pipeline` if you want to chain it with planning or
+  testing stages.
+- `ReviewFeedback.parse_from_text(text)` recognises the
+  `[SEVERITY] file:line: message` line format the reviewer agent is
+  prompted to emit. Override the prompt for a different output
+  shape and supply a custom parser.
+- For multi-perspective reviews (security / performance /
+  maintainability / etc.), see `chimera.review.perspective` and the
+  `review_server` MCP server.
+- The CLI `chimera review --diff <patch>` is a thin wrapper around
+  `ReviewOrchestrator.run()`.
+
 ## Import
 
 ```python
-from chimera.review import ReviewOrchestrator, ReviewFeedback, ReviewComment, Severity
+from chimera.review import (
+    ReviewComment,
+    ReviewFeedback,
+    ReviewOrchestrator,
+    Severity,
+)
 ```

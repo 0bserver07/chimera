@@ -42,8 +42,21 @@ async for event in agent.run("Fix the failing test in test_utils.py"):
 
 ## Choosing a Preset
 
+`chimera.assembly.presets.PRESETS` defines six canonical presets and
+one deprecated alias:
+
+| Preset | Tool set | Permissions | Hooks | Transcripts | Compaction | Streaming | `max_turns` |
+|--------|----------|-------------|-------|-------------|-----------|-----------|------------:|
+| `coding_agent` | coding | ✓ | ✓ | ✓ | ✓ | ✓ | 100 |
+| `codex` | coding | ✓ | — | ✓ | ✓ | ✓ | 50 |
+| `kimi` | coding | ✓ | — | ✓ | ✓ | ✓ | 50 |
+| `swebench` | coding | — | — | — | — | — | 30 |
+| `minimal` | minimal | — | — | — | ✓ | ✓ | 20 |
+| `explore` | explore | — | — | — | ✓ | ✓ | 30 |
+| `claude_code` | (deprecated alias for `coding_agent`) | | | | | | |
+
 - **swebench** -- Best for benchmarks and well-defined bug fixes. Minimal
-  scaffold, no transcripts/compaction, focuses on root cause.
+  scaffold, focuses on root cause.
 - **codex** -- General-purpose with full tool access. Good default for
   open-ended tasks. Permissions on, hooks off.
 - **kimi** -- Action-first, KISS. Iterates on failures.

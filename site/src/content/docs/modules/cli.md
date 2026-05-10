@@ -3,25 +3,41 @@ title: "CLI & REPL"
 description: "CLI & REPL"
 ---
 
-Chimera's command-line interface provides 11 subcommands for code synthesis, evaluation, interactive coding, code review, CI fixing, and more. The `chimera code` subcommand launches an interactive REPL with 19 slash commands for session management, debugging, and agent control.
+Chimera's command-line interface ships three families of subcommands:
+
+1. **Synthesis & evaluation** — `synthesize`, `eval`, `bench`, `code`,
+   `review`, `ci-fix`, `research`, `docs`, `testgen`, `migrate`,
+   `plugins`, `auth`.
+2. **Seven codename coding agents** — `mink` (`tui`), `otter`
+   (`multi`), `ferret` (`sandbox`), `weasel` (`mini`), `shrew`
+   (`tiny`), `stoat` (`shell`), `badger` (`strict`). Each is its own
+   harness; aliases work as drop-in replacements.
+3. **Cross-CLI helpers** — `which`, `doctor`, `config`, `agents`,
+   `resume`, `tier-status`, `completion`, `team`, `fs`.
+
+The `chimera code` subcommand launches an interactive REPL with 19
+slash commands for session management, debugging, and agent control.
 
 ## Quick Start
 
 ```bash
-# Synthesize code from a specification
-chimera synthesize --spec "Build a REST API with FastAPI" --tests ./tests/
+# Pick a coding-agent CLI for a task (heuristic recommender, no LLM)
+chimera which --task "review a PR with a sandbox"
+
+# Diagnose your setup
+chimera doctor
 
 # Launch the interactive coding REPL
-chimera code --model claude-sonnet-4-20250514
+chimera code --model claude-sonnet-4-6
+
+# Resume the most recent run from any CLI
+chimera resume
 
 # Run AI code review on a diff
 chimera review --diff changes.patch
-
-# Fix CI failures automatically
-chimera ci-fix --log ci-output.log
 ```
 
-## Subcommands
+## Synthesis & evaluation subcommands
 
 | Command | Description | Key flags |
 |---------|-------------|-----------|
@@ -29,14 +45,50 @@ chimera ci-fix --log ci-output.log
 | `chimera synth` | Alias for `synthesize` | (same as above) |
 | `chimera eval` | Evaluate against benchmarks | `--benchmark` (required), `--dataset`, `--limit`, `--model`, `--output` |
 | `chimera bench` | Run benchmark suites | `--suite` (required), `--tasks-dir`, `--model`, `--output` |
-| `chimera code` | Interactive REPL | `--model`, `--workdir`, `--max-steps`, `--mode`, `--models` |
+| `chimera code` | Interactive REPL | `--model`, `--workdir`, `--max-steps`, `--mode`, `--models`, `--max-cost` |
 | `chimera review` | AI code review | `--diff` (required), `--model`, `--max-rounds` |
-| `chimera ci-fix` | Diagnose/fix CI failures | `--log` (required), `--model`, `--max-attempts` |
+| `chimera ci-fix` | Diagnose / fix CI failures | `--log` (required), `--model`, `--max-attempts` |
 | `chimera research` | Research a question | `--question` (required), `--model`, `--workdir` |
 | `chimera docs` | Generate API documentation | `--source` (required), `--output` |
 | `chimera testgen` | Generate test skeletons | `--source` (required), `--output` |
 | `chimera migrate` | Apply migration presets | `--source` (required), `--preset` (required) |
-| `chimera plugins` | Manage plugins | positional: `action` (search/install/uninstall), `query` |
+| `chimera plugins` | Manage plugins | positional: `action` (`search` / `install` / `uninstall` / `list`); `--cli`, `--scope`, `--index`, `--overwrite`, `--legacy-entrypoints` |
+| `chimera auth login <provider>` | OAuth / API-key login | provider in {`anthropic`, `openai`, `openrouter`, `xai`}. See [Auth → Provider authentication matrix](/modules/auth/#provider-authentication-matrix-wave-11-b3) for which providers run a real device flow. |
+| `chimera auth logout <provider>` | Clear stored credentials | — |
+
+## Coding-agent subcommands (7 codenames)
+
+Each codename is a full harness. Aliases (`tui`, `multi`, `sandbox`,
+`mini`, `tiny`, `shell`, `strict`) are exact drop-in replacements
+selected by user posture.
+
+| Command | Alias | Posture |
+|---|---|---|
+| `chimera mink` | `tui` | TUI-first interactive coding agent |
+| `chimera otter` | `multi` | Server-first multi-client (HTTP + SSE + ACP) |
+| `chimera ferret` | `sandbox` | Sandbox-first IDE-flagship coding agent |
+| `chimera weasel` | `mini` | Minimal harness, four operating modes |
+| `chimera shrew` | `tiny` | Tuned for small local models |
+| `chimera stoat` | `shell` | Shell-mode toggle, Kimi-tuned defaults |
+| `chimera badger` | `strict` | Harness-rewrite posture, parity tracking |
+
+`chimera agents` (the top-level discovery command, distinct from each
+CLI's own `agents` subcommand) lists every codename + alias +
+inspiration so users can pick without grepping the README.
+
+## Cross-CLI helpers
+
+| Command | Description | Key flags |
+|---|---|---|
+| `chimera which --task "<freeform>"` | Heuristic CLI recommender. Pure stdlib, no LLM, no network — runs instantly in CI / shell completion. | `--task` (required), `--top-k`, `--format text\|json` |
+| `chimera doctor` | Probe API keys, four local model daemons, Docker, four optional extras, all seven CLIs, the eventlog directory, and the plugin marketplace index. | `--format text\|json`, `--strict` |
+| `chimera config get \| set \| unset \| list \| edit` | Persistent CLI defaults in `~/.chimera/config.toml`. Keys are dot-namespaced (`otter.model`, `global.no-color`, `shrew.vram-gb`); bare keys auto-bucket to `global`. | `--cli` (filter on `list`) |
+| `chimera resume [id]` | Auto-detect which codename minted a session and dispatch to that CLI's `--resume`. Omit the id to resume the newest run across all CLIs. | passthrough flags after `--` |
+| `chimera tier-status` | Render `docs/tier-status.json` (77 features × 12 categories × 3 tiers). | `--format text\|json\|md`, `--regen`, `--category` |
+| `chimera completion <shell>` | Print a completion script for `bash`, `zsh`, or `fish`. The generator walks the live parser at runtime, so newly-registered subcommands show up automatically. | `<shell>` (required) |
+| `chimera completion install` | Auto-detect `$SHELL`, write the script to `~/.chimera/completion/<shell>.sh` (or `~/.config/fish/completions/chimera.fish`), and append a marker-bracketed source line to the user's rc file. Idempotent; reversible via `--undo`. | `--shell`, `--rc-path`, `--undo`, `--dry-run` |
+| `chimera fs ...` | Filesystem helpers (read, list, hash, etc.) used by other subcommands. | per-subcommand |
+| `chimera team ...` | Experimental multi-agent teams (gated by `CHIMERA_EXPERIMENTAL_AGENT_TEAMS`). | per-subcommand |
 
 ## Usage
 
@@ -244,7 +296,7 @@ Total cost: $0.0198
 |----------|--------|-------------|
 | `build_parser()` | `chimera.cli.main` | Build the top-level `argparse.ArgumentParser` with all subcommands |
 | `main(argv)` | `chimera.cli.main` | CLI entry point; parses args and dispatches to subcommand handlers |
-| `run_code(args)` | `chimera.cli.code` | Run the interactive coding REPL |
+| `run_code(args)` | `chimera.cli.code` | Run the interactive coding REPL (with cost gating) |
 | `run_synthesize(args)` | `chimera.cli.main` | Execute the synthesize command |
 | `run_eval(args)` | `chimera.cli.main` | Execute the eval command |
 | `run_bench(args)` | `chimera.cli.main` | Execute the bench command |
@@ -255,6 +307,15 @@ Total cost: $0.0198
 | `run_testgen(args)` | `chimera.cli.main` | Execute the testgen command |
 | `run_migrate(args)` | `chimera.cli.main` | Execute the migrate command |
 | `run_plugins(args)` | `chimera.cli.main` | Execute the plugins command |
+| `run_auth(args)` | `chimera.cli.main` | Execute the auth login / logout / list / status command |
+| `add_subparser(subparsers)` | `chimera.cli.which_cmd` | Register the heuristic recommender (`chimera which`) |
+| `add_subparser(subparsers)` | `chimera.cli.tier_status` | Register the tier-status renderer (`chimera tier-status`) |
+| `add_arguments(parser)` | `chimera.cli.doctor` | Wire the `chimera doctor` flags |
+| `register(subparsers)` | `chimera.cli.config_cmd` | Register the `chimera config` get/set/unset/list/edit subcommand |
+| `add_arguments(parser)` | `chimera.cli.resume_cmd` | Wire `chimera resume <id>` (auto-detects originating codename) |
+| `add_arguments(parser)` | `chimera.cli.completion` | Wire `chimera completion <shell> [install]` |
+| `resolve_default(cli, key, fallback)` | `chimera.cli.config_loader` | Read a persistent default from `~/.chimera/config.toml` |
+| `estimate_cost(model, prompt, expected_output_tokens)` | `chimera.cli.cost_estimator` | Pre-flight cost estimate; raises `ModelNotPriced` for unknown ids |
 
 ## Integration
 
@@ -263,10 +324,26 @@ Total cost: $0.0198
 - **REPL components**: The REPL wires together `Agent`, `Session`, `ReAct` loop, `LoopConfig`, `CostTracker`, `ConsoleStreamHandler`, and `LocalEnvironment`.
 - **MCP integration**: The REPL auto-loads MCP servers from `~/.chimera/mcp.json` using `MCPToolSource.from_config()`.
 - **Project context**: The REPL auto-discovers project configuration via `ProjectConfig.from_directory()` and appends project rules to the system prompt.
+- **Cost gating** (W12-9): The REPL refuses turns whose pre-flight estimate exceeds `--max-cost`; `/max-cost <usd>` and `/force-send` adjust the cap mid-session. See [Cost Tracking → Pre-flight estimation](/modules/cost-tracking/#pre-flight-cost-estimation).
+- **Persistent defaults** (W11 A2): `chimera config set` writes `~/.chimera/config.toml`. CLI subcommands opt in via `resolve_default("<cli>", "<key>", fallback=...)`.
+- **Late-bound subparsers**: `which`, `doctor`, `tier-status` register inside `try / except` blocks so a broken module never breaks `chimera --help`. The dispatcher mirrors the same guard.
 
 ## Import Reference
 
 ```python
 from chimera.cli.main import build_parser, main, create_parser
 from chimera.cli.code import run_code
+from chimera.cli.config_loader import resolve_default
+from chimera.cli.cost_estimator import (
+    CostEstimate,
+    ModelNotPriced,
+    estimate_cost,
+    format_estimate,
+)
+from chimera.cli.resume_cmd import (
+    KNOWN_CODENAMES,
+    detect_codename,
+    find_latest_across_all,
+)
+from chimera.cli.which_cmd import KEYWORD_MAP, recommend, Recommendation
 ```

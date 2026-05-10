@@ -32,6 +32,27 @@ Every auth method implements:
 | `refresh(credential)` | Refresh an existing credential |
 | `provider_name` (property) | Identifier of the target provider |
 
+## Provider authentication matrix (Wave 11 B3)
+
+`chimera auth login <provider>` does **not** assume every vendor
+publishes a public OAuth device flow. Wave 11 (`B3-W11-OAUTH-CLEANUP`)
+cleaned up the wave-9 scaffolds so each provider exits with
+documented behaviour:
+
+| Provider | Method | `chimera auth login` | Setup |
+|---|---|---|---|
+| `anthropic` | API key only | rc=2 + friendly stderr message | `export ANTHROPIC_API_KEY=sk-ant-...` |
+| `openai` | API key only | rc=2 + friendly stderr message | `export OPENAI_API_KEY=sk-...` |
+| `openrouter` | OAuth device flow (RFC 8628) | rc=0 + cred persisted | Stdlib polling against the public client. |
+| `xai` | OAuth device flow (RFC 8628) | rc=0 + cred persisted | Same. |
+
+The scaffold short-circuit lives in
+`chimera.auth.oauth_device.SCAFFOLD_PROVIDERS` /
+`scaffold_message()`. Anthropic and OpenAI endpoints stay empty
+strings (sentinel) so accidentally promoting them to a real flow
+requires touching the constants — not a config typo. See
+[B3-W11 report](https://github.com/0bserver07/chimera/blob/master/research/B3-W11-OAUTH-CLEANUP.md).
+
 ## Built-in providers
 
 ### APIKeyAuth

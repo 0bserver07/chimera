@@ -105,6 +105,39 @@ result = schema.validate('{"issues": ["unused import"], "score": 7}')
 # => {"issues": ["unused import"], "score": 7}
 ```
 
+## Persistent CLI defaults (Wave 11 A2)
+
+`chimera.cli.config_cmd` writes a separate, simpler TOML file at
+`~/.chimera/config.toml` for CLI-only defaults. Keys are
+dot-namespaced (`otter.model`, `global.no-color`, `shrew.vram-gb`);
+bare keys auto-bucket to `[global]`.
+
+```bash
+chimera config set otter.model claude-sonnet-4-6
+chimera config get otter.model
+chimera config list --cli otter
+chimera config unset otter.model
+chimera config edit                 # opens $EDITOR
+```
+
+Subcommands opt in to the new defaults via the
+`chimera.cli.config_loader.resolve_default()` helper:
+
+```python
+from chimera.cli.config_loader import resolve_default
+
+model = resolve_default("otter", "model", fallback="claude-sonnet-4-6")
+```
+
+Resolution order: explicit CLI flag → environment variable → TOML
+default → fallback. The `--cli` filter on `list` accepts any of
+`global`, `mink`, `otter`, `ferret`, `weasel`, `shrew`, `stoat`,
+`badger`. Stdlib-only — no `tomli` dependency on Python 3.11+.
+
+This file is *separate* from `ChimeraConfig` (project-scoped YAML /
+JSON for environments, strategies, compaction). The two never
+overlap.
+
 ## Integration
 
 - **DiscriminatedUnion** is the foundation for polymorphic config throughout Chimera. `Environment`, `Strategy`, and `CompactionStrategy` all extend it, so `ChimeraConfig` can instantiate any registered subclass from a YAML/JSON `"type"` field.
@@ -115,6 +148,7 @@ result = schema.validate('{"issues": ["unused import"], "score": 7}')
 - **ProjectConfig** feeds discovered rules into the system prompt via `rules_text`, and skills into the `/skill` REPL command.
 - **SkillRegistry** uses lazy loading -- skills are only read from disk when first accessed by name.
 - **StructuredOutput** is used by agents and workflows to enforce typed responses from LLMs, with automatic retry on validation failure (up to `max_retries`).
+- **Persistent CLI defaults** (`~/.chimera/config.toml`): consumed by `chimera config` and `resolve_default()`. The marketplace (`chimera plugins`) reads `[global] plugin_index` from the same file when neither `--index` nor `$CHIMERA_PLUGIN_INDEX` resolves.
 
 ## Import Reference
 

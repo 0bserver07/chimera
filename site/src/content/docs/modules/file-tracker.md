@@ -63,3 +63,29 @@ meta = tracker.to_metadata()
 # Pass to compaction strategy
 strategy.set_metadata(meta)
 ```
+
+## LoopConfig wiring
+
+Pass a tracker through `LoopConfig.file_tracker` so reads / writes
+performed by tools land in the same shared instance:
+
+```python
+from chimera.core.file_tracker import FileTracker
+from chimera.core.loop_config import LoopConfig
+
+tracker = FileTracker()
+config = LoopConfig(file_tracker=tracker)
+# ...run the loop, then introspect:
+print(tracker.to_prompt_section())
+```
+
+The shared `tool_executor` records every successful `read_file` /
+`write_file` / `edit_file` / `replace_in_file` / `apply_patch` invocation
+on the configured tracker so subsequent compaction passes can render a
+"Files you've been working with" section into the rolling summary.
+
+## Related
+
+- [LoopConfig](/modules/loop-config/) — `file_tracker` field
+- [Compaction](/modules/compaction/) — `FileAwareCompaction` mixin
+- [Checkpoints](/modules/checkpoints/) — `GhostCommitManager` for file-undo

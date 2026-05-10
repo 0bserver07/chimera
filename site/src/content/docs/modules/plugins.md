@@ -138,6 +138,89 @@ quality_plugins = mp.registry.by_tag("quality")
 top_plugins = mp.registry.top_rated(limit=5)
 ```
 
+### Configuring the index URL (Wave 11 B2)
+
+The marketplace ships with **no default index URL**
+(`DEFAULT_INDEX_URL: str | None = None`). Rationale: we don't want to
+commit to a registry SLA or signing infrastructure, and the trust
+model is cleaner when every operator owns their index. Three
+configuration paths are evaluated in order:
+
+1. `chimera plugins ... --index <url-or-path>` flag.
+2. `$CHIMERA_PLUGIN_INDEX` environment variable.
+3. `chimera config set plugin_index <url>` (TOML, `[global]`).
+
+When none of the three resolve, `chimera plugins search` and
+`chimera plugins install` exit `rc=2` (configuration error) with a
+friendly message printed to *stderr*; stdout stays clean for `jq`
+consumers. A fetch / parse error stays at `rc=1` so scripted callers
+can disambiguate.
+
+A clearly-labeled sample index lives at
+[`examples/plugin-index.json`](https://github.com/0bserver07/chimera/blob/master/examples/plugin-index.json)
+with three fake entries (each `description` prefixed
+`EXAMPLE -`) and an `_note: "EXAMPLE INDEX..."` tripwire. Tests
+treat the warning as a regression guard so future maintainers can't
+accidentally promote it to a real registry.
+
+### chimera-plugin manifest (Wave 13 E1)
+
+The in-tree `chimera-plugin/` skill / agent / command / hook / MCP
+bundle now ships a single `plugin.json` that serves both
+consumers:
+
+- **Marketplace** (`PluginInfo.from_dict`) — picks up
+  `name`, `version`, `description`, `author`, `tags`. Unknown
+  keys are ignored.
+- **Directory loader** (`DirectoryPluginLoader`) — picks up
+  `name`, `version`, `description`, `author`. The loader's
+  `MANIFEST_FILES` list checks `plugin.json` first, then falls
+  through to `.claude-plugin/plugin.json`.
+
+Manifest shape (verbatim fields):
+
+```json
+{
+  "name": "chimera-plugin",
+  "version": "0.2.0",
+  "description": "Skills, agents, commands, hooks, MCP servers",
+  "license": "MIT",
+  "author": "Chimera",
+  "homepage": "https://github.com/0bserver07/chimera",
+  "tags": ["skills", "agents", "mcp", "hooks"],
+  "components": [
+    {"type": "skill",   "name": "code-review",       "path": "skills/code-review/"},
+    {"type": "agent",   "name": "reviewer",          "path": "agents/reviewer.md"},
+    {"type": "command", "name": "benchmark",         "path": "commands/benchmark.md"},
+    {"type": "hook",    "name": "auto_test",         "path": "hooks/hooks.json"}
+  ],
+  "mcp_servers": {
+    "search":    {"command": ["python3", "-m", "chimera.mcp_servers.search_server"],
+                  "module":  "chimera.mcp_servers.search_server"},
+    "review":    {"command": ["python3", "-m", "chimera.mcp_servers.review_server"],
+                  "module":  "chimera.mcp_servers.review_server"},
+    "testgen":   {"command": ["python3", "-m", "chimera.mcp_servers.testgen_server"],
+                  "module":  "chimera.mcp_servers.testgen_server"},
+    "migration": {"command": ["python3", "-m", "chimera.mcp_servers.migration_server"],
+                  "module":  "chimera.mcp_servers.migration_server"},
+    "rag":       {"command": ["python3", "-m", "chimera.mcp_servers.rag_server"],
+                  "module":  "chimera.mcp_servers.rag_server"},
+    "benchmark": {"command": ["python3", "-m", "chimera.mcp_servers.benchmark_server"],
+                  "module":  "chimera.mcp_servers.benchmark_server"}
+  }
+}
+```
+
+`components[]` covers 14 skills + 3 agents + 5 commands + 1 hook
+bundle; each path is relative to `chimera-plugin/` and resolves to a
+real file on disk. Six MCP servers are listed with both a subprocess
+`command` and a `module` field for direct Python import.
+
+The sample `examples/plugin-index.json` carries a real
+`chimera-plugin` entry (with `_note: "Built-in plugin (real)"`)
+alongside the three EXAMPLE placeholders so it can be distinguished
+both visually and programmatically.
+
 ## Integration
 
 - **PluginManager.tools** returns all `BaseTool` instances registered by loaded plugins, ready to pass to `Agent` or `ToolGroup`.

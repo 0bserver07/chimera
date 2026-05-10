@@ -149,6 +149,34 @@ summary.set_metadata(meta)
 compacted = summary.compact(messages, budget=8000)
 ```
 
+## SmartCompaction
+
+`SmartCompaction` (`chimera.compaction.smart`) is a higher-order
+strategy that mixes urgency awareness with policy-driven choice between
+the cheaper strategies. It accepts a `SmartCompactionConfig` carrying
+soft / hard token thresholds, the LLM provider, and switches for
+which sub-strategies to enable. The strategy escalates the action
+based on `CompactionUrgency` (`NONE`, `SOFT`, `HARD`) returned by
+`ThresholdCompaction.classify()`. See `docs/playbooks/04-context-management.md`
+for a tour of the pattern.
+
+## ThoughtStripCompaction
+
+`ThoughtStripCompaction` (`chimera.compaction.thought_strip`) drops
+extended-thinking blocks from messages so the saved transcript fits
+without burning context budget on internal monologue. Use
+`estimate_thinking_tokens(messages)` to see how many tokens a strip
+will reclaim before applying it.
+
+## Threshold-aware compaction
+
+`ThresholdCompaction` (`chimera.compaction.thresholds`) wraps any
+strategy with `SOFT` / `HARD` thresholds and tool-call / tool-result
+atomicity. When an `AtomicGroup` (call + result pair) would be split
+by truncation, the group is preserved as a unit. `InsufficientCompactionError`
+is raised when even the most aggressive strategy can't bring the
+transcript under the hard threshold.
+
 ## Integration with Sessions
 
 When `auto_compact=True` is set on a `Session`, the compaction strategy runs

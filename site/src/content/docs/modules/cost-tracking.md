@@ -148,13 +148,56 @@ tracker.record_usage(model="claude-sonnet-4", input_tokens=500, output_tokens=10
 # prints: [claude-sonnet-4] +$0.0030
 ```
 
+## Pre-flight cost estimation
+
+`chimera.cli.cost_estimator` adds a *pre-flight* version of cost
+tracking — answer "how much will this turn cost?" before paying for
+the round-trip. Wave-11 (`A8-W11-COST-ESTIMATE`) wires it into the
+otter `-p` one-shot path; Wave-12 (`W12-9-REPL-COST-GATING`) extends
+the gate to the interactive REPL.
+
+```python
+from chimera.cli.cost_estimator import estimate_cost, ModelNotPriced
+
+estimate = estimate_cost(
+    model="claude-sonnet-4-6",
+    prompt="implement a JSON parser",
+    expected_output_tokens=2000,
+)
+print(estimate.total_usd)        # 0.0184
+print(estimate.input_tokens)     # 7   (chars-÷-4 rule)
+```
+
+Token counts use the chars-÷-4 rule of thumb (good to ~10-20 % on
+English / code). Pricing comes from `chimera.providers.cost.PRICING`
+with longest-prefix-match semantics so `glm-5-air` resolves through
+`glm-5`. Unknown models raise `ModelNotPriced` (subclass of
+`KeyError`) so callers can detect missing entries rather than
+silently estimating zero.
+
+### CLI gating
+
+| Flag / command | Layer | Behaviour |
+|---|---|---|
+| `--estimate-cost` | otter `-p` | Print the estimate and exit (no provider call). |
+| `--max-cost FLOAT` | one-shot + REPL | Refuse the turn when the estimate exceeds the cap. |
+| `/max-cost <usd>` | REPL | Raise / clear the active cap mid-session. Empty argument clears. |
+| `/force-send` | REPL | Bypass the cap once for the next turn only. |
+
+The REPL gate runs *before* the agent thread spins up, so a refused
+turn costs zero. Refusal goes to stderr; stdout stays clean for
+`jq`-style consumers. See `chimera/cli/code.py::_gate_turn_by_cost`
+and `chimera/cli/slash_commands.py` for the wiring shared across
+codenames.
+
 ## Integration
 
 - **Agent**: Each `Agent` instance holds a `CostTracker`. The ReAct loop calls `start_step()` / `end_step()` around each iteration and `record_usage()` after every provider call.
 - **REPL `/cost` command**: Displays the current tracker's `summary()` in a formatted table, including per-model breakdown, cache stats, and budget status.
+- **REPL cost gating** (W12-9): Each user turn is cost-estimated before submission; turns exceeding `--max-cost` are refused with a friendly hint pointing at `/max-cost` and `/force-send`. The wiring lives at `chimera.cli.code` so any CLI delegating to `run_code` inherits it.
 - **EventBus**: A `StepCost` event is emitted after each step with the `StepUsage` data, enabling middleware and plugins to react to cost changes.
 - **Provider layer**: Providers call `record_usage()` on the tracker after each LLM response, passing token counts from the API response headers.
-- **Built-in pricing**: `MODEL_PRICING` includes per-million-token rates for Claude (Opus, Sonnet, Haiku), GPT-4o, o1, and o3-mini, with distinct pricing for input, output, cache-read, cache-write, and reasoning tokens. Unknown models fall back to the `"default"` pricing tier.
+- **Built-in pricing**: `chimera.providers.cost.PRICING` includes per-million-token rates for Claude, GPT, GLM, DeepSeek, Kimi, Qwen, GPT-OSS, Mistral-Codestral and Gemma3 (see [Providers](/modules/provider-registry/) for the catalog refresh). Unknown models fall back to the `"default"` tier.
 
 ## Import Reference
 
@@ -164,5 +207,11 @@ from chimera.providers.cost_tracker import (
     CostTracker,
     StepUsage,
     TokenUsage,
+)
+from chimera.cli.cost_estimator import (
+    CostEstimate,
+    ModelNotPriced,
+    estimate_cost,
+    format_estimate,
 )
 ```

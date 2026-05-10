@@ -132,3 +132,74 @@ class TimeBasedPolicy(PermissionPolicy):
             return PermissionAction.DENY
         return PermissionAction.ALLOW
 ```
+
+## ApprovalMode (5-mode surface)
+
+`ApprovalMode` is the standard 5-mode surface that several CLIs expose
+through a `--permission-mode` flag.  Each mode resolves to a concrete
+policy via `policy_for_mode()`:
+
+| Mode value | Policy | Behaviour |
+|------------|--------|-----------|
+| `read-only` | `ReadOnly` | Only the read whitelist allowed; everything else denied |
+| `suggest` | `Interactive` | Reads auto-approve; writes/bash/git surface for explicit approval |
+| `auto` | `AutoEditPolicy` | Reads + simple file edits auto-approve; bash/git/destructive ops `ASK` |
+| `yolo` | `AutoApprove` | Every tool call auto-approves (sandbox-only) |
+| `strict` | `AlwaysAskPolicy` | Every tool call (including reads) requires explicit approval |
+
+```python
+from chimera.permissions import ApprovalMode, parse_mode, policy_for_mode
+
+# Direct construction
+policy = policy_for_mode(ApprovalMode.AUTO)
+
+# Parse from a CLI string (case-insensitive, accepts aliases)
+mode = parse_mode("read-only")        # ApprovalMode.READ_ONLY
+mode = parse_mode("acceptEdits")      # ApprovalMode.AUTO  (legacy alias)
+mode = parse_mode("bypassPermissions") # ApprovalMode.YOLO (legacy alias)
+
+policy = policy_for_mode(mode)
+policy.evaluate("bash", {"command": "ls"})  # PermissionAction.ASK
+```
+
+`parse_mode()` accepts canonical spellings (`read-only`, `suggest`,
+`auto`, `yolo`, `strict`), underscore variants (`read_only`), and the
+legacy `--approval` / `--permission-mode` strings (`default`,
+`acceptEdits`, `bypassPermissions`, `plan`, `full`).
+
+### Legacy `PermissionMode` enum
+
+The pre-G3 six-mode `PermissionMode` enum
+(`DEFAULT`/`PLAN`/`ACCEPT_EDITS`/`BYPASS`/`DONT_ASK`/`AUTO`) is still
+exported for backwards compatibility with the interactive REPL and the
+in-process permission checker.  New code should prefer `ApprovalMode`.
+
+## Audit log
+
+`AuditLog` records every permission evaluation for after-the-fact
+inspection.  Each entry is an `AuditEntry` with `tool_name`, `action`,
+`granted`, `args`, and a timestamp.
+
+```python
+from chimera.permissions import AuditLog
+
+log = AuditLog()
+log.record(tool_name="bash", action="bash:rm /tmp/x", granted=False, args={"command": "rm /tmp/x"})
+
+log.summary()        # {"total": 1, "granted": 0, "denied": 1, ...}
+log.for_tool("bash") # list of entries for the bash tool
+log.clear()
+```
+
+## Risk classification
+
+`classify_risk()` maps bash commands to a `RiskLevel` (`SAFE`,
+`MODERATE`, `DESTRUCTIVE`, `CRITICAL`) so callers can surface elevated
+risk to the user before granting `ASK` decisions.
+
+```python
+from chimera.permissions import classify_risk, format_risk
+
+level = classify_risk("rm -rf /")          # RiskLevel.CRITICAL
+banner = format_risk(level)                # human-readable summary
+```

@@ -122,41 +122,44 @@ nexts = flow.next_nodes("C")  # [(FlowEdge, FlowNode), ...]
 | `FlowValidationError` | Missing begin/end, unreachable end, unlabeled decision edges, duplicate labels |
 | `FlowError` | `advance()` called at end node, or invalid choice |
 
-## Skill Discovery (pi-mono)
+## Skill Discovery
 
 `chimera.skills.discovery` provides automatic skill discovery so the REPL and
-agent loops can load Flow skills from well-known locations without manual
-registration.
+agent loops can load skills from well-known locations without manual
+registration.  See [Skill Discovery](/modules/skill-discovery/) for the full
+API; the short version:
 
 ### SKILL.md format
 
-A `SKILL.md` file placed in a skill directory tells the discovery system how to
-load the skill.  It is a Markdown file with a YAML front-matter header:
+A `SKILL.md` file is a Markdown file with a small YAML front-matter
+header.  Only `name` and `description` are required; the rest of the
+file is the skill body that gets injected into the system prompt:
 
 ```markdown
 ---
 name: my-workflow
 description: A short description shown in /skills
-entry: flow.md        # path to the Mermaid flowchart file, relative to SKILL.md
 ---
 
-Any additional documentation for the skill goes here.
+Step-by-step instructions for the agent. This block can include a
+Mermaid flowchart that the agent runs through Flow.from_mermaid:
+
+```mermaid
+flowchart TD
+    A([BEGIN]) --> B[Read code]
+    B --> C([END])
+```
 ```
 
-### Discovery API
+### Search path priority
 
-| Function | Description |
-|----------|-------------|
-| `discover_skills(paths)` | Search `paths` for `SKILL.md` files and return a list of loaded `Flow` objects |
-| `default_search_paths()` | Return the default search path list: `~/.chimera/skills/`, `./skills/`, and any paths from `CHIMERA_SKILL_PATH` env var |
+`default_search_paths(workdir)` returns three paths in priority order:
 
-```python
-from chimera.skills.discovery import discover_skills, default_search_paths
+1. Bundled chimera algorithm skills (read-only, ships with the package)
+2. `{workdir}/.chimera/skills/` — project-local
+3. `~/.chimera/skills/` — user global
 
-skills = discover_skills(default_search_paths())
-for skill in skills:
-    print(skill.name, skill.description)
-```
+Later paths override earlier ones by skill name.
 
 ### Auto-discovery in the REPL
 

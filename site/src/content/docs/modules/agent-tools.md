@@ -3,11 +3,18 @@ title: "AGENT_TOOLS"
 description: "AGENT_TOOLS"
 ---
 
-`chimera.AGENT_TOOLS` is an extended `ToolGroup` with 13 tools designed for
-interactive agent sessions.  It is the default tool set used by the CLI REPL
-(`chimera code`).
+`chimera.AGENT_TOOLS` is an extended `ToolGroup` with the full default
+tool set used by the interactive REPL (`chimera code`) and every
+codename-bearing CLI that consumes `create_default_registry()`.
+
+The group is constructed lazily on first access (see
+`chimera.core.tool_group._make_agent_tools`), avoiding circular import
+issues at package import time.
 
 ## What's Included
+
+The 23 tools cover read/write/edit, shell, search, git, tests, repo
+maps, multi-file patches, scheduling, and Jupyter editing.
 
 | # | Tool | Description |
 |---|------|-------------|
@@ -23,25 +30,41 @@ interactive agent sessions.  It is the default tool set used by the CLI REPL
 | 10 | `image_read` | Read and describe images |
 | 11 | `repo_map` | Generate a repository structure map |
 | 12 | `think` | Internal reasoning (no side effects) |
-| 13 | `todo` | Manage a task list |
+| 13 | `todo` | Manage a task list (persistent for `/resume` parity) |
+| 14 | `verify` | Run a verifier (tests / linters / type checks) |
+| 15 | `web_search` | Web search tool |
+| 16 | `apply_patch` | Multi-file structured edits via unified-diff body (W13-G1) |
+| 17 | `write_guard` | Surfaces the `write_file` vs `edit_file` invariant (W13-G13) |
+| 18 | `notebook_edit` | Jupyter notebook cell edits |
+| 19 | `enter_worktree` | Create an isolated git worktree for the current run |
+| 20 | `exit_worktree` | Tear down the active git worktree and merge back |
+| 21 | `cron_create` | Schedule a recurring task via cron-style expression |
+| 22 | `cron_list` | List active scheduled tasks |
+| 23 | `cron_delete` | Cancel a scheduled task |
+
+The four tools added in W13-G1 / W13-G13 (`apply_patch`, `write_guard`,
+`notebook_edit`, plus the `enter_worktree`/`exit_worktree` and
+`cron_*` triplets) closed parity gaps that previously left
+mink/ferret/otter without a default Jupyter / git-worktree /
+scheduled-task surface.
 
 ## How It Differs from DEFAULT_TOOLS
 
 `DEFAULT_TOOLS` is a minimal 4-tool group for simple agent runs:
 
-| DEFAULT_TOOLS (4) | AGENT_TOOLS (13) |
+| DEFAULT_TOOLS (4) | AGENT_TOOLS (23) |
 |---|---|
-| read, write, bash, image_read | Everything in DEFAULT_TOOLS + edit, search, list_files, test, git, replace_in_file, repo_map, think, todo |
+| read, write, bash, image_read | DEFAULT_TOOLS + edit, search, list_files, test, git, replace_in_file, repo_map, think, todo, verify, web_search, apply_patch, write_guard, notebook_edit, enter_worktree, exit_worktree, cron_create, cron_list, cron_delete |
 
-Use `DEFAULT_TOOLS` for lightweight tasks. Use `AGENT_TOOLS` for full coding
-sessions.
+Use `DEFAULT_TOOLS` for lightweight tasks. Use `AGENT_TOOLS` for full
+coding sessions.
 
 ## Usage
 
 ```python
 import chimera
 
-# Use the full agent tool set
+# Use the full agent tool set (23 tools)
 agent = chimera.Agent(
     provider=chimera.create_provider(),
     tools=list(chimera.AGENT_TOOLS),
@@ -50,7 +73,7 @@ agent = chimera.Agent(
 result = agent.run("Refactor the utils module.", env=env)
 ```
 
-You can extend it by adding more tools:
+Extend by adding more tools:
 
 ```python
 from chimera.tools.dmail import DMailTool
@@ -62,7 +85,8 @@ agent = chimera.Agent(provider=provider, tools=tools)
 Or select a subset:
 
 ```python
-tools = [t for t in chimera.AGENT_TOOLS if t.name in ("read", "write", "bash", "edit")]
+tools = [t for t in chimera.AGENT_TOOLS
+         if t.name in ("read", "write", "bash", "edit")]
 ```
 
 ## Tools NOT in AGENT_TOOLS
@@ -76,6 +100,9 @@ Some tools require special setup and are not included by default:
 | `BrowserTool` | Requires `playwright` (optional dependency) |
 | `WebFetchTool` | Requires network access configuration |
 | `DelegateTool` | Requires multi-agent setup |
+| `IPythonTool` | Requires an IPython kernel |
+| `BatchTool` | Wraps other tools — pass an explicit list |
+| `PlanModeTool` | Activated by `--mode plan` / `/plan-mode`, not loaded by default |
 
 Add these explicitly when needed.
 
@@ -86,16 +113,26 @@ Both `DEFAULT_TOOLS` and `AGENT_TOOLS` are `ToolGroup` instances:
 ```python
 group = chimera.AGENT_TOOLS
 
-len(group)              # 13
-group.has("bash")       # True
-group.get("bash")       # BashTool instance
-group.add(my_tool)      # Add a tool to the group
-list(group)             # Iterate over all tools
+len(group)                # 23
+group.has("apply_patch")  # True
+group.get("bash")         # BashTool instance
+group.add(my_tool)        # Add a tool to the group
+list(group)               # Iterate over all tools
 ```
+
+`create_default_tools(read_ops=..., write_ops=..., bash_ops=..., search_ops=...)`
+constructs a `DEFAULT_TOOLS`-shaped group with custom operation backends —
+useful for sandboxed or remote environments.
 
 ## Import Reference
 
 ```python
 from chimera import AGENT_TOOLS, DEFAULT_TOOLS
-from chimera.core.tool_group import ToolGroup
+from chimera.core.tool_group import ToolGroup, create_default_tools
 ```
+
+## Related
+
+- [Concepts: Tools](/concepts/tools/) — discoverability and tool-call schemas
+- [Permissions](/modules/permissions/) — gate tool calls before they run
+- [Agent Presets](/modules/agent-presets/) — preset-shaped tool subsets
