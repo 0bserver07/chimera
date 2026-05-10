@@ -52,14 +52,12 @@ jobs:
           if-no-files-found: error
 
   publish-pypi:
-    name: Publish to PyPI (Trusted Publishing)
+    name: Publish to PyPI (API token)
     needs: build
     runs-on: ubuntu-latest
     environment:
       name: release
       url: https://pypi.org/p/chimera-run
-    permissions:
-      id-token: write
     steps:
       - name: Download distributions
         uses: actions/download-artifact@v4
@@ -69,6 +67,9 @@ jobs:
 
       - name: Publish package to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          skip-existing: true
 
   github-release:
     name: Attach artifacts to GitHub Release
