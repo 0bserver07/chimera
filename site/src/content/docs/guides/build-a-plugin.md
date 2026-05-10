@@ -100,32 +100,68 @@ my-plugin = "my_package.plugin:MyPlugin"
 
 ## Step 4: Directory-Based Plugins
 
-For quick, no-code plugins, use a directory layout:
+For quick, no-code plugins, use a directory layout with a `plugin.json`
+manifest. The manifest format was standardised in W13-E1 (`docs/plans/
+W13-E1-PLUGIN-MANIFEST.md`) and is the recommended way to package skills,
+agents, slash commands, hooks, and MCP servers together.
 
 ```
 my-plugin/
-  plugin.json
+  plugin.json              <- top-level manifest
+  skills/
+    auto-test.md
   agents/
-    code-reviewer.md
+    reviewer.md
+  commands/
+    review.md
   hooks/
     hooks.json
   .mcp.json
 ```
 
-**plugin.json** -- manifest:
+**plugin.json** -- the manifest enumerates every component the plugin
+ships and (optionally) declares MCP servers and tags:
+
 ```json
 {
   "name": "my-plugin",
   "version": "1.0.0",
-  "description": "Directory-based plugin example",
-  "author": "Your Name"
+  "description": "Lint feedback + reviewer agent + benchmark command.",
+  "license": "MIT",
+  "author": "Your Name",
+  "homepage": "https://github.com/you/my-plugin",
+  "tags": ["code-review", "lint"],
+  "components": [
+    { "type": "skill",   "name": "auto-test", "path": "skills/auto-test.md" },
+    { "type": "agent",   "name": "reviewer",  "path": "agents/reviewer.md" },
+    { "type": "command", "name": "review",    "path": "commands/review.md" },
+    { "type": "hook",    "name": "hooks",     "path": "hooks/hooks.json" }
+  ],
+  "mcp_servers": {
+    "my-search": {
+      "command": ["python3", "-m", "my_plugin.search_server"],
+      "module": "my_plugin.search_server",
+      "description": "Custom symbol-aware code search."
+    }
+  }
 }
 ```
 
-**agents/code-reviewer.md** -- agent definition with YAML frontmatter
+| Field | Required | Purpose |
+|---|---|---|
+| `name` | yes | Unique plugin id (matches the directory name by convention). |
+| `version` | yes | Semver string. |
+| `description` | yes | One-sentence summary surfaced in the marketplace. |
+| `license` | recommended | SPDX identifier (`MIT`, `Apache-2.0`, ...). |
+| `components` | yes | List of `{type, name, path}` entries. Supported types: `skill`, `agent`, `command`, `hook`. |
+| `mcp_servers` | optional | Map of MCP server configs; same shape as `.mcp.json`. |
+| `tags` | optional | Free-form tags for marketplace search. |
+
+**agents/reviewer.md** -- agent definition with YAML frontmatter
 (loaded by `AgentConfig.from_markdown()`).
 
-**.mcp.json** -- MCP server configurations:
+**.mcp.json** -- MCP server configs (alternative to inlining under
+`mcp_servers` in the manifest):
 ```json
 {
   "servers": {
@@ -161,6 +197,10 @@ plugin = loader.load("/path/to/my-plugin")
 registry = ComponentRegistry()
 plugin.activate(registry)
 ```
+
+The loader reads `plugin.json` first and uses the `components` list to
+discover every skill/agent/command/hook -- you do not have to maintain a
+parallel directory walk in your code.
 
 ---
 

@@ -17,7 +17,7 @@ the input (task) of agent N+1.  If any agent fails, the pipeline stops early.
 ```python
 from chimera import Agent, Pipeline, Prompt, create_provider
 
-provider = create_provider(model="claude-sonnet-4-20250514")
+provider = create_provider(model="glm-5")
 
 planner = Agent(
     provider=provider,
@@ -68,7 +68,7 @@ pick the best one.
 ```python
 from chimera import Agent, Ensemble, Prompt, create_provider
 
-provider = create_provider(model="claude-sonnet-4-20250514")
+provider = create_provider(model="glm-5")
 
 agents = [
     Agent(
@@ -112,7 +112,7 @@ coordinator as a `DelegateTool`.
 ```python
 from chimera import Agent, DEFAULT_TOOLS, Prompt, Supervisor, create_provider
 
-provider = create_provider(model="claude-sonnet-4-20250514")
+provider = create_provider(model="glm-5")
 
 # Workers -- each has its own tools and prompt
 frontend_dev = Agent(

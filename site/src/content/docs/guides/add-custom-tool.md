@@ -49,7 +49,7 @@ Use it in an agent:
 ```python
 from chimera import Agent, DEFAULT_TOOLS, create_provider
 
-provider = create_provider(model="claude-sonnet-4-20250514")
+provider = create_provider(model="glm-5")
 agent = Agent(
     provider=provider,
     tools=list(DEFAULT_TOOLS) + [count_lines],
@@ -204,7 +204,7 @@ class WordCountTool(BaseTool):
         return ToolResult(output=f"Word count: {words}")
 
 
-provider = create_provider(model="claude-sonnet-4-20250514")
+provider = create_provider(model="glm-5")
 agent = Agent(
     provider=provider,
     tools=list(DEFAULT_TOOLS) + [WordCountTool()],

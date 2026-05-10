@@ -136,6 +136,62 @@ Ollama runs on the standard port.
 
 ---
 
+## Built-in Provider Catalog
+
+`chimera.providers.catalog.ProviderCatalog.default()` ships with entries
+for popular hosted and local model lines so you can bring up a provider
+with a single string. The catalog auto-resolves base URLs, env vars,
+context windows, and per-Mtok pricing. New entries added across W11-W15:
+
+| Catalog id | Provider | Source / env vars | Context |
+|---|---|---|---|
+| `bedrock/claude-sonnet-4`, `bedrock/claude-haiku-3.5` | compatible (AWS Bedrock) | `AWS_BEDROCK_ENDPOINT`, `AWS_BEDROCK_KEY` | 200k |
+| `azure/gpt-4o`, `azure/gpt-4o-mini` | compatible (Azure OpenAI) | `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_KEY` | 128k |
+| `groq/llama-3.3-70b` | compatible (Groq) | `GROQ_API_KEY` | 128k |
+| `deepseek-chat`, `deepseek-reasoner` | compatible (DeepSeek API) | `DEEPSEEK_API_KEY` | 64k |
+| `deepseek-v4`, `deepseek-v4-pro` | compatible (DeepSeek API) | `DEEPSEEK_API_KEY` | 128k |
+| `deepseek-v4-pro:cloud` | ollama (local cloud passthrough) | `OLLAMA_HOST` | 262k |
+| `deepseek-v3.1-terminus`, `deepseek-coder-v3` | compatible (DeepSeek API) | `DEEPSEEK_API_KEY` | 128k |
+| `qwen3-coder`, `qwen3-coder-30b`, `qwen3-32b` | ollama | `OLLAMA_HOST` | 131k |
+| `glm-4.6`, `glm-5.1` | anthropic (api.z.ai) | `ANTHROPIC_AUTH_TOKEN` | 200k |
+| `gpt-oss-120b`, `gpt-oss-20b` | ollama | `OLLAMA_HOST` | 131k |
+| `kimi-k2-0905-preview`, `kimi-k2.5` | anthropic (api.moonshot.ai) | `MOONSHOT_API_KEY` | 200k |
+| `mistral-codestral-2511` | ollama | `OLLAMA_HOST` | 256k |
+| `gemma3-27b-instruct` | ollama | `OLLAMA_HOST` | 131k |
+
+Use a catalog entry directly:
+
+```python
+from chimera.providers.catalog import ProviderCatalog
+
+catalog = ProviderCatalog.default()
+provider = catalog.create("deepseek-coder-v3")  # reads $DEEPSEEK_API_KEY
+```
+
+Or register your own entry:
+
+```python
+from chimera.providers.catalog import ModelConfig, ProviderCatalog
+
+catalog = ProviderCatalog.default()
+catalog.register(ModelConfig(
+    model="acme/internal-llm",
+    provider_type="compatible",
+    base_url="https://llm.acme.internal/v1",
+    api_key_env="ACME_LLM_KEY",
+    context_window=64_000,
+    cost=(0.50, 1.50),  # USD per Mtok input / output
+))
+provider = catalog.create("acme/internal-llm")
+```
+
+`create_provider()` falls through to the catalog automatically when a
+model name matches a registered entry, so most code paths can keep using
+`chimera.create_provider(model="deepseek-coder-v3")` and the right
+provider/base-url/key combination is wired up for them.
+
+---
+
 ## Using .env Files
 
 Keep credentials out of your shell history by storing them in a `.env` file

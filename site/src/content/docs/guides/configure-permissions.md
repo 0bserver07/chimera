@@ -59,6 +59,48 @@ policy = Interactive()
 
 ---
 
+## 2a. The Five `--permission-mode` Choices
+
+The `ferret`, `badger`, and `mink` CLIs all expose a single
+`--permission-mode` flag with five canonical spellings, ordered from least
+to most permissive:
+
+| Mode | Behaviour | Backing policy |
+|---|---|---|
+| `read-only` | Only `read_file`, `search`, `list_files`, `repo_map` allowed; everything else denied. | `ReadOnly` |
+| `suggest` | Reads auto-approve; every write/edit/bash/git call asks for explicit confirmation. | `Interactive` |
+| `auto` | Reads + simple file edits auto-approve; bash/git/destructive ops still ask. | `AutoEditPolicy` |
+| `yolo` | Every tool call auto-approves. Sandbox use only. | `AutoApprove` |
+| `strict` | Every tool call (including reads) asks for confirmation. | `AlwaysAskPolicy` |
+
+Resolve a mode string to a policy programmatically:
+
+```python
+from chimera.permissions.modes import ApprovalMode, parse_mode, policy_for_mode
+
+mode = parse_mode("auto")          # ApprovalMode.AUTO
+policy = policy_for_mode(mode)     # AutoEditPolicy()
+
+# Legacy spellings round-trip too.
+policy_for_mode("acceptEdits")     # → AutoEditPolicy() (was AUTO under mink's old flag)
+policy_for_mode("plan")            # → ReadOnly() (was the legacy "plan" alias)
+```
+
+`parse_mode()` accepts the five canonical strings, the underscore variants
+(`read_only`), the legacy ferret `--approval` values (`full` → `yolo`), and
+the legacy mink `--permission-mode` choices (`default`, `acceptEdits`,
+`bypassPermissions`, `plan`).
+
+From the CLI:
+
+```bash
+chimera code --permission-mode auto
+chimera code --permission-mode strict   # everything asks
+chimera code --permission-mode yolo     # nothing asks
+```
+
+---
+
 ## 3. Custom Rules
 
 For fine-grained control, build a `PermissionRuleset` from `Rule` objects.
@@ -128,7 +170,7 @@ Permissions are injected into the agent's reasoning loop through `LoopConfig`.
 ```python
 from chimera import Agent, DEFAULT_TOOLS, LoopConfig, Prompt, ReAct, create_provider
 
-provider = create_provider(model="claude-sonnet-4-20250514")
+provider = create_provider(model="glm-5")
 
 config = LoopConfig(permissions=permissions)
 loop = ReAct(max_steps=30, config=config)
@@ -204,7 +246,7 @@ from chimera import (
 )
 
 # --- Provider ---
-provider = create_provider(model="claude-sonnet-4-20250514")
+provider = create_provider(model="glm-5")
 
 # --- Permissions ---
 permissions = PermissionRuleset(

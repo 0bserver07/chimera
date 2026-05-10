@@ -55,7 +55,7 @@ Sends the tool call to an LLM that classifies risk as LOW/MEDIUM/HIGH.
 ```python
 from chimera import LLMSecurityAnalyzer, create_provider
 
-provider = create_provider(model="claude-sonnet-4")
+provider = create_provider(model="glm-5")
 analyzer = LLMSecurityAnalyzer(provider=provider)
 ```
 
@@ -72,7 +72,7 @@ from chimera import (
     create_provider,
 )
 
-provider = create_provider(model="claude-sonnet-4")
+provider = create_provider(model="glm-5")
 analyzer = CompositeSecurityAnalyzer(
     rule_analyzer=RuleBasedSecurityAnalyzer(),
     llm_analyzer=LLMSecurityAnalyzer(provider=provider),
@@ -191,7 +191,7 @@ class SecurityGate(PermissionPolicy):
         return PermissionAction.ALLOW
 
 
-provider = create_provider(model="claude-sonnet-4")
+provider = create_provider(model="glm-5")
 config = LoopConfig(permissions=SecurityGate())
 loop = ReAct(max_steps=30, config=config)
 
