@@ -97,17 +97,42 @@ agent = Agent(provider=provider, tools=list(DEFAULT_TOOLS))
 `Agent` expects a `list[BaseTool]`, so wrap `DEFAULT_TOOLS` with `list()` to convert from `ToolGroup`.
 :::### AGENT_TOOLS
 
-For interactive sessions (like the REPL), Chimera provides `AGENT_TOOLS` -- a 13-tool preset that extends `DEFAULT_TOOLS` with edit, search, list_files, test, git, replace_in_file, repo_map, think, and todo:
+For interactive sessions (like the REPL), Chimera provides `AGENT_TOOLS` -- a 23-tool preset that extends `DEFAULT_TOOLS` with the full coding-agent surface: edit, search, list_files, test, git, replace_in_file, repo_map, think, todo, verify, web_search, plus the W13-added structured-edit and lifecycle tools (apply_patch, write_guard, notebook_edit, enter_worktree, exit_worktree, cron_create, cron_list, cron_delete):
 
 ```python
 from chimera.core.tool_group import AGENT_TOOLS
 
-# Contains all DEFAULT_TOOLS plus EditFileTool, SearchTool, ListFilesTool,
-# TestTool, GitTool, ReplaceInFileTool, RepoMapTool, ThinkTool, TodoTool
+# Contains:
+#   ReadFileTool, WriteFileTool, EditFileTool, BashTool, SearchTool,
+#   ListFilesTool, TestTool, GitTool, ReplaceInFileTool, ImageReadTool,
+#   RepoMapTool, ThinkTool, TodoTool(persist=True), VerifyTool,
+#   WebSearchTool, ApplyPatchTool, WriteGuardTool, NotebookEditTool,
+#   EnterWorktreeTool, ExitWorktreeTool, CronCreateTool,
+#   CronListTool, CronDeleteTool
 agent = Agent(provider=provider, tools=list(AGENT_TOOLS))
 ```
 
-The REPL (`chimera code`) uses `AGENT_TOOLS` by default.
+The REPL (`chimera code`) and every coding-agent CLI (`mink`, `otter`,
+`ferret`, `weasel`, `shrew`, `stoat`, `badger`) use `AGENT_TOOLS` by
+default. `TodoTool` is constructed with `persist=True` so todo state
+survives `/resume`; bare `TodoTool()` instances default to in-memory.
+
+#### W13 additions
+
+Eight tools were added to `AGENT_TOOLS` in W13 to close gaps that
+previously left the bare REPL (and the per-CLI shims) without a default
+structured-edit / Jupyter / git-worktree / scheduled-task surface:
+
+| Tool | Class | Purpose |
+|------|-------|---------|
+| `apply_patch` | `ApplyPatchTool` | Multi-file structured edits with fuzzy matching (Codex / GPT-family format) |
+| `write_guard` | `WriteGuardTool` | Surfaces the `write_file` (create-only) vs `edit_file` (modify-existing) invariant |
+| `notebook_edit` | `NotebookEditTool` | Edit `.ipynb` cells without breaking notebook JSON |
+| `enter_worktree` | `EnterWorktreeTool` | Spawn a git worktree for parallel exploration |
+| `exit_worktree` | `ExitWorktreeTool` | Tear down an enter_worktree branch |
+| `cron_create` | `CronCreateTool` | Schedule a recurring or one-shot agent task |
+| `cron_list` | `CronListTool` | List scheduled tasks |
+| `cron_delete` | `CronDeleteTool` | Cancel a scheduled task |
 
 ## Built-in Tools
 
@@ -204,5 +229,6 @@ If two tools share the same `name`, the agent's tool dispatch will use whichever
 - `chimera.core.tool.tool` -- decorator for function-based tools
 - `chimera.core.tool_group.ToolGroup` -- named collection of tools
 - `chimera.core.tool_group.DEFAULT_TOOLS` -- pre-built default toolset (4 tools)
-- `chimera.core.tool_group.AGENT_TOOLS` -- extended toolset for interactive sessions (13 tools)
+- `chimera.core.tool_group.AGENT_TOOLS` -- extended toolset for interactive sessions (23 tools)
+- `chimera.core.tool_group.create_default_tools(read_ops, write_ops, bash_ops, search_ops)` -- factory for ops-backed default tools
 - `chimera.types.ToolResult` -- return type from `execute()`

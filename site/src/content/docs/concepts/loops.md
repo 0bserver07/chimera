@@ -5,6 +5,28 @@ description: "Loops"
 
 A **Loop** defines the execution strategy an agent follows -- how it reasons, when it invokes tools, and when it stops. Chimera ships four loop variants, each suited to different problem types.
 
+:::note[ReAct vs the CodingAgent stack]
+The four loops on this page (`ReAct`, `PlanAndExecute`, `Reflexion`,
+`TreeOfThought`) are the synchronous variants used by `Agent` and the
+synthesis pipeline (`Trainer`, `synthesize()`). The product
+[`CodingAgent`](/chimera/concepts/agents/#codingagent-the-canonical-assembled-stack)
+class — the canonical preset for production coding-agent use — runs on
+top of `chimera.core.agent_loop.AgentLoop`, an async-generator core
+loop with streaming, multi-stage error recovery, and concurrent tool
+execution. The seven coding-agent CLIs (`mink`, `otter`, `ferret`,
+`weasel`, `shrew`, `stoat`, `badger`) all default to `AgentLoop` via
+`CodingAgent`.
+
+The legacy synchronous `ReAct` stack remains available as an opt-in
+escape hatch behind `chimera code --legacy-react`, preserved so callers
+that depend on the rich slash-command REPL (`/checkpoint`, `/tree`,
+`/branch`, `/switch`, steering) keep working until those features
+land in the new stack. Treat `--legacy-react` as deprecated — new code
+should target `CodingAgent` (or `AgentLoop` directly for custom
+embeddings); the `ReAct` class on this page is still the right choice
+for `Agent.run()` and the `Trainer`-driven synthesis loop.
+:::
+
 ## Available Loops
 
 | Loop | Module | Strategy |
@@ -158,8 +180,9 @@ with LocalEnvironment(workdir="./project") as env:
 
 ## API Reference
 
-- `chimera.core.loop.ReAct` -- default reasoning loop
+- `chimera.core.loop.ReAct` -- default synchronous reasoning loop (used by `Agent` / `Trainer`)
 - `chimera.core.loops.plan_execute.PlanAndExecute` -- plan-first loop
 - `chimera.core.loops.reflexion.Reflexion` -- reflective loop
 - `chimera.core.loops.tree_of_thought.TreeOfThought` -- multi-candidate loop
 - `chimera.core.loop_config.LoopConfig` -- optional behavior injection
+- `chimera.core.agent_loop.AgentLoop` -- async-generator core loop (used by `CodingAgent`)

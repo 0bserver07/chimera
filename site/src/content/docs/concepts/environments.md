@@ -3,7 +3,7 @@ title: "Environments"
 description: "Environments"
 ---
 
-An **Environment** is where generated code lives and gets tested. It provides file I/O, command execution, test running, and checkpointing -- everything an agent needs to work with code. Chimera ships three environment implementations, plus a mixin for persistent shell sessions.
+An **Environment** is where generated code lives and gets tested. It provides file I/O, command execution, test running, and checkpointing -- everything an agent needs to work with code. Chimera ships five environment implementations (`LocalEnvironment`, `GitEnvironment`, `DockerEnvironment`, `RemoteEnvironment`, `CloudEnvironment`), plus a `SessionMixin` for persistent shell sessions.
 
 ## The Environment ABC
 
@@ -116,7 +116,71 @@ On `setup()`, it starts a detached container running `sleep infinity`. File oper
 
 :::caution[Docker must be running]
 `DockerEnvironment` requires a running Docker daemon. Install the `docker` Python package: `pip install docker`.
-:::## SessionMixin (Persistent Shells)
+:::## RemoteEnvironment
+
+`RemoteEnvironment` delegates every `Environment` method to a remote
+workspace server over HTTP. Useful for offloading heavy command execution
+to a dedicated host or running code in a managed environment.
+
+```python
+from chimera.env.remote import RemoteEnvironment
+
+env = RemoteEnvironment(
+    host="workspace.internal",
+    port=8443,
+    api_key="bearer-token-here",
+    working_dir="/workspace",
+    tls=True,
+)
+```
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `host` | (required) | Hostname or IP of the remote workspace server |
+| `port` | (required) | TCP port the server listens on |
+| `api_key` | `None` | Bearer token sent in the `Authorization` header (requires `tls=True`) |
+| `working_dir` | (required) | Working directory on the remote server |
+| `timeout` | `60` | Default request timeout (seconds) |
+| `tls` | `True` | Use HTTPS (passing `api_key` with `tls=False` raises `ValueError`) |
+
+Requires the `httpx` extra: `pip install chimera-run[remote]`.
+
+## CloudEnvironment
+
+`CloudEnvironment` extends `RemoteEnvironment` with on-demand sandbox
+provisioning. A cloud workspace is created during `setup()` and torn down
+on `cleanup()` (unless `keep_alive=True`). Use this with managed sandbox
+providers — Modal, Daytona, custom HTTP-fronted runners — that expose a
+provisioning API.
+
+```python
+from chimera.env.cloud import CloudEnvironment
+
+env = CloudEnvironment(
+    cloud_api_url="https://api.cloud.example.com",
+    cloud_api_key="...",
+    image="python:3.11-slim",
+    working_dir="/workspace",
+    keep_alive=False,
+    init_timeout=120,
+)
+```
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `cloud_api_url` | (required) | Provisioning API base URL |
+| `cloud_api_key` | (required) | API key for the provisioning service |
+| `image` | `None` | Container image (provider default if `None`) |
+| `working_dir` | `"/workspace"` | Working directory inside the sandbox |
+| `keep_alive` | `False` | When `True`, `cleanup()` does not destroy the sandbox |
+| `init_timeout` | `120` | Max seconds to wait for the sandbox to become ready |
+| `sandbox_id` | `None` | Connect to an existing sandbox instead of creating one |
+
+Provisioning round-trips happen during `setup()`/`cleanup()`; everything
+else inherits `RemoteEnvironment`'s HTTP-delegation contract. Requires
+`httpx`.
+
+## SessionMixin (Persistent Shells)
 
 `SessionMixin` adds persistent shell sessions to any environment using tmux. Instead of running each command as an isolated subprocess, commands run inside a persistent tmux session where state (environment variables, working directory, running processes) is preserved.
 
@@ -172,6 +236,8 @@ with GitEnvironment(workdir="./my-project", test_cmd="pytest -v") as env:
 - `chimera.env.local.LocalEnvironment` -- local filesystem environment
 - `chimera.env.git_env.GitEnvironment` -- git-based checkpointing
 - `chimera.env.docker.DockerEnvironment` -- Docker container isolation
+- `chimera.env.remote.RemoteEnvironment` -- HTTP-delegated remote workspace
+- `chimera.env.cloud.CloudEnvironment` -- cloud sandbox provisioning over HTTP
 - `chimera.env.session.SessionMixin` -- persistent tmux sessions
 - `chimera.types.CommandResult` -- command execution result
 - `chimera.types.TestResult` -- test suite result

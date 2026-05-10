@@ -156,6 +156,30 @@ Constraint.custom(
 )
 ```
 
+## Advanced training utilities
+
+Beyond the core Spec / Strategy / Constraint / Trainer surface, the
+`chimera.training` package ships several utilities for deeper
+synthesis workflows. Each is opt-in — the basic Trainer + Strategy
+flow above does not require any of them.
+
+| Module | Purpose |
+|--------|---------|
+| `chimera.training.spec_inference` | Infer a `Spec` from existing code or a partial test suite |
+| `chimera.training.sketch` | `SketchSpec` — programs with typed holes that the agent fills in |
+| `chimera.training.mutation` | `MutationTester` — generate code mutants and verify the test suite catches them |
+| `chimera.training.fault_localization` | `FaultLocalizer` — surface suspicious code locations from test failures |
+| `chimera.training.impact` | `ImpactAnalyzer` — measure caller impact of a code change |
+| `chimera.training.oracle` | `OracleCallback` — runtime oracles for I/O-pair checking |
+| `chimera.training.regularization` | Penalty terms layered on top of constraint evaluation |
+| `chimera.training.tuner` | Hyperparameter sweep over strategy / loop / model configurations |
+| `chimera.training.validation` | Pre-flight spec / test / environment validation |
+
+These modules compose with the Trainer rather than replacing it: a
+`Strategy` can read suspicious locations from `FaultLocalizer` to
+narrow its prompt, a `Spec` can be a `SketchSpec` with holes for the
+agent to fill, and so on.
+
 ## Callbacks and SynthesisResult
 
 Callbacks observe synthesis via the `Callback` ABC. Implement `on_synthesis_start()`, `on_epoch_start(epoch)`, `on_epoch_end(epoch, result)`, and `on_synthesis_end(result)`. Return `False` from `on_epoch_end` to stop early.
@@ -224,3 +248,11 @@ print(f"Total cost: ${result.total_cost:.2f}")
 - `chimera.training.strategies.base.Callback` -- lifecycle observer
 - `chimera.training.strategies.base.SynthesisResult` -- final result
 - `chimera.training.strategies.base.EpochResult` -- per-epoch result
+- `chimera.training.spec_inference` -- infer specs from code / tests
+- `chimera.training.sketch.SketchSpec` -- holes-and-fillings spec
+- `chimera.training.mutation.MutationTester` -- mutation testing
+- `chimera.training.fault_localization.FaultLocalizer` -- suspicious-location surfacing
+- `chimera.training.impact.ImpactAnalyzer` -- caller-impact analysis
+- `chimera.training.oracle.OracleCallback` -- runtime I/O-pair oracles
+- `chimera.training.tuner` -- hyperparameter sweeps
+- `chimera.training.validation` -- pre-flight spec validation

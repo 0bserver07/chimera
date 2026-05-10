@@ -5,6 +5,9 @@ description: "Getting Started"
 
 ## Install
 
+Chimera is published on PyPI as `chimera-run` (the import path stays
+`chimera`):
+
 ```bash
 pip install chimera-run                  # core (zero dependencies)
 pip install chimera-run[anthropic]       # + Claude support
@@ -12,7 +15,14 @@ pip install chimera-run[openai]          # + OpenAI support
 pip install chimera-run[all]             # all providers
 ```
 
-Requires **Python 3.11+**.
+Or with `uv`:
+
+```bash
+uv add chimera-run                       # core
+uv add 'chimera-run[anthropic]'          # + Claude support
+```
+
+Requires **Python 3.11+**. Tested on 3.11, 3.12, and 3.13.
 
 ---
 
@@ -227,7 +237,9 @@ python examples/synthesis/quickstart_synthesize.py --model glm-5
 
 ## Next Steps
 
-- **[Core Concepts](/concepts/agents/)** -- understand agents, providers, tools, loops, environments, and the training layer.
-- **[Build a Coding Agent](/guides/build-a-coding-agent/)** -- step-by-step guide to building a production agent.
-- **[Modules](/modules/acp/)** -- events, compaction, detection, permissions, streaming, sessions, auth.
-- **[API Reference](/reference/core/)** -- full reference for every public class and function.
+- **[Quickstart](/chimera/quickstart/)** -- 5-minute tour, including the 7-CLI lineup (`mink`, `otter`, `ferret`, `weasel`, `shrew`, `stoat`, `badger`) and the `chimera which` / `chimera agents` / `chimera doctor` discovery commands.
+- **[Core Concepts](/chimera/concepts/agents/)** -- understand agents, providers, tools, loops, environments, and the training layer.
+- **[Architecture](/chimera/architecture/)** -- the nine-phase stack and how the seven CLIs compose.
+- **[Build a Coding Agent](/chimera/guides/build-a-coding-agent/)** -- step-by-step guide to building a production agent.
+- **[Modules](/chimera/modules/acp/)** -- events, compaction, detection, permissions, streaming, sessions, auth.
+- **[API Reference](/chimera/reference/core/)** -- full reference for every public class and function.

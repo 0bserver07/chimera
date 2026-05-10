@@ -77,8 +77,44 @@ agent = CodingAgent.from_preset("coding_agent")
 > emits a `DeprecationWarning` and will be removed in v0.7.0. See
 > [Migration: AgentPreset → CodingAgent](/chimera/migrations/v0.4-to-v0.5/#agentpresetbuild--codingagentfrom_preset).
 
+## The 7-CLI tour
+
+Chimera ships seven coding-agent CLIs, each composed from the same
+`CodingAgent` library but with different per-CLI defaults. The fastest
+way to pick one is the discovery commands:
+
+```bash
+# Show all 7 codenames + aliases + inspirations + parity row
+chimera agents
+
+# Recommend a CLI from a free-text description of what you want to do
+chimera which "I want a TUI with mid-turn steering"
+chimera which "host a long-running agent for multiple clients"
+
+# Diagnose your environment (API keys, daemons, optional extras)
+chimera doctor
+```
+
+Each CLI is invoked as a subcommand, with a short alias for the posture
+it adopts:
+
+```bash
+chimera mink           # alias: tui     — TUI-first interactive
+chimera otter          # alias: multi   — server-first, HTTP+SSE / ACP serve
+chimera ferret         # alias: sandbox — sandbox × approval composition
+chimera weasel         # alias: mini    — minimal harness, four modes
+chimera shrew          # alias: tiny    — small local model tuning
+chimera stoat          # alias: shell   — shell-mode toggle, Kimi defaults
+chimera badger         # alias: strict  — harness-rewrite + parity tracking
+```
+
+`chimera resume <id>` auto-detects which CLI minted a session id and
+hands the resume off to the right CLI; `chimera resume` (no id) picks
+the most recent run across all seven.
+
 ## Next steps
 
-- [Architecture](/architecture/) — understand the 8-layer stack
-- [Build a Coding Agent](/guides/build-a-coding-agent/) — custom agent composition
-- [API Reference](/reference/core/) — full module docs
+- [Architecture](/chimera/architecture/) — understand the 9-phase stack and how the seven CLIs compose
+- [Agents concept](/chimera/concepts/agents/) — `Agent` vs `CodingAgent`, presets, the 7-CLI architecture
+- [Build a Coding Agent](/chimera/guides/build-a-coding-agent/) — custom agent composition
+- [API Reference](/chimera/reference/core/) — full module docs
