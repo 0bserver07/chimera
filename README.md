@@ -2,7 +2,7 @@
 
 [![PyPI](https://img.shields.io/pypi/v/chimera-run.svg)](https://pypi.org/project/chimera-run/) [![Python](https://img.shields.io/pypi/pyversions/chimera-run.svg)](https://pypi.org/project/chimera-run/) [![License](https://img.shields.io/github/license/0bserver07/chimera.svg)](LICENSE) [![Tests](https://img.shields.io/badge/tests-8206%20passing-brightgreen)](https://github.com/0bserver07/chimera/actions)
 
-**Compose coding agents from modular primitives.** Seven CLI codenames on one substrate — a Python library for building agents yourself, and seven ready-to-run agents on top of it.
+**An open-source Python framework for building coding agents.** Pick your provider, pick your tools, pick your loop. Chimera wires them together. Recreate SWE-Agent, Aider, Cline, or Codex in a few lines, or design something entirely new.
 
 ```bash
 pip install chimera-run
