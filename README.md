@@ -1,8 +1,16 @@
 # Chimera
 
-AI that reads, writes, edits, and iterates on code with tests. Chimera is a Python library for building these tools yourself, plus a ready-to-run coding agent on top of it.
+[![PyPI](https://img.shields.io/pypi/v/chimera-run.svg)](https://pypi.org/project/chimera-run/) [![Python](https://img.shields.io/pypi/pyversions/chimera-run.svg)](https://pypi.org/project/chimera-run/) [![License](https://img.shields.io/github/license/0bserver07/chimera.svg)](LICENSE) [![Tests](https://img.shields.io/badge/tests-8206%20passing-brightgreen)](https://github.com/0bserver07/chimera/actions)
 
-**Status: Alpha** — 7720 passing tests, 62 skipped (live integration tests excluded; v0.7.0 baseline measured 2026-05-09). Reproducible benchmarks with GLM-5.1: HumanEval 66.5% pass@1 (109/164), SWE-bench Lite 10% (2/20, top-20 smallest patches). Raw results in `data/`.
+**Compose coding agents from modular primitives.** Seven CLI codenames on one substrate — a Python library for building agents yourself, and seven ready-to-run agents on top of it.
+
+```bash
+pip install chimera-run
+chimera mink                        # TUI-first coding agent
+chimera agents                      # list all 7 CLIs with one-line pitches
+```
+
+**v0.7.0 status** — 8206 passing tests, 101 skipped, 0 failed. ruff + mypy (641 modules) + 7 trademark scrubs all green. Reproducible benchmarks with GLM-5.1: HumanEval 66.5% pass@1 (109/164), SWE-bench Lite 10% (2/20, top-20 smallest patches). Raw results in `data/`.
 
 ## Who This Is For
 
@@ -24,17 +32,18 @@ Chimera gives you two things:
 
 ## Install
 
-Latest release: **v0.7.0** ([release notes](https://github.com/0bserver07/chimera/releases/tag/v0.7.0)).
-
-Not yet on PyPI. Install from source:
+Latest release: **v0.7.0** ([release notes](https://github.com/0bserver07/chimera/releases/tag/v0.7.0) · [PyPI](https://pypi.org/project/chimera-run/0.7.0/)).
 
 ```bash
-pip install "git+https://github.com/0bserver07/chimera.git@v0.7.0#egg=chimera-run[anthropic]"   # GLM-5 / Anthropic-compatible
-pip install "git+https://github.com/0bserver07/chimera.git@v0.7.0#egg=chimera-run[openai]"      # GPT
-pip install "git+https://github.com/0bserver07/chimera.git@v0.7.0#egg=chimera-run[all]"         # anthropic + openai + browser + remote
+pip install chimera-run                       # core
+pip install "chimera-run[anthropic]"          # + Anthropic / Claude / GLM (Anthropic-compatible)
+pip install "chimera-run[openai]"             # + OpenAI / GPT / OpenRouter
+pip install "chimera-run[ollama]"             # + Ollama for local models
+pip install "chimera-run[tui]"                # + textual TUI (mink/otter)
+pip install "chimera-run[all]"                # everything above + browser + remote
 ```
 
-Requires Python 3.11+. A `chimera-run` PyPI release is planned post-alpha.
+Requires Python 3.11+. Or with [uv](https://docs.astral.sh/uv/): `uv pip install chimera-run`.
 
 ## Build Your Own Coding Agent
 
