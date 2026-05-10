@@ -1,5 +1,88 @@
 # Changelog
 
+## 0.7.0 — 2026-05-09 — Deprecation cuts + P1/P2 polish + first PyPI release
+
+First release on PyPI (`pip install chimera-run`). Removes the v0.6.0
+deprecation warnings and ships the W14 + W15 gap-closure work.
+
+### Removed
+
+- `AgentPreset.build()` — call `CodingAgent.from_preset(...)` instead.
+- `chimera cc` top-level alias — use `chimera mink`.
+
+### Added
+
+- 12 codex-style ferret subcommands (`apply`, `review`, `fork`, `mcp-server`,
+  `mcp {add|list|remove}`).
+- otter polish: `worktree`, `stats`, `export`/`import`, PTY HTTP routes,
+  remote skill marketplace.
+- stoat: hooks engine + `/sessions` slash + `--continue`/`--session` flags +
+  bracketed paste.
+- badger: 12 new slashes (`/memory`, `/export`, `/agents`, `/skills`,
+  6 git wrappers, `/bughunter`, `/ultraplan`).
+- weasel print-mode: `--thinking`, `--stream-json`, piped stdin, multi-`-p`,
+  `@file` expansion.
+- shrew quality layer: `output_parser`, `quality_monitor`, `model_profiles`
+  config, knowledge-axis skill scoring.
+- mink: 9 remaining hook events wired (27/27 declared events fire),
+  `settings.json` keys applied (theme, keybindings, statusline, output styles).
+- ProgramBench inference loop (live agent runs end-to-end inside `task_cleanroom`
+  containers).
+- W15 P2 batch: 11 cosmetic / UX wins (4 ferret slashes, otter `/notify` + `/now`,
+  badger `--profile` + `/teleport`, shrew `permission_gate` + `checkpoint`).
+
+### Tests
+
+- 7628 → 8206 passing (0 failed) across the wave.
+- mypy clean across 641 files.
+- Trademark scrubs clean for all 7 codenames.
+
+## 0.6.0 — 2026-05-07 — P0 gap closure + benchmark scaffolds
+
+Closes the 26 P0 items surfaced by the W12 audits.
+
+### Added
+
+- `apply_patch` tool (atomic multi-file patch DSL, ferret + otter default).
+- 18 hook events wired (PreToolUse / PostToolUse / SessionStart / etc.) with
+  per-event filtering on `HookMatcher`.
+- 5 permission modes (`read-only` / `suggest` / `auto` / `yolo` / `strict`)
+  via `--permission-mode` on ferret, badger, mink.
+- `git`-shadow file-undo + `/undo` + `/redo` (otter).
+- Declarative permission rules (otter, `~/.chimera/permissions.json`).
+- Real Ctrl-X chord + plan mode (stoat).
+- 4 default subagent profiles (planner / researcher / executor / reviewer).
+- `/resume` + `/diff` slashes (badger; shared via the slash registry).
+- Weasel: JS/TS extension execution + RPC streaming.
+- Shrew: per-turn dynamic skill injection + 13 algorithm cheat-sheet skills +
+  `write_guard` invariant.
+- 14 new mink `settings.json` keys (theme / keybindings / statusline / output
+  styles / cleanup / install / notification channel / etc.).
+- 6 new ferret codex-flag triplet (`--full-auto`, `--yolo`, `--add-dir`,
+  `--skip-git-repo-check`, `--image`, `--profile`).
+
+### Benchmarks
+
+- `programbench` (Yang et al 2026 — agent rebuilds program from binary + docs).
+- `multi_swe_bench` with per-language runners (Java / Go / JS / Rust / Python).
+- Scaffolds for `humaneval-x`, `swe-lancer`, `nocha`.
+
+### Cross-cutting
+
+- 13 new model entries across 7 families (qwen3, glm-4.6/5.1,
+  deepseek-v3.1-terminus / coder-v3, gpt-oss, kimi-k2, mistral-codestral,
+  gemma3) + GPT-OSS / Gemma prefix routing.
+- chimera-plugin manifest (`plugin.json`).
+- OAuth scaffolds cleanup (anthropic / openai marked as scaffolds; openrouter +
+  xai unchanged).
+- Help-long auto-promote helper (`register_argument`); all 7 CLIs `--help` ≤ 50
+  lines.
+- Plugin marketplace placeholder cleanup.
+
+### Tests
+
+- 6964 → 7628 passing (0 failed). +664.
+
 ## 0.5.0 — 2026-04-30 — Five-Strong Coding-Agent Family
 
 The 0.5.0 release ships the full **mink / otter / ferret / weasel / shrew**
