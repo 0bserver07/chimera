@@ -132,6 +132,7 @@ class OllamaProvider(Provider):
         context_length: int = _DEFAULT_NUM_CTX,
         keep_alive: str = _DEFAULT_KEEP_ALIVE,
         think: bool | None = None,
+        api_key: str | None = None,
     ) -> None:
         if httpx is None:
             raise ImportError("pip install httpx")
@@ -142,6 +143,18 @@ class OllamaProvider(Provider):
         # When unspecified, enable thinking only for kimi* models since
         # generic models reject the field.
         self._think = think if think is not None else model.lower().startswith("kimi")
+        # Bearer-token auth for Ollama Cloud's direct API (https://ollama.com).
+        # When unset we look at $OLLAMA_API_KEY. A local daemon ignores the
+        # header, so it's safe to always send when a key is present.
+        import os as _os
+        self._api_key = api_key or _os.environ.get("OLLAMA_API_KEY")
+
+    @property
+    def _auth_headers(self) -> dict[str, str]:
+        """Return the Authorization header dict (empty when no key)."""
+        if self._api_key:
+            return {"Authorization": f"Bearer {self._api_key}"}
+        return {}
 
     # ------------------------------------------------------------------
     # Request / response helpers
@@ -178,8 +191,16 @@ class OllamaProvider(Provider):
         if max_tokens:
             options["num_predict"] = max_tokens
 
+        # Ollama Cloud's *direct* API (https://ollama.com) takes the bare
+        # model id ("gpt-oss:120b"); the local daemon takes the "-cloud"
+        # suffixed form ("gpt-oss:120b-cloud") to flag the passthrough.
+        # When we're pointed straight at ollama.com, strip the suffix.
+        wire_model = self._model
+        if "ollama.com" in self._base_url and wire_model.endswith("-cloud"):
+            wire_model = wire_model[: -len("-cloud")]
+
         payload: dict[str, Any] = {
-            "model": self._model,
+            "model": wire_model,
             "messages": self._convert_messages(messages),
             "stream": stream,
             "options": options,
@@ -220,6 +241,7 @@ class OllamaProvider(Provider):
             resp = httpx.post(  # type: ignore[union-attr]
                 f"{self._base_url}/api/chat",
                 json=payload,
+                headers=self._auth_headers or None,
                 timeout=300,
             )
             resp.raise_for_status()
@@ -234,6 +256,7 @@ class OllamaProvider(Provider):
                     resp = client.post(
                         f"{self._base_url}/api/chat",
                         json=payload,
+                        headers=self._auth_headers or None,
                     )
                     resp.raise_for_status()
                     data = resp.json()
@@ -371,6 +394,7 @@ class OllamaProvider(Provider):
             try:
                 async with client.stream(
                     "POST", f"{self._base_url}/api/chat", json=payload,
+                    headers=self._auth_headers or None,
                 ) as resp:
                     resp.raise_for_status()
                     async for line in resp.aiter_lines():
@@ -520,7 +544,11 @@ def _ollama_factory(
     # anything that isn't already a full URL.
     if resolved and not resolved.startswith(("http://", "https://")):
         resolved = f"https://{resolved}"
-    return OllamaProvider(model=model, base_url=resolved, **kw)
+    # api_key threads through to the Authorization: Bearer header — used by
+    # Ollama Cloud's direct API. Falls back to $OLLAMA_API_KEY inside the
+    # provider when None. Strip from kw if a caller already passed it.
+    kw.pop("api_key", None)
+    return OllamaProvider(model=model, base_url=resolved, api_key=api_key, **kw)
 
 
 _register("ollama", _ollama_factory)
