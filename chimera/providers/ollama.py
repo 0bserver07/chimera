@@ -510,7 +510,17 @@ def _ollama_factory(
     api_key: str | None = None,
     **kw: Any,
 ) -> OllamaProvider:
-    return OllamaProvider(model=model, base_url=base_url or "http://localhost:11434", **kw)
+    # Resolution order: explicit base_url > $OLLAMA_HOST > local daemon default.
+    # Users running Ollama Cloud (https://ollama.com) or a remote/private
+    # Ollama instance set OLLAMA_HOST to their endpoint; only when nothing
+    # is set do we fall through to the local daemon assumption.
+    import os
+    resolved = base_url or os.environ.get("OLLAMA_HOST") or "http://localhost:11434"
+    # Bare hostnames (e.g. "ollama.com") need a scheme — assume https for
+    # anything that isn't already a full URL.
+    if resolved and not resolved.startswith(("http://", "https://")):
+        resolved = f"https://{resolved}"
+    return OllamaProvider(model=model, base_url=resolved, **kw)
 
 
 _register("ollama", _ollama_factory)
