@@ -158,8 +158,18 @@ def _is_kimi_model(model: str) -> bool:
     :data:`_DEFAULT_KIMI_MODEL`. We deliberately don't match generic
     OpenRouter ids of the form ``moonshot/kimi-…`` here — those route
     through OpenRouter via :func:`_should_use_openrouter`.
+
+    Excluded: ``-cloud`` or ``:cloud`` suffixed kimi ids (e.g.
+    ``kimi-k2.6-cloud``, ``kimi-k2.6:cloud``) — those are Ollama Cloud
+    passthrough ids that should route through the Ollama provider, not
+    Moonshot. ``$OLLAMA_API_KEY`` authenticates the request there.
     """
-    return model.lower().startswith("kimi-")
+    lowered = model.lower()
+    if not lowered.startswith("kimi-"):
+        return False
+    if lowered.endswith("-cloud") or lowered.endswith(":cloud"):
+        return False
+    return True
 
 
 def _should_use_openrouter(model: str) -> bool:
@@ -174,9 +184,17 @@ def _should_use_openrouter(model: str) -> bool:
 
 
 def _is_ollama_id(model: str) -> bool:
-    """Return ``True`` when ``model`` looks like an Ollama tag (``name:tag``)."""
+    """Return ``True`` when ``model`` looks like an Ollama tag.
+
+    Matches: ``name:tag`` (e.g. ``qwen3-coder:480b``) or ``name-cloud`` /
+    ``name:cloud`` (Ollama Cloud passthrough). Excludes the ``vendor/name``
+    OpenRouter convention.
+    """
     if "/" in model:
         return False
+    lowered = model.lower()
+    if lowered.endswith("-cloud") or lowered.endswith(":cloud"):
+        return True
     return ":" in model
 
 

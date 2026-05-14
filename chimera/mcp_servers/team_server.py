@@ -3,8 +3,8 @@
 
 Wraps the :class:`chimera.cli.agent_teams.Team` and
 :class:`chimera.cli.agent_teams.TeamMailbox` primitives as MCP tools so any
-MCP host (Claude Code, Codex, OpenCode, Gemini CLI, etc.) can drive shared
-task queues and per-agent mailboxes over JSON-RPC.
+compliant MCP host can drive shared task queues and per-agent mailboxes
+over JSON-RPC.
 
 Exposed tools:
 

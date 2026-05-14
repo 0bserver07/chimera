@@ -297,10 +297,22 @@ def _sglang_base_url() -> str:
 
 
 def _ollama_base_url() -> str:
-    """Return the configured Ollama base URL (with trailing slash trimmed)."""
-    return os.environ.get(
-        "OLLAMA_BASE_URL", _OLLAMA_DEFAULT_BASE_URL,
+    """Return the configured Ollama base URL (with trailing slash trimmed).
+
+    Resolution order: ``$OLLAMA_BASE_URL`` > ``$OLLAMA_HOST`` > local daemon.
+    Both env names are accepted because OLLAMA_HOST is the canonical name
+    Ollama itself documents; OLLAMA_BASE_URL is the shrew-specific override
+    kept for backwards compat. Bare hostnames (e.g. ``ollama.com``) get an
+    ``https://`` scheme prepended.
+    """
+    url = (
+        os.environ.get("OLLAMA_BASE_URL")
+        or os.environ.get("OLLAMA_HOST")
+        or _OLLAMA_DEFAULT_BASE_URL
     ).rstrip("/")
+    if url and not url.startswith(("http://", "https://")):
+        url = f"https://{url}"
+    return url
 
 
 def probe_llamacpp(base_url: str | None = None) -> bool:
