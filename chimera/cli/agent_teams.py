@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import os
 import secrets
+import shutil
 import time
 from contextlib import contextmanager
 from pathlib import Path
@@ -28,9 +29,11 @@ __all__ = [
     "Team",
     "TeamMailbox",
     "create_team",
+    "destroy_team",
+    "is_enabled",
     "join_team",
     "leave_team",
-    "is_enabled",
+    "list_teams",
     "teams_root",
 ]
 
@@ -349,6 +352,34 @@ class Team:
                 self._rewrite_tasks(tasks)
             return changed
 
+    # ---- teardown ----------------------------------------------------------
+
+    def destroy(self, force: bool = False) -> Path:
+        """Delete the entire team directory.
+
+        Args:
+            force: When True, delete even if claimed-but-not-completed tasks
+                exist. When False, refuse to delete and raise.
+
+        Returns:
+            The deleted directory path (for logging).
+
+        Raises:
+            ValueError: If any task is in status ``"claimed"`` and ``force``
+                is False.
+        """
+        if not force and self.task_path.exists():
+            with _flock(self.task_path, exclusive=False):
+                tasks = self._read_tasks_unlocked()
+            claimed = [t for t in tasks if t.get("status") == "claimed"]
+            if claimed:
+                raise ValueError(
+                    f"team has {len(claimed)} claimed-but-not-completed tasks; "
+                    "pass force=True to delete anyway"
+                )
+        shutil.rmtree(self.dir, ignore_errors=True)
+        return self.dir
+
 
 class TeamMailbox:
     """Per-agent message inbox stored as ``mailbox/<agent_id>.jsonl``."""
@@ -402,3 +433,60 @@ def leave_team(name: str, agent_id: str) -> Team:
     if team.exists():
         team.remove_member(agent_id)
     return team
+
+
+def destroy_team(name: str, root: Path | None = None, force: bool = False) -> Path:
+    """Delete a team directory and all of its state.
+
+    Args:
+        name: Team name (directory under ``teams_root()``).
+        root: Optional override for the teams root dir; defaults to
+            :func:`teams_root`.
+        force: When True, delete even if claimed-but-not-completed tasks
+            exist.
+
+    Returns:
+        The deleted directory path (whether or not it existed beforehand).
+
+    Raises:
+        ValueError: If any task is in status ``"claimed"`` and ``force`` is
+            False.
+    """
+    return Team(name, root=root).destroy(force=force)
+
+
+def list_teams(root: Path | None = None) -> list[dict[str, Any]]:
+    """Enumerate every team directory under ``root``.
+
+    Args:
+        root: Optional override for the teams root dir; defaults to
+            :func:`teams_root`.
+
+    Returns:
+        A list of dicts (sorted by ``name``) with keys ``name``,
+        ``members`` (list[str]), ``tasks_total``, ``tasks_open``,
+        ``tasks_claimed``, ``tasks_completed``, and ``dir`` (str path).
+        Returns ``[]`` when the root directory does not exist.
+    """
+    base = root or teams_root()
+    if not base.exists():
+        return []
+    out: list[dict[str, Any]] = []
+    for child in sorted(base.iterdir(), key=lambda p: p.name):
+        if not child.is_dir():
+            continue
+        if not (child / "config.json").is_file():
+            continue
+        team = Team(child.name, root=base)
+        cfg = team.load_config()
+        tasks = team.list_tasks()
+        out.append({
+            "name": child.name,
+            "members": list(cfg.get("members", [])),
+            "tasks_total": len(tasks),
+            "tasks_open": sum(1 for t in tasks if t.get("status") == "open"),
+            "tasks_claimed": sum(1 for t in tasks if t.get("status") == "claimed"),
+            "tasks_completed": sum(1 for t in tasks if t.get("status") == "completed"),
+            "dir": str(child),
+        })
+    return out
