@@ -11,6 +11,10 @@ Subcommands::
     chimera team task add <name> "<desc>" add a task
     chimera team task list <name>         list tasks
     chimera team status <name>            show team config + counts
+    chimera team ls                       list all teams
+    chimera team rm <name> [--force]      destroy a team
+    chimera team watch <name>             live status dashboard
+    chimera team roles                    list discovered team roles
 """
 from __future__ import annotations
 
@@ -19,13 +23,17 @@ import json
 import sys
 from typing import Sequence
 
+from chimera.agents.team_roles import discover_team_roles
 from chimera.cli.agent_teams import (
     ENV_FLAG,
     Team,
     create_team,
+    destroy_team,
     is_enabled,
     join_team,
+    list_teams,
 )
+from chimera.mink.team_watch import watch_team
 
 
 def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
@@ -54,6 +62,26 @@ def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") 
 
     p_status = team_sub.add_parser("status", help="Show team summary")
     p_status.add_argument("name")
+
+    p_ls = team_sub.add_parser("ls", help="List all teams")
+    p_ls.add_argument("--json", dest="as_json", action="store_true", help="Emit JSON.")
+
+    p_rm = team_sub.add_parser("rm", help="Destroy a team")
+    p_rm.add_argument("name")
+    p_rm.add_argument(
+        "--force",
+        action="store_true",
+        help="Destroy even when tasks are still claimed (not completed).",
+    )
+
+    p_watch = team_sub.add_parser("watch", help="Live dashboard for a team")
+    p_watch.add_argument("name")
+    p_watch.add_argument("--interval", type=float, default=1.0)
+    p_watch.add_argument("--max-recent", type=int, default=10)
+
+    p_roles = team_sub.add_parser("roles", help="List discovered team roles")
+    p_roles.add_argument("--workdir", default=None, help="Project dir to scan.")
+    p_roles.add_argument("--json", dest="as_json", action="store_true")
 
     team_parser.set_defaults(func=run)
 
@@ -107,7 +135,58 @@ def run(args: argparse.Namespace) -> int:
         }, indent=2))
         return 0
 
-    print("usage: chimera team {create|join|task|status} ...", file=sys.stderr)
+    if action == "ls":
+        teams = list_teams()
+        if getattr(args, "as_json", False):
+            print(json.dumps(teams, indent=2))
+        else:
+            if not teams:
+                print("no teams")
+            else:
+                for t in teams:
+                    print(
+                        f"{t['name']:24}  members={len(t['members'])}  "
+                        f"open={t['tasks_open']}  claimed={t['tasks_claimed']}  "
+                        f"completed={t['tasks_completed']}"
+                    )
+        return 0
+
+    if action == "rm":
+        try:
+            path = destroy_team(args.name, force=args.force)
+        except ValueError as exc:
+            print(f"refused: {exc}", file=sys.stderr)
+            return 1
+        print(f"destroyed: {path}")
+        return 0
+
+    if action == "watch":
+        return watch_team(
+            team_name=args.name,
+            interval=args.interval,
+            stop_after_n_renders=None,
+        )
+
+    if action == "roles":
+        workdir = None
+        if args.workdir:
+            from pathlib import Path
+            workdir = Path(args.workdir)
+        roles = discover_team_roles(workdir=workdir)
+        if getattr(args, "as_json", False):
+            print(json.dumps(roles, indent=2, default=str))
+        else:
+            if not roles:
+                print("no team roles discovered")
+            else:
+                for r in roles:
+                    print(f"{r['role']:14}  {r['description']}")
+        return 0
+
+    print(
+        "usage: chimera team {create|join|task|status|ls|rm|watch|roles} ...",
+        file=sys.stderr,
+    )
     return 1
 
 

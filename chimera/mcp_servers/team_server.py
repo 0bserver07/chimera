@@ -608,15 +608,23 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--team",
         default=None,
-        help="Default team name applied when a tool call omits 'name'.",
+        help="Default team name applied when a tool call omits 'name'. "
+             "Falls back to CHIMERA_TEAM env var.",
     )
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> None:
-    """Entry point for the MCP team server."""
+    """Entry point for the MCP team server.
+
+    Both ``--team`` and ``--role`` accept env-var fallbacks
+    (``CHIMERA_TEAM`` / ``CHIMERA_ROLE``) so the teammate runner can inject
+    identity without per-invocation ``mcp.json`` edits.
+    """
     ns = _parse_args(argv)
-    server = TeamMCPServer(role=ns.role, team_name=ns.team)
+    team_name = ns.team or os.environ.get("CHIMERA_TEAM")
+    role = ns.role or os.environ.get("CHIMERA_ROLE")
+    server = TeamMCPServer(role=role, team_name=team_name)
     server.run()
 
 

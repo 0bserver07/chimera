@@ -44,6 +44,7 @@ def _tool(proc: subprocess.Popen, name: str, args: dict | None = None) -> str:
 
 
 def main() -> int:
+    agent_id = os.environ["CHIMERA_AGENT"]
     server_cmd = [sys.executable, "-m", "chimera.mcp_servers.team_server"]
     proc = subprocess.Popen(
         server_cmd,
@@ -56,8 +57,8 @@ def main() -> int:
     )
     try:
         _send(proc, "initialize", {"protocolVersion": "2024-11-05", "capabilities": {}})
-        _tool(proc, "team_recv_messages", {"drain": True})
-        claim = _tool(proc, "team_claim_task", {})
+        _tool(proc, "team_recv_messages", {"agent_id": agent_id, "drain": True})
+        claim = _tool(proc, "team_claim_task", {"agent_id": agent_id})
         try:
             payload = json.loads(claim)
         except json.JSONDecodeError:
@@ -66,7 +67,11 @@ def main() -> int:
             return 0
         task_id = payload["task_id"]
         description = payload.get("description", "")
-        _tool(proc, "team_complete_task", {"task_id": task_id, "result": f"echo: {description}"})
+        _tool(
+            proc,
+            "team_complete_task",
+            {"agent_id": agent_id, "task_id": task_id, "result": f"echo: {description}"},
+        )
         return 0
     finally:
         try:
