@@ -73,6 +73,8 @@ function_synthesis_onnx = [
 
 [project.scripts]
 chimera = "chimera.cli.main:main"
+chimera-team-mcp = "chimera.mcp_servers.team_server:main"
+chimera-team-run = "chimera.mcp_servers.teammate_runner:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["chimera"]
