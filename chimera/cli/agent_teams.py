@@ -159,7 +159,24 @@ class Team:
 
     # ---- tasks -------------------------------------------------------------
 
-    def add_task(self, description: str, created_by: str = "lead") -> str:
+    def add_task(
+        self,
+        description: str,
+        created_by: str = "lead",
+        depends_on: list[str] | None = None,
+    ) -> str:
+        """Append a new task to ``task_list.jsonl`` and return its id.
+
+        Args:
+            description: Free-form description of the work item.
+            created_by: Agent id of the creator (defaults to ``"lead"``).
+            depends_on: Optional list of task ids that must reach status
+                ``"completed"`` before this task is claimable. Defaults to
+                an empty list (no dependencies).
+
+        Returns:
+            The hex task id assigned to the new record.
+        """
         task_id = secrets.token_hex(8)
         record = {
             "id": task_id,
@@ -169,11 +186,39 @@ class Team:
             "claimed_by": None,
             "status": "open",
             "result": None,
+            "depends_on": list(depends_on or []),
         }
         with _flock(self.task_path):
             with open(self.task_path, "a", encoding="utf-8") as f:
                 f.write(json.dumps(record) + "\n")
         return task_id
+
+    def _deps_satisfied(self, rec: dict[str, Any], tasks: list[dict[str, Any]]) -> bool:
+        """Return True iff every dep id in ``rec`` exists and is completed.
+
+        A missing dep id (no matching task) is treated as unsatisfied so the
+        task stays blocked rather than silently unblocking on a typo.
+        """
+        deps = rec.get("depends_on") or []
+        if not deps:
+            return True
+        by_id = {t["id"]: t for t in tasks}
+        for dep_id in deps:
+            dep = by_id.get(dep_id)
+            if dep is None or dep.get("status") != "completed":
+                return False
+        return True
+
+    def is_blocked(self, task_id: str) -> bool:
+        """Return True iff ``task_id`` is open but its deps are unresolved."""
+        with _flock(self.task_path, exclusive=False):
+            tasks = self._read_tasks_unlocked()
+            for rec in tasks:
+                if rec["id"] == task_id:
+                    if rec.get("status") != "open":
+                        return False
+                    return not self._deps_satisfied(rec, tasks)
+            return False
 
     def _read_tasks_unlocked(self) -> list[dict[str, Any]]:
         if not self.task_path.exists():
@@ -186,9 +231,38 @@ class Team:
             tasks[rec["id"]] = rec
         return list(tasks.values())
 
-    def list_tasks(self) -> list[dict[str, Any]]:
+    def list_tasks(self, status_filter: str = "all") -> list[dict[str, Any]]:
+        """Return tasks matching ``status_filter``.
+
+        Args:
+            status_filter: One of ``"all"`` (default), ``"open"`` (open and
+                unblocked), ``"open_all"`` (all open including blocked),
+                ``"blocked"`` (open with unresolved deps), ``"claimed"``,
+                or ``"completed"``. Unknown values return all tasks.
+
+        Returns:
+            List of task record dicts matching the filter.
+        """
         with _flock(self.task_path, exclusive=False):
-            return self._read_tasks_unlocked()
+            tasks = self._read_tasks_unlocked()
+
+        if status_filter == "all":
+            return tasks
+        if status_filter == "open":
+            return [
+                t for t in tasks
+                if t.get("status") == "open" and self._deps_satisfied(t, tasks)
+            ]
+        if status_filter == "open_all":
+            return [t for t in tasks if t.get("status") == "open"]
+        if status_filter == "blocked":
+            return [
+                t for t in tasks
+                if t.get("status") == "open" and not self._deps_satisfied(t, tasks)
+            ]
+        if status_filter in {"claimed", "completed"}:
+            return [t for t in tasks if t.get("status") == status_filter]
+        return tasks
 
     def _rewrite_tasks(self, tasks: list[dict[str, Any]]) -> None:
         tmp = self.task_path.with_suffix(".jsonl.tmp")
@@ -198,12 +272,23 @@ class Team:
         os.replace(tmp, self.task_path)
 
     def claim_task(self, task_id: str, agent_id: str) -> bool:
-        """Atomically claim a task. Returns True if this caller won the race."""
+        """Atomically claim a task. Returns True if this caller won the race.
+
+        A task whose ``depends_on`` list still has incomplete entries is NOT
+        claimable: this method returns ``False`` for such tasks even if no
+        other agent has raced for them. Use :meth:`is_blocked` or the
+        ``"blocked"`` filter of :meth:`list_tasks` to surface them.
+        """
         with _flock(self.task_path):
             tasks = self._read_tasks_unlocked()
             won = False
             for rec in tasks:
-                if rec["id"] == task_id and rec.get("claimed_by") is None and rec.get("status") == "open":
+                if (
+                    rec["id"] == task_id
+                    and rec.get("claimed_by") is None
+                    and rec.get("status") == "open"
+                    and self._deps_satisfied(rec, tasks)
+                ):
                     rec["claimed_by"] = agent_id
                     rec["status"] = "claimed"
                     rec["claimed_at"] = time.time()
@@ -212,6 +297,28 @@ class Team:
             if won:
                 self._rewrite_tasks(tasks)
             return won
+
+    def auto_claim_task(self, agent_id: str) -> str | None:
+        """Atomically claim the first unblocked open task. Returns its id or None.
+
+        Tasks are scanned in append order; any task with unresolved
+        ``depends_on`` is skipped. Returns the claimed task id, or ``None``
+        if no unblocked open task is available.
+        """
+        with _flock(self.task_path):
+            tasks = self._read_tasks_unlocked()
+            for rec in tasks:
+                if (
+                    rec.get("claimed_by") is None
+                    and rec.get("status") == "open"
+                    and self._deps_satisfied(rec, tasks)
+                ):
+                    rec["claimed_by"] = agent_id
+                    rec["status"] = "claimed"
+                    rec["claimed_at"] = time.time()
+                    self._rewrite_tasks(tasks)
+                    return str(rec["id"])
+            return None
 
     def release_task(self, task_id: str, agent_id: str) -> bool:
         with _flock(self.task_path):
