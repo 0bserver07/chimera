@@ -68,3 +68,9 @@ oracle = OracleCallback(
 - [Training concepts](/../concepts/training/) -- callbacks and the synthesis loop
 - [Validation](/validation/) -- detect overfitting with held-out tests
 - [Spec Inference](/spec-inference/) -- infer invariants from source code
+
+<!-- W17-3 SOURCE FOOTER -->
+
+## Source
+
+`chimera/training/oracle.py` -- verified against current source at wave-17.

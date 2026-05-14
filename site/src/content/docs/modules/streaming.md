@@ -127,3 +127,9 @@ agent = Agent(
 
 result = agent.run("Find all TODO comments in the project.")
 ```
+
+<!-- W17-3 SOURCE FOOTER -->
+
+## Source
+
+`chimera/streaming/` -- verified against current source at wave-17.

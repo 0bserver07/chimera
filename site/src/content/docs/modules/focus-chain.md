@@ -74,3 +74,9 @@ section = chain.to_prompt_section()
 - [Compaction](/compaction/) -- token-level history compression
 - [Context Mention](/context-mention/) -- @-mention context injection
 - [History Processor](/history-processor/) -- conversation history transforms
+
+<!-- W17-3 SOURCE FOOTER -->
+
+## Source
+
+`chimera/context/focus.py` -- verified against current source at wave-17.

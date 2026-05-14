@@ -100,3 +100,9 @@ tools = list(chimera.AGENT_TOOLS) + [dmail]
 from chimera.tools.dmail import DMailTool
 from chimera.core.tool import ContextAwareTool  # base class
 ```
+
+<!-- W17-3 SOURCE FOOTER -->
+
+## Source
+
+`chimera/tools/dmail.py` -- verified against current source at wave-17.

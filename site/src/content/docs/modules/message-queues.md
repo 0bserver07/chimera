@@ -60,3 +60,9 @@ threading.Timer(2.0, inject_hint).start()
 for msg in queues.drain_steering():
     context.add(msg)
 ```
+
+<!-- W17-3 SOURCE FOOTER -->
+
+## Source
+
+`chimera/core/message_queue.py` -- verified against current source at wave-17.

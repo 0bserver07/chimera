@@ -117,3 +117,9 @@ from chimera.wire.types import (
     StatusUpdate,
 )
 ```
+
+<!-- W17-3 SOURCE FOOTER -->
+
+## Source
+
+`chimera/wire/` -- verified against current source at wave-17.

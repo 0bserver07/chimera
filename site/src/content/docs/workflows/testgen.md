@@ -79,3 +79,9 @@ Parses pytest-cov / coverage.py text output into a `CoverageReport`.
 ```python
 from chimera.testgen import TestGenerator, TestCase, CoverageReport, parse_coverage
 ```
+
+<!-- W17-3 SOURCE FOOTER -->
+
+## Source
+
+`chimera/testgen/` -- verified against current source at wave-17.

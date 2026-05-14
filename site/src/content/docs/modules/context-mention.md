@@ -76,3 +76,9 @@ from chimera.context.mentions import MentionResolver, Mention
 - [Focus Chain](/focus-chain/) -- budget-aware context selection
 - [History Processor](/history-processor/) -- conversation history transforms
 - [Context-Aware Tools](/context-aware-tools/) -- tools with context access
+
+<!-- W17-3 SOURCE FOOTER -->
+
+## Source
+
+`chimera/context/mentions.py` -- verified against current source at wave-17.

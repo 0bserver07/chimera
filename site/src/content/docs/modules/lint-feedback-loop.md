@@ -74,3 +74,9 @@ from chimera.core.loops.lint_feedback import LintFeedbackLoop
 - [Loops](/../concepts/loops/) -- overview of all loop types
 - [Retry Loop](/retry-loop/) -- retry wrapper with scoring
 - [Plan/Act Loop](/plan-act-loop/) -- two-phase plan then execute
+
+<!-- W17-3 SOURCE FOOTER -->
+
+## Source
+
+`chimera/core/loops/lint_feedback.py` -- verified against current source at wave-17.

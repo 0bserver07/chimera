@@ -77,3 +77,9 @@ from chimera.core.demonstration import DemonstrationPrompt, Example
 
 - [Instruction Layer](/instruction-layer/) -- composable prompt layers
 - [Agent Config](/agents-config/) -- agent configuration with presets
+
+<!-- W17-3 SOURCE FOOTER -->
+
+## Source
+
+`chimera/core/demonstration.py` -- verified against current source at wave-17.

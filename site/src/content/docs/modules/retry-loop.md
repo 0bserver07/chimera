@@ -79,3 +79,9 @@ from chimera.core.loops.retry import RetryLoop, RetryAttempt
 - [Loops](/../concepts/loops/) -- overview of all loop types
 - [Plan/Act Loop](/plan-act-loop/) -- two-phase plan then execute
 - [Lint Feedback Loop](/lint-feedback-loop/) -- linter-driven iteration
+
+<!-- W17-3 SOURCE FOOTER -->
+
+## Source
+
+`chimera/core/loops/retry.py` -- verified against current source at wave-17.

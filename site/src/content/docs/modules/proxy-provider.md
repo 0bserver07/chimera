@@ -52,3 +52,9 @@ provider = create_provider(
 
 The `context_window` property returns `128000` by default; configure your
 relay to report the actual limit if needed.
+
+<!-- W17-3 SOURCE FOOTER -->
+
+## Source
+
+`chimera/providers/proxy.py` -- verified against current source at wave-17.

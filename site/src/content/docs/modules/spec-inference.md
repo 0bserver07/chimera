@@ -66,3 +66,9 @@ inferrer.write_test_file("tests/test_invariants.py")
 - [Oracle](/oracle/) -- grow the test suite during synthesis
 - [Mutation Testing](/mutation-testing/) -- evaluate test suite quality
 - [Validation](/validation/) -- detect overfitting with held-out tests
+
+<!-- W17-3 SOURCE FOOTER -->
+
+## Source
+
+`chimera/training/spec_inference.py` -- verified against current source at wave-17.

@@ -135,3 +135,9 @@ class TokenBudgetDetector(DetectionStrategy):
     def reset(self):
         ...
 ```
+
+<!-- W17-3 SOURCE FOOTER -->
+
+## Source
+
+`chimera/detection/` -- verified against current source at wave-17.

@@ -65,3 +65,9 @@ handler = RpcHandler(server)
 server.set_handlers(handler.handlers)
 server.run()  # blocks until EOF on stdin
 ```
+
+<!-- W17-3 SOURCE FOOTER -->
+
+## Source
+
+`chimera/rpc/` -- verified against current source at wave-17.

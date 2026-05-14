@@ -77,3 +77,9 @@ from chimera.sessions.long_term_memory import LongTermMemory, MemoryEntry
 
 - [Sessions](/sessions/) -- multi-turn conversation persistence
 - [Checkpoints](/checkpoints/) -- named context snapshots
+
+<!-- W17-3 SOURCE FOOTER -->
+
+## Source
+
+`chimera/sessions/long_term_memory.py` -- verified against current source at wave-17.

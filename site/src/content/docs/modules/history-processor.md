@@ -81,3 +81,9 @@ class DropSystemProcessor(HistoryProcessor):
 
 - [Compaction](/compaction/) -- threshold-based context compaction
 - [Focus Chain](/focus-chain/) -- token-budget context selection
+
+<!-- W17-3 SOURCE FOOTER -->
+
+## Source
+
+`chimera/context/history.py` -- verified against current source at wave-17.

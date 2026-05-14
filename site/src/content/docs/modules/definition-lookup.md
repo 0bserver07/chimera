@@ -70,3 +70,9 @@ from chimera.tools.definition_lookup import DefinitionLookupTool, DefinitionFind
 
 - [Tree-Sitter Parser](/tree-sitter-parser/) -- AST-based symbol extraction
 - [Agent Tools](/agent-tools/) -- built-in tool catalogue
+
+<!-- W17-3 SOURCE FOOTER -->
+
+## Source
+
+`chimera/tools/definition_lookup.py` -- verified against current source at wave-17.

@@ -55,3 +55,9 @@ response = provider.complete(
 
 Pass `ThinkingLevel.OFF` (the default) to disable extended reasoning entirely
 and avoid the additional latency and token cost.
+
+<!-- W17-3 SOURCE FOOTER -->
+
+## Source
+
+`chimera/providers/thinking.py` -- verified against current source at wave-17.

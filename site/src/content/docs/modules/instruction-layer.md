@@ -81,3 +81,9 @@ from chimera.core.instruction import InstructionLayer, Layer
 
 - [Demonstration Prompt](/demonstration-prompt/) -- few-shot example prompting
 - [Agent Config](/agents-config/) -- agent configuration with presets
+
+<!-- W17-3 SOURCE FOOTER -->
+
+## Source
+
+`chimera/core/instruction.py` -- verified against current source at wave-17.

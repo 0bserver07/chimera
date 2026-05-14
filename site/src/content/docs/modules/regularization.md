@@ -54,3 +54,9 @@ score = reg.combined_score(pass_rate=0.95, critic_score=0.8)
 
 - [Critic module](/critic/) -- LLMCritic and ChecklistCritic
 - [Training concepts](/../concepts/training/) -- callbacks and strategies
+
+<!-- W17-3 SOURCE FOOTER -->
+
+## Source
+
+`chimera/training/regularization.py` -- verified against current source at wave-17.

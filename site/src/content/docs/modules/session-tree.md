@@ -61,3 +61,9 @@ print(tree.get_branch_points())   # [id1]
 # Read the alternate branch
 msgs = tree.get_messages(id3)
 ```
+
+<!-- W17-3 SOURCE FOOTER -->
+
+## Source
+
+`chimera/sessions/tree.py` -- verified against current source at wave-17.

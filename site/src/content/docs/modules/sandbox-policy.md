@@ -78,3 +78,9 @@ from chimera.security.sandbox import SandboxPolicy, PathRule, NetworkRule, Acces
 
 - [Security](/security/) -- risk classification and security analysis
 - [Permissions](/permissions/) -- tool-level permission policies
+
+<!-- W17-3 SOURCE FOOTER -->
+
+## Source
+
+`chimera/security/sandbox.py` -- verified against current source at wave-17.

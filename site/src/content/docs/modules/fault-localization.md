@@ -63,3 +63,9 @@ result = agent.run(prompt, env=env)
 
 - [Impact Analysis](/impact-analysis/) -- analyze blast radius of changes
 - [Training concepts](/../concepts/training/) -- strategies that use test feedback
+
+<!-- W17-3 SOURCE FOOTER -->
+
+## Source
+
+`chimera/training/fault_localization.py` -- verified against current source at wave-17.

@@ -57,3 +57,9 @@ result = agent.run(prompt, env=env)
 
 - [Fault Localization](/fault-localization/) -- find where bugs are
 - [Mutation Testing](/mutation-testing/) -- test suite quality analysis
+
+<!-- W17-3 SOURCE FOOTER -->
+
+## Source
+
+`chimera/training/impact.py` -- verified against current source at wave-17.

@@ -97,3 +97,9 @@ class ContextSummaryTool(ContextAwareTool):
 from chimera.core.tool import BaseTool, ContextAwareTool
 from chimera.core.context import Context
 ```
+
+<!-- W17-3 SOURCE FOOTER -->
+
+## Source
+
+`chimera/core/tool.py` -- verified against current source at wave-17.

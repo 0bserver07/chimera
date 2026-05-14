@@ -70,3 +70,9 @@ from chimera.tools.parsers.base import LanguageParser, Symbol
 
 - [Definition Lookup](/definition-lookup/) -- find symbol definitions across a codebase
 - [Agent Tools](/agent-tools/) -- built-in tool catalogue
+
+<!-- W17-3 SOURCE FOOTER -->
+
+## Source
+
+`chimera/tools/parsers/tree_sitter.py` -- verified against current source at wave-17.

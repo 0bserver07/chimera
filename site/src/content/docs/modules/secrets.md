@@ -174,3 +174,9 @@ to a file or returning it to the user.
 ```python
 from chimera.secrets import SecretRegistry, SecretDetector, RedactionMiddleware
 ```
+
+<!-- W17-3 SOURCE FOOTER -->
+
+## Source
+
+`chimera/secrets/` -- verified against current source at wave-17.

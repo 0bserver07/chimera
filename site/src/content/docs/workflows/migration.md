@@ -84,3 +84,9 @@ Dataclass with fields: `name`, `description`, `rules` (list of `MigrationRule`).
 ```python
 from chimera.migration import MigrationPlanner, MigrationPlan, MigrationRule
 ```
+
+<!-- W17-3 SOURCE FOOTER -->
+
+## Source
+
+`chimera/migration/` -- verified against current source at wave-17.

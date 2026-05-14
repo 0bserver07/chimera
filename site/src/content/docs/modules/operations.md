@@ -68,3 +68,9 @@ tool = ReadTool(read_ops=DockerReadOps("my-container"))
 | `stdout` | `str` | Standard output |
 | `stderr` | `str` | Standard error |
 | `exit_code` | `int` | Process exit code (`-1` on timeout) |
+
+<!-- W17-3 SOURCE FOOTER -->
+
+## Source
+
+`chimera/core/operations.py` -- verified against current source at wave-17.

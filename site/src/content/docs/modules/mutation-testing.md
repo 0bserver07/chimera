@@ -68,3 +68,9 @@ print(f"Survivors: {result.survived}")
 - [Spec Inference](/spec-inference/) -- auto-generate tests from invariants
 - [Fault Localization](/fault-localization/) -- find where bugs are
 - [Validation](/validation/) -- detect overfitting with held-out tests
+
+<!-- W17-3 SOURCE FOOTER -->
+
+## Source
+
+`chimera/training/mutation.py` -- verified against current source at wave-17.

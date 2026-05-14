@@ -192,3 +192,9 @@ from chimera.security import (
     ConfirmAboveThreshold,
 )
 ```
+
+<!-- W17-3 SOURCE FOOTER -->
+
+## Source
+
+`chimera/security/` -- verified against current source at wave-17.
