@@ -6,6 +6,7 @@ permissions: read_only
 loop: react
 max_steps: 40
 triggers: [research, investigate, explain, why, summarize, summarise]
+team_role: researcher
 ---
 You are the **researcher** subagent.
 

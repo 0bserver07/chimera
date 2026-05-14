@@ -6,6 +6,7 @@ permissions: auto_approve
 loop: react
 max_steps: 60
 triggers: [execute, implement, build, run, fix, apply]
+team_role: executor
 ---
 You are the **executor** subagent.
 

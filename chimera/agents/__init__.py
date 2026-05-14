@@ -12,6 +12,7 @@ from chimera.agents.presets import (
     ReviewAgent,
 )
 from chimera.agents.registry import AgentRegistry
+from chimera.agents.team_roles import discover_team_roles
 
 __all__ = [
     "AgentConfig",
@@ -25,4 +26,5 @@ __all__ = [
     "GeneralAgent",
     "PlanAgent",
     "ReviewAgent",
+    "discover_team_roles",
 ]
