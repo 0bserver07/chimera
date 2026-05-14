@@ -126,6 +126,8 @@ class FileAgentDef:
         max_iterations: Maximum loop iterations.
         triggers: Keyword triggers for agent selection.
         skills: Skill names to inject into the system prompt.
+        team_role: Optional team-role tag for team-template discovery
+            (e.g. ``executor``, ``planner``).
         source: Where this definition was loaded from.
         file_path: Path to the source file.
     """
@@ -139,6 +141,7 @@ class FileAgentDef:
     max_iterations: int = 50
     triggers: list[str] = field(default_factory=list)
     skills: list[str] = field(default_factory=list)
+    team_role: str | None = None
     source: str = ""
     file_path: str = ""
 
@@ -185,6 +188,12 @@ class FileAgentDef:
         max_iterations = int(max_iter_raw) if isinstance(max_iter_raw, str) else 50
         model_raw = meta.get("model")
         model = str(model_raw) if model_raw and not isinstance(model_raw, list) else None
+        team_role_raw = meta.get("team_role")
+        team_role = (
+            str(team_role_raw)
+            if team_role_raw and not isinstance(team_role_raw, list)
+            else None
+        )
 
         return cls(
             name=name,
@@ -196,6 +205,7 @@ class FileAgentDef:
             max_iterations=max_iterations,
             triggers=triggers,
             skills=skills,
+            team_role=team_role,
             source=source,
             file_path=str(path),
         )

@@ -6,6 +6,7 @@ permissions: read_only
 loop: react
 max_steps: 30
 triggers: [review, critique, audit, check, lgtm]
+team_role: reviewer
 ---
 You are the **reviewer** subagent.
 

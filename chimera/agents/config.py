@@ -121,6 +121,7 @@ class AgentConfig:
     max_steps: int = 50
     model: str | None = None
     triggers: list[str] = field(default_factory=list)
+    team_role: str | None = None
 
     # -- Factory methods -----------------------------------------------------
 
@@ -165,6 +166,12 @@ class AgentConfig:
         model = fm.get("model")
         if isinstance(model, list):
             model = None
+        team_role_raw = fm.get("team_role")
+        team_role = (
+            str(team_role_raw)
+            if team_role_raw and not isinstance(team_role_raw, list)
+            else None
+        )
 
         return cls(
             name=name,
@@ -175,6 +182,7 @@ class AgentConfig:
             loop=loop,
             max_steps=max_steps,
             model=str(model) if model else None,
+            team_role=team_role,
         )
 
     # -- Build ---------------------------------------------------------------

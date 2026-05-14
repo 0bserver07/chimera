@@ -6,6 +6,7 @@ permissions: read_only
 loop: plan_execute
 max_steps: 30
 triggers: [plan, design, propose, blueprint, architecture]
+team_role: planner
 ---
 You are the **planner** subagent.
 
