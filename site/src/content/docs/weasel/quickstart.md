@@ -1,6 +1,6 @@
 ---
 title: Weasel Quickstart
-description: Install weasel, learn the four operating modes, and run one example in each — interactive REPL, one-shot print, stdio RPC, and embedded SDK.
+description: Install weasel, walk all four operating modes side-by-side, write a JS/TS extension, drive --thinking + --stream-json + multi -p + @file expansion.
 ---
 
 # `chimera weasel` Quickstart
@@ -10,41 +10,37 @@ description: Install weasel, learn the four operating modes, and run one example
 [`chimera otter`](../otter/quickstart.md) mirrors a server-first
 multi-client agent, and [`chimera ferret`](../ferret/quickstart.md)
 mirrors an IDE-first sandbox-first agent, weasel mirrors **the
-minimal harness**: powerful defaults plus four operating modes,
-adapt-to-your-workflow rather than ship-every-feature.
+minimal harness**: powerful defaults plus four operating modes —
+interactive, print, rpc, sdk — and an auto-discovered
+`.weasel/extensions/` directory. Adapt-to-your-workflow rather than
+ship-every-feature.
 
-The headline trade is simplicity. Weasel ships **no sub-agents, no
-plan mode, no built-in approval presets, no opinionated session
-chrome**. What it ships is a clean four-mode entry surface, an
-auto-discovered `.weasel/extensions/` directory, and an embeddable
-`Agent` class. If you want more, you build it (or install an
-extension); weasel will not get in the way.
+Headline trade is simplicity. Weasel ships **no sub-agents, no plan
+mode, no built-in approval presets, no opinionated session chrome.**
+What it ships is a clean four-mode entry surface, auto-discovered
+extensions, and an embeddable `Agent` class. If you want more, you
+build it (or install an extension); weasel will not get in the way.
 
-This page walks the four entry points end-to-end. For deeper dives:
+Deeper dives:
 
 - [`modes.md`](modes.md) — interactive / print / rpc / sdk in detail.
 - [`extensions.md`](extensions.md) — `.weasel/extensions/` layout.
 - [`sdk.md`](sdk.md) — `from chimera.weasel.sdk import Agent`.
 - [`providers.md`](providers.md) — provider chain.
 - [`parity-matrix.md`](parity-matrix.md) — upstream surface mapping.
-- [`security-and-trademarks.md`](security-and-trademarks.md) — policy.
 
 ## Prerequisites
 
 - Python 3.11+
 - [`uv`](https://docs.astral.sh/uv/)
-- One of: an Anthropic API key, an OpenAI API key, an OpenRouter API
-  key, or a running Ollama daemon
+- For the JS/TS extension path: Node 20+
+- One of: an Anthropic key, an OpenAI key, an OpenRouter key, an
+  Ollama daemon, or an Ollama Cloud account
 
 ```bash
 uv --version                          # >= 0.4
 uv sync --extra dev --extra anthropic # core + Anthropic SDK
 ```
-
-The Anthropic extra is recommended for the default model. To drive
-weasel against OpenAI, OpenRouter, llama.cpp, or Ollama, swap the
-extra (`--extra openai`) or skip it; the OpenAI-compatible adapter
-is stdlib + httpx. The full matrix lives in [`providers.md`](providers.md).
 
 ## Provider configuration
 
@@ -52,36 +48,34 @@ Weasel resolves the provider in this order (first match wins):
 
 1. `--model <id>` on the CLI.
 2. `$WEASEL_MODEL` environment variable.
-3. `$ANTHROPIC_API_KEY` set → defaults to `claude-sonnet-4-6`.
-4. `$OPENAI_API_KEY` set → defaults to `gpt-4o`.
-5. `$OPENROUTER_API_KEY` set → defaults to `anthropic/claude-sonnet-4`.
-6. Local Ollama daemon reachable on `:11434` → first installed tag.
-7. Friendly error pointing at the env vars above.
+3. `$ANTHROPIC_API_KEY` → `claude-sonnet-4-6`.
+4. `$OPENAI_API_KEY` → `gpt-4o`.
+5. `$OPENROUTER_API_KEY` → `anthropic/claude-sonnet-4`.
+6. `$OLLAMA_API_KEY` → `gpt-oss:120b-cloud`.
+7. Local Ollama daemon on `:11434` → first installed tag.
+8. Friendly error pointing at the env vars above.
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
-# OR
-export OPENAI_API_KEY=sk-...
-# OR
-export OPENROUTER_API_KEY=sk-or-...
+# OR — free path
+export OLLAMA_HOST=https://ollama.com
+export OLLAMA_API_KEY=<your-key>
 ```
 
-## The four modes at a glance
+## The four modes side-by-side
 
-| Mode | Command | When to use |
-|---|---|---|
-| Interactive | `chimera weasel` | Day-to-day, conversational, mid-turn steering. |
-| Print (one-shot) | `chimera weasel -p "..."` | Scripts, CI, `xargs`, shell pipelines. |
-| RPC (stdio) | `chimera weasel --mode rpc` | Process integration: another tool drives weasel over JSON-RPC. |
-| SDK (embedded) | `from chimera.weasel.sdk import Agent` | Drop into your Python app; no subprocess. |
+| Mode | Command | I/O envelope | When to use |
+|---|---|---|---|
+| Interactive | `chimera weasel` | streaming TTY | Day-to-day, conversational, mid-turn steering. |
+| Print (one-shot) | `chimera weasel -p "..."` | stdout text or JSON | Scripts, CI, `xargs`, shell pipelines. |
+| RPC (stdio) | `chimera weasel --mode rpc` | JSON-RPC 2.0 on stdin/stdout | Another tool drives weasel as a subprocess. |
+| SDK (embedded) | `from chimera.weasel.sdk import Agent` | Python object | Drop into your Python app; no subprocess. |
 
-The modes share **one** loop, **one** tool registry, **one**
-extension surface, and **one** session store. Switching modes does
-not change semantics — only the I/O envelope.
+The modes share **one** loop, **one** tool registry, **one** extension
+surface, and **one** session store. Switching modes does not change
+semantics — only the I/O envelope.
 
 ## Mode 1 — Interactive REPL
-
-Run `chimera weasel` with no flags for a streaming REPL:
 
 ```bash
 chimera weasel
@@ -99,24 +93,12 @@ CHANGELOG.md  CLAUDE.md  README.md  chimera/  docs/  examples/  tests/
 # Chimera
 A composable coding agent framework
 ...
-
-The repo root has a README pitching Chimera as a composable coding agent framework.
 > ▌
 ```
 
-The REPL streams assistant text + tool calls inline, accepts
-mid-turn steering (just type while the agent is working), and
-supports `Ctrl-C` cancellation. Slash commands are intentionally
-sparse: `/help`, `/exit`, `/model`, `/cost`, `/clear`, `/sessions`,
-`/extensions`. Anything else you want, you add via an extension.
-
-Every REPL session is event-sourced under
-`~/.chimera/eventlog/weasel-<utc>-<uuid>/`. To resume:
-
-```bash
-chimera weasel sessions list
-chimera weasel sessions show weasel-20260430T101455-1f3c2a8b
-```
+Slash commands are intentionally sparse: `/help`, `/exit`, `/model`,
+`/cost`, `/clear`, `/sessions`, `/extensions`. Anything else you want,
+you add via an extension.
 
 ## Mode 2 — Print (one-shot)
 
@@ -124,26 +106,58 @@ chimera weasel sessions show weasel-20260430T101455-1f3c2a8b
 JSON with `--json`:
 
 ```bash
-chimera weasel -p "list the top-level files and read the README"
 chimera weasel -p "summarize TODO comments in src/" --json
 chimera weasel -p "ship it" --max-steps 5
-chimera weasel --model gpt-4o -p "draft a release note"
-chimera weasel -p "audit" --allowed-tools Read,Bash --no-save
+chimera weasel --model gpt-oss:120b-cloud -p "draft a release note"
+chimera weasel -p "audit" --allowed-tools Read,Bash
 ```
 
-Stdout is the agent's final text answer (or one JSON blob with
-`--json`). Stderr carries the run-id banner so pipelines can keep
-stdout clean:
+### Multi `-p` (chained prompts)
+
+Pass `-p` repeatedly to chain turns in a single non-interactive
+invocation. Each `-p` reuses the same loop / context.
 
 ```bash
-chimera weasel -p "what does this repo do" | tee summary.txt
+chimera weasel -p "read CHANGELOG.md" \
+               -p "summarize the last release in 3 bullets" \
+               -p "draft a tweet for it"
 ```
+
+### `@file` expansion
+
+Any token of the form `@<path>` in a `-p` argument is expanded to the
+contents of that file (UTF-8, max 1 MB) inline:
+
+```bash
+chimera weasel -p "review this diff: @./pending.diff"
+chimera weasel -p "rewrite @./prompt.txt to be terser"
+```
+
+### `--thinking` + `--stream-json`
+
+Surface the model's thinking trace alongside text deltas:
+
+```bash
+chimera weasel --thinking medium --stream-json \
+               -p "explain why the test is flaking" \
+   | jq 'select(.event=="thinking_delta" or .event=="text_delta")'
+```
+
+Sample stream:
+
+```json
+{"event":"thinking_delta","text":"The test asserts ..."}
+{"event":"text_delta","text":"Looking at the test, "}
+{"event":"thinking_delta","text":"... but the fixture seeds RNG."}
+{"event":"text_delta","text":"the race comes from the seeded RNG ..."}
+```
+
+Stdout is one JSON line per `LoopEvent`. Stderr carries the run-id
+banner so pipelines stay clean.
 
 ## Mode 3 — RPC (stdio JSON-RPC)
 
-`--mode rpc` turns weasel into a JSON-RPC 2.0 server speaking on
-stdin/stdout — the integration point for outside tools that want to
-drive a weasel session as a subprocess.
+`--mode rpc` turns weasel into a JSON-RPC 2.0 server on stdin/stdout:
 
 ```bash
 chimera weasel --mode rpc < requests.jsonl
@@ -164,12 +178,12 @@ Response stream:
 ```
 
 Methods: `prompt`, `steer`, `cancel`, `get_state`, `compact`,
-`list_sessions`, `resume`. Full schema lives in [`modes.md`](modes.md).
+`list_sessions`, `resume`. Schema in [`modes.md`](modes.md).
 
 ## Mode 4 — SDK (embedded)
 
 For when you want weasel inside your Python process — no subprocess,
-no JSON-RPC, just a class. Both sync and async forms ship.
+no JSON-RPC, just a class. Sync and async forms ship:
 
 ```python
 from chimera.weasel.sdk import Agent
@@ -195,24 +209,12 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-Full recipe lives in [`sdk.md`](sdk.md).
+Full recipe in [`sdk.md`](sdk.md).
 
 ## Extensions
 
-Weasel auto-discovers `.weasel/extensions/*.{py,js,ts}` in the cwd
-and `~/.weasel/extensions/` globally. Extensions register tools,
-hooks, slash commands, and prompt templates. Layout:
-
-```text
-.weasel/
-  settings.json
-  extensions/
-    my-tool.py            # Python (importlib)
-    my-script.ts          # TS/JS (subprocess via Node)
-    feature/
-      manifest.json
-      index.py
-```
+Weasel auto-discovers `.weasel/extensions/*.{py,js,ts}` in cwd and
+`~/.weasel/extensions/` globally.
 
 A minimal Python extension:
 
@@ -228,40 +230,102 @@ def register(api):
     api.register_tool(hello)
 ```
 
-Drop it under `.weasel/extensions/hello.py` and the next `chimera
-weasel` invocation will pick it up. Full schema in
-[`extensions.md`](extensions.md).
+A minimal TypeScript extension (run via the bundled Node executor):
+
+```typescript
+// .weasel/extensions/word_count.ts
+export const manifest = {
+  name: "word_count",
+  version: "0.1",
+};
+
+export function register(api: any) {
+  api.register_tool({
+    name: "word_count",
+    description: "Return the word count of a file.",
+    parameters: { path: "string" },
+    async run({ path }: { path: string }) {
+      const fs = await import("node:fs/promises");
+      const text = await fs.readFile(path, "utf-8");
+      return { words: text.split(/\s+/).filter(Boolean).length };
+    },
+  });
+}
+```
+
+Drop the `.ts` file under `.weasel/extensions/word_count.ts` and the
+next `chimera weasel` invocation will pick it up, transparently
+shelling out to the bundled Node executor. JS works the same way; the
+`manifest.name` matches the directory or filename.
+
+## Sessions / persistence
+
+```bash
+chimera weasel sessions list
+chimera weasel sessions show weasel-20260514T101455-1f3c2a8b
+chimera weasel --resume weasel-20260514T101455-1f3c2a8b   # explicit
+chimera weasel -c                                         # newest in cwd
+```
+
+## Choose your model
+
+Recommended models for the minimal-harness posture:
+
+| Backend | Tag | Why for weasel |
+|---|---|---|
+| Anthropic | `claude-sonnet-4-6` | Default; strongest tool calling. |
+| Ollama Cloud | `gpt-oss:120b-cloud` | Free w/ Ollama account; native tools. |
+| OpenAI | `gpt-4o` | Strong baseline; `$OPENAI_API_KEY`. |
+| OpenRouter | `anthropic/claude-sonnet-4` | Same Anthropic model via OpenRouter. |
+
+See [the Ollama Cloud recipe](../use-with-ollama.md).
 
 ## Env vars at a glance
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `WEASEL_MODEL` | (unset) | Default model id when `--model` is not passed. |
-| `ANTHROPIC_API_KEY` | (unset) | Activates the Anthropic provider chain. |
-| `OPENAI_API_KEY` | (unset) | Activates the OpenAI provider chain. |
-| `OPENROUTER_API_KEY` | (unset) | Activates the OpenRouter (compatible) provider chain. |
-| `OLLAMA_HOST` | `http://localhost:11434` | Ollama daemon root (set for remote daemons). |
-| `WEASEL_EXTENSIONS_DIR` | `.weasel/extensions/` | Override the extensions search root. |
-| `NO_COLOR` | (unset) | Force the plain output handler. |
+| `WEASEL_MODEL` | (unset) | Default model id. |
+| `ANTHROPIC_API_KEY` | (unset) | Anthropic chain. |
+| `OPENAI_API_KEY` | (unset) | OpenAI chain. |
+| `OPENROUTER_API_KEY` | (unset) | OpenRouter chain. |
+| `OLLAMA_API_KEY` | (unset) | Ollama Cloud. |
+| `OLLAMA_HOST` | `http://localhost:11434` | Daemon URL. |
+| `WEASEL_EXTENSIONS_DIR` | `.weasel/extensions/` | Extensions search root. |
+| `NO_COLOR` | (unset) | Plain output handler. |
 
 ## What gets written to disk
 
 | Path | What |
 |---|---|
 | `~/.chimera/eventlog/weasel-<id>/` | Per-run event stream + summary. |
-| `.weasel/settings.json` | Project-local settings (model, extensions allowlist). |
+| `.weasel/settings.json` | Project-local settings. |
 | `.weasel/extensions/` | Project-local extensions. |
 | `~/.weasel/extensions/` | User-global extensions. |
-| `~/.chimera/credentials.json` | OAuth-issued tokens (mode `0o600`). |
+| `~/.chimera/credentials.json` | OAuth tokens (mode `0o600`). |
 
-Everything is local and plaintext. No remote telemetry. To purge
-old runs: `rm -rf ~/.chimera/eventlog/weasel-*`.
+Everything is local. Purge with `rm -rf ~/.chimera/eventlog/weasel-*`.
 
 ## Where to go next
 
-- Pick the right mode for your job: [`modes.md`](modes.md).
-- Write an extension: [`extensions.md`](extensions.md).
-- Embed weasel in a Python app: [`sdk.md`](sdk.md).
-- Pick a provider: [`providers.md`](providers.md).
-- Want the surface-by-surface parity status? [`parity-matrix.md`](parity-matrix.md).
-- Trademark + security policy: [`security-and-trademarks.md`](security-and-trademarks.md).
+- [Modes](./modes.md) — pick the right mode for the job.
+- [Extensions](./extensions.md) — Python and TS/JS recipes.
+- [SDK](./sdk.md) — embed weasel.
+- [Providers](./providers.md).
+- [Parity Matrix](./parity-matrix.md).
+- [Security and Trademarks](./security-and-trademarks.md).
+
+---
+
+### Verified (2026-05-14)
+
+Two commands from this quickstart, against Ollama Cloud:
+
+```text
+$ OLLAMA_HOST=https://ollama.com OLLAMA_API_KEY=*** \
+    chimera weasel -p "Hello, please reply with one word: hello" \
+                   --model gpt-oss:120b-cloud --max-steps 2
+hello
+
+$ chimera weasel --version
+chimera weasel 0.7.0
+```

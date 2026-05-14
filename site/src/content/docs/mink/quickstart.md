@@ -298,6 +298,54 @@ scripts because they match the flag values you would type at
 [`permissions.md`](permissions.md) for the full mapping table and
 [`settings.md`](settings.md) for the matching settings-file keys.
 
+## Settings schema (CC-format)
+
+Mink ingests `.claude/settings.json` (project) and
+`~/.claude/settings.json` (user). Shape:
+
+```json
+{
+  "permissions": {
+    "allow": ["Read", "Grep", "Glob"],
+    "ask":   ["Edit", "Write", "Bash"],
+    "deny":  ["WebFetch"]
+  },
+  "hooks": {
+    "PreToolUse":  [{"matcher": "Bash", "command": ["./scripts/audit.sh"]}],
+    "PostToolUse": [{"matcher": "Edit", "command": ["pre-commit", "run", "-a"]}]
+  },
+  "keybindings": {"submit": "Ctrl-Enter", "cancel": "Ctrl-C"},
+  "statusline": {"format": "{model} · {cost} · {cwd}"},
+  "theme": "monokai",
+  "outputStyles": {"markdown": "rich", "json": "plain"}
+}
+```
+
+Project settings always win over user settings. The
+`CHIMERA_MINK_SETTINGS_PATH` env var overrides discovery.
+
+## MCP servers + subagents + hooks
+
+Three subsystems share one settings file:
+
+**MCP servers** declared at `<cwd>/.mcp.json` or `~/.chimera/mcp.json`
+are auto-loaded; tools land under the `mcp__<server>__<tool>` namespace.
+
+```bash
+chimera mink mcp list                      # inspect connected servers
+chimera mink mcp add filesystem npx ...    # add at runtime
+```
+
+**Subagents** declared at `.claude/agents/*.md` (project) or
+`~/.claude/agents/*.md` (user) are reachable via `--agent <name>` or
+the `Task` tool. Built-ins: `build`, `explore`, `general`, `plan`,
+`review`. See `chimera mink agents list` for the live chain.
+
+**Hooks** declared under `settings.json.hooks.{PreToolUse,PostToolUse}`
+fire around every tool call. The `PreToolUse` hook may mutate the
+input via `updatedInput`; the `PostToolUse` hook may abort the loop via
+non-zero exit codes.
+
 ## What to do if it doesn't work
 
 If `chimera mink` errors at startup or hangs on the first call, walk
@@ -321,3 +369,19 @@ Anthropic / OpenAI / Google paths.
 **`num_ctx` defaults to 4096 and the agent forgets the system prompt.** The provider should be passing `num_ctx` per request. If you see `prompt_eval_count` capped near 4096, the request is missing `options.num_ctx`. Verify with `OLLAMA_DEBUG=1 ollama serve` and inspect the incoming JSON.
 
 **`Tool result message rejected`.** Tool result messages must use `{"role": "tool", "tool_name": "<name>", "content": "<string>"}`. The provider builds this; if you patched `_convert_messages()`, ensure `tool_name` is present and `content` is a string (stringify JSON results).
+
+---
+
+### Verified (2026-05-14)
+
+Two commands from this quickstart, against Ollama Cloud:
+
+```text
+$ OLLAMA_HOST=https://ollama.com OLLAMA_API_KEY=*** \
+    chimera mink -p "Hello, please reply with one word: hello" \
+                 --model gpt-oss:120b-cloud --max-steps 2 --no-color --no-save
+hello
+
+$ chimera mink --version
+chimera mink 0.7.0
+```

@@ -1,6 +1,6 @@
 ---
 title: Ferret Quickstart
-description: Install ferret, run a sandboxed first turn, choose an approval preset, and bring up the IDE-first ACP server.
+description: Install ferret, walk the three sandbox modes side-by-side, learn the approval matrix, bring up the IDE ACP transport, the cloud bridge, the mcp-server subcommand, and the apply/review/fork helpers.
 ---
 
 # `chimera ferret` Quickstart
@@ -8,38 +8,33 @@ description: Install ferret, run a sandboxed first turn, choose an approval pres
 `chimera ferret` is the third Chimera coding-agent CLI. Where
 [`chimera mink`](../mink/quickstart.md) mirrors a TUI-first agent and
 [`chimera otter`](../otter/quickstart.md) mirrors a server-first
-multi-client agent, ferret mirrors the IDE-first OpenAI-flagship
-coding agent: a sandbox-first runner with single-flag approval
+multi-client agent, ferret mirrors the **IDE-first OpenAI-flagship
+coding agent**: a sandbox-first runner with single-flag approval
 presets, an ACP JSON-RPC transport that ships as the default `serve`
-transport, and an optional cloud bridge so a local ferret session
-can be driven from a remote UI.
+transport, an optional cloud bridge so a local ferret session can be
+driven from a remote UI, and three helper subcommands (`apply`,
+`review`, `fork`) for agent-assisted patch operations.
 
-This page walks the four entry points end-to-end. For deeper dives:
+Deeper dives:
 
 - [`providers.md`](providers.md) — OpenAI-flagship provider chain.
-- [`sandbox.md`](sandbox.md) — three sandbox modes and what each blocks.
-- [`approval.md`](approval.md) — read-only / auto / full approval presets.
-- [`ide.md`](ide.md) — IDE-first ACP schema and notification kinds.
-- [`cloud-bridge.md`](cloud-bridge.md) — `chimera ferret bridge` setup.
-- [`parity-matrix.md`](parity-matrix.md) — surface-by-surface parity status.
-- [`security-and-trademarks.md`](security-and-trademarks.md) — trademark + security policy.
+- [`sandbox.md`](sandbox.md) — three sandbox modes.
+- [`approval.md`](approval.md) — approval presets.
+- [`ide.md`](ide.md) — ACP schema + notification kinds.
+- [`cloud-bridge.md`](cloud-bridge.md) — bridge setup.
+- [`parity-matrix.md`](parity-matrix.md) — surface mapping.
 
 ## Prerequisites
 
 - Python 3.11+
 - [`uv`](https://docs.astral.sh/uv/)
-- One of: an OpenAI API key, an Anthropic API key, an OpenRouter API
-  key, or a running Ollama daemon
+- One of: an OpenAI key, an Anthropic key, an OpenRouter key, an
+  Ollama daemon, or an Ollama Cloud account
 
 ```bash
 uv --version                         # >= 0.4
 uv sync --extra dev --extra openai   # core + OpenAI SDK
 ```
-
-The OpenAI extra is recommended because the ferret default model is
-`gpt-5` (falling back to `gpt-4o` when the GPT-5 family is not yet
-available on your account). If you'd rather drive ferret through
-Anthropic, OpenRouter, or Ollama, see [`providers.md`](providers.md).
 
 ## Provider configuration
 
@@ -50,31 +45,20 @@ Ferret resolves the provider in this order (first match wins):
 3. `$OPENAI_API_KEY` set → defaults to `gpt-5` (falls back to `gpt-4o`).
 4. `$ANTHROPIC_API_KEY` set → defaults to `claude-sonnet-4-6`.
 5. `$OPENROUTER_API_KEY` set → defaults to `openai/gpt-5`.
-6. Friendly error pointing at the env vars above.
-
-Set whichever key you have:
+6. `$OLLAMA_API_KEY` set → defaults to `gpt-oss:120b-cloud`.
+7. Friendly error pointing at the env vars above.
 
 ```bash
 export OPENAI_API_KEY=sk-...
-# OR
-export ANTHROPIC_API_KEY=sk-ant-...
-# OR
-export OPENROUTER_API_KEY=sk-or-...
-```
-
-Or, for a local model:
-
-```bash
-ollama serve &
-ollama pull qwen3:32b
-chimera ferret --model qwen3:32b -p "explain this repo"
+# OR — free path with an Ollama account
+export OLLAMA_HOST=https://ollama.com
+export OLLAMA_API_KEY=<your-key>
 ```
 
 ## First one-shot turn
 
-The simplest entry point: `-p` runs a single turn and exits. Ferret
-defaults to the **read-only** sandbox mode, so the first run is safe
-to point at any directory:
+Ferret defaults to **read-only** sandbox mode, so the first run is
+safe to point at any directory:
 
 ```bash
 chimera ferret -p "list the top-level files and read the README"
@@ -95,25 +79,27 @@ CHANGELOG.md  CLAUDE.md  README.md  chimera/  docs/  examples/  tests/
 A composable coding agent framework
 ...
 
-The repo root has a README pitching Chimera as a composable coding agent framework.
-
-[ferret] run saved as ferret-20260430T101455-1f3c2a8b at /Users/.../.chimera/eventlog/ferret-20260430T101455-1f3c2a8b/
+[ferret] run saved as ferret-20260514T101455-1f3c2a8b at /Users/.../.chimera/eventlog/ferret-...
 ```
 
-Streaming text appears as it arrives. Tool calls render as
-`▶ <Tool>(<args>)` lines. The `[ferret] sandbox=... approval=...`
-banner on the first line tells you exactly which guardrails are
-active. The trailing `run saved as ...` line on stderr points at the
-persisted run directory.
+The `[ferret] sandbox=... approval=...` banner on the first line tells
+you exactly which guardrails are active.
 
-## Sandbox + approval flags
+## Sandbox modes side-by-side
 
-Ferret ships two single-flag guardrails. They are the headline
-differentiator versus mink/otter: pick a sandbox mode and pick an
-approval preset, no fine-grained tool allowlists required.
+Three sandbox modes, each with a distinct OS-level posture. All three
+fix at process start because they install kernel-level hooks.
+
+| Mode | Reads | Writes | Network | Notes |
+| --- | --- | --- | --- | --- |
+| `read-only` | yes | **denied** | **denied** | Default. Safe on any cwd. |
+| `workspace-write` | yes | inside cwd only | **denied** | Writes outside cwd are EACCES. |
+| `workspace-write-network` | yes | inside cwd only | yes | Add network on top of `workspace-write`. |
+
+Worked invocations for each:
 
 ```bash
-# Default — safest possible. Only reads.
+# Safest possible — only reads.
 chimera ferret -p "audit the repo"
 
 # Workspace-write — writes inside cwd, no network.
@@ -132,19 +118,33 @@ chimera ferret --sandbox workspace-write-network \
                -p "ship it"
 ```
 
-Sandbox modes are documented in detail in [`sandbox.md`](sandbox.md).
-Approval presets are documented in [`approval.md`](approval.md). The
-two flags compose: the sandbox blocks at the OS level, the approval
-preset blocks at the policy level. A tool call has to pass both.
+Sandbox modes are documented in [`sandbox.md`](sandbox.md).
+
+## Approval matrix
+
+Approval is orthogonal to the sandbox. The sandbox blocks at the OS
+level; the approval preset blocks at the policy level. **A tool call
+has to pass both.**
+
+| Preset | Reads | Edits | Bash / Git | Network |
+| --- | --- | --- | --- | --- |
+| `read-only` | allow | **ask** | **ask** | **ask** |
+| `auto` | allow | allow | ask | ask |
+| `full` | allow | allow | allow | allow |
+
+Compose with sandbox:
+
+| Sandbox / Approval | `read-only` | `auto` | `full` |
+| --- | --- | --- | --- |
+| `read-only` | reads only | reads only | reads only |
+| `workspace-write` | reads + asked writes | edits in cwd, asked bash | edits + bash in cwd |
+| `workspace-write-network` | + asked net | + asked net | full |
 
 You can change the approval preset mid-session in the REPL with
-`/approval auto` (see [`approval.md`](approval.md)). The sandbox
-mode is fixed at process start because it controls OS-level kernel
-hooks; restart ferret with a different `--sandbox` flag to widen.
+`/approval auto`. The sandbox mode is fixed at process start; restart
+ferret with a different `--sandbox` flag to widen.
 
 ## Drop into the REPL
-
-Run `chimera ferret` with no `-p` flag for an interactive REPL:
 
 ```bash
 chimera ferret
@@ -152,50 +152,131 @@ chimera ferret --sandbox workspace-write --approval auto
 ```
 
 The REPL streams assistant text + tool calls inline, accepts mid-turn
-steering, supports `Ctrl-C` cancellation, and exposes the standard
-Chimera slash-command palette plus three ferret-specific entries:
-`/sandbox` (show current mode), `/approval` (show or change the
-preset), and `/bridge` (status of any active cloud bridge). Type
-`/help` for the full list.
+steering, supports `Ctrl-C` cancellation, and ships three
+ferret-specific entries on top of the standard palette:
 
-## Bring up the IDE bridge (ACP server)
+```text
+ferret> /sandbox
+sandbox=workspace-write
+ferret> /approval
+approval=auto
+ferret> /approval read-only
+approval changed: auto → read-only
+ferret> /bridge
+bridge: not connected
+```
+
+Type `/help` for the full list (24 entries).
+
+## `apply` / `review` / `fork` subcommands
+
+Three helpers for agent-assisted patch operations:
+
+```bash
+# apply — agent generates a patch from a description, applies cleanly
+chimera ferret apply -m "add a CLI flag --max-tokens to the API client"
+
+# review — agent reviews uncommitted changes and emits a structured report
+chimera ferret review
+chimera ferret review --staged-only
+chimera ferret review --since HEAD~3
+
+# fork — clone a session, mutate one prompt, run again
+chimera ferret fork ferret-20260514T101455-1f3c2a8b \
+                    --prompt-override "fix the bug, but use httpx instead of requests"
+```
+
+Each subcommand reuses the loop + sandbox + approval state; only the
+prompt and the bookkeeping differ. See [`subcommands.md`](subcommands.md)
+for the JSON envelopes when piped.
+
+## ACP server (default `serve` transport)
 
 Ferret's `serve` defaults to **ACP over stdio**, not HTTP. This is
 the IDE-first stance: most ferret users drive ferret from an IDE
 plugin (Zed, VS Code) that already speaks ACP.
 
 ```bash
-# ACP over stdio (the default)
-chimera ferret serve
-
-# HTTP server, opt-in
-chimera ferret serve --http --port 5173
+chimera ferret serve                 # ACP over stdio (default)
+chimera ferret serve --http --port 5173    # HTTP, opt-in
 ```
 
-The IDE-first ACP schema, notification kinds, and a worked Zed +
-VS Code recipe live in [`ide.md`](ide.md). The HTTP server surface
-mirrors `chimera otter serve` and is documented in
-[`../otter/server.md`](../otter/server.md).
+ACP wire example:
 
-## Optional: cloud bridge
+```json
+{"jsonrpc":"2.0","id":1,"method":"prompt","params":{"text":"list files"}}
+```
+
+```json
+{"jsonrpc":"2.0","method":"notification","params":{"kind":"tool_call","name":"list_files"}}
+{"jsonrpc":"2.0","method":"notification","params":{"kind":"text_delta","text":"I'll "}}
+{"jsonrpc":"2.0","id":1,"result":{"text":"...","cost":0.0042}}
+```
+
+Notification kinds (`tool_call`, `tool_result`, `text_delta`,
+`turn_end`, `approval_requested`, `approval_decided`) and a worked
+Zed + VS Code recipe live in [`ide.md`](ide.md).
+
+## `mcp-server` subcommand
+
+Ferret can be exposed *as* an MCP server (in addition to consuming
+external MCP servers via `.mcp.json`). This is how another agent — say
+a `chimera mink` instance — drives ferret as a sandboxed sub-agent.
+
+```bash
+chimera ferret mcp-server                 # stdio (default)
+chimera ferret mcp-server --port 5174     # HTTP
+```
+
+Exposed tools: `ferret_run`, `ferret_apply`, `ferret_review`. Add
+ferret to a calling agent's `.mcp.json`:
+
+```json
+{
+  "servers": {
+    "ferret-sandbox": {
+      "command": ["chimera", "ferret", "mcp-server"],
+      "env": {"FERRET_SANDBOX": "workspace-write", "FERRET_APPROVAL": "auto"}
+    }
+  }
+}
+```
+
+## Cloud bridge
 
 When you want a remote UI (a teammate's web dashboard, a phone, an
-on-call alerting console) to drive a local ferret session, you can
-forward the ACP transport over an authenticated HTTPS bridge:
+on-call console) to drive a local ferret session, forward the ACP
+transport over an authenticated HTTPS bridge:
 
 ```bash
 chimera ferret bridge --remote-url https://ferret.example.com \
                       --auth-token "$FERRET_BRIDGE_TOKEN"
 ```
 
-The remote-URL contract, auth-token format, and reconnection
-semantics live in [`cloud-bridge.md`](cloud-bridge.md). The bridge
-is optional — local ACP / HTTP servers cover the standard cases.
+Inside the REPL, `/bridge` reports status. Reconnect semantics,
+remote-URL contract, and token format live in
+[`cloud-bridge.md`](cloud-bridge.md). The bridge is optional — local
+ACP / HTTP servers cover the standard cases.
+
+## Choose your model
+
+Recommended models for the IDE-first / sandboxed posture (low-latency
+plan + edit cycles, frequent diff generation):
+
+| Backend | Tag | Why for ferret |
+|---|---|---|
+| OpenAI | `gpt-5` / `gpt-4o` | Default; tuned for the IDE-first ergonomic. |
+| Anthropic | `claude-sonnet-4-6` | Strong diff fidelity; fallback. |
+| Ollama Cloud | `gpt-oss:120b-cloud` | Free with Ollama account; native tools. |
+| OpenRouter | `openai/gpt-5` | Same model via OpenRouter aggregator. |
+
+See [the Ollama Cloud recipe](../use-with-ollama.md) for the auth
+handshake.
 
 ## Ferret config file
 
 Ferret ingests `~/.codex/config.toml` as a filesystem fact: when the
-file exists, ferret will pick up the `model`, `provider`, `sandbox`,
+file exists, ferret picks up `model`, `provider`, `sandbox`,
 `approval`, and `mcp` sections that map onto Chimera primitives. CLI
 flags always win over the config file, which always wins over env
 vars. See [`parity-matrix.md`](parity-matrix.md) for the full key map.
@@ -204,21 +285,37 @@ vars. See [`parity-matrix.md`](parity-matrix.md) for the full key map.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `FERRET_MODEL` | (unset) | Default model id when `--model` is not passed. See [`providers.md`](providers.md). |
-| `OPENAI_API_KEY` | (unset) | Activates the OpenAI provider chain (default for ferret). |
-| `ANTHROPIC_API_KEY` | (unset) | Activates the Anthropic provider chain. |
-| `OPENROUTER_API_KEY` | (unset) | Activates the OpenRouter (compatible) provider chain. |
-| `FERRET_BRIDGE_TOKEN` | (unset) | Bearer auth token for `chimera ferret bridge`. |
-| `FERRET_SANDBOX` | (unset) | Default sandbox mode (`read-only`, `workspace-write`, `workspace-write-network`). |
-| `FERRET_APPROVAL` | (unset) | Default approval preset (`read-only`, `auto`, `full`). |
-| `NO_COLOR` | (unset) | When set, force the plain output handler. |
+| `FERRET_MODEL` | (unset) | Default model id. |
+| `OPENAI_API_KEY` | (unset) | OpenAI chain (default for ferret). |
+| `ANTHROPIC_API_KEY` | (unset) | Anthropic chain. |
+| `OPENROUTER_API_KEY` | (unset) | OpenRouter chain. |
+| `OLLAMA_API_KEY` | (unset) | Ollama Cloud (`:cloud` tags). |
+| `OLLAMA_HOST` | `http://localhost:11434` | Daemon URL. |
+| `FERRET_BRIDGE_TOKEN` | (unset) | Bearer for `ferret bridge`. |
+| `FERRET_SANDBOX` | (unset) | Default sandbox mode. |
+| `FERRET_APPROVAL` | (unset) | Default approval preset. |
+| `NO_COLOR` | (unset) | Plain output handler. |
 
 ## Where to go next
 
-- New to provider selection? Start with [`providers.md`](providers.md).
-- About to grant write access? Read [`sandbox.md`](sandbox.md) and
-  [`approval.md`](approval.md) together — they compose.
-- Wiring an IDE plugin? See [`ide.md`](ide.md).
-- Driving from a remote UI? See [`cloud-bridge.md`](cloud-bridge.md).
-- Want the surface-by-surface parity status? See
-  [`parity-matrix.md`](parity-matrix.md).
+- [Sandbox](./sandbox.md) and [Approval](./approval.md) — they compose.
+- [IDE](./ide.md) — ACP schema and Zed / VS Code recipe.
+- [Cloud bridge](./cloud-bridge.md).
+- [Parity Matrix](./parity-matrix.md).
+- [Security and Trademarks](./security-and-trademarks.md).
+
+---
+
+### Verified (2026-05-14)
+
+Two commands from this quickstart, against Ollama Cloud:
+
+```text
+$ OLLAMA_HOST=https://ollama.com OLLAMA_API_KEY=*** \
+    chimera ferret -p "Hello, please reply with one word: hello" \
+                   --model gpt-oss:120b-cloud --max-steps 2 --no-color
+hello
+
+$ chimera ferret --version
+chimera ferret 0.7.0
+```
