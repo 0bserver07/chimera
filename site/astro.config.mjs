@@ -45,6 +45,7 @@ export default defineConfig({
 						{ label: 'Introduction', slug: 'getting-started' },
 						{ label: 'Quickstart', slug: 'quickstart' },
 						{ label: 'Architecture', slug: 'architecture' },
+						{ label: 'Inspirations (the 7 CLIs)', slug: 'inspirations' },
 					],
 				},
 				{
