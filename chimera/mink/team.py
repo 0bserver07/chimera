@@ -56,6 +56,13 @@ def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") 
     p_task_add.add_argument("name")
     p_task_add.add_argument("description")
     p_task_add.add_argument("--by", default="lead")
+    p_task_add.add_argument(
+        "--depends-on",
+        action="append",
+        default=None,
+        metavar="TASK_ID",
+        help="Task id this new task depends on (repeat for multiple).",
+    )
 
     p_task_list = task_sub.add_parser("list", help="List tasks")
     p_task_list.add_argument("name")
@@ -109,7 +116,10 @@ def run(args: argparse.Namespace) -> int:
             print(f"team '{args.name}' does not exist", file=sys.stderr)
             return 1
         if args.task_action == "add":
-            tid = team.add_task(args.description, created_by=args.by)
+            deps = getattr(args, "depends_on", None) or []
+            tid = team.add_task(
+                args.description, created_by=args.by, depends_on=deps,
+            )
             print(tid)
             return 0
         if args.task_action == "list":
