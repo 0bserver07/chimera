@@ -49,6 +49,15 @@ export default defineConfig({
 					],
 				},
 				{
+					label: 'Tutorials',
+					items: [
+						{ label: 'Build SWE-Agent in 60 lines', slug: 'tutorials/build-swe-agent-in-60-lines' },
+						{ label: 'Build Aider in 50 lines', slug: 'tutorials/build-aider-in-50-lines' },
+						{ label: 'Build Cline in 70 lines', slug: 'tutorials/build-cline-in-70-lines' },
+						{ label: 'Build Your Own Coding Agent', slug: 'tutorials/build-your-own-coding-agent' },
+					],
+				},
+				{
 					label: 'Concepts',
 					autogenerate: { directory: 'concepts' },
 				},
