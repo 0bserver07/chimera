@@ -1,0 +1,46 @@
+# Codex CLI config for the chimera-team MCP server.
+#
+# Drop this section into ~/.codex/config.toml (or merge it into the
+# existing [mcp_servers.*] table block).
+#
+# IMPORTANT — sandbox-write requirement:
+#   The chimera-team MCP server writes to ~/.chimera/teams (or whatever
+#   CHIMERA_TEAMS_HOME points at). Codex's default `read-only` sandbox
+#   blocks the server from creating lock files and JSONL state, so every
+#   team_claim_task call returns "user cancelled MCP tool call".
+#
+#   Two ways to fix it:
+#     a) Run Codex with --sandbox workspace-write and grant access to the
+#        teams home explicitly:
+#
+#          codex exec -s workspace-write --add-dir {{HOME}}/.chimera/teams \
+#              "claim a task and finish it"
+#
+#     b) Point CHIMERA_TEAMS_HOME inside the workspace Codex was started
+#        in (e.g. ./.chimera-teams) so it's already writable.
+#
+# IMPORTANT — identity via env vars (per-invocation overrides):
+#   The MCP server reads CHIMERA_TEAM and CHIMERA_AGENT from its
+#   environment. To bind one teammate identity to a Codex exec, override
+#   the env on the command line — Codex's `-c` flag merges into the
+#   table below:
+#
+#     codex exec \
+#       -s workspace-write --add-dir {{HOME}}/.chimera/teams \
+#       -c 'mcp_servers.chimera-team.env.CHIMERA_TEAM="review-pr"' \
+#       -c 'mcp_servers.chimera-team.env.CHIMERA_AGENT="codex-reviewer"' \
+#       "drain mailbox, claim a task, finish it, stop."
+#
+#   Replace {{HOME}} with your real home dir if Codex doesn't expand it.
+
+[mcp_servers.chimera-team]
+command = "chimera-team-mcp"
+args = []
+
+[mcp_servers.chimera-team.env]
+CHIMERA_EXPERIMENTAL_AGENT_TEAMS = "1"
+# Set per-invocation via `codex exec -c ...` (see comment block above):
+# CHIMERA_TEAM  = "review-pr"
+# CHIMERA_AGENT = "codex-reviewer"
+# Optional — only needed if you don't want the default ~/.chimera/teams:
+# CHIMERA_TEAMS_HOME = "{{HOME}}/.chimera/teams"

@@ -1,0 +1,21 @@
+{
+  "_comments": {
+    "purpose": "Drop-in snippet for ~/.chimera/mcp.json (read by chimera/cli/code.py at startup). Registers the chimera-team MCP server so a `chimera code -p` session can claim/complete tasks alongside Codex/OpenCode teammates.",
+    "merge_strategy": "If ~/.chimera/mcp.json already exists, copy the mcpServers.chimera-team entry into the existing servers/mcpServers map. chimera/cli/code.py accepts either `servers` or `mcpServers` as the top-level key.",
+    "experimental_flag": "CHIMERA_EXPERIMENTAL_AGENT_TEAMS=1 is required — the team server refuses to start without it.",
+    "identity_env": "CHIMERA_TEAM and CHIMERA_AGENT pick this Chimera process's teammate identity. Override them per session by exporting CHIMERA_TEAM=... CHIMERA_AGENT=... before launching `chimera code`.",
+    "teams_home": "{{TEAMS_HOME}} should be an absolute path. Use the same value across all teammates so they share state — e.g. /Users/you/.chimera/teams or a workspace-local directory like /Users/you/projects/foo/.chimera-teams."
+  },
+  "mcpServers": {
+    "chimera-team": {
+      "command": "chimera-team-mcp",
+      "args": [],
+      "env": {
+        "CHIMERA_EXPERIMENTAL_AGENT_TEAMS": "1",
+        "CHIMERA_TEAM": "review-pr",
+        "CHIMERA_AGENT": "chimera-1",
+        "CHIMERA_TEAMS_HOME": "{{TEAMS_HOME}}"
+      }
+    }
+  }
+}

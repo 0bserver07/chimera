@@ -1,0 +1,24 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "_comments": {
+    "purpose": "Project-local OpenCode config that registers the chimera-team MCP server so OpenCode sessions can participate in a Chimera agent team.",
+    "auth": "OpenCode requires `opencode auth login` (or an OPENCODE_API_KEY in env) before MCP tools are visible. Without auth the agent stays in unauthenticated mode and the team_* tools won't be invoked.",
+    "path_layout": "All team state lives under CHIMERA_TEAMS_HOME (defaults to ~/.chimera/teams). The MCP server creates {{TEAMS_HOME}}/<team-name>/{config.json, task_list.jsonl, mailbox/*.jsonl}. Replace {{TEAMS_HOME}} below with an absolute path you control (e.g. /Users/you/.chimera/teams) — OpenCode does not expand ~.",
+    "identity": "CHIMERA_TEAM and CHIMERA_AGENT identify this OpenCode instance to the team. Change them per project / per session as needed. The MCP server falls back to these env vars when --team / --agent flags are absent.",
+    "experimental_flag": "CHIMERA_EXPERIMENTAL_AGENT_TEAMS=1 is required — the server refuses to start without it.",
+    "sandbox_note": "Unlike Codex, OpenCode does not impose a read-only filesystem sandbox on its MCP children by default, so no extra --add-dir flag is needed. Just ensure the user running OpenCode has write access to {{TEAMS_HOME}}."
+  },
+  "mcp": {
+    "chimera-team": {
+      "type": "local",
+      "command": ["chimera-team-mcp"],
+      "enabled": true,
+      "environment": {
+        "CHIMERA_EXPERIMENTAL_AGENT_TEAMS": "1",
+        "CHIMERA_TEAM": "review-pr",
+        "CHIMERA_AGENT": "opencode-1",
+        "CHIMERA_TEAMS_HOME": "{{TEAMS_HOME}}"
+      }
+    }
+  }
+}
