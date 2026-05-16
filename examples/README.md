@@ -3,6 +3,28 @@
 Runnable scripts that exercise Chimera end-to-end. Each script is standalone
 and self-documenting (read the docstring at the top). Grouped by intent below.
 
+## Common environment variables
+
+Most examples reach for one of two provider chains. Set the relevant
+pair before running:
+
+```bash
+# Anthropic-compatible (Claude direct, GLM via z.ai, Kimi via Moonshot, …)
+export ANTHROPIC_BASE_URL="https://api.anthropic.com"   # or https://api.z.ai/api/anthropic
+export ANTHROPIC_AUTH_TOKEN="sk-ant-..."                # or your provider token
+export ANTHROPIC_MODEL="claude-sonnet-4-5"              # optional override
+
+# Ollama (local daemon or ollama.com cloud)
+export ANTHROPIC_BASE_URL="http://localhost:11434"      # or https://ollama.com
+export ANTHROPIC_AUTH_TOKEN="ollama"                    # or your ollama.com token
+
+# OpenAI
+export OPENAI_API_KEY="sk-..."
+```
+
+Scripts skip gracefully (rc=0 with a `SKIP:` message) when their
+credentials are missing — safe to drop into CI.
+
 ```
 examples/
 ├── provider/            — smallest "does it connect?" demos
@@ -20,26 +42,53 @@ examples/
 - [`quickstart_provider.py`](provider/quickstart_provider.py) — Connect to any
   Anthropic-compatible provider (Claude, GLM-5 via z.ai, OpenAI-compatible) and
   run three smoke tests.
+  - Env: `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_MODEL`.
+  - Run: `python examples/provider/quickstart_provider.py`
+  - Output: three short responses (plain text, tool-call, multi-turn) printed sequentially.
 - [`ollama_quickstart.py`](provider/ollama_quickstart.py) — Same idea, pointed
   at Ollama's Anthropic-compatible endpoint (local daemon or
   `https://ollama.com`). Runs plain text, tool-use, and multi-turn demos.
+  - Env: `ANTHROPIC_BASE_URL` (e.g. `http://localhost:11434`), `ANTHROPIC_AUTH_TOKEN=ollama`.
+  - Run: `python examples/provider/ollama_quickstart.py --model kimi-k2.6:cloud`
+  - Output: three short responses; daemon misses skip gracefully.
 - [`streaming_agent.py`](provider/streaming_agent.py) — Stream agent output
   token by token.
+  - Env: any provider chain above.
+  - Run: `python examples/provider/streaming_agent.py`
+  - Output: token deltas printed inline until the agent finishes.
 
 ## agent/
 
 - [`agent_with_tools.py`](agent/agent_with_tools.py) — Build an agent by
   composing a custom tool set.
+  - Env: any provider chain above.
+  - Run: `python examples/agent/agent_with_tools.py`
+  - Output: an agent transcript showing the custom tool getting picked up.
 - [`coding_agent.py`](agent/coding_agent.py) — Full coding agent: 24 tools,
   interactive REPL, project-rules loading.
+  - Env: any provider chain above; optional `CHIMERA_RULES_FILE=.chimera/rules.md`.
+  - Run: `python examples/agent/coding_agent.py`
+  - Output: interactive REPL — type a prompt, get streamed tool calls and edits.
 - [`coding_agent_minimal.py`](agent/coding_agent_minimal.py) — Smallest
   possible coding loop, no bells or whistles.
+  - Env: any provider chain above.
+  - Run: `python examples/agent/coding_agent_minimal.py`
+  - Output: a one-shot agent run that completes a tiny task and prints the result.
 - [`ollama_coding_agent.py`](agent/ollama_coding_agent.py) — Full `CodingAgent`
   driven by an Ollama cloud model; pre-flight checks endpoint + context window.
+  - Env: `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN=ollama`.
+  - Run: `python examples/agent/ollama_coding_agent.py --model kimi-k2.6:cloud`
+  - Output: pre-flight summary, then an agent transcript against the chosen model.
 - [`build_full_preset_agent.py`](agent/build_full_preset_agent.py) — Assemble
   a full-featured coding agent from Chimera primitives via the `claude_code`
   preset key on `CodingAgent.from_preset()`.
+  - Env: any provider chain above.
+  - Run: `python examples/agent/build_full_preset_agent.py`
+  - Output: preset summary (tools, hooks, permissions) plus a sample run.
 - [`build_codex_clone.py`](agent/build_codex_clone.py) — Codex-style preset.
+  - Env: any provider chain above (defaults to OpenAI).
+  - Run: `python examples/agent/build_codex_clone.py`
+  - Output: a Codex-style agent transcript without the hooks layer.
 
 ## real_world/
 
@@ -48,16 +97,31 @@ Everyday tools you can point at your own codebase.
 - [`ollama_code_review.py`](real_world/ollama_code_review.py) — Pipe `git diff`
   into a model and get a VERDICT / SUMMARY / ISSUES review. Verified against
   `kimi-k2.6`.
+  - Env: `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN=ollama`.
+  - Run: `git diff | python examples/real_world/ollama_code_review.py`
+  - Output: structured `VERDICT: …`, `SUMMARY: …`, `ISSUES: …` block.
 - [`ollama_commit_message.py`](real_world/ollama_commit_message.py) — Generate
   a Conventional Commits message from your staged diff. Stdout is pipeable into
   `git commit -F -`.
+  - Env: `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN=ollama`.
+  - Run: `git diff --staged | python examples/real_world/ollama_commit_message.py`
+  - Output: a single conventional-commits message on stdout.
 - [`ollama_explain.py`](real_world/ollama_explain.py) — Hand a file to the
   model and get a structured explanation (WHAT IT IS / PURPOSE / KEY PIECES /
   HOW IT FITS / GOTCHAS).
+  - Env: `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN=ollama`.
+  - Run: `python examples/real_world/ollama_explain.py path/to/file.py`
+  - Output: a five-section structured explanation.
 - [`ci_fix.py`](real_world/ci_fix.py) — `CIFixWorkflow`: parse CI logs, prompt
   the agent, retry until green.
+  - Env: any provider chain above.
+  - Run: `python examples/real_world/ci_fix.py --log path/to/ci.log`
+  - Output: per-iteration patch + test summary until tests pass or `--max-attempts` is hit.
 - [`session_persistence.py`](real_world/session_persistence.py) — Save and
   resume agent sessions across restarts.
+  - Env: any provider chain above.
+  - Run: `python examples/real_world/session_persistence.py`
+  - Output: first invocation creates `~/.chimera/sessions/<id>.json`; subsequent runs resume from it.
 
 ## composition/
 
@@ -94,12 +158,24 @@ Compile natural-language specs into portable `.chi` bundles.
 ## benchmarks/
 
 - [`humaneval_full.py`](benchmarks/humaneval_full.py) — Full HumanEval suite.
+  - Env: any provider chain above.
+  - Run: `python examples/benchmarks/humaneval_full.py --model glm-5.1`
+  - Output: per-problem pass/fail trace, then `pass@1` summary; raw results to `data/humaneval-<model>-results.json`.
 - [`swe_bench_lite_run.py`](benchmarks/swe_bench_lite_run.py) — Canonical
   SWE-bench Lite runner (matches the 10% resolve rate in `data/`).
+  - Env: any provider chain above; `SWEBENCH_DATA_DIR` if you've pre-fetched it.
+  - Run: `python examples/benchmarks/swe_bench_lite_run.py --limit 20`
+  - Output: per-instance patch + verdict, final resolve-rate; results to `data/swebench-lite-<model>-results.jsonl`.
 - [`swe_bench_proper.py`](benchmarks/swe_bench_proper.py) — Official SWE-bench
   eval flow (`FAIL_TO_PASS` / `PASS_TO_PASS`).
+  - Env: same as above + `SWEBENCH_INSTANCE_ID` to scope.
+  - Run: `python examples/benchmarks/swe_bench_proper.py --instance-id <id>`
+  - Output: full eval report including F2P / P2P breakdown.
 - [`swe_bench_docker.py`](benchmarks/swe_bench_docker.py) — SWE-bench with
   per-instance Docker isolation.
+  - Env: same as above + a running Docker daemon.
+  - Run: `python examples/benchmarks/swe_bench_docker.py --limit 5`
+  - Output: per-instance Docker container ID + verdict; results land in `data/`.
 
 ## Codename CLI quickstarts
 

@@ -62,9 +62,16 @@ compromised model or proxy can return adversarial tool calls. Your defenses:
 
 ## Reporting a vulnerability
 
-Email security reports to the maintainer (see `pyproject.toml` authors
-field) or open a GitHub security advisory on the repo. Please include a
-minimal reproduction and do not file public issues for unpatched
+**Preferred channel:** open a private
+[GitHub Security Advisory](https://github.com/0bserver07/chimera/security/advisories/new)
+on the repository. This keeps the report private until a fix ships and
+gives us a tracked, CVE-issuable record.
+
+If GitHub Security Advisories are unavailable to you, email the
+maintainers (contacts listed under the `authors` field in
+`pyproject.toml`, or via the GitHub profile at
+<https://github.com/0bserver07>). Please include a minimal
+reproduction and do not file public issues for unpatched
 vulnerabilities.
 
 We aim to acknowledge reports within 72 hours. No bounty program.
