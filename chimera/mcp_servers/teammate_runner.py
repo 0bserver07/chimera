@@ -40,6 +40,28 @@ Sample::
 
     chimera-team-run --team review-pr --agent opencode-1 \\
         --cmd 'opencode run "{prompt}"'
+
+Session reuse (ACP)
+-------------------
+
+For agents that speak Agent Client Protocol over stdio, pass
+``--reuse-session --runtime acp`` to keep a single subprocess alive
+across N tasks. The runner spawns the external agent once via
+:class:`chimera.acp.client.ACPClient`, then sends one
+``session/sendMessage`` per task instead of paying the cold-start cost
+on every iteration. If the subprocess crashes mid-session the runner
+tears down the dead client and respawns on the next iteration —
+existing stuck-claim recovery still applies. The persistent session is
+gracefully stopped when the loop idles out::
+
+    chimera-team-run --team review-pr --agent opencode-1 \\
+        --runtime acp --reuse-session \\
+        --cmd 'opencode acp'
+
+When ``--reuse-session`` is passed but ``--runtime`` is not ``acp`` the
+flag is downgraded with a warning and the runner falls back to
+spawn-per-task — preserving the legacy behavior so misconfigured
+invocations still make progress.
 """
 from __future__ import annotations
 
@@ -50,12 +72,176 @@ import subprocess
 import sys
 import tempfile
 import time
+from dataclasses import dataclass
 from pathlib import Path
-from typing import TextIO
+from typing import TYPE_CHECKING, Callable, Protocol, TextIO
 
 from chimera.cli.agent_teams import ENV_FLAG, Team, TeamMailbox
 
-__all__ = ["TEAMMATE_PROMPT", "run_loop", "main"]
+if TYPE_CHECKING:
+    from chimera.acp.types import ACPSessionConfig
+
+
+class ACPClientLike(Protocol):
+    """Structural protocol the runner needs from an ACP client.
+
+    The real :class:`chimera.acp.client.ACPClient` satisfies this, and so
+    does any test fake that implements ``start``, ``stop``, and
+    ``send_message``. Using a Protocol keeps the production code agnostic
+    to test doubles without sacrificing type checking — mypy / Pyright
+    accept structural subtyping here.
+    """
+
+    def start(self) -> None: ...
+
+    def stop(self) -> None: ...
+
+    def send_message(self, text: str) -> object: ...
+
+
+#: Type alias for a factory that constructs an ACP-client-like object
+#: from a prepared :class:`ACPSessionConfig`. The structural
+#: :class:`ACPClientLike` lets tests inject fakes that only implement
+#: the three methods the runner actually calls.
+ACPClientFactory = Callable[["ACPSessionConfig"], ACPClientLike]
+
+
+@dataclass
+class _SessionState:
+    """Mutable state for the persistent-session (ACP) code path.
+
+    Attributes:
+        client: The live ACP client, or ``None`` if not yet started or
+            after a crash forced teardown.
+    """
+
+    client: ACPClientLike | None = None
+
+
+def _build_acp_config(
+    cmd_template: str, env: dict[str, str],
+) -> "ACPSessionConfig":
+    """Parse a ``--cmd`` string into an :class:`ACPSessionConfig`.
+
+    The reuse-session path doesn't use the ``{prompt}`` / ``{prompt_file}``
+    placeholders — prompts arrive via ``session/sendMessage`` — so the
+    template is parsed as a literal ``command + args`` via ``shlex.split``.
+
+    Args:
+        cmd_template: The ``--cmd`` value (no placeholder substitution).
+        env: Environment variables to pass through to the subprocess
+            (already includes ``CHIMERA_TEAM`` / ``CHIMERA_AGENT`` /
+            ``CHIMERA_EXPERIMENTAL_AGENT_TEAMS``).
+
+    Returns:
+        A configured :class:`ACPSessionConfig` ready to hand to
+        :class:`ACPClient`.
+
+    Raises:
+        ValueError: If ``cmd_template`` is empty after shlex parsing.
+    """
+    from chimera.acp.types import ACPSessionConfig
+
+    parts = shlex.split(cmd_template)
+    if not parts:
+        raise ValueError("--cmd must contain at least one token")
+    return ACPSessionConfig(
+        command=[parts[0]],
+        args=parts[1:],
+        env=env,
+    )
+
+
+def _acp_run_one_task(
+    state: _SessionState,
+    prompt: str,
+    cmd_template: str,
+    env: dict[str, str],
+    log: TextIO,
+    client_factory: ACPClientFactory | None = None,
+) -> int:
+    """Send one task's prompt to the persistent ACP session.
+
+    On the first call (or after a crash forced teardown) this spawns the
+    ACP subprocess and creates a fresh session. On subsequent calls it
+    reuses the same subprocess — that's the entire point of the
+    reuse-session flag. If ``send_message`` raises, the dead client is
+    closed and ``state.client`` is reset to ``None`` so the *next*
+    iteration of the outer loop respawns.
+
+    Args:
+        state: Mutable session state shared across iterations.
+        prompt: Teammate workflow prompt to deliver via
+            ``session/sendMessage``.
+        cmd_template: Original ``--cmd`` value, used only when we need
+            to spawn (or respawn) the subprocess.
+        env: Environment variables for the subprocess.
+        log: Stream to write status messages to.
+        client_factory: Optional injection point for tests; defaults to
+            ``lambda cfg: ACPClient(cfg)``.
+
+    Returns:
+        ``0`` on a successful send; ``-1`` when the ACP subprocess
+        crashed or failed to start (the outer loop will respawn next
+        iteration).
+    """
+    if client_factory is None:
+        # Defer the import so tests with their own factory don't pay
+        # the cost (and so import-cycle risk stays bounded).
+        from chimera.acp.client import ACPClient as _DefaultACPClient
+
+        def _default_factory(cfg: "ACPSessionConfig") -> ACPClientLike:
+            return _DefaultACPClient(cfg)
+
+        factory: ACPClientFactory = _default_factory
+    else:
+        factory = client_factory
+
+    if state.client is None:
+        try:
+            cfg = _build_acp_config(cmd_template, env)
+            state.client = factory(cfg)
+            state.client.start()
+            print(
+                "chimera-team-run: started persistent ACP session.",
+                file=log,
+            )
+        except Exception as e:
+            print(
+                f"chimera-team-run: failed to start ACP session ({e!r}); "
+                "will retry next iteration.",
+                file=log,
+            )
+            # Best-effort teardown so we don't leak a half-started process.
+            client = state.client
+            state.client = None
+            if client is not None:
+                try:
+                    client.stop()
+                except Exception:
+                    pass
+            return -1
+
+    try:
+        state.client.send_message(prompt)
+        return 0
+    except (RuntimeError, OSError, BrokenPipeError) as e:
+        print(
+            f"chimera-team-run: ACP session crashed ({e!r}); "
+            "will respawn next iteration.",
+            file=log,
+        )
+        client = state.client
+        state.client = None
+        if client is not None:
+            try:
+                client.stop()
+            except Exception:
+                pass
+        return -1
+
+
+__all__ = ["TEAMMATE_PROMPT", "run_loop", "main", "ACPClientFactory"]
 
 
 TEAMMATE_PROMPT = """\
@@ -133,6 +319,9 @@ def run_loop(
     poll_interval: float = 2.0,
     max_nudges: int = 1,
     log: TextIO = sys.stderr,
+    reuse_session: bool = False,
+    runtime: str = "spawn",
+    acp_client_factory: ACPClientFactory | None = None,
 ) -> int:
     """Poll-and-spawn loop.
 
@@ -140,21 +329,52 @@ def run_loop(
         team_name: Team to attach to (created if absent).
         agent_id: This teammate's id.
         cmd_template: Shell command with ``{prompt}`` or ``{prompt_file}``
-            placeholders.
+            placeholders. In ``--runtime acp --reuse-session`` mode the
+            placeholders are not required because prompts are delivered
+            over ACP rather than the command line.
         teams_root: Override for ``~/.chimera/teams``.
         idle_timeout: Exit after this many seconds with no *progress*
             (no task transitioning to a new state). This covers both
             "no open tasks" and "agent keeps failing to make progress".
         task_timeout: Kill the external subprocess after this many seconds.
+            Only enforced in ``runtime='spawn'`` mode; ACP reuse leaves
+            timeout to the agent's own deadlines (the persistent session
+            doesn't expose a clean kill point per ``session/sendMessage``).
         poll_interval: How often (seconds) to check the task list.
         max_nudges: Number of consecutive no-progress nudges to send for a
             stuck claim before the runner force-releases the task. Defaults
             to 1 (one nudge, then release on the next stuck iteration).
         log: Stream to write status messages to.
+        reuse_session: When True (and ``runtime`` is ``'acp'``), keep one
+            external-agent subprocess alive across tasks. When True but
+            ``runtime`` is ``'spawn'``, the flag is downgraded with a
+            warning and the loop falls back to spawn-per-task.
+        runtime: External-agent runtime. ``'spawn'`` (default) shells out
+            once per task. ``'acp'`` drives a persistent
+            :class:`chimera.acp.client.ACPClient` and delivers prompts
+            via ``session/sendMessage`` (requires ``reuse_session=True``
+            to differ from spawn behavior).
+        acp_client_factory: Optional injection point for tests; defaults
+            to ``lambda cfg: ACPClient(cfg)``.
 
     Returns:
         Exit code (0 on idle-timeout shutdown).
     """
+    # Coerce flags: --reuse-session is only meaningful with --runtime acp.
+    # A misconfigured invocation should still make progress, so we warn
+    # and downgrade rather than fail.
+    if reuse_session and runtime != "acp":
+        print(
+            f"chimera-team-run: --reuse-session requires --runtime acp "
+            f"(got runtime={runtime!r}); falling back to spawn-per-task.",
+            file=log,
+        )
+        reuse_session = False
+
+    session_state: _SessionState | None = (
+        _SessionState() if reuse_session else None
+    )
+
     team = Team(team_name, root=teams_root)
     team.init()
     team.add_member(agent_id)
@@ -245,93 +465,134 @@ def run_loop(
 
     last_progress = time.time()
 
-    while True:
-        # Idle = no team-state progress for idle_timeout, regardless of
-        # whether tasks remain open. A stuck agent that never completes
-        # anything still drains to this exit rather than spinning forever.
-        if time.time() - last_progress > idle_timeout:
-            print(
-                f"chimera-team-run: no progress for {idle_timeout:.0f}s "
-                f"({_my_completed()} tasks completed by {agent_id}); exiting.",
-                file=log,
-            )
-            return 0
+    try:
+        while True:
+            # Idle = no team-state progress for idle_timeout, regardless of
+            # whether tasks remain open. A stuck agent that never completes
+            # anything still drains to this exit rather than spinning forever.
+            if time.time() - last_progress > idle_timeout:
+                print(
+                    f"chimera-team-run: no progress for {idle_timeout:.0f}s "
+                    f"({_my_completed()} tasks completed by {agent_id}); exiting.",
+                    file=log,
+                )
+                return 0
 
-        tasks = team.list_tasks()
-        open_tasks = [t for t in tasks if t.get("status") == "open"]
-        # Tasks we released earlier and that are now back in the pool —
-        # we don't count those as "open work for me" to avoid an infinite
-        # claim/release cycle with the same misbehaving agent.
-        if released_by_runner:
-            # Drop ids that have transitioned out of "open" (someone else
-            # acted on them) so the next round can reconsider.
-            status_by_id = {t["id"]: t.get("status") for t in tasks}
-            for tid in list(released_by_runner):
-                if status_by_id.get(tid) != "open":
-                    released_by_runner.discard(tid)
-        spawnable_open = [t for t in open_tasks if t["id"] not in released_by_runner]
-        my_stuck = [
-            t for t in tasks
-            if t.get("status") == "claimed" and t.get("claimed_by") == agent_id
-        ]
+            tasks = team.list_tasks()
+            open_tasks = [t for t in tasks if t.get("status") == "open"]
+            # Tasks we released earlier and that are now back in the pool —
+            # we don't count those as "open work for me" to avoid an infinite
+            # claim/release cycle with the same misbehaving agent.
+            if released_by_runner:
+                # Drop ids that have transitioned out of "open" (someone else
+                # acted on them) so the next round can reconsider.
+                status_by_id = {t["id"]: t.get("status") for t in tasks}
+                for tid in list(released_by_runner):
+                    if status_by_id.get(tid) != "open":
+                        released_by_runner.discard(tid)
+            spawnable_open = [t for t in open_tasks if t["id"] not in released_by_runner]
+            my_stuck = [
+                t for t in tasks
+                if t.get("status") == "claimed" and t.get("claimed_by") == agent_id
+            ]
 
-        # Spawn when there's fresh open work OR we have stuck claims of
-        # ours (re-spawn so the agent can read its mailbox and act).
-        if not spawnable_open and not my_stuck:
-            time.sleep(poll_interval)
-            continue
+            # Spawn when there's fresh open work OR we have stuck claims of
+            # ours (re-spawn so the agent can read its mailbox and act).
+            if not spawnable_open and not my_stuck:
+                time.sleep(poll_interval)
+                continue
 
-        # Snapshot task ids before the spawn — we use this to detect
-        # whether the agent actually made progress.
-        before = {t["id"]: t.get("status") for t in tasks}
+            # Snapshot task ids before the spawn — we use this to detect
+            # whether the agent actually made progress.
+            before = {t["id"]: t.get("status") for t in tasks}
 
-        with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False) as f:
-            f.write(prompt)
-            prompt_file = f.name
-
-        try:
-            cmd = cmd_template.replace("{prompt_file}", prompt_file).replace(
-                "{prompt}", shlex.quote(prompt)
-            )
             spawn_reason = (
                 f"{len(spawnable_open)} open task(s)" if spawnable_open
                 else f"{len(my_stuck)} stuck claim(s)"
             )
-            print(
-                f"chimera-team-run: {spawn_reason}; spawning external agent.",
-                file=log,
-            )
-            rc = _run_with_timeout(cmd, base_env, task_timeout, log)
-        finally:
-            try:
-                os.unlink(prompt_file)
-            except OSError:
-                pass
 
-        after_tasks = team.list_tasks()
-        runner_acted = _handle_stuck_claims(after_tasks)
+            if session_state is not None:
+                # Persistent ACP session: one subprocess, N send_message calls.
+                # The dead-client respawn is handled inside the helper — we
+                # only see a non-zero rc when the *next* iteration will
+                # need to re-create the client.
+                print(
+                    f"chimera-team-run: {spawn_reason}; "
+                    "sending prompt via persistent ACP session.",
+                    file=log,
+                )
+                rc = _acp_run_one_task(
+                    session_state,
+                    prompt,
+                    cmd_template,
+                    base_env,
+                    log,
+                    acp_client_factory,
+                )
+            else:
+                # Legacy spawn-per-task path: substitute placeholders and
+                # shell out, paying the cold-start cost each iteration.
+                with tempfile.NamedTemporaryFile(
+                    "w", suffix=".txt", delete=False,
+                ) as f:
+                    f.write(prompt)
+                    prompt_file = f.name
 
-        # Refresh task state after any runner-initiated releases so the
-        # progress check below sees the runner's own action as a state
-        # change for the *next* iteration.
-        if runner_acted:
+                try:
+                    cmd = cmd_template.replace(
+                        "{prompt_file}", prompt_file,
+                    ).replace("{prompt}", shlex.quote(prompt))
+                    print(
+                        f"chimera-team-run: {spawn_reason}; "
+                        "spawning external agent.",
+                        file=log,
+                    )
+                    rc = _run_with_timeout(cmd, base_env, task_timeout, log)
+                finally:
+                    try:
+                        os.unlink(prompt_file)
+                    except OSError:
+                        pass
+
             after_tasks = team.list_tasks()
-        after = {t["id"]: t.get("status") for t in after_tasks}
+            runner_acted = _handle_stuck_claims(after_tasks)
 
-        progressed = before != after
-        if progressed:
-            last_progress = time.time()
-            print(
-                f"chimera-team-run: agent exited rc={rc}; team state changed.",
-                file=log,
-            )
-        else:
-            print(
-                f"chimera-team-run: agent exited rc={rc} but team state "
-                f"did not change. Sleeping {poll_interval:.0f}s before retry.",
-                file=log,
-            )
-            time.sleep(poll_interval)
+            # Refresh task state after any runner-initiated releases so the
+            # progress check below sees the runner's own action as a state
+            # change for the *next* iteration.
+            if runner_acted:
+                after_tasks = team.list_tasks()
+            after = {t["id"]: t.get("status") for t in after_tasks}
+
+            progressed = before != after
+            if progressed:
+                last_progress = time.time()
+                print(
+                    f"chimera-team-run: agent exited rc={rc}; team state changed.",
+                    file=log,
+                )
+            else:
+                print(
+                    f"chimera-team-run: agent exited rc={rc} but team state "
+                    f"did not change. Sleeping {poll_interval:.0f}s before retry.",
+                    file=log,
+                )
+                time.sleep(poll_interval)
+    finally:
+        # Gracefully stop the persistent ACP subprocess on any exit path
+        # (idle timeout, KeyboardInterrupt, or unexpected raise).
+        if session_state is not None and session_state.client is not None:
+            try:
+                session_state.client.stop()
+                print(
+                    "chimera-team-run: stopped persistent ACP session.",
+                    file=log,
+                )
+            except Exception as e:
+                print(
+                    f"chimera-team-run: failed to stop ACP session ({e!r}).",
+                    file=log,
+                )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -370,11 +631,41 @@ def main(argv: list[str] | None = None) -> int:
             "the runner force-releases the task back to the pool (default: 1)."
         ),
     )
+    parser.add_argument(
+        "--runtime",
+        choices=["spawn", "acp"],
+        default="spawn",
+        help=(
+            "External-agent runtime. 'spawn' (default) runs --cmd as a "
+            "fresh subprocess per task. 'acp' speaks Agent Client "
+            "Protocol over stdio to a persistent subprocess "
+            "(combine with --reuse-session)."
+        ),
+    )
+    parser.add_argument(
+        "--reuse-session",
+        action="store_true",
+        help=(
+            "Keep one external-agent subprocess alive across tasks "
+            "instead of spawning a fresh one per task. Requires "
+            "--runtime acp; with --runtime spawn the flag is "
+            "downgraded with a warning."
+        ),
+    )
     args = parser.parse_args(argv)
 
-    if "{prompt}" not in args.cmd and "{prompt_file}" not in args.cmd:
+    # In reuse-session ACP mode the placeholders are not required —
+    # prompts are delivered via session/sendMessage rather than the
+    # command line. In every other mode they're load-bearing.
+    placeholders_required = not (args.reuse_session and args.runtime == "acp")
+    if (
+        placeholders_required
+        and "{prompt}" not in args.cmd
+        and "{prompt_file}" not in args.cmd
+    ):
         print(
-            "chimera-team-run: --cmd must contain {prompt} or {prompt_file}.",
+            "chimera-team-run: --cmd must contain {prompt} or "
+            "{prompt_file} (unless --reuse-session --runtime acp is set).",
             file=sys.stderr,
         )
         return 2
@@ -389,6 +680,8 @@ def main(argv: list[str] | None = None) -> int:
         task_timeout=args.task_timeout,
         poll_interval=args.poll_interval,
         max_nudges=args.max_nudges,
+        reuse_session=args.reuse_session,
+        runtime=args.runtime,
     )
 
 

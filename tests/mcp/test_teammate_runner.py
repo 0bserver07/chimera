@@ -8,6 +8,13 @@ server (the MCP server is just an interface over the same Team object).
 
 Doing it this way lets us validate the runner's loop without needing a
 real MCP host installed in the test environment.
+
+The session-reuse tests use an in-process fake ``ACPClient`` injected
+via ``acp_client_factory``. The fake mutates the on-disk team state
+exactly like a real ACP agent would (claim + complete the next open
+task) — that way the same assertions about team state hold, and we get
+to count ``start`` / ``stop`` / ``send_message`` calls to prove the
+runner actually reuses one subprocess across N tasks.
 """
 from __future__ import annotations
 
@@ -17,7 +24,9 @@ import sys
 import textwrap
 import time
 from pathlib import Path
+from typing import Any, Callable
 
+from chimera.acp.types import ACPResponse, ACPSessionConfig
 from chimera.cli.agent_teams import Team, TeamMailbox
 from chimera.mcp_servers.teammate_runner import (
     TEAMMATE_PROMPT,
@@ -379,3 +388,360 @@ class TestPromptContents:
         # Stop-after-one-task instruction is the load-bearing one for
         # the runner's invariant (one invocation = one task).
         assert "work exactly ONE task" in rendered
+
+
+# ---------------------------------------------------------------------------
+# Session reuse (issue #148)
+# ---------------------------------------------------------------------------
+
+
+class _FakeACPClient:
+    """In-process stand-in for ``chimera.acp.client.ACPClient``.
+
+    Mutates the on-disk team state on every ``send_message`` call —
+    claim + complete the next open task — exactly like a real ACP agent
+    using the ``team_*`` MCP tools would. The bookkeeping counters
+    (``start_calls`` / ``stop_calls`` / ``send_calls``) let assertions
+    prove the runner actually reuses one subprocess across N tasks.
+
+    Construct with ``crash_on_send`` to simulate an agent that dies
+    mid-session — the next iteration of the runner should re-create the
+    client.
+    """
+
+    def __init__(
+        self,
+        cfg: ACPSessionConfig,
+        teams_root: Path,
+        team_name: str,
+        agent_id: str,
+        crash_on_send: bool = False,
+    ) -> None:
+        self.cfg = cfg
+        self.teams_root = teams_root
+        self.team_name = team_name
+        self.agent_id = agent_id
+        self.crash_on_send = crash_on_send
+        self.start_calls = 0
+        self.stop_calls = 0
+        self.send_calls = 0
+        self._started = False
+
+    def start(self) -> None:
+        self.start_calls += 1
+        self._started = True
+
+    def stop(self) -> None:
+        self.stop_calls += 1
+        self._started = False
+
+    def send_message(
+        self, text: str, on_chunk: Callable[[str], None] | None = None,
+    ) -> ACPResponse:
+        self.send_calls += 1
+        if self.crash_on_send:
+            raise RuntimeError("ACP process closed stdout")
+        # Simulate the agent calling team_claim_task + team_complete_task
+        # via its MCP client. The on-disk team state is shared with the
+        # runner, so this is equivalent to a real agent's behavior from
+        # the runner's point of view.
+        team = Team(self.team_name, root=self.teams_root)
+        for rec in team.list_tasks():
+            if rec.get("status") == "open":
+                if team.claim_task(rec["id"], self.agent_id):
+                    team.complete_task(
+                        rec["id"], self.agent_id, result="acp mock done",
+                    )
+                    break
+        return ACPResponse(
+            text="", thoughts=[], tool_calls=[],
+            cost=0.0, input_tokens=0, output_tokens=0,
+        )
+
+
+def _factory_for(
+    teams_root: Path,
+    team_name: str,
+    agent_id: str,
+    *,
+    crash_first: bool = False,
+    track: list[Any] | None = None,
+) -> Callable[[ACPSessionConfig], _FakeACPClient]:
+    """Build an ``acp_client_factory`` that records each constructed client.
+
+    When ``crash_first`` is True the first client raises on
+    ``send_message`` and subsequent ones behave normally — drives the
+    "crash + respawn" assertion.
+    """
+    sink: list[Any] = track if track is not None else []
+
+    def _factory(cfg: ACPSessionConfig) -> _FakeACPClient:
+        crash = crash_first and len(sink) == 0
+        client = _FakeACPClient(
+            cfg, teams_root=teams_root,
+            team_name=team_name, agent_id=agent_id,
+            crash_on_send=crash,
+        )
+        sink.append(client)
+        return client
+
+    _factory.clients = sink  # type: ignore[attr-defined]
+    return _factory
+
+
+class TestSessionReuse:
+    def test_acp_reuse_keeps_one_subprocess_across_tasks(
+        self, tmp_path: Path,
+    ) -> None:
+        # Three open tasks. With --reuse-session --runtime acp, the
+        # runner must create exactly ONE ACPClient and call .start()
+        # exactly once — not three times. send_message gets called once
+        # per task (3 total).
+        team = Team("reuse1", root=tmp_path)
+        team.init()
+        for i in range(3):
+            team.add_task(f"reuse task {i}", created_by="lead")
+
+        factory = _factory_for(tmp_path, "reuse1", "alice")
+
+        log = io.StringIO()
+        rc = run_loop(
+            team_name="reuse1",
+            agent_id="alice",
+            cmd_template="opencode acp",  # no placeholders required
+            teams_root=tmp_path,
+            idle_timeout=0.3,
+            poll_interval=0.05,
+            log=log,
+            reuse_session=True,
+            runtime="acp",
+            acp_client_factory=factory,
+        )
+        assert rc == 0
+
+        clients = factory.clients  # type: ignore[attr-defined]
+        # Reuse means one ACPClient instance across all tasks.
+        assert len(clients) == 1, (
+            f"expected 1 client (reuse), got {len(clients)}"
+        )
+        # And exactly one start() — the whole point of the flag.
+        assert clients[0].start_calls == 1
+        # Three send_message calls (one per task).
+        assert clients[0].send_calls == 3
+        # All tasks completed.
+        statuses = [
+            t["status"] for t in Team("reuse1", root=tmp_path).list_tasks()
+        ]
+        assert statuses.count("completed") == 3
+        # Log shows the persistent session was started.
+        assert "started persistent ACP session" in log.getvalue()
+        assert "stopped persistent ACP session" in log.getvalue()
+
+    def test_acp_reuse_respawns_after_crash(self, tmp_path: Path) -> None:
+        # The first ACPClient crashes on send_message (RuntimeError);
+        # the runner must tear it down and create a second client on
+        # the next iteration. That second client claims+completes the
+        # task. We assert two clients were created and at least one
+        # task completed.
+        team = Team("reuse2", root=tmp_path)
+        team.init()
+        for i in range(2):
+            team.add_task(f"reuse task {i}", created_by="lead")
+
+        factory = _factory_for(
+            tmp_path, "reuse2", "alice", crash_first=True,
+        )
+
+        log = io.StringIO()
+        rc = run_loop(
+            team_name="reuse2",
+            agent_id="alice",
+            cmd_template="opencode acp",
+            teams_root=tmp_path,
+            idle_timeout=0.5,
+            poll_interval=0.05,
+            log=log,
+            reuse_session=True,
+            runtime="acp",
+            acp_client_factory=factory,
+        )
+        assert rc == 0
+
+        clients = factory.clients  # type: ignore[attr-defined]
+        # At least two clients — first crashed, second (and maybe more)
+        # took over. We don't pin the exact count because the loop may
+        # respawn more than once during idle_timeout, but two is the
+        # minimum that proves respawn happened.
+        assert len(clients) >= 2, (
+            f"expected respawn after crash, got {len(clients)} client(s)"
+        )
+        # The crashed client got stopped (cleanup of dead session).
+        assert clients[0].stop_calls >= 1
+        # The crashed client logged its failure.
+        assert "ACP session crashed" in log.getvalue()
+        # At least one task completed via the surviving client.
+        completed = [
+            t for t in Team("reuse2", root=tmp_path).list_tasks()
+            if t.get("status") == "completed"
+        ]
+        assert len(completed) >= 1
+
+    def test_acp_reuse_stops_client_on_idle_exit(
+        self, tmp_path: Path,
+    ) -> None:
+        # When the loop exits (here: via idle_timeout because no tasks
+        # remain), the persistent ACP client must be stopped. This
+        # mirrors the "session cleanup on shutdown" acceptance criterion.
+        team = Team("reuse3", root=tmp_path)
+        team.init()
+        team.add_task("only task", created_by="lead")
+
+        factory = _factory_for(tmp_path, "reuse3", "alice")
+
+        log = io.StringIO()
+        rc = run_loop(
+            team_name="reuse3",
+            agent_id="alice",
+            cmd_template="opencode acp",
+            teams_root=tmp_path,
+            idle_timeout=0.3,
+            poll_interval=0.05,
+            log=log,
+            reuse_session=True,
+            runtime="acp",
+            acp_client_factory=factory,
+        )
+        assert rc == 0
+
+        clients = factory.clients  # type: ignore[attr-defined]
+        assert len(clients) == 1
+        # Critical assertion: stop() called on shutdown.
+        assert clients[0].stop_calls == 1
+        assert "stopped persistent ACP session" in log.getvalue()
+
+    def test_reuse_session_without_acp_runtime_falls_back_to_spawn(
+        self, tmp_path: Path,
+    ) -> None:
+        # If a user passes --reuse-session without --runtime acp the
+        # runner downgrades with a warning and uses the legacy
+        # spawn-per-task path. The task still completes — we don't
+        # block progress just because the flag is misconfigured.
+        team = Team("fallback", root=tmp_path)
+        team.init()
+        team.add_task("first", created_by="lead")
+
+        log = io.StringIO()
+        rc = run_loop(
+            team_name="fallback",
+            agent_id="alice",
+            cmd_template=_cmd_for(MOCK_AGENT),
+            teams_root=tmp_path,
+            idle_timeout=0.3,
+            poll_interval=0.05,
+            log=log,
+            reuse_session=True,
+            runtime="spawn",
+        )
+        assert rc == 0
+        # Warning shown to the operator.
+        assert "falling back to spawn-per-task" in log.getvalue()
+        # The task still completed via the spawn path.
+        statuses = [
+            t["status"] for t in Team("fallback", root=tmp_path).list_tasks()
+        ]
+        assert statuses == ["completed"]
+        # No ACP session was started.
+        assert "started persistent ACP session" not in log.getvalue()
+
+    def test_acp_send_failure_at_start_returns_to_loop(
+        self, tmp_path: Path,
+    ) -> None:
+        # Hostile factory: every ACPClient raises in .start(). The loop
+        # logs the failure but does not crash — it idles out cleanly
+        # so the operator can fix the config.
+        team = Team("reuse4", root=tmp_path)
+        team.init()
+        team.add_task("first", created_by="lead")
+
+        class _BrokenStartClient:
+            def __init__(self, cfg: ACPSessionConfig) -> None:
+                self.cfg = cfg
+                self.stop_calls = 0
+
+            def start(self) -> None:
+                raise RuntimeError("no such binary")
+
+            def stop(self) -> None:
+                self.stop_calls += 1
+
+            def send_message(
+                self, text: str,
+                on_chunk: Callable[[str], None] | None = None,
+            ) -> ACPResponse:  # pragma: no cover — start() raises first
+                raise AssertionError("send_message should not be reached")
+
+        log = io.StringIO()
+        rc = run_loop(
+            team_name="reuse4",
+            agent_id="alice",
+            cmd_template="opencode acp",
+            teams_root=tmp_path,
+            idle_timeout=0.3,
+            poll_interval=0.05,
+            log=log,
+            reuse_session=True,
+            runtime="acp",
+            acp_client_factory=_BrokenStartClient,  # type: ignore[arg-type]
+        )
+        assert rc == 0
+        assert "failed to start ACP session" in log.getvalue()
+        # Task still open — nothing got done.
+        tasks = Team("reuse4", root=tmp_path).list_tasks()
+        assert all(t["status"] == "open" for t in tasks)
+
+
+class TestSessionReuseCLI:
+    def test_main_rejects_placeholders_only_for_spawn(
+        self, tmp_path: Path,
+    ) -> None:
+        # In the default (spawn) runtime the placeholder check still applies.
+        rc = main([
+            "--team", "x", "--agent", "y",
+            "--cmd", "echo no-placeholders-here",
+            "--teams-home", str(tmp_path),
+            "--idle-timeout", "0.05",
+        ])
+        assert rc == 2
+
+    def test_main_accepts_placeholder_free_cmd_with_reuse_acp(
+        self, tmp_path: Path,
+    ) -> None:
+        # With --reuse-session --runtime acp the placeholders are not
+        # required (prompts arrive via session/sendMessage). Use a
+        # quick-failing command so we don't actually spawn anything
+        # interesting; what matters is rc != 2 (placeholder validation
+        # did not fire).
+        rc = main([
+            "--team", "x", "--agent", "y",
+            "--cmd", "true",  # placeholder-free; would fail validation pre-flag
+            "--teams-home", str(tmp_path),
+            "--idle-timeout", "0.05",
+            "--runtime", "acp",
+            "--reuse-session",
+        ])
+        # rc could be 0 (idle-out with no tasks) — what matters is that
+        # we got past the placeholder validation that would have returned 2.
+        assert rc != 2
+
+    def test_main_rejects_unknown_runtime(self, tmp_path: Path) -> None:
+        # argparse should reject an invalid --runtime value before any
+        # of our own validation runs.
+        import pytest
+        with pytest.raises(SystemExit):
+            main([
+                "--team", "x", "--agent", "y",
+                "--cmd", "echo {prompt}",
+                "--teams-home", str(tmp_path),
+                "--idle-timeout", "0.05",
+                "--runtime", "nonsense",
+            ])

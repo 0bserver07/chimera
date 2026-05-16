@@ -142,6 +142,58 @@ task, the runner force-releases the claim so another teammate can pick
 it up. Nudge counters reset when the task transitions out of `claimed`
 (completion, voluntary release, or runner-initiated release).
 
+### Session reuse (ACP)
+
+For agents that speak Agent Client Protocol (ACP) over stdio, pass
+`--reuse-session --runtime acp` to keep a **single subprocess alive
+across N tasks**. The runner spawns the external agent once via
+`chimera.acp.client.ACPClient`, then sends one `session/sendMessage`
+per task instead of paying the cold-start cost (binary load, auth,
+context, MCP server reinit) on every iteration.
+
+```bash
+chimera-team-run --team review-pr --agent opencode-1 \
+    --runtime acp --reuse-session \
+    --cmd 'opencode acp'
+```
+
+What changes vs. spawn-per-task:
+
+| Concern | Spawn-per-task (default) | `--reuse-session --runtime acp` |
+|---|---|---|
+| Subprocess lifecycle | One per task | One for the whole `chimera-team-run` lifetime |
+| Per-task overhead | Full cold-start (binary load, auth, MCP reinit) | One `session/sendMessage` JSON-RPC call |
+| Prompt delivery | `{prompt}` or `{prompt_file}` substituted into `--cmd` | Sent via ACP `session/sendMessage` (placeholders not required) |
+| Agent crash mid-task | Subprocess just exits; runner spawns a new one for the next task | Runner tears down the dead client and respawns on the next iteration |
+| Cleanup on shutdown | Nothing to clean up (subprocesses already exited) | Runner calls `client.stop()` so the persistent process exits cleanly |
+| Stuck-claim nudges | Apply | Apply (same on-disk mailbox / task-list path) |
+
+Crash recovery composes with the existing stuck-claim mechanism: if the
+agent's ACP subprocess dies mid-task with a claim still held, the
+runner respawns the client *and* the on-disk claim is still owned by
+this agent id — so the nudge → force-release flow runs as usual.
+
+`--reuse-session` requires `--runtime acp`. Passing it with the default
+`--runtime spawn` downgrades the flag with a warning rather than
+failing, so a misconfigured invocation still makes progress:
+
+```text
+chimera-team-run: --reuse-session requires --runtime acp
+(got runtime='spawn'); falling back to spawn-per-task.
+```
+
+Run-time logging shows which path is active, so it's easy to confirm
+the optimization is engaged:
+
+```text
+chimera-team-run: started persistent ACP session.
+chimera-team-run: 3 open task(s); sending prompt via persistent ACP session.
+chimera-team-run: agent exited rc=0; team state changed.
+... (N more iterations) ...
+chimera-team-run: no progress for 60s (3 tasks completed by opencode-1); exiting.
+chimera-team-run: stopped persistent ACP session.
+```
+
 ## External-agent integration
 
 `chimera-team-mcp` is agent-agnostic. Anything that speaks MCP can be a
@@ -269,9 +321,13 @@ least one, no double-claims.
 2. **Pull, not push.** Teammates drain mailboxes when their next
    invocation runs — there's no mid-task message delivery yet. See issue
    [#149](https://github.com/0bserver07/chimera/issues/149).
-3. **Cold start per task.** `chimera-team-run` spawns a fresh
-   subprocess for every task. Session reuse for ACP-speaking agents is
-   tracked in issue [#148](https://github.com/0bserver07/chimera/issues/148).
+3. **Cold start per task (default).** By default `chimera-team-run`
+   spawns a fresh subprocess per task. For ACP-speaking agents,
+   `--reuse-session --runtime acp` keeps one subprocess alive across N
+   tasks (see [Session reuse (ACP)](#session-reuse-acp) above). Non-ACP
+   agents still pay the cold-start cost per task; persistent stdin-fed
+   sessions for other runtimes are still tracked in issue
+   [#148](https://github.com/0bserver07/chimera/issues/148).
 4. **No plan-approval workflow.** Tasks can't yet require a
    teammate-proposed plan + lead-approve gate. See issue
    [#147](https://github.com/0bserver07/chimera/issues/147).
