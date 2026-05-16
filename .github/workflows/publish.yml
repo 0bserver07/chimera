@@ -5,9 +5,11 @@ on:
     tags:
       - "v*"
 
+# Top-level permissions are intentionally minimal.  The publish-pypi job
+# below requests ``id-token: write`` for itself so the OIDC step can mint
+# the short-lived token PyPI expects from a Trusted Publisher.
 permissions:
   contents: write
-  id-token: write
 
 jobs:
   build:
@@ -52,9 +54,23 @@ jobs:
           if-no-files-found: error
 
   publish-pypi:
-    name: Publish to PyPI (API token)
+    # Single-job publish with two strategies:
+    #   1. Trusted Publishing (OIDC, no secrets) — preferred.
+    #   2. PYPI_API_TOKEN repo secret — fallback.
+    #
+    # The OIDC step runs first.  If the repo has been registered as a
+    # Trusted Publisher on PyPI, that step succeeds and the token step
+    # is skipped.  If OIDC is not yet registered (or is explicitly
+    # disabled via ``vars.PUBLISH_USE_TOKEN == 'true'``), the token
+    # step takes over.  Either path uses ``skip-existing: true`` so a
+    # re-run on a tag whose artifacts already uploaded is a no-op.
+    name: Publish to PyPI
     needs: build
     runs-on: ubuntu-latest
+    # ``id-token: write`` is required for PyPI Trusted Publishing OIDC.
+    # Keep at job scope so other jobs cannot accidentally mint tokens.
+    permissions:
+      id-token: write
     environment:
       name: release
       url: https://pypi.org/p/chimera-run
@@ -65,7 +81,26 @@ jobs:
           name: python-package-distributions
           path: dist/
 
-      - name: Publish package to PyPI
+      - name: Publish to PyPI via Trusted Publishing (OIDC)
+        id: publish_oidc
+        # Skip the OIDC attempt only when the operator explicitly opts
+        # out via repo/environment variable ``PUBLISH_USE_TOKEN``.
+        # ``continue-on-error`` lets the workflow keep running if the
+        # Trusted Publisher is not yet registered — the token fallback
+        # step then takes over.
+        if: vars.PUBLISH_USE_TOKEN != 'true'
+        continue-on-error: true
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true
+
+      - name: Publish to PyPI via API token (fallback)
+        # Runs when the OIDC step did not succeed: either it failed
+        # (Trusted Publisher not registered yet), was cancelled, or was
+        # skipped via ``vars.PUBLISH_USE_TOKEN``.  Once Trusted
+        # Publishing is in place this branch never runs and the
+        # ``PYPI_API_TOKEN`` secret can be deleted.
+        if: steps.publish_oidc.outcome != 'success'
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           password: ${{ secrets.PYPI_API_TOKEN }}

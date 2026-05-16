@@ -1,6 +1,6 @@
 ---
 title: Releasing chimera-run
-description: Release procedure for the chimera-run package — version bump, tag, publish via GitHub Actions Trusted Publisher (OIDC).
+description: Release procedure for the chimera-run package — version bump, tag, publish via GitHub Actions Trusted Publisher (OIDC) with API-token fallback.
 ---
 
 # Releasing chimera-run
@@ -8,6 +8,34 @@ description: Release procedure for the chimera-run package — version bump, tag
 This document is the canonical playbook for cutting a `chimera-run` release.
 The PyPI distribution name is **`chimera-run`** (not `chimera-ai`); the
 Python import path stays `import chimera`.
+
+## Publishing strategy: OIDC first, token fallback
+
+`.github/workflows/publish.yml` supports two upload paths in a single
+`publish-pypi` job. The OIDC step runs first; the token step runs only
+when OIDC did not succeed:
+
+| Path | When it runs | Secrets required |
+|---|---|---|
+| **Trusted Publishing (OIDC)** | Default. The job has `permissions: id-token: write` and calls `pypa/gh-action-pypi-publish` without a `password:` — the action mints a short-lived OIDC token that PyPI verifies against the registered Trusted Publisher. | None. |
+| **API token fallback** | The OIDC step's `outcome != 'success'` (either Trusted Publisher is not registered yet, the OIDC step failed, or `vars.PUBLISH_USE_TOKEN == 'true'` skipped it). | `PYPI_API_TOKEN` repo secret. |
+
+In practice you flip from one path to the other purely on pypi.org —
+no further code changes are needed. The recommended migration:
+
+1. Confirm releases have been going out on the token fallback.
+2. Register the repo as a Trusted Publisher on
+   <https://pypi.org/manage/project/chimera-run/settings/publishing/>
+   (owner `0bserver07`, repo `chimera`, workflow `publish.yml`,
+   environment `release`).
+3. Tag the next release. The OIDC step now succeeds and the token
+   branch is skipped.
+4. Delete the `PYPI_API_TOKEN` repo secret. Future runs are token-less.
+
+To force the token path even after Trusted Publishing is registered
+(useful for emergency releases off a fork), set the repo or
+environment variable `PUBLISH_USE_TOKEN` to `true`; the OIDC step is
+skipped and the token step runs unconditionally.
 
 ## TL;DR
 
@@ -43,7 +71,7 @@ Release.
 
 ## Prerequisites (one-time setup)
 
-### PyPI Trusted Publisher
+### PyPI Trusted Publisher (preferred — eventually)
 
 Trusted Publishing eliminates the need to mint an API token and store
 it as a GitHub secret. It is configured **once** in the PyPI project
@@ -57,10 +85,25 @@ settings:
    - Environment: `release`
 3. Save.
 
-Until this is configured the publish job will exit with
-`OIDCException: trust relationship not established`. The build job
-itself (`uv build`, `twine check`) succeeds independently and is a
-useful smoke test even without the trusted publisher in place.
+Until this is configured the OIDC step fails with
+`OIDCException: trust relationship not established`. With the current
+workflow that failure is **non-fatal** — the token fallback step runs
+next and the release still publishes via `PYPI_API_TOKEN`. The build
+job itself (`uv build`, `twine check`) succeeds independently and is a
+useful smoke test regardless.
+
+### PyPI API token (fallback path)
+
+Until the Trusted Publisher is registered, a long-lived API token sits
+in repo secrets:
+
+1. Generate a project-scoped token at
+   <https://pypi.org/manage/account/token/> (scope: project
+   `chimera-run`).
+2. Set it as repo secret `PYPI_API_TOKEN` under
+   **Settings → Secrets and variables → Actions → New repository
+   secret**.
+3. After the first successful OIDC publish, delete the secret.
 
 ### GitHub environment
 
@@ -165,7 +208,11 @@ Once the tag is pushed:
    uploads `dist/` as a workflow artifact.
 3. The `publish-pypi` job downloads the artifact and runs
    `pypa/gh-action-pypi-publish@release/v1` against the `release`
-   environment, using OIDC.
+   environment. It first tries Trusted Publishing (OIDC, no
+   `password:`); if that step's outcome is not `success` (e.g.
+   Trusted Publisher not registered yet, or
+   `vars.PUBLISH_USE_TOKEN == 'true'`), the token-fallback step runs
+   with `password: ${{ secrets.PYPI_API_TOKEN }}`.
 4. The `github-release` job downloads the artifact again and creates
    (or updates) a GitHub Release with `generate_release_notes: true`,
    attaching the wheel + sdist.
@@ -187,7 +234,8 @@ verify on PyPI: <https://pypi.org/project/chimera-run/>.
 | Symptom | Likely cause | Fix |
 |---|---|---|
 | Workflow fails at "Verify tag matches pyproject.toml" | Forgot to bump `pyproject.toml` before tagging | Delete the tag (`git tag -d`, `git push origin :refs/tags/...`), bump version, re-tag. |
-| `OIDCException` during publish | Trusted Publisher not registered, or the `release` environment is missing | Configure on PyPI as above; re-run the failed job from the Actions UI. |
+| OIDC step shows `OIDCException` but the job is green | Trusted Publisher not registered yet — the token fallback step succeeded | No action required. To switch to OIDC, register the publisher on PyPI as above. |
+| OIDC step **and** token step both fail | Trusted Publisher not registered **and** `PYPI_API_TOKEN` missing/expired | Register the publisher, or rotate the token at <https://pypi.org/manage/account/token/> and update the `PYPI_API_TOKEN` repo secret. |
 | `403 Forbidden` from PyPI | Project name mismatch — uploading `chimera_ai` to a `chimera-run` project | Confirm `[project].name` in `pyproject.toml`. |
 | Twine rejects metadata | Long-description rendering broken | `uv build && uv run --with twine twine check dist/*`; preview the README at <https://github.com/pypa/readme_renderer>. |
 | Dist contains stale `chimera_ai-*` files | `dist/` not cleaned before build | `rm -rf dist/ && uv build`. |
