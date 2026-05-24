@@ -1,3 +1,8 @@
+---
+title: Mink Parity Matrix
+description: Feature-by-feature parity table between chimera mink and the upstream open-source coding agent it mirrors.
+---
+
 # `chimera mink` Parity Matrix
 
 **Source baseline:** `research/mink/24-gap-analysis.md` (Apr 23 2026).
@@ -31,7 +36,7 @@ mink` and the family grew from 5 to 7 (stoat, badger).
 | 8 | Permissions | GREEN | `chimera/permissions/` + `chimera/cli/permission_prompt.py` + `chimera/mink/settings.py:to_chimera_loop_config` | `Tool(arg_key:pattern)` grammar; `.claude/settings.json` allow/ask/deny lists are now consumed by `chimera mink -p` (audit B-4 fix). |
 | 9 | TUI / streaming render | GREEN | `chimera/cli/render.py:MinkStreamHandler` + `build_stream_handler` wired in `chimera/mink/cli.py:_run_print_mode` and `chimera/cli/code.py` (opt-in via `CHIMERA_RICH_TUI=1`) | MarkdownStream, Spinner, ToolBlockRenderer, ThinkingBlockRenderer, DiffRenderer all flow through the live runtime. Auto-detect: rich on TTY, plain on pipe / `NO_COLOR` / `--no-color` / `--no-rich`. Audit B-2 / B-7 / B-8 closed. |
 | 10 | Sessions / resume / fork | GREEN | `chimera/sessions/` + `/resume` slash command | Already superset; `/resume <id>` exposed in M4. |
-| 11 | Subagents / Task tool | GREEN | `chimera/tools/task_tool.py`, `chimera/cli/agent_teams.py` | Child `AgentLoop` spawn with linked cancellation; experimental teams behind env flag. |
+| 11 | Subagents / Task tool / Agent Teams | GREEN | `chimera/tools/task_tool.py`, `chimera/cli/agent_teams.py`, `chimera/mcp_servers/team_server.py`, `chimera/mcp_servers/teammate_runner.py`, `chimera/mink/team_watch.py` | Child `AgentLoop` spawn with linked cancellation. **Agent teams** (still experimental, env-gated by `CHIMERA_EXPERIMENTAL_AGENT_TEAMS=1`): `chimera-team-mcp` exposes 10 `team_*` tools over MCP; `chimera-team-run` drives external agents per task with idle-nudge for stuck claims; Codex CLI verified end-to-end; OpenCode + internal `chimera code -p` wired via the same MCP server (config snippets in `examples/agent_teams/`). Task deps, lead/teammate role gating, `team watch` live dashboard, role discovery from `.md` frontmatter. See [agent-teams.md](./agent-teams.md). |
 | 12 | Settings / config | GREEN | `chimera/mink/settings.py` + `chimera/tools/config_tool.py` + `chimera/mink/cli.py:_run_print_mode` | User → project → local merge; rules now feed the live `LoopConfig.permissions` for one-shot `-p` runs (audit B-4 fix). M5-C `ConfigTool` exposes get/set/list. |
 | 13 | Ollama provider (Kimi K2.6 / GLM-5) | YELLOW | `chimera/providers/ollama.py` | Streaming + tool-roundtrip + `num_ctx`/`keep_alive`/`think` shipped. Vision and JSON-grammar mode still deferred (Ollama-cloud limitation). |
 | 14 | Cancellation / Ctrl-C | GREEN | `chimera/core/cancellation.py` | Chimera-only superset. |
