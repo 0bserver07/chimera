@@ -201,7 +201,7 @@ chimera otter serve --port 5173
 
 `chimera otter serve --acp` boots a JSON-RPC 2.0 server over stdio —
 the integration point for IDE clients that already speak ACP (Zed,
-the OpenCode TUI, custom plugins).
+the upstream TUI, custom plugins).
 
 ```bash
 chimera otter serve --acp
