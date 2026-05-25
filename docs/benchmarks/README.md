@@ -25,7 +25,7 @@ Full transparency on what Chimera can and cannot reproduce. Every benchmark has 
 
 | # | Benchmark | What It Tests | Our Score | Reference | Status | Issue |
 |---|-----------|--------------|-----------|-----------|--------|-------|
-| L1 | [HumanEval](https://github.com/openai/human-eval) | Function generation (164) | **GLM-5.1: 92.7%** (152/164, raw in `data/humaneval-glm-5.1-results.json`). Prior 66.5% was a harness extraction bug, fixed 2026-05-20 (always-prepend prompt + subprocess timeout + retry). GLM-5: 90.9% unverifiable — raw data lost. | GLM-5: ~92% claimed | DONE | [Report](2026-03-30-humaneval-glm51.md) |
+| L1 | [HumanEval](https://github.com/openai/human-eval) | Function generation (164) | **GLM-5.1: 92.7%** (152/164). **Claude Haiku 4.5: 95.7%** (157/164). Raw in `data/humaneval-*-results.json`. Prior GLM-5.1 66.5% was a harness extraction bug, fixed 2026-05-20 (always-prepend prompt + subprocess timeout + retry). Sonnet 4.6 / Opus 4.7 pending — Max OAuth 5h quota exhausted at run time. | GLM-5: ~92% claimed | DONE | [Report](2026-03-30-humaneval-glm51.md) |
 | L2 | [HumanEval+](https://github.com/evalplus/evalplus) | Extended test cases | NOT RUN | — | TODO | #10 |
 | L3 | [MBPP](https://github.com/google-research/google-research/tree/master/mbpp) | Basic programming (974) | NOT RUN | — | TODO | #11 |
 | L4 | [LiveCodeBench](https://livecodebench.github.io/) | Contest problems | NOT RUN | — | TODO | #12 |
