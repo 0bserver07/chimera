@@ -1,0 +1,56 @@
+{
+  "model": "glm-5.1",
+  "passed": 152,
+  "total": 164,
+  "pass_rate": 0.926829268292683,
+  "errors": [
+    [
+      "HumanEval/32",
+      "TIMEOUT (>10.0s)"
+    ],
+    [
+      "HumanEval/83",
+      "AssertionError"
+    ],
+    [
+      "HumanEval/93",
+      "AssertionError: This prints if this assert fails 1 (good for debugging!)"
+    ],
+    [
+      "HumanEval/115",
+      "AssertionError: Error"
+    ],
+    [
+      "HumanEval/120",
+      "AssertionError"
+    ],
+    [
+      "HumanEval/126",
+      "AssertionError: This prints if this assert fails 7 (good for debugging!)"
+    ],
+    [
+      "HumanEval/129",
+      "AssertionError"
+    ],
+    [
+      "HumanEval/130",
+      "AssertionError"
+    ],
+    [
+      "HumanEval/132",
+      "AssertionError"
+    ],
+    [
+      "HumanEval/145",
+      "AssertionError"
+    ],
+    [
+      "HumanEval/160",
+      "AssertionError"
+    ],
+    [
+      "HumanEval/163",
+      "AssertionError: Test 1"
+    ]
+  ]
+}

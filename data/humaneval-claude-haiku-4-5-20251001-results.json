@@ -1,0 +1,36 @@
+{
+  "model": "claude-haiku-4-5-20251001",
+  "passed": 157,
+  "total": 164,
+  "pass_rate": 0.9573170731707317,
+  "errors": [
+    [
+      "HumanEval/32",
+      "AssertionError"
+    ],
+    [
+      "HumanEval/54",
+      "AssertionError"
+    ],
+    [
+      "HumanEval/65",
+      "AssertionError"
+    ],
+    [
+      "HumanEval/93",
+      "AssertionError: This prints if this assert fails 1 (good for debugging!)"
+    ],
+    [
+      "HumanEval/130",
+      "IndexError: list index out of range"
+    ],
+    [
+      "HumanEval/132",
+      "AssertionError"
+    ],
+    [
+      "HumanEval/145",
+      "AssertionError"
+    ]
+  ]
+}

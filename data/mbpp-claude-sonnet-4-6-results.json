@@ -1,0 +1,107 @@
+{
+  "model": "claude-sonnet-4-6",
+  "backend": "claude-cli",
+  "benchmark": "mbpp-sanitized",
+  "passed": 403,
+  "total": 427,
+  "pass_rate": 0.9437939110070258,
+  "total_cost_usd": 24.9304,
+  "errors": [
+    [
+      87,
+      "AssertionError"
+    ],
+    [
+      143,
+      "AssertionError"
+    ],
+    [
+      164,
+      "AssertionError"
+    ],
+    [
+      248,
+      "AssertionError"
+    ],
+    [
+      301,
+      "AssertionError"
+    ],
+    [
+      306,
+      "AssertionError"
+    ],
+    [
+      398,
+      "ValueError: invalid literal for int() with base 10: '['"
+    ],
+    [
+      415,
+      "AssertionError"
+    ],
+    [
+      431,
+      "AssertionError"
+    ],
+    [
+      438,
+      "AssertionError"
+    ],
+    [
+      452,
+      "AssertionError"
+    ],
+    [
+      461,
+      "AssertionError"
+    ],
+    [
+      462,
+      "AssertionError"
+    ],
+    [
+      473,
+      "AssertionError"
+    ],
+    [
+      574,
+      "AssertionError"
+    ],
+    [
+      579,
+      "AssertionError"
+    ],
+    [
+      590,
+      "Command '['claude', '--model', 'claude-sonnet-4-6', '-p', '--output-format', 'json', '--no-session-persistence']' timed out after 180 seconds"
+    ],
+    [
+      595,
+      "AssertionError"
+    ],
+    [
+      631,
+      "AssertionError"
+    ],
+    [
+      749,
+      "AssertionError"
+    ],
+    [
+      755,
+      "IndexError: list index out of range"
+    ],
+    [
+      769,
+      "AssertionError"
+    ],
+    [
+      783,
+      "AssertionError"
+    ],
+    [
+      801,
+      "AssertionError"
+    ]
+  ]
+}

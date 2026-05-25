@@ -1,0 +1,9 @@
+{
+  "model": "claude-opus-4-7",
+  "backend": "claude-cli",
+  "passed": 164,
+  "total": 164,
+  "pass_rate": 1.0,
+  "total_cost_usd": 21.4983,
+  "errors": []
+}

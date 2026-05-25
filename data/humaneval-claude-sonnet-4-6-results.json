@@ -1,0 +1,18 @@
+{
+  "model": "claude-sonnet-4-6",
+  "backend": "claude-cli",
+  "passed": 162,
+  "total": 164,
+  "pass_rate": 0.9878048780487805,
+  "total_cost_usd": 9.2048,
+  "errors": [
+    [
+      "HumanEval/106",
+      "AssertionError"
+    ],
+    [
+      "HumanEval/132",
+      "AssertionError"
+    ]
+  ]
+}

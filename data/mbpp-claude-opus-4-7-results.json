@@ -1,0 +1,51 @@
+{
+  "model": "claude-opus-4-7",
+  "backend": "claude-cli",
+  "benchmark": "mbpp-sanitized",
+  "passed": 417,
+  "total": 427,
+  "pass_rate": 0.9765807962529274,
+  "total_cost_usd": 55.5497,
+  "errors": [
+    [
+      16,
+      "AssertionError"
+    ],
+    [
+      20,
+      "AssertionError"
+    ],
+    [
+      164,
+      "AssertionError"
+    ],
+    [
+      431,
+      "AssertionError"
+    ],
+    [
+      438,
+      "AssertionError"
+    ],
+    [
+      461,
+      "AssertionError"
+    ],
+    [
+      579,
+      "AssertionError"
+    ],
+    [
+      595,
+      "AssertionError"
+    ],
+    [
+      776,
+      "AssertionError"
+    ],
+    [
+      794,
+      "AssertionError"
+    ]
+  ]
+}
