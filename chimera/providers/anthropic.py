@@ -109,12 +109,32 @@ class AnthropicProvider(Provider):
         if resolved_key is None:
             resolved_key = os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")
 
-        client_kwargs: dict[str, Any] = {
-            "api_key": resolved_key,
-        }
+        # Claude Code Max OAuth tokens (sk-ant-oat01-*) authenticate via
+        # Bearer, not x-api-key. The SDK accepts them via auth_token, but
+        # ANTHROPIC_API_KEY in env would still poison the client with an
+        # invalid x-api-key header -- pop it during construction.
+        is_oauth = bool(resolved_key) and resolved_key.startswith("sk-ant-oat01-")
+
+        client_kwargs: dict[str, Any] = {}
+        if is_oauth:
+            client_kwargs["auth_token"] = resolved_key
+            client_kwargs["api_key"] = None
+            client_kwargs["default_headers"] = {"anthropic-beta": "oauth-2025-04-20"}
+        else:
+            client_kwargs["api_key"] = resolved_key
+
         if base_url or os.environ.get("ANTHROPIC_BASE_URL"):
             client_kwargs["base_url"] = base_url or os.environ.get("ANTHROPIC_BASE_URL")
-        self._client = anthropic.Anthropic(**client_kwargs)
+
+        if is_oauth:
+            _saved_env = os.environ.pop("ANTHROPIC_API_KEY", None)
+            try:
+                self._client = anthropic.Anthropic(**client_kwargs)
+            finally:
+                if _saved_env is not None:
+                    os.environ["ANTHROPIC_API_KEY"] = _saved_env
+        else:
+            self._client = anthropic.Anthropic(**client_kwargs)
 
     # ------------------------------------------------------------------
     # Request / response helpers
