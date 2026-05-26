@@ -1,0 +1,60 @@
+{
+  "model": "claude-haiku-4-5-20251001",
+  "passed": 151,
+  "total": 164,
+  "pass_rate": 0.9207317073170732,
+  "errors": [
+    [
+      "HumanEval/32",
+      "TypeError: Value after * must be an iterable, not float"
+    ],
+    [
+      "HumanEval/76",
+      "AssertionError"
+    ],
+    [
+      "HumanEval/91",
+      "AssertionError"
+    ],
+    [
+      "HumanEval/93",
+      "AssertionError"
+    ],
+    [
+      "HumanEval/115",
+      "AssertionError"
+    ],
+    [
+      "HumanEval/122",
+      "AssertionError"
+    ],
+    [
+      "HumanEval/125",
+      "AssertionError"
+    ],
+    [
+      "HumanEval/132",
+      "AssertionError"
+    ],
+    [
+      "HumanEval/139",
+      "TIMEOUT (>10.0s)"
+    ],
+    [
+      "HumanEval/145",
+      "AssertionError"
+    ],
+    [
+      "HumanEval/151",
+      "AssertionError"
+    ],
+    [
+      "HumanEval/154",
+      "AssertionError"
+    ],
+    [
+      "HumanEval/158",
+      "AssertionError"
+    ]
+  ]
+}
