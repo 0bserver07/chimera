@@ -49,6 +49,10 @@ def call_claude_cli(model: str, prompt_msg: str, timeout: int = 180) -> tuple[st
     Returns (response_text, total_cost_usd). Raises on non-zero exit or
     unparseable output.
     """
+    # Strip ANTHROPIC_API_KEY from the child env: when set alongside
+    # CLAUDE_CODE_OAUTH_TOKEN, the CLI sends the OAuth token as x-api-key
+    # (not Bearer) and the server rejects it as "Invalid API key".
+    child_env = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
     result = subprocess.run(
         [
             "claude",
@@ -61,6 +65,7 @@ def call_claude_cli(model: str, prompt_msg: str, timeout: int = 180) -> tuple[st
         capture_output=True,
         text=True,
         timeout=timeout,
+        env=child_env,
     )
     if result.returncode != 0:
         raise RuntimeError(f"claude CLI exit {result.returncode}: {result.stderr[:200]}")

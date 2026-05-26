@@ -1,0 +1,50 @@
+{
+  "model": "claude-sonnet-4-6",
+  "backend": "claude-cli",
+  "passed": 154,
+  "total": 164,
+  "pass_rate": 0.9390243902439024,
+  "total_cost_usd": 9.2421,
+  "errors": [
+    [
+      "HumanEval/32",
+      "TIMEOUT (>10.0s)"
+    ],
+    [
+      "HumanEval/39",
+      "TIMEOUT (>10.0s)"
+    ],
+    [
+      "HumanEval/76",
+      "AssertionError"
+    ],
+    [
+      "HumanEval/91",
+      "AssertionError"
+    ],
+    [
+      "HumanEval/106",
+      "AssertionError"
+    ],
+    [
+      "HumanEval/132",
+      "AssertionError"
+    ],
+    [
+      "HumanEval/134",
+      "AssertionError"
+    ],
+    [
+      "HumanEval/139",
+      "TIMEOUT (>10.0s)"
+    ],
+    [
+      "HumanEval/151",
+      "AssertionError"
+    ],
+    [
+      "HumanEval/154",
+      "AssertionError"
+    ]
+  ]
+}
