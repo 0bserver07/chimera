@@ -1,0 +1,249 @@
+{
+  "model": "claude-haiku-4-5-20251001",
+  "backend": "chimera-python",
+  "passed": 446,
+  "total": 500,
+  "pass_rate": 0.892,
+  "total_cost_usd": 1.465,
+  "by_level": {
+    "2": {
+      "passed": 87,
+      "total": 90
+    },
+    "5": {
+      "passed": 101,
+      "total": 134
+    },
+    "3": {
+      "passed": 101,
+      "total": 105
+    },
+    "4": {
+      "passed": 115,
+      "total": 128
+    },
+    "1": {
+      "passed": 42,
+      "total": 43
+    }
+  },
+  "errors": [
+    [
+      "test/intermediate_algebra/1197.json",
+      "got '\\\\frac{67}{336}' want '\\\\frac{3}{56}'"
+    ],
+    [
+      "test/intermediate_algebra/1388.json",
+      "got '-2, 1' want '1,-2'"
+    ],
+    [
+      "test/intermediate_algebra/1454.json",
+      "got '10\\\\sqrt{65}' want '70 \\\\sqrt{2}'"
+    ],
+    [
+      "test/intermediate_algebra/956.json",
+      "got '(-3, -4, -1)' want '(6,31,-1)'"
+    ],
+    [
+      "test/precalculus/1146.json",
+      "got '-\\\\frac{35}{64}' want '\\\\frac{35}{64}'"
+    ],
+    [
+      "test/intermediate_algebra/1849.json",
+      "got '500' want '501'"
+    ],
+    [
+      "test/prealgebra/1646.json",
+      "got '130' want '80'"
+    ],
+    [
+      "test/intermediate_algebra/662.json",
+      "got '0, 2' want '1 \\\\pm \\\\sqrt{19}'"
+    ],
+    [
+      "test/intermediate_algebra/558.json",
+      "got '\\\\lambda \\\\in [3, 4]' want '(3,4]'"
+    ],
+    [
+      "test/prealgebra/1733.json",
+      "got '-15' want '-9'"
+    ],
+    [
+      "test/intermediate_algebra/128.json",
+      "no \\boxed{} in response"
+    ],
+    [
+      "test/intermediate_algebra/1408.json",
+      "got 'L_{85}' want '-2'"
+    ],
+    [
+      "test/intermediate_algebra/966.json",
+      "got '12\\\\sqrt{2}' want '16'"
+    ],
+    [
+      "test/geometry/880.json",
+      "got '\\\\sqrt{157}' want '2\\\\sqrt{113}'"
+    ],
+    [
+      "test/prealgebra/1003.json",
+      "got '\\\\frac{270}{7}' want '\\\\frac{270}7\\\\text{ degrees}'"
+    ],
+    [
+      "test/intermediate_algebra/1510.json",
+      "got '\\\\frac{9\\\\sqrt{3}}{8}' want '0'"
+    ],
+    [
+      "test/number_theory/417.json",
+      "got '11111111100' want '11,\\\\! 111,\\\\! 111,\\\\! 100'"
+    ],
+    [
+      "test/precalculus/819.json",
+      "no \\boxed{} in response"
+    ],
+    [
+      "test/precalculus/1056.json",
+      "got '10368\\\\pi' want '288 \\\\pi'"
+    ],
+    [
+      "test/geometry/229.json",
+      "got '17' want '16'"
+    ],
+    [
+      "test/prealgebra/874.json",
+      "got '102' want '116'"
+    ],
+    [
+      "test/precalculus/452.json",
+      "no \\boxed{} in response"
+    ],
+    [
+      "test/geometry/473.json",
+      "got '864' want '864 \\\\mbox{ inches}^2'"
+    ],
+    [
+      "test/geometry/826.json",
+      "got '1\\\\frac{7}{25}' want '1\\\\frac{4}{5}'"
+    ],
+    [
+      "test/precalculus/768.json",
+      "got '3 + 2\\\\sqrt{2}, 3 - 2\\\\sqrt{2}, -3 + 2\\\\sqrt{2}, -3 - 2\\\\sqrt{2}' want '3 \\\\pm 2 \\\\sqrt{2}'"
+    ],
+    [
+      "test/intermediate_algebra/960.json",
+      "got '\\\\frac{121}{420}' want '\\\\frac{17}{21}'"
+    ],
+    [
+      "test/precalculus/1201.json",
+      "got '9' want '11'"
+    ],
+    [
+      "test/prealgebra/1044.json",
+      "got '5.4' want '5.4 \\\\text{ cents}'"
+    ],
+    [
+      "test/intermediate_algebra/1544.json",
+      "got '4' want '6'"
+    ],
+    [
+      "test/geometry/711.json",
+      "got '\\\\frac{2 + 3\\\\sqrt{3}}{2}' want '1+2\\\\sqrt{3}'"
+    ],
+    [
+      "test/prealgebra/1423.json",
+      "got '12\\\\pi \\\\text{ inches per second}' want '12\\\\pi'"
+    ],
+    [
+      "test/intermediate_algebra/2152.json",
+      "got '2' want '0'"
+    ],
+    [
+      "test/intermediate_algebra/117.json",
+      "got '\\\\frac{35}{2}' want '15'"
+    ],
+    [
+      "test/prealgebra/1973.json",
+      "got '4 \\\\text{ inches per second}' want '4'"
+    ],
+    [
+      "test/precalculus/1281.json",
+      "got '11(1+\\\\sqrt{5})' want '11 \\\\sqrt{5} + 11'"
+    ],
+    [
+      "test/intermediate_algebra/860.json",
+      "got '\\\\text{Circle}' want '\\\\text{ellipse}'"
+    ],
+    [
+      "test/prealgebra/1865.json",
+      "got '12^{\\\\text{th}} \\\\text{ grade}' want '12'"
+    ],
+    [
+      "test/counting_and_probability/188.json",
+      "got '\\\\frac{4}{9}' want '\\\\frac{1}{2}'"
+    ],
+    [
+      "test/algebra/101.json",
+      "got '[-2, 7]' want 'x \\\\in [-2,7]'"
+    ],
+    [
+      "test/algebra/1031.json",
+      "got '5.5' want '\\\\frac{11}{2}'"
+    ],
+    [
+      "test/prealgebra/1991.json",
+      "got '\\\\text{Navin would earn the most after working an eight-hour day}' want '\\\\text{Navin}'"
+    ],
+    [
+      "test/geometry/817.json",
+      "got '7' want '\\\\frac{14}{3}'"
+    ],
+    [
+      "test/precalculus/398.json",
+      "got '\\\\begin{pmatrix} 0.2 \\\\\\\\ -3.6 \\\\end{pmatrix}' want '\\\\begin{pmatrix} 1/5 \\\\\\\\ -18/5 \\\\end{pmatrix}'"
+    ],
+    [
+      "test/intermediate_algebra/1797.json",
+      "got '7\\\\sqrt{10}' want '2 \\\\sqrt{5}'"
+    ],
+    [
+      "test/precalculus/625.json",
+      "got '\\\\begin{pmatrix} \\\\frac{16}{49} \\\\\\\\ \\\\frac{48}{49} \\\\\\\\ \\\\frac{24}{49} \\\\end{pmatrix}' want '\\\\begin{pmatrix} 16/49 \\\\\\\\ 48/49 \\\\\\\\ 24/49 \\\\end{pmatrix}'"
+    ],
+    [
+      "test/intermediate_algebra/2015.json",
+      "got '\\\\{-2, 1-\\\\sqrt{5}, 1+\\\\sqrt{5}\\\\}' want '\\\\{1\\\\pm\\\\sqrt{5},-2\\\\}'"
+    ],
+    [
+      "test/precalculus/1133.json",
+      "got '\\\\frac{5R^2}{3} + \\\\frac{2(a^2 + b^2 + c^2)}{9}' want '3R^2'"
+    ],
+    [
+      "test/prealgebra/2037.json",
+      "got '550 \\\\text{ gallons}' want '550'"
+    ],
+    [
+      "test/algebra/2470.json",
+      "got '137\\\\frac{1}{2} \\\\text{ miles}' want '137 \\\\frac{1}{2}'"
+    ],
+    [
+      "test/intermediate_algebra/1279.json",
+      "got '0' want '\\\\frac{2}{1005}'"
+    ],
+    [
+      "test/intermediate_algebra/1467.json",
+      "got '\\\\frac{8n^2+4n+1}{5}' want '8n^2 + 4n + 1'"
+    ],
+    [
+      "test/intermediate_algebra/1930.json",
+      "got '0' want '\\\\frac{1}{4}'"
+    ],
+    [
+      "test/intermediate_algebra/1981.json",
+      "got '(2, 12) \\\\cup (12, 102)' want '(2,12) \\\\cup (12,102)'"
+    ],
+    [
+      "test/geometry/561.json",
+      "got '\\\\frac{27}{8}' want '\\\\frac{7}{2}'"
+    ]
+  ],
+  "regraded": true
+}

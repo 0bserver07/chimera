@@ -1,0 +1,101 @@
+{
+  "model": "claude-sonnet-4-6",
+  "backend": "claude-cli",
+  "passed": 183,
+  "total": 200,
+  "pass_rate": 0.915,
+  "total_cost_usd": 13.036,
+  "by_level": {
+    "2": {
+      "passed": 40,
+      "total": 44
+    },
+    "5": {
+      "passed": 43,
+      "total": 50
+    },
+    "3": {
+      "passed": 38,
+      "total": 41
+    },
+    "4": {
+      "passed": 41,
+      "total": 44
+    },
+    "1": {
+      "passed": 21,
+      "total": 21
+    }
+  },
+  "errors": [
+    [
+      "test/algebra/1098.json",
+      "got '12+9i' want '6+9i'"
+    ],
+    [
+      "test/intermediate_algebra/1388.json",
+      "got '-2, 1' want '1,-2'"
+    ],
+    [
+      "test/intermediate_algebra/428.json",
+      "got 'x \\\\in \\\\{3, 5, 7\\\\}' want '3, 5, 7'"
+    ],
+    [
+      "test/intermediate_algebra/1454.json",
+      "Command '['claude', '--model', 'claude-sonnet-4-6'"
+    ],
+    [
+      "test/prealgebra/1233.json",
+      "got '10\\\\%' want '10'"
+    ],
+    [
+      "test/intermediate_algebra/623.json",
+      "got 'a + b = 0' want '0'"
+    ],
+    [
+      "test/counting_and_probability/377.json",
+      "got '\\\\dfrac{2240}{78125}' want '\\\\frac{448}{15625"
+    ],
+    [
+      "test/intermediate_algebra/662.json",
+      "got '1+\\\\sqrt{19},\\\\ 1-\\\\sqrt{19}' want '1 \\\\pm \\\\"
+    ],
+    [
+      "test/precalculus/1300.json",
+      "got '\\\\mathbf{v} = \\\\begin{pmatrix}-1/3\\\\\\\\2/3\\\\\\\\"
+    ],
+    [
+      "test/intermediate_algebra/558.json",
+      "got '\\\\lambda \\\\in (3,4]' want '(3,4]'"
+    ],
+    [
+      "test/intermediate_algebra/515.json",
+      "got '\\\\dfrac{4}{3}' want '\\\\frac43'"
+    ],
+    [
+      "test/intermediate_algebra/1063.json",
+      "got 'z_{2002} = 1 + 274i' want '1+274i'"
+    ],
+    [
+      "test/number_theory/847.json",
+      "got '4210_5' want '4210_{5}'"
+    ],
+    [
+      "test/intermediate_algebra/964.json",
+      "got 'f(2015,2"
+    ],
+    [
+      "test/geometry/880.json",
+      "Command '['claude', '--model', 'claude-sonnet-4-6'"
+    ],
+    [
+      "test/intermediate_algebra/1410.json",
+      "got '\\\\dfrac{6}{5}' want '\\\\frac65'"
+    ],
+    [
+      "test/prealgebra/1003.json",
+      "got '\\\\dfrac{270}{7}' want '\\\\frac{270}7\\\\text{ de"
+    ]
+  ],
+  "regraded": true
+}

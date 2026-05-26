@@ -1,0 +1,500 @@
+{"task_id": "test/precalculus/807.json", "status": "PASS", "level": 2, "subject": "Precalculus", "candidate": "\\left(3, \\frac{\\pi}{2}\\right)", "reference": "\\left( 3, \\frac{\\pi}{2} \\right)", "cost": 0.001733, "error": ""}
+{"task_id": "test/intermediate_algebra/1994.json", "status": "PASS", "level": 5, "subject": "Intermediate Algebra", "candidate": "p - q", "reference": "p - q", "cost": 0.003856, "error": ""}
+{"task_id": "test/algebra/2584.json", "status": "PASS", "level": 3, "subject": "Algebra", "candidate": "\\frac{14}{3}", "reference": "\\frac{14}{3}", "cost": 0.001752, "error": ""}
+{"task_id": "test/number_theory/572.json", "status": "PASS", "level": 3, "subject": "Number Theory", "candidate": "9", "reference": "9", "cost": 0.001435, "error": ""}
+{"task_id": "test/algebra/1349.json", "status": "PASS", "level": 2, "subject": "Algebra", "candidate": "\\text{Evelyn}", "reference": "\\text{Evelyn}", "cost": 0.002346, "error": ""}
+{"task_id": "test/prealgebra/1622.json", "status": "PASS", "level": 2, "subject": "Prealgebra", "candidate": "42", "reference": "42", "cost": 0.001537, "error": ""}
+{"task_id": "test/number_theory/515.json", "status": "PASS", "level": 3, "subject": "Number Theory", "candidate": "27", "reference": "27", "cost": 0.002035, "error": ""}
+{"task_id": "test/precalculus/927.json", "status": "PASS", "level": 4, "subject": "Precalculus", "candidate": "90", "reference": "90^\\circ", "cost": 0.003047, "error": ""}
+{"task_id": "test/algebra/2036.json", "status": "PASS", "level": 3, "subject": "Algebra", "candidate": "3\\sqrt{13}", "reference": "3\\sqrt{13}", "cost": 0.001548, "error": ""}
+{"task_id": "test/prealgebra/1139.json", "status": "PASS", "level": 5, "subject": "Prealgebra", "candidate": "4", "reference": "4", "cost": 0.006529, "error": ""}
+{"task_id": "test/number_theory/1032.json", "status": "PASS", "level": 3, "subject": "Number Theory", "candidate": "2220", "reference": "2220", "cost": 0.002632, "error": ""}
+{"task_id": "test/intermediate_algebra/1197.json", "status": "FAIL", "level": 5, "subject": "Intermediate Algebra", "candidate": "\\frac{67}{336}", "reference": "\\frac{3}{56}", "cost": 0.007056, "error": "got '\\\\frac{67}{336}' want '\\\\frac{3}{56}'"}
+{"task_id": "test/number_theory/737.json", "status": "PASS", "level": 5, "subject": "Number Theory", "candidate": "284", "reference": "284", "cost": 0.002699, "error": ""}
+{"task_id": "test/geometry/248.json", "status": "PASS", "level": 2, "subject": "Geometry", "candidate": "5", "reference": "5", "cost": 0.001183, "error": ""}
+{"task_id": "test/precalculus/1303.json", "status": "PASS", "level": 1, "subject": "Precalculus", "candidate": "\\sqrt{51}", "reference": "\\sqrt{51}", "cost": 0.001631, "error": ""}
+{"task_id": "test/precalculus/990.json", "status": "PASS", "level": 5, "subject": "Precalculus", "candidate": "w = 6 - 5i", "reference": "6 - 5i", "cost": 0.003309, "error": ""}
+{"task_id": "test/intermediate_algebra/134.json", "status": "PASS", "level": 1, "subject": "Intermediate Algebra", "candidate": "-50", "reference": "-50", "cost": 0.001387, "error": ""}
+{"task_id": "test/precalculus/1199.json", "status": "PASS", "level": 4, "subject": "Precalculus", "candidate": "\\pi", "reference": "\\pi", "cost": 0.004208, "error": ""}
+{"task_id": "test/geometry/434.json", "status": "PASS", "level": 1, "subject": "Geometry", "candidate": "28", "reference": "28", "cost": 0.003514, "error": ""}
+{"task_id": "test/intermediate_algebra/1000.json", "status": "PASS", "level": 3, "subject": "Intermediate Algebra", "candidate": "3", "reference": "3", "cost": 0.004557, "error": ""}
+{"task_id": "test/algebra/1098.json", "status": "PASS", "level": 3, "subject": "Algebra", "candidate": "6 + 9i", "reference": "6+9i", "cost": 0.000594, "error": ""}
+{"task_id": "test/intermediate_algebra/607.json", "status": "PASS", "level": 3, "subject": "Intermediate Algebra", "candidate": "13535", "reference": "13535", "cost": 0.00584, "error": ""}
+{"task_id": "test/algebra/1837.json", "status": "PASS", "level": 5, "subject": "Algebra", "candidate": "5", "reference": "5", "cost": 0.003101, "error": ""}
+{"task_id": "test/algebra/2193.json", "status": "PASS", "level": 5, "subject": "Algebra", "candidate": "x = 5", "reference": "x=5", "cost": 0.002103, "error": ""}
+{"task_id": "test/algebra/2427.json", "status": "PASS", "level": 5, "subject": "Algebra", "candidate": "10", "reference": "10", "cost": 0.003601, "error": ""}
+{"task_id": "test/intermediate_algebra/1388.json", "status": "FAIL", "level": 5, "subject": "Intermediate Algebra", "candidate": "-2, 1", "reference": "1,-2", "cost": 0.005548, "error": "got '-2, 1' want '1,-2'"}
+{"task_id": "test/counting_and_probability/525.json", "status": "PASS", "level": 5, "subject": "Counting & Probability", "candidate": "144", "reference": "144", "cost": 0.007135, "error": ""}
+{"task_id": "test/prealgebra/1840.json", "status": "PASS", "level": 2, "subject": "Prealgebra", "candidate": "78", "reference": "78", "cost": 0.001328, "error": ""}
+{"task_id": "test/precalculus/779.json", "status": "PASS", "level": 2, "subject": "Precalculus", "candidate": "-2 + 7i", "reference": "-2 + 7i", "cost": 0.001348, "error": ""}
+{"task_id": "test/counting_and_probability/666.json", "status": "PASS", "level": 2, "subject": "Counting & Probability", "candidate": "225", "reference": "225", "cost": 0.001537, "error": ""}
+{"task_id": "test/number_theory/864.json", "status": "PASS", "level": 3, "subject": "Number Theory", "candidate": "52_8", "reference": "52_8", "cost": 0.001697, "error": ""}
+{"task_id": "test/prealgebra/1302.json", "status": "PASS", "level": 4, "subject": "Prealgebra", "candidate": "11\\sqrt{2}", "reference": "11\\sqrt2", "cost": 0.000801, "error": ""}
+{"task_id": "test/counting_and_probability/134.json", "status": "PASS", "level": 4, "subject": "Counting & Probability", "candidate": "720", "reference": "720", "cost": 0.00156, "error": ""}
+{"task_id": "test/algebra/1072.json", "status": "PASS", "level": 4, "subject": "Algebra", "candidate": "\\frac{243}{625}", "reference": "\\frac{243}{625}", "cost": 0.003295, "error": ""}
+{"task_id": "test/counting_and_probability/119.json", "status": "PASS", "level": 4, "subject": "Counting & Probability", "candidate": "-125", "reference": "-125", "cost": 0.002952, "error": ""}
+{"task_id": "test/number_theory/627.json", "status": "PASS", "level": 2, "subject": "Number Theory", "candidate": "3", "reference": "3", "cost": 0.001855, "error": ""}
+{"task_id": "test/intermediate_algebra/428.json", "status": "PASS", "level": 2, "subject": "Intermediate Algebra", "candidate": "x = 3, 5, 7", "reference": "3, 5, 7", "cost": 0.003229, "error": ""}
+{"task_id": "test/geometry/967.json", "status": "PASS", "level": 3, "subject": "Geometry", "candidate": "72", "reference": "72", "cost": 0.000866, "error": ""}
+{"task_id": "test/algebra/24.json", "status": "PASS", "level": 1, "subject": "Algebra", "candidate": "2000", "reference": "2000", "cost": 0.000829, "error": ""}
+{"task_id": "test/number_theory/45.json", "status": "PASS", "level": 3, "subject": "Number Theory", "candidate": "23", "reference": "23", "cost": 0.00083, "error": ""}
+{"task_id": "test/prealgebra/930.json", "status": "PASS", "level": 2, "subject": "Prealgebra", "candidate": "12 \\text{ cm}", "reference": "12", "cost": 0.001055, "error": ""}
+{"task_id": "test/geometry/627.json", "status": "PASS", "level": 4, "subject": "Geometry", "candidate": "17", "reference": "17", "cost": 0.004258, "error": ""}
+{"task_id": "test/algebra/2214.json", "status": "PASS", "level": 2, "subject": "Algebra", "candidate": "4", "reference": "4", "cost": 0.001408, "error": ""}
+{"task_id": "test/intermediate_algebra/1454.json", "status": "FAIL", "level": 5, "subject": "Intermediate Algebra", "candidate": "10\\sqrt{65}", "reference": "70 \\sqrt{2}", "cost": 0.005929, "error": "got '10\\\\sqrt{65}' want '70 \\\\sqrt{2}'"}
+{"task_id": "test/prealgebra/1558.json", "status": "PASS", "level": 5, "subject": "Prealgebra", "candidate": "1.25", "reference": "1.25", "cost": 0.00186, "error": ""}
+{"task_id": "test/geometry/178.json", "status": "PASS", "level": 3, "subject": "Geometry", "candidate": "2", "reference": "2", "cost": 0.001507, "error": ""}
+{"task_id": "test/precalculus/285.json", "status": "PASS", "level": 2, "subject": "Precalculus", "candidate": "6", "reference": "6", "cost": 0.004728, "error": ""}
+{"task_id": "test/algebra/305.json", "status": "PASS", "level": 5, "subject": "Algebra", "candidate": "5", "reference": "5", "cost": 0.001893, "error": ""}
+{"task_id": "test/algebra/1265.json", "status": "PASS", "level": 2, "subject": "Algebra", "candidate": "\\frac{3}{2}", "reference": "\\frac{3}{2}", "cost": 0.001216, "error": ""}
+{"task_id": "test/prealgebra/1388.json", "status": "PASS", "level": 4, "subject": "Prealgebra", "candidate": "83", "reference": "83", "cost": 0.001047, "error": ""}
+{"task_id": "test/number_theory/1055.json", "status": "PASS", "level": 5, "subject": "Number Theory", "candidate": "203", "reference": "203", "cost": 0.003125, "error": ""}
+{"task_id": "test/intermediate_algebra/1217.json", "status": "PASS", "level": 2, "subject": "Intermediate Algebra", "candidate": "x^5 - x^4 + x^3 - x^2 + x - 1", "reference": "x^5 - x^4 + x^3 - x^2 + x - 1", "cost": 0.002734, "error": ""}
+{"task_id": "test/prealgebra/951.json", "status": "PASS", "level": 5, "subject": "Prealgebra", "candidate": "12", "reference": "12", "cost": 0.001564, "error": ""}
+{"task_id": "test/precalculus/1105.json", "status": "PASS", "level": 2, "subject": "Precalculus", "candidate": "-\\frac{\\pi}{6}", "reference": "-\\frac{\\pi}{6}", "cost": 0.001751, "error": ""}
+{"task_id": "test/prealgebra/572.json", "status": "PASS", "level": 2, "subject": "Prealgebra", "candidate": "0.15", "reference": "0.15", "cost": 0.000881, "error": ""}
+{"task_id": "test/algebra/187.json", "status": "PASS", "level": 4, "subject": "Algebra", "candidate": "3", "reference": "3", "cost": 0.002172, "error": ""}
+{"task_id": "test/algebra/769.json", "status": "PASS", "level": 3, "subject": "Algebra", "candidate": "11", "reference": "11", "cost": 0.00163, "error": ""}
+{"task_id": "test/intermediate_algebra/1168.json", "status": "PASS", "level": 2, "subject": "Intermediate Algebra", "candidate": "16", "reference": "16", "cost": 0.000942, "error": ""}
+{"task_id": "test/algebra/722.json", "status": "PASS", "level": 1, "subject": "Algebra", "candidate": "9901", "reference": "9901", "cost": 0.001736, "error": ""}
+{"task_id": "test/prealgebra/1247.json", "status": "PASS", "level": 2, "subject": "Prealgebra", "candidate": "5", "reference": "5", "cost": 0.001621, "error": ""}
+{"task_id": "test/intermediate_algebra/956.json", "status": "FAIL", "level": 5, "subject": "Intermediate Algebra", "candidate": "(-3, -4, -1)", "reference": "(6,31,-1)", "cost": 0.008304, "error": "got '(-3, -4, -1)' want '(6,31,-1)'"}
+{"task_id": "test/intermediate_algebra/1247.json", "status": "PASS", "level": 3, "subject": "Intermediate Algebra", "candidate": "-256", "reference": "-256", "cost": 0.002532, "error": ""}
+{"task_id": "test/precalculus/675.json", "status": "PASS", "level": 5, "subject": "Precalculus", "candidate": "4", "reference": "4", "cost": 0.005213, "error": ""}
+{"task_id": "test/intermediate_algebra/279.json", "status": "PASS", "level": 5, "subject": "Intermediate Algebra", "candidate": "10", "reference": "10", "cost": 0.004295, "error": ""}
+{"task_id": "test/precalculus/1146.json", "status": "FAIL", "level": 4, "subject": "Precalculus", "candidate": "-\\frac{35}{64}", "reference": "\\frac{35}{64}", "cost": 0.007226, "error": "got '-\\\\frac{35}{64}' want '\\\\frac{35}{64}'"}
+{"task_id": "test/prealgebra/1747.json", "status": "PASS", "level": 1, "subject": "Prealgebra", "candidate": "1", "reference": "1", "cost": 0.000823, "error": ""}
+{"task_id": "test/algebra/2046.json", "status": "PASS", "level": 3, "subject": "Algebra", "candidate": "x^3 + 3x - 6", "reference": "x^3+3x-6", "cost": 0.001872, "error": ""}
+{"task_id": "test/prealgebra/1233.json", "status": "PASS", "level": 4, "subject": "Prealgebra", "candidate": "10\\%", "reference": "10", "cost": 0.001464, "error": ""}
+{"task_id": "test/precalculus/1313.json", "status": "PASS", "level": 4, "subject": "Precalculus", "candidate": "46", "reference": "46", "cost": 0.003819, "error": ""}
+{"task_id": "test/intermediate_algebra/207.json", "status": "PASS", "level": 4, "subject": "Intermediate Algebra", "candidate": "-1", "reference": "-1", "cost": 0.002968, "error": ""}
+{"task_id": "test/number_theory/46.json", "status": "PASS", "level": 2, "subject": "Number Theory", "candidate": "40_9", "reference": "40_9", "cost": 0.001413, "error": ""}
+{"task_id": "test/number_theory/516.json", "status": "PASS", "level": 4, "subject": "Number Theory", "candidate": "2516_8", "reference": "2516_8", "cost": 0.002407, "error": ""}
+{"task_id": "test/geometry/456.json", "status": "PASS", "level": 2, "subject": "Geometry", "candidate": "3", "reference": "3", "cost": 0.001475, "error": ""}
+{"task_id": "test/algebra/2253.json", "status": "PASS", "level": 4, "subject": "Algebra", "candidate": "\\frac{3\\sqrt{3}}{4}", "reference": "\\frac{3\\sqrt{3}}{4}", "cost": 0.001918, "error": ""}
+{"task_id": "test/precalculus/24313.json", "status": "PASS", "level": 2, "subject": "Precalculus", "candidate": "\\cot x", "reference": "\\cot x", "cost": 0.001896, "error": ""}
+{"task_id": "test/counting_and_probability/1114.json", "status": "PASS", "level": 4, "subject": "Counting & Probability", "candidate": "\\frac{11}{36}", "reference": "\\frac{11}{36}", "cost": 0.002145, "error": ""}
+{"task_id": "test/intermediate_algebra/623.json", "status": "PASS", "level": 2, "subject": "Intermediate Algebra", "candidate": "0", "reference": "0", "cost": 0.001453, "error": ""}
+{"task_id": "test/algebra/1004.json", "status": "PASS", "level": 1, "subject": "Algebra", "candidate": "4", "reference": "4", "cost": 0.000851, "error": ""}
+{"task_id": "test/intermediate_algebra/47.json", "status": "PASS", "level": 4, "subject": "Intermediate Algebra", "candidate": "(-2, 1)", "reference": "(-2,1)", "cost": 0.003511, "error": ""}
+{"task_id": "test/prealgebra/192.json", "status": "PASS", "level": 1, "subject": "Prealgebra", "candidate": "2", "reference": "2", "cost": 0.001183, "error": ""}
+{"task_id": "test/intermediate_algebra/1849.json", "status": "FAIL", "level": 5, "subject": "Intermediate Algebra", "candidate": "500", "reference": "501", "cost": 0.006604, "error": "got '500' want '501'"}
+{"task_id": "test/algebra/1035.json", "status": "PASS", "level": 3, "subject": "Algebra", "candidate": "3", "reference": "3", "cost": 0.001801, "error": ""}
+{"task_id": "test/algebra/2700.json", "status": "PASS", "level": 5, "subject": "Algebra", "candidate": "\\frac{3}{2}", "reference": "\\frac{3}{2}", "cost": 0.002862, "error": ""}
+{"task_id": "test/intermediate_algebra/2046.json", "status": "PASS", "level": 2, "subject": "Intermediate Algebra", "candidate": "x = 2", "reference": "2", "cost": 0.002789, "error": ""}
+{"task_id": "test/algebra/893.json", "status": "PASS", "level": 4, "subject": "Algebra", "candidate": "-1", "reference": "-1", "cost": 0.003047, "error": ""}
+{"task_id": "test/geometry/353.json", "status": "PASS", "level": 4, "subject": "Geometry", "candidate": "\\sqrt{5}", "reference": "\\sqrt{5}", "cost": 0.001608, "error": ""}
+{"task_id": "test/prealgebra/307.json", "status": "PASS", "level": 1, "subject": "Prealgebra", "candidate": "240", "reference": "240", "cost": 0.000735, "error": ""}
+{"task_id": "test/algebra/567.json", "status": "PASS", "level": 1, "subject": "Algebra", "candidate": "1", "reference": "1", "cost": 0.002306, "error": ""}
+{"task_id": "test/algebra/892.json", "status": "PASS", "level": 5, "subject": "Algebra", "candidate": "2", "reference": "2", "cost": 0.005339, "error": ""}
+{"task_id": "test/number_theory/357.json", "status": "PASS", "level": 4, "subject": "Number Theory", "candidate": "21", "reference": "21", "cost": 0.001808, "error": ""}
+{"task_id": "test/prealgebra/1761.json", "status": "PASS", "level": 3, "subject": "Prealgebra", "candidate": "\\frac{3}{2}", "reference": "\\frac{3}{2}", "cost": 0.001216, "error": ""}
+{"task_id": "test/algebra/2023.json", "status": "PASS", "level": 3, "subject": "Algebra", "candidate": "1", "reference": "1", "cost": 0.0017, "error": ""}
+{"task_id": "test/counting_and_probability/377.json", "status": "PASS", "level": 4, "subject": "Counting & Probability", "candidate": "\\frac{448}{15625}", "reference": "\\frac{448}{15625}", "cost": 0.002751, "error": ""}
+{"task_id": "test/algebra/873.json", "status": "PASS", "level": 4, "subject": "Algebra", "candidate": "33", "reference": "33", "cost": 0.00174, "error": ""}
+{"task_id": "test/prealgebra/1646.json", "status": "FAIL", "level": 5, "subject": "Prealgebra", "candidate": "130", "reference": "80", "cost": 0.003629, "error": "got '130' want '80'"}
+{"task_id": "test/precalculus/34.json", "status": "PASS", "level": 2, "subject": "Precalculus", "candidate": "-4", "reference": "-4", "cost": 0.003265, "error": ""}
+{"task_id": "test/intermediate_algebra/662.json", "status": "FAIL", "level": 5, "subject": "Intermediate Algebra", "candidate": "0, 2", "reference": "1 \\pm \\sqrt{19}", "cost": 0.005741, "error": "got '0, 2' want '1 \\\\pm \\\\sqrt{19}'"}
+{"task_id": "test/prealgebra/105.json", "status": "PASS", "level": 1, "subject": "Prealgebra", "candidate": "\\text{East}", "reference": "\\text{east}", "cost": 0.001282, "error": ""}
+{"task_id": "test/prealgebra/1924.json", "status": "PASS", "level": 2, "subject": "Prealgebra", "candidate": "2k + 2", "reference": "2k+2", "cost": 0.000901, "error": ""}
+{"task_id": "test/precalculus/1300.json", "status": "PASS", "level": 3, "subject": "Precalculus", "candidate": "\\mathbf{v} = \\begin{pmatrix} -1/3 \\\\ 2/3 \\\\ 5/3 \\end{pmatrix}", "reference": "\\begin{pmatrix} -1/3 \\\\ 2/3 \\\\ 5/3 \\end{pmatrix}", "cost": 0.004068, "error": ""}
+{"task_id": "test/geometry/183.json", "status": "PASS", "level": 5, "subject": "Geometry", "candidate": "145", "reference": "145^\\circ", "cost": 0.003519, "error": ""}
+{"task_id": "test/intermediate_algebra/582.json", "status": "PASS", "level": 5, "subject": "Intermediate Algebra", "candidate": "850", "reference": "850", "cost": 0.005804, "error": ""}
+{"task_id": "test/intermediate_algebra/431.json", "status": "PASS", "level": 1, "subject": "Intermediate Algebra", "candidate": "(a+5)(b+2)", "reference": "(a+5)(b+2)", "cost": 0.00121, "error": ""}
+{"task_id": "test/intermediate_algebra/558.json", "status": "FAIL", "level": 5, "subject": "Intermediate Algebra", "candidate": "\\lambda \\in [3, 4]", "reference": "(3,4]", "cost": 0.006513, "error": "got '\\\\lambda \\\\in [3, 4]' want '(3,4]'"}
+{"task_id": "test/intermediate_algebra/362.json", "status": "PASS", "level": 4, "subject": "Intermediate Algebra", "candidate": "40", "reference": "40", "cost": 0.00725, "error": ""}
+{"task_id": "test/prealgebra/1804.json", "status": "PASS", "level": 3, "subject": "Prealgebra", "candidate": "29", "reference": "29", "cost": 0.00154, "error": ""}
+{"task_id": "test/intermediate_algebra/515.json", "status": "PASS", "level": 2, "subject": "Intermediate Algebra", "candidate": "\\frac{4}{3}", "reference": "\\frac43", "cost": 0.001115, "error": ""}
+{"task_id": "test/number_theory/914.json", "status": "PASS", "level": 2, "subject": "Number Theory", "candidate": "9", "reference": "9", "cost": 0.001608, "error": ""}
+{"task_id": "test/intermediate_algebra/894.json", "status": "PASS", "level": 3, "subject": "Intermediate Algebra", "candidate": "k = 2", "reference": "2", "cost": 0.005594, "error": ""}
+{"task_id": "test/precalculus/44.json", "status": "PASS", "level": 5, "subject": "Precalculus", "candidate": "120", "reference": "120^\\circ", "cost": 0.004343, "error": ""}
+{"task_id": "test/intermediate_algebra/345.json", "status": "PASS", "level": 4, "subject": "Intermediate Algebra", "candidate": "504", "reference": "504", "cost": 0.007683, "error": ""}
+{"task_id": "test/counting_and_probability/23957.json", "status": "PASS", "level": 3, "subject": "Counting & Probability", "candidate": "210", "reference": "210", "cost": 0.001599, "error": ""}
+{"task_id": "test/algebra/2058.json", "status": "PASS", "level": 4, "subject": "Algebra", "candidate": "13", "reference": "13", "cost": 0.002631, "error": ""}
+{"task_id": "test/algebra/2593.json", "status": "PASS", "level": 2, "subject": "Algebra", "candidate": "8000", "reference": "8000", "cost": 0.001281, "error": ""}
+{"task_id": "test/intermediate_algebra/1898.json", "status": "PASS", "level": 3, "subject": "Intermediate Algebra", "candidate": "-5", "reference": "-5", "cost": 0.002869, "error": ""}
+{"task_id": "test/counting_and_probability/1060.json", "status": "PASS", "level": 2, "subject": "Counting & Probability", "candidate": "1260", "reference": "1260", "cost": 0.001528, "error": ""}
+{"task_id": "test/algebra/2157.json", "status": "PASS", "level": 2, "subject": "Algebra", "candidate": "2", "reference": "2", "cost": 0.001352, "error": ""}
+{"task_id": "test/algebra/2251.json", "status": "PASS", "level": 2, "subject": "Algebra", "candidate": "x = 3", "reference": "3", "cost": 0.001003, "error": ""}
+{"task_id": "test/intermediate_algebra/232.json", "status": "PASS", "level": 5, "subject": "Intermediate Algebra", "candidate": "81", "reference": "81", "cost": 0.004823, "error": ""}
+{"task_id": "test/prealgebra/1733.json", "status": "FAIL", "level": 3, "subject": "Prealgebra", "candidate": "-15", "reference": "-9", "cost": 0.006295, "error": "got '-15' want '-9'"}
+{"task_id": "test/intermediate_algebra/128.json", "status": "FAIL", "level": 2, "subject": "Intermediate Algebra", "candidate": null, "reference": "\\text{even}", "cost": 0.005194, "error": "no \\boxed{} in response"}
+{"task_id": "test/prealgebra/505.json", "status": "PASS", "level": 2, "subject": "Prealgebra", "candidate": "x = 6", "reference": "6", "cost": 0.001435, "error": ""}
+{"task_id": "test/algebra/1332.json", "status": "PASS", "level": 3, "subject": "Algebra", "candidate": "9", "reference": "9", "cost": 0.001295, "error": ""}
+{"task_id": "test/geometry/283.json", "status": "PASS", "level": 4, "subject": "Geometry", "candidate": "8", "reference": "8", "cost": 0.005376, "error": ""}
+{"task_id": "test/algebra/972.json", "status": "PASS", "level": 4, "subject": "Algebra", "candidate": "\\frac{11}{2}", "reference": "\\frac{11}{2}", "cost": 0.004162, "error": ""}
+{"task_id": "test/algebra/2232.json", "status": "PASS", "level": 4, "subject": "Algebra", "candidate": "-3", "reference": "-3", "cost": 0.001405, "error": ""}
+{"task_id": "test/intermediate_algebra/1063.json", "status": "PASS", "level": 4, "subject": "Intermediate Algebra", "candidate": "1 + 274i", "reference": "1+274i", "cost": 0.005569, "error": ""}
+{"task_id": "test/number_theory/847.json", "status": "PASS", "level": 3, "subject": "Number Theory", "candidate": "4210_5", "reference": "4210_{5}", "cost": 0.001328, "error": ""}
+{"task_id": "test/algebra/661.json", "status": "PASS", "level": 3, "subject": "Algebra", "candidate": "36", "reference": "36", "cost": 0.00209, "error": ""}
+{"task_id": "test/geometry/1140.json", "status": "PASS", "level": 5, "subject": "Geometry", "candidate": "\\frac{3840}{289}", "reference": "\\frac{3840}{289}", "cost": 0.003957, "error": ""}
+{"task_id": "test/number_theory/753.json", "status": "PASS", "level": 4, "subject": "Number Theory", "candidate": "13", "reference": "13", "cost": 0.00205, "error": ""}
+{"task_id": "test/algebra/246.json", "status": "PASS", "level": 4, "subject": "Algebra", "candidate": "8", "reference": "8", "cost": 0.001514, "error": ""}
+{"task_id": "test/prealgebra/1686.json", "status": "PASS", "level": 3, "subject": "Prealgebra", "candidate": "4", "reference": "4", "cost": 0.001641, "error": ""}
+{"task_id": "test/prealgebra/1807.json", "status": "PASS", "level": 3, "subject": "Prealgebra", "candidate": "120", "reference": "120", "cost": 0.001618, "error": ""}
+{"task_id": "test/intermediate_algebra/1126.json", "status": "PASS", "level": 4, "subject": "Intermediate Algebra", "candidate": "16", "reference": "16", "cost": 0.002746, "error": ""}
+{"task_id": "test/prealgebra/1297.json", "status": "PASS", "level": 5, "subject": "Prealgebra", "candidate": "9", "reference": "9", "cost": 0.001885, "error": ""}
+{"task_id": "test/intermediate_algebra/2022.json", "status": "PASS", "level": 5, "subject": "Intermediate Algebra", "candidate": "64", "reference": "64", "cost": 0.006299, "error": ""}
+{"task_id": "test/number_theory/1257.json", "status": "PASS", "level": 4, "subject": "Number Theory", "candidate": "204_5", "reference": "204_5", "cost": 0.002517, "error": ""}
+{"task_id": "test/counting_and_probability/430.json", "status": "PASS", "level": 4, "subject": "Counting & Probability", "candidate": "\\frac{1}{3}", "reference": "\\frac{1}{3}", "cost": 0.002984, "error": ""}
+{"task_id": "test/intermediate_algebra/1151.json", "status": "PASS", "level": 3, "subject": "Intermediate Algebra", "candidate": "1", "reference": "1", "cost": 0.003223, "error": ""}
+{"task_id": "test/number_theory/156.json", "status": "PASS", "level": 4, "subject": "Number Theory", "candidate": "13", "reference": "13", "cost": 0.002572, "error": ""}
+{"task_id": "test/number_theory/612.json", "status": "PASS", "level": 1, "subject": "Number Theory", "candidate": "2", "reference": "2", "cost": 0.001386, "error": ""}
+{"task_id": "test/counting_and_probability/159.json", "status": "PASS", "level": 5, "subject": "Counting & Probability", "candidate": "28800", "reference": "28800", "cost": 0.0019, "error": ""}
+{"task_id": "test/precalculus/477.json", "status": "PASS", "level": 3, "subject": "Precalculus", "candidate": "3\\sqrt{5}", "reference": "3 \\sqrt{5}", "cost": 0.003568, "error": ""}
+{"task_id": "test/precalculus/43.json", "status": "PASS", "level": 1, "subject": "Precalculus", "candidate": "(15, -29)", "reference": "(15,-29)", "cost": 0.001125, "error": ""}
+{"task_id": "test/intermediate_algebra/1408.json", "status": "FAIL", "level": 5, "subject": "Intermediate Algebra", "candidate": "L_{85}", "reference": "-2", "cost": 0.00686, "error": "got 'L_{85}' want '-2'"}
+{"task_id": "test/algebra/1519.json", "status": "PASS", "level": 3, "subject": "Algebra", "candidate": "\\frac{\\sqrt{3}}{3}", "reference": "\\frac{\\sqrt{3}}{3}", "cost": 0.00122, "error": ""}
+{"task_id": "test/intermediate_algebra/966.json", "status": "FAIL", "level": 5, "subject": "Intermediate Algebra", "candidate": "12\\sqrt{2}", "reference": "16", "cost": 0.005729, "error": "got '12\\\\sqrt{2}' want '16'"}
+{"task_id": "test/algebra/988.json", "status": "PASS", "level": 1, "subject": "Algebra", "candidate": "x = 11", "reference": "11", "cost": 0.00088, "error": ""}
+{"task_id": "test/number_theory/931.json", "status": "PASS", "level": 2, "subject": "Number Theory", "candidate": "49", "reference": "49", "cost": 0.003984, "error": ""}
+{"task_id": "test/intermediate_algebra/964.json", "status": "PASS", "level": 5, "subject": "Intermediate Algebra", "candidate": "1", "reference": "1", "cost": 0.005889, "error": ""}
+{"task_id": "test/precalculus/986.json", "status": "PASS", "level": 5, "subject": "Precalculus", "candidate": "144", "reference": "144", "cost": 0.004522, "error": ""}
+{"task_id": "test/geometry/172.json", "status": "PASS", "level": 5, "subject": "Geometry", "candidate": "8", "reference": "8", "cost": 0.006277, "error": ""}
+{"task_id": "test/counting_and_probability/230.json", "status": "PASS", "level": 4, "subject": "Counting & Probability", "candidate": "\\frac{2}{21}", "reference": "\\frac{2}{21}", "cost": 0.003303, "error": ""}
+{"task_id": "test/geometry/880.json", "status": "FAIL", "level": 5, "subject": "Geometry", "candidate": "\\sqrt{157}", "reference": "2\\sqrt{113}", "cost": 0.00638, "error": "got '\\\\sqrt{157}' want '2\\\\sqrt{113}'"}
+{"task_id": "test/counting_and_probability/803.json", "status": "PASS", "level": 4, "subject": "Counting & Probability", "candidate": "\\frac{1}{4}", "reference": "\\frac{1}{4}", "cost": 0.002521, "error": ""}
+{"task_id": "test/precalculus/117.json", "status": "PASS", "level": 3, "subject": "Precalculus", "candidate": "30", "reference": "30^\\circ", "cost": 0.00515, "error": ""}
+{"task_id": "test/intermediate_algebra/1410.json", "status": "PASS", "level": 2, "subject": "Intermediate Algebra", "candidate": "\\frac{6}{5}", "reference": "\\frac65", "cost": 0.001599, "error": ""}
+{"task_id": "test/algebra/2570.json", "status": "PASS", "level": 4, "subject": "Algebra", "candidate": "2107", "reference": "2107", "cost": 0.001698, "error": ""}
+{"task_id": "test/algebra/621.json", "status": "PASS", "level": 4, "subject": "Algebra", "candidate": "3.21", "reference": "3.21", "cost": 0.002219, "error": ""}
+{"task_id": "test/number_theory/521.json", "status": "PASS", "level": 2, "subject": "Number Theory", "candidate": "18", "reference": "18", "cost": 0.001822, "error": ""}
+{"task_id": "test/algebra/1255.json", "status": "PASS", "level": 2, "subject": "Algebra", "candidate": "6", "reference": "6", "cost": 0.000839, "error": ""}
+{"task_id": "test/prealgebra/1655.json", "status": "PASS", "level": 5, "subject": "Prealgebra", "candidate": "\\frac{17}{50}", "reference": "\\dfrac{17}{50}", "cost": 0.00135, "error": ""}
+{"task_id": "test/algebra/2517.json", "status": "PASS", "level": 5, "subject": "Algebra", "candidate": "-\\frac{35}{9}", "reference": "-\\frac{35}{9}", "cost": 0.004796, "error": ""}
+{"task_id": "test/precalculus/697.json", "status": "PASS", "level": 2, "subject": "Precalculus", "candidate": "-\\sqrt{3}", "reference": "-\\sqrt{3}", "cost": 0.006124, "error": ""}
+{"task_id": "test/prealgebra/1356.json", "status": "PASS", "level": 4, "subject": "Prealgebra", "candidate": "\\frac{4}{9}", "reference": "\\frac{4}{9}", "cost": 0.001211, "error": ""}
+{"task_id": "test/prealgebra/1003.json", "status": "FAIL", "level": 5, "subject": "Prealgebra", "candidate": "\\frac{270}{7}", "reference": "\\frac{270}7\\text{ degrees}", "cost": 0.00235, "error": "got '\\\\frac{270}{7}' want '\\\\frac{270}7\\\\text{ degrees}'"}
+{"task_id": "test/algebra/478.json", "status": "PASS", "level": 1, "subject": "Algebra", "candidate": "65", "reference": "65", "cost": 0.000847, "error": ""}
+{"task_id": "test/counting_and_probability/181.json", "status": "PASS", "level": 5, "subject": "Counting & Probability", "candidate": "19", "reference": "19", "cost": 0.005645, "error": ""}
+{"task_id": "test/geometry/802.json", "status": "PASS", "level": 2, "subject": "Geometry", "candidate": "12", "reference": "12", "cost": 0.002004, "error": ""}
+{"task_id": "test/algebra/297.json", "status": "PASS", "level": 5, "subject": "Algebra", "candidate": "1736", "reference": "1736", "cost": 0.006981, "error": ""}
+{"task_id": "test/prealgebra/1272.json", "status": "PASS", "level": 1, "subject": "Prealgebra", "candidate": "\\frac{13}{15}", "reference": "\\frac{13}{15}", "cost": 0.001133, "error": ""}
+{"task_id": "test/algebra/841.json", "status": "PASS", "level": 1, "subject": "Algebra", "candidate": "350", "reference": "350", "cost": 0.001793, "error": ""}
+{"task_id": "test/algebra/686.json", "status": "PASS", "level": 5, "subject": "Algebra", "candidate": "4", "reference": "4", "cost": 0.004125, "error": ""}
+{"task_id": "test/algebra/351.json", "status": "PASS", "level": 3, "subject": "Algebra", "candidate": "2", "reference": "2", "cost": 0.001399, "error": ""}
+{"task_id": "test/intermediate_algebra/991.json", "status": "PASS", "level": 2, "subject": "Intermediate Algebra", "candidate": "3", "reference": "3", "cost": 0.003474, "error": ""}
+{"task_id": "test/number_theory/598.json", "status": "PASS", "level": 3, "subject": "Number Theory", "candidate": "0.0000672", "reference": ".0000672", "cost": 0.001928, "error": ""}
+{"task_id": "test/geometry/65.json", "status": "PASS", "level": 3, "subject": "Geometry", "candidate": "30", "reference": "30^\\circ", "cost": 0.004984, "error": ""}
+{"task_id": "test/prealgebra/1113.json", "status": "PASS", "level": 2, "subject": "Prealgebra", "candidate": "60", "reference": "60", "cost": 0.001524, "error": ""}
+{"task_id": "test/precalculus/659.json", "status": "PASS", "level": 4, "subject": "Precalculus", "candidate": "5x - 7y + 11z + 4 = 0", "reference": "5x - 7y + 11z + 4 = 0", "cost": 0.005434, "error": ""}
+{"task_id": "test/prealgebra/1908.json", "status": "PASS", "level": 3, "subject": "Prealgebra", "candidate": "3", "reference": "3", "cost": 0.002409, "error": ""}
+{"task_id": "test/algebra/1275.json", "status": "PASS", "level": 3, "subject": "Algebra", "candidate": "\\frac{\\sqrt{3}}{3}", "reference": "\\frac{\\sqrt{3}}{3}", "cost": 0.001655, "error": ""}
+{"task_id": "test/prealgebra/1922.json", "status": "PASS", "level": 2, "subject": "Prealgebra", "candidate": "1251", "reference": "1251", "cost": 0.000924, "error": ""}
+{"task_id": "test/algebra/1082.json", "status": "PASS", "level": 4, "subject": "Algebra", "candidate": "23", "reference": "23", "cost": 0.003894, "error": ""}
+{"task_id": "test/intermediate_algebra/183.json", "status": "PASS", "level": 5, "subject": "Intermediate Algebra", "candidate": "(2, \\infty)", "reference": "(2,\\infty)", "cost": 0.005905, "error": ""}
+{"task_id": "test/algebra/1214.json", "status": "PASS", "level": 1, "subject": "Algebra", "candidate": "1", "reference": "1", "cost": 0.00087, "error": ""}
+{"task_id": "test/number_theory/978.json", "status": "PASS", "level": 4, "subject": "Number Theory", "candidate": "7", "reference": "7", "cost": 0.002676, "error": ""}
+{"task_id": "test/algebra/2199.json", "status": "PASS", "level": 1, "subject": "Algebra", "candidate": "7", "reference": "7", "cost": 0.001338, "error": ""}
+{"task_id": "test/algebra/733.json", "status": "PASS", "level": 5, "subject": "Algebra", "candidate": "6", "reference": "6", "cost": 0.004119, "error": ""}
+{"task_id": "test/geometry/702.json", "status": "PASS", "level": 5, "subject": "Geometry", "candidate": "160", "reference": "160", "cost": 0.006688, "error": ""}
+{"task_id": "test/counting_and_probability/51.json", "status": "PASS", "level": 5, "subject": "Counting & Probability", "candidate": "\\frac{13}{18}", "reference": "\\frac{13}{18}", "cost": 0.001682, "error": ""}
+{"task_id": "test/algebra/109.json", "status": "PASS", "level": 2, "subject": "Algebra", "candidate": "0", "reference": "0", "cost": 0.000795, "error": ""}
+{"task_id": "test/geometry/221.json", "status": "PASS", "level": 3, "subject": "Geometry", "candidate": "30", "reference": "30", "cost": 0.001854, "error": ""}
+{"task_id": "test/intermediate_algebra/1422.json", "status": "PASS", "level": 3, "subject": "Intermediate Algebra", "candidate": "4", "reference": "4", "cost": 0.002089, "error": ""}
+{"task_id": "test/intermediate_algebra/2196.json", "status": "PASS", "level": 5, "subject": "Intermediate Algebra", "candidate": "\\frac{1}{4}", "reference": "\\frac{1}{4}", "cost": 0.004616, "error": ""}
+{"task_id": "test/intermediate_algebra/591.json", "status": "PASS", "level": 4, "subject": "Intermediate Algebra", "candidate": "24", "reference": "24", "cost": 0.003484, "error": ""}
+{"task_id": "test/algebra/1937.json", "status": "PASS", "level": 1, "subject": "Algebra", "candidate": "1600", "reference": "1600", "cost": 0.001286, "error": ""}
+{"task_id": "test/number_theory/838.json", "status": "PASS", "level": 5, "subject": "Number Theory", "candidate": "6", "reference": "6", "cost": 0.004684, "error": ""}
+{"task_id": "test/counting_and_probability/508.json", "status": "PASS", "level": 3, "subject": "Counting & Probability", "candidate": "10080", "reference": "10,\\!080", "cost": 0.001079, "error": ""}
+{"task_id": "test/prealgebra/1907.json", "status": "PASS", "level": 2, "subject": "Prealgebra", "candidate": "17", "reference": "17", "cost": 0.001046, "error": ""}
+{"task_id": "test/prealgebra/2086.json", "status": "PASS", "level": 4, "subject": "Prealgebra", "candidate": "40", "reference": "40", "cost": 0.001598, "error": ""}
+{"task_id": "test/number_theory/149.json", "status": "PASS", "level": 4, "subject": "Number Theory", "candidate": "66", "reference": "66", "cost": 0.002612, "error": ""}
+{"task_id": "test/algebra/291.json", "status": "PASS", "level": 5, "subject": "Algebra", "candidate": "\\frac{2}{3}", "reference": "\\frac{2}{3}", "cost": 0.002462, "error": ""}
+{"task_id": "test/intermediate_algebra/1555.json", "status": "PASS", "level": 3, "subject": "Intermediate Algebra", "candidate": "12", "reference": "12", "cost": 0.002008, "error": ""}
+{"task_id": "test/intermediate_algebra/1510.json", "status": "FAIL", "level": 5, "subject": "Intermediate Algebra", "candidate": "\\frac{9\\sqrt{3}}{8}", "reference": "0", "cost": 0.006037, "error": "got '\\\\frac{9\\\\sqrt{3}}{8}' want '0'"}
+{"task_id": "test/precalculus/263.json", "status": "PASS", "level": 3, "subject": "Precalculus", "candidate": "\\begin{pmatrix} -2 \\\\ -14 \\\\ -7 \\end{pmatrix}", "reference": "\\begin{pmatrix} -2 \\\\ -14 \\\\ -7 \\end{pmatrix}", "cost": 0.00407, "error": ""}
+{"task_id": "test/precalculus/541.json", "status": "PASS", "level": 2, "subject": "Precalculus", "candidate": "\\left(\\frac{3}{2}, -13\\right)", "reference": "\\left( \\frac{3}{2}, -13 \\right)", "cost": 0.001751, "error": ""}
+{"task_id": "test/counting_and_probability/389.json", "status": "PASS", "level": 2, "subject": "Counting & Probability", "candidate": "28", "reference": "28", "cost": 0.000893, "error": ""}
+{"task_id": "test/number_theory/1201.json", "status": "PASS", "level": 3, "subject": "Number Theory", "candidate": "1", "reference": "1", "cost": 0.001796, "error": ""}
+{"task_id": "test/number_theory/234.json", "status": "PASS", "level": 2, "subject": "Number Theory", "candidate": "16", "reference": "16", "cost": 0.001928, "error": ""}
+{"task_id": "test/prealgebra/378.json", "status": "PASS", "level": 4, "subject": "Prealgebra", "candidate": "10", "reference": "10", "cost": 0.002777, "error": ""}
+{"task_id": "test/prealgebra/1555.json", "status": "PASS", "level": 2, "subject": "Prealgebra", "candidate": "5", "reference": "5", "cost": 0.00157, "error": ""}
+{"task_id": "test/algebra/2102.json", "status": "PASS", "level": 3, "subject": "Algebra", "candidate": "56", "reference": "56", "cost": 0.001628, "error": ""}
+{"task_id": "test/intermediate_algebra/102.json", "status": "PASS", "level": 4, "subject": "Intermediate Algebra", "candidate": "2", "reference": "2", "cost": 0.004168, "error": ""}
+{"task_id": "test/counting_and_probability/765.json", "status": "PASS", "level": 5, "subject": "Counting & Probability", "candidate": "110", "reference": "110", "cost": 0.002522, "error": ""}
+{"task_id": "test/algebra/907.json", "status": "PASS", "level": 4, "subject": "Algebra", "candidate": "2", "reference": "2", "cost": 0.001412, "error": ""}
+{"task_id": "test/prealgebra/1436.json", "status": "PASS", "level": 4, "subject": "Prealgebra", "candidate": "6", "reference": "6", "cost": 0.001711, "error": ""}
+{"task_id": "test/number_theory/417.json", "status": "FAIL", "level": 4, "subject": "Number Theory", "candidate": "11111111100", "reference": "11,\\! 111,\\! 111,\\! 100", "cost": 0.003905, "error": "got '11111111100' want '11,\\\\! 111,\\\\! 111,\\\\! 100'"}
+{"task_id": "test/algebra/864.json", "status": "PASS", "level": 2, "subject": "Algebra", "candidate": "(-1, 6)", "reference": "(-1,6)", "cost": 0.001069, "error": ""}
+{"task_id": "test/counting_and_probability/282.json", "status": "PASS", "level": 4, "subject": "Counting & Probability", "candidate": "\\frac{1}{2}", "reference": "\\frac{1}{2}", "cost": 0.005863, "error": ""}
+{"task_id": "test/prealgebra/1961.json", "status": "PASS", "level": 5, "subject": "Prealgebra", "candidate": "\\frac{16}{27}", "reference": "\\frac{16}{27}", "cost": 0.001369, "error": ""}
+{"task_id": "test/number_theory/89.json", "status": "PASS", "level": 3, "subject": "Number Theory", "candidate": "900", "reference": "900", "cost": 0.002834, "error": ""}
+{"task_id": "test/geometry/547.json", "status": "PASS", "level": 4, "subject": "Geometry", "candidate": "54", "reference": "54", "cost": 0.004825, "error": ""}
+{"task_id": "test/number_theory/183.json", "status": "PASS", "level": 3, "subject": "Number Theory", "candidate": "14", "reference": "14", "cost": 0.002662, "error": ""}
+{"task_id": "test/precalculus/190.json", "status": "PASS", "level": 4, "subject": "Precalculus", "candidate": "\\frac{9}{256}", "reference": "\\frac{9}{256}", "cost": 0.003095, "error": ""}
+{"task_id": "test/algebra/2159.json", "status": "PASS", "level": 3, "subject": "Algebra", "candidate": "11", "reference": "11", "cost": 0.001485, "error": ""}
+{"task_id": "test/counting_and_probability/71.json", "status": "PASS", "level": 3, "subject": "Counting & Probability", "candidate": "3", "reference": "3", "cost": 0.001656, "error": ""}
+{"task_id": "test/precalculus/819.json", "status": "FAIL", "level": 3, "subject": "Precalculus", "candidate": null, "reference": "\\text{(C)}", "cost": 0.002342, "error": "no \\boxed{} in response"}
+{"task_id": "test/precalculus/1056.json", "status": "FAIL", "level": 4, "subject": "Precalculus", "candidate": "10368\\pi", "reference": "288 \\pi", "cost": 0.005463, "error": "got '10368\\\\pi' want '288 \\\\pi'"}
+{"task_id": "test/prealgebra/2057.json", "status": "PASS", "level": 4, "subject": "Prealgebra", "candidate": "90", "reference": "90", "cost": 0.000984, "error": ""}
+{"task_id": "test/intermediate_algebra/986.json", "status": "PASS", "level": 4, "subject": "Intermediate Algebra", "candidate": "\\frac{16}{5}", "reference": "\\frac{16}{5}", "cost": 0.004477, "error": ""}
+{"task_id": "test/algebra/1578.json", "status": "PASS", "level": 4, "subject": "Algebra", "candidate": "10", "reference": "10", "cost": 0.003028, "error": ""}
+{"task_id": "test/intermediate_algebra/1354.json", "status": "PASS", "level": 5, "subject": "Intermediate Algebra", "candidate": "\\frac{1997}{2}", "reference": "\\frac{1997}{2}", "cost": 0.003803, "error": ""}
+{"task_id": "test/precalculus/441.json", "status": "PASS", "level": 2, "subject": "Precalculus", "candidate": "30", "reference": "30^\\circ", "cost": 0.002218, "error": ""}
+{"task_id": "test/intermediate_algebra/1837.json", "status": "PASS", "level": 3, "subject": "Intermediate Algebra", "candidate": "34", "reference": "34", "cost": 0.00293, "error": ""}
+{"task_id": "test/prealgebra/153.json", "status": "PASS", "level": 4, "subject": "Prealgebra", "candidate": "\\frac{5}{9}", "reference": "\\frac 59", "cost": 0.002267, "error": ""}
+{"task_id": "test/precalculus/989.json", "status": "PASS", "level": 4, "subject": "Precalculus", "candidate": "12", "reference": "12", "cost": 0.005142, "error": ""}
+{"task_id": "test/intermediate_algebra/337.json", "status": "PASS", "level": 1, "subject": "Intermediate Algebra", "candidate": "22", "reference": "22", "cost": 0.002275, "error": ""}
+{"task_id": "test/algebra/975.json", "status": "PASS", "level": 5, "subject": "Algebra", "candidate": "x = -4", "reference": "-4", "cost": 0.002055, "error": ""}
+{"task_id": "test/geometry/229.json", "status": "FAIL", "level": 5, "subject": "Geometry", "candidate": "17", "reference": "16", "cost": 0.008319, "error": "got '17' want '16'"}
+{"task_id": "test/prealgebra/874.json", "status": "FAIL", "level": 4, "subject": "Prealgebra", "candidate": "102", "reference": "116", "cost": 0.005085, "error": "got '102' want '116'"}
+{"task_id": "test/algebra/1143.json", "status": "PASS", "level": 5, "subject": "Algebra", "candidate": "17", "reference": "17", "cost": 0.003645, "error": ""}
+{"task_id": "test/algebra/2626.json", "status": "PASS", "level": 5, "subject": "Algebra", "candidate": "32348", "reference": "\\$32,\\!348", "cost": 0.001801, "error": ""}
+{"task_id": "test/geometry/254.json", "status": "PASS", "level": 2, "subject": "Geometry", "candidate": "3", "reference": "3", "cost": 0.001566, "error": ""}
+{"task_id": "test/prealgebra/1251.json", "status": "PASS", "level": 5, "subject": "Prealgebra", "candidate": "8", "reference": "8", "cost": 0.003074, "error": ""}
+{"task_id": "test/intermediate_algebra/1210.json", "status": "PASS", "level": 4, "subject": "Intermediate Algebra", "candidate": "-13x + 3", "reference": "-13x+3", "cost": 0.003349, "error": ""}
+{"task_id": "test/algebra/1787.json", "status": "PASS", "level": 2, "subject": "Algebra", "candidate": "8", "reference": "8", "cost": 0.001116, "error": ""}
+{"task_id": "test/intermediate_algebra/1123.json", "status": "PASS", "level": 3, "subject": "Intermediate Algebra", "candidate": "\\frac{10}{11}", "reference": "\\frac{10}{11}", "cost": 0.002714, "error": ""}
+{"task_id": "test/precalculus/920.json", "status": "PASS", "level": 4, "subject": "Precalculus", "candidate": "\\begin{pmatrix} -1 & 0 \\\\ 0 & -1 \\end{pmatrix}", "reference": "\\begin{pmatrix} -1 & 0 \\\\ 0 & -1 \\end{pmatrix}", "cost": 0.005602, "error": ""}
+{"task_id": "test/number_theory/1065.json", "status": "PASS", "level": 4, "subject": "Number Theory", "candidate": "17", "reference": "17", "cost": 0.003154, "error": ""}
+{"task_id": "test/algebra/1934.json", "status": "PASS", "level": 4, "subject": "Algebra", "candidate": "13", "reference": "13", "cost": 0.001795, "error": ""}
+{"task_id": "test/counting_and_probability/894.json", "status": "PASS", "level": 5, "subject": "Counting & Probability", "candidate": "540", "reference": "540", "cost": 0.003098, "error": ""}
+{"task_id": "test/algebra/2064.json", "status": "PASS", "level": 5, "subject": "Algebra", "candidate": "81", "reference": "81", "cost": 0.002145, "error": ""}
+{"task_id": "test/prealgebra/1458.json", "status": "PASS", "level": 3, "subject": "Prealgebra", "candidate": "\\frac{1}{8}", "reference": "\\frac{1}{8}", "cost": 0.000757, "error": ""}
+{"task_id": "test/counting_and_probability/1009.json", "status": "PASS", "level": 5, "subject": "Counting & Probability", "candidate": "28", "reference": "28", "cost": 0.001568, "error": ""}
+{"task_id": "test/precalculus/452.json", "status": "FAIL", "level": 2, "subject": "Precalculus", "candidate": null, "reference": "\\text{(E)}", "cost": 0.002072, "error": "no \\boxed{} in response"}
+{"task_id": "test/prealgebra/1995.json", "status": "PASS", "level": 3, "subject": "Prealgebra", "candidate": "\\frac{8}{21}", "reference": "\\frac{8}{21}", "cost": 0.001698, "error": ""}
+{"task_id": "test/geometry/473.json", "status": "FAIL", "level": 4, "subject": "Geometry", "candidate": "864", "reference": "864 \\mbox{ inches}^2", "cost": 0.001175, "error": "got '864' want '864 \\\\mbox{ inches}^2'"}
+{"task_id": "test/algebra/694.json", "status": "PASS", "level": 3, "subject": "Algebra", "candidate": "16", "reference": "16", "cost": 0.00171, "error": ""}
+{"task_id": "test/intermediate_algebra/149.json", "status": "PASS", "level": 1, "subject": "Intermediate Algebra", "candidate": "22", "reference": "22", "cost": 0.000928, "error": ""}
+{"task_id": "test/precalculus/580.json", "status": "PASS", "level": 3, "subject": "Precalculus", "candidate": "120", "reference": "120^\\circ", "cost": 0.002943, "error": ""}
+{"task_id": "test/geometry/347.json", "status": "PASS", "level": 3, "subject": "Geometry", "candidate": "76\u00b0", "reference": "76^\\circ", "cost": 0.001165, "error": ""}
+{"task_id": "test/prealgebra/1317.json", "status": "PASS", "level": 1, "subject": "Prealgebra", "candidate": "4", "reference": "4", "cost": 0.000964, "error": ""}
+{"task_id": "test/geometry/483.json", "status": "PASS", "level": 4, "subject": "Geometry", "candidate": "15", "reference": "15", "cost": 0.001774, "error": ""}
+{"task_id": "test/geometry/826.json", "status": "FAIL", "level": 5, "subject": "Geometry", "candidate": "1\\frac{7}{25}", "reference": "1\\frac{4}{5}", "cost": 0.006785, "error": "got '1\\\\frac{7}{25}' want '1\\\\frac{4}{5}'"}
+{"task_id": "test/algebra/524.json", "status": "PASS", "level": 2, "subject": "Algebra", "candidate": "4005", "reference": "4005", "cost": 0.001402, "error": ""}
+{"task_id": "test/prealgebra/1742.json", "status": "PASS", "level": 3, "subject": "Prealgebra", "candidate": "\\frac{33}{100}", "reference": "\\dfrac{33}{100}", "cost": 0.001037, "error": ""}
+{"task_id": "test/geometry/226.json", "status": "PASS", "level": 1, "subject": "Geometry", "candidate": "180", "reference": "180^\\circ", "cost": 0.001696, "error": ""}
+{"task_id": "test/number_theory/466.json", "status": "PASS", "level": 1, "subject": "Number Theory", "candidate": "1", "reference": "1", "cost": 0.001253, "error": ""}
+{"task_id": "test/counting_and_probability/913.json", "status": "PASS", "level": 3, "subject": "Counting & Probability", "candidate": "6", "reference": "6", "cost": 0.001825, "error": ""}
+{"task_id": "test/algebra/2551.json", "status": "PASS", "level": 1, "subject": "Algebra", "candidate": "10", "reference": "10", "cost": 0.001159, "error": ""}
+{"task_id": "test/number_theory/634.json", "status": "PASS", "level": 4, "subject": "Number Theory", "candidate": "333", "reference": "333", "cost": 0.002632, "error": ""}
+{"task_id": "test/number_theory/533.json", "status": "PASS", "level": 4, "subject": "Number Theory", "candidate": "1030", "reference": "1030", "cost": 0.002571, "error": ""}
+{"task_id": "test/prealgebra/993.json", "status": "PASS", "level": 4, "subject": "Prealgebra", "candidate": "1250", "reference": "1250", "cost": 0.00134, "error": ""}
+{"task_id": "test/geometry/686.json", "status": "PASS", "level": 5, "subject": "Geometry", "candidate": "18 + 2\\pi", "reference": "18+2\\pi", "cost": 0.003116, "error": ""}
+{"task_id": "test/algebra/346.json", "status": "PASS", "level": 2, "subject": "Algebra", "candidate": "7", "reference": "7", "cost": 0.000847, "error": ""}
+{"task_id": "test/algebra/1282.json", "status": "PASS", "level": 5, "subject": "Algebra", "candidate": "11", "reference": "11", "cost": 0.002716, "error": ""}
+{"task_id": "test/prealgebra/1834.json", "status": "PASS", "level": 4, "subject": "Prealgebra", "candidate": "\\sqrt{53}", "reference": "\\sqrt{53}", "cost": 0.001246, "error": ""}
+{"task_id": "test/number_theory/691.json", "status": "PASS", "level": 3, "subject": "Number Theory", "candidate": "255", "reference": "255", "cost": 0.001613, "error": ""}
+{"task_id": "test/prealgebra/1512.json", "status": "PASS", "level": 5, "subject": "Prealgebra", "candidate": "7\\pi", "reference": "7\\pi", "cost": 0.0019, "error": ""}
+{"task_id": "test/number_theory/1287.json", "status": "PASS", "level": 4, "subject": "Number Theory", "candidate": "8", "reference": "8", "cost": 0.002259, "error": ""}
+{"task_id": "test/prealgebra/260.json", "status": "PASS", "level": 4, "subject": "Prealgebra", "candidate": "36\u00b0", "reference": "36^\\circ", "cost": 0.005414, "error": ""}
+{"task_id": "test/algebra/1184.json", "status": "PASS", "level": 4, "subject": "Algebra", "candidate": "129", "reference": "129", "cost": 0.00277, "error": ""}
+{"task_id": "test/prealgebra/1787.json", "status": "PASS", "level": 3, "subject": "Prealgebra", "candidate": "1", "reference": "1", "cost": 0.001693, "error": ""}
+{"task_id": "test/precalculus/768.json", "status": "FAIL", "level": 5, "subject": "Precalculus", "candidate": "3 + 2\\sqrt{2}, 3 - 2\\sqrt{2}, -3 + 2\\sqrt{2}, -3 - 2\\sqrt{2}", "reference": "3 \\pm 2 \\sqrt{2}", "cost": 0.006139, "error": "got '3 + 2\\\\sqrt{2}, 3 - 2\\\\sqrt{2}, -3 + 2\\\\sqrt{2}, -3 - 2\\\\sqrt{2}' want '3 \\\\pm 2 \\\\sqrt{2}'"}
+{"task_id": "test/intermediate_algebra/1411.json", "status": "PASS", "level": 4, "subject": "Intermediate Algebra", "candidate": "440", "reference": "440", "cost": 0.006024, "error": ""}
+{"task_id": "test/intermediate_algebra/960.json", "status": "FAIL", "level": 5, "subject": "Intermediate Algebra", "candidate": "\\frac{121}{420}", "reference": "\\frac{17}{21}", "cost": 0.00765, "error": "got '\\\\frac{121}{420}' want '\\\\frac{17}{21}'"}
+{"task_id": "test/number_theory/631.json", "status": "PASS", "level": 5, "subject": "Number Theory", "candidate": "36", "reference": "36", "cost": 0.003486, "error": ""}
+{"task_id": "test/precalculus/1172.json", "status": "PASS", "level": 5, "subject": "Precalculus", "candidate": "7", "reference": "7", "cost": 0.006131, "error": ""}
+{"task_id": "test/intermediate_algebra/1300.json", "status": "PASS", "level": 3, "subject": "Intermediate Algebra", "candidate": "16", "reference": "16", "cost": 0.005017, "error": ""}
+{"task_id": "test/algebra/634.json", "status": "PASS", "level": 3, "subject": "Algebra", "candidate": "r = 4", "reference": "4", "cost": 0.003736, "error": ""}
+{"task_id": "test/counting_and_probability/25149.json", "status": "PASS", "level": 4, "subject": "Counting & Probability", "candidate": "63", "reference": "63", "cost": 0.001952, "error": ""}
+{"task_id": "test/intermediate_algebra/90.json", "status": "PASS", "level": 4, "subject": "Intermediate Algebra", "candidate": "898", "reference": "898", "cost": 0.004924, "error": ""}
+{"task_id": "test/algebra/2486.json", "status": "PASS", "level": 5, "subject": "Algebra", "candidate": "\\left(\\frac{3}{5}, \\frac{8}{3}\\right]", "reference": "\\left(\\frac{3}{5},\\frac{8}{3}\\right]", "cost": 0.001872, "error": ""}
+{"task_id": "test/number_theory/488.json", "status": "PASS", "level": 4, "subject": "Number Theory", "candidate": "58", "reference": "58", "cost": 0.00469, "error": ""}
+{"task_id": "test/precalculus/1201.json", "status": "FAIL", "level": 3, "subject": "Precalculus", "candidate": "9", "reference": "11", "cost": 0.006566, "error": "got '9' want '11'"}
+{"task_id": "test/intermediate_algebra/754.json", "status": "PASS", "level": 2, "subject": "Intermediate Algebra", "candidate": "\\textbf{(B)}", "reference": "\\text{(B)}", "cost": 0.005104, "error": ""}
+{"task_id": "test/number_theory/1172.json", "status": "PASS", "level": 4, "subject": "Number Theory", "candidate": "103", "reference": "103", "cost": 0.002606, "error": ""}
+{"task_id": "test/precalculus/881.json", "status": "PASS", "level": 4, "subject": "Precalculus", "candidate": "\\begin{pmatrix} -18 \\\\ -49 \\\\ 96 \\end{pmatrix}", "reference": "\\begin{pmatrix} -18 \\\\ -49 \\\\ 96 \\end{pmatrix}", "cost": 0.005015, "error": ""}
+{"task_id": "test/geometry/1097.json", "status": "PASS", "level": 4, "subject": "Geometry", "candidate": "63", "reference": "63", "cost": 0.001861, "error": ""}
+{"task_id": "test/counting_and_probability/339.json", "status": "PASS", "level": 4, "subject": "Counting & Probability", "candidate": "12", "reference": "12", "cost": 0.001517, "error": ""}
+{"task_id": "test/prealgebra/1044.json", "status": "FAIL", "level": 5, "subject": "Prealgebra", "candidate": "5.4", "reference": "5.4 \\text{ cents}", "cost": 0.002617, "error": "got '5.4' want '5.4 \\\\text{ cents}'"}
+{"task_id": "test/prealgebra/465.json", "status": "PASS", "level": 4, "subject": "Prealgebra", "candidate": "5", "reference": "5", "cost": 0.00503, "error": ""}
+{"task_id": "test/geometry/965.json", "status": "PASS", "level": 5, "subject": "Geometry", "candidate": "28", "reference": "28", "cost": 0.004762, "error": ""}
+{"task_id": "test/intermediate_algebra/446.json", "status": "PASS", "level": 3, "subject": "Intermediate Algebra", "candidate": "9", "reference": "9", "cost": 0.003177, "error": ""}
+{"task_id": "test/algebra/2257.json", "status": "PASS", "level": 4, "subject": "Algebra", "candidate": "\\frac{9}{19}", "reference": "\\frac9{19}", "cost": 0.002428, "error": ""}
+{"task_id": "test/intermediate_algebra/1544.json", "status": "FAIL", "level": 5, "subject": "Intermediate Algebra", "candidate": "4", "reference": "6", "cost": 0.00661, "error": "got '4' want '6'"}
+{"task_id": "test/precalculus/695.json", "status": "PASS", "level": 2, "subject": "Precalculus", "candidate": "(-\\infty, 0]", "reference": "(-\\infty, 0]", "cost": 0.002795, "error": ""}
+{"task_id": "test/geometry/711.json", "status": "FAIL", "level": 5, "subject": "Geometry", "candidate": "\\frac{2 + 3\\sqrt{3}}{2}", "reference": "1+2\\sqrt{3}", "cost": 0.007372, "error": "got '\\\\frac{2 + 3\\\\sqrt{3}}{2}' want '1+2\\\\sqrt{3}'"}
+{"task_id": "test/number_theory/203.json", "status": "PASS", "level": 3, "subject": "Number Theory", "candidate": "14", "reference": "14", "cost": 0.004854, "error": ""}
+{"task_id": "test/algebra/1842.json", "status": "PASS", "level": 2, "subject": "Algebra", "candidate": "49", "reference": "49", "cost": 0.001734, "error": ""}
+{"task_id": "test/number_theory/911.json", "status": "PASS", "level": 4, "subject": "Number Theory", "candidate": "3", "reference": "3", "cost": 0.002244, "error": ""}
+{"task_id": "test/intermediate_algebra/1714.json", "status": "PASS", "level": 1, "subject": "Intermediate Algebra", "candidate": "(5, \\infty)", "reference": "(5,\\infty)", "cost": 0.001508, "error": ""}
+{"task_id": "test/prealgebra/1423.json", "status": "FAIL", "level": 5, "subject": "Prealgebra", "candidate": "12\\pi \\text{ inches per second}", "reference": "12\\pi", "cost": 0.001158, "error": "got '12\\\\pi \\\\text{ inches per second}' want '12\\\\pi'"}
+{"task_id": "test/geometry/1108.json", "status": "PASS", "level": 2, "subject": "Geometry", "candidate": "(2, 4)", "reference": "(2,4)", "cost": 0.001662, "error": ""}
+{"task_id": "test/algebra/791.json", "status": "PASS", "level": 4, "subject": "Algebra", "candidate": "41", "reference": "41", "cost": 0.002813, "error": ""}
+{"task_id": "test/algebra/276.json", "status": "PASS", "level": 2, "subject": "Algebra", "candidate": "12", "reference": "12", "cost": 0.002914, "error": ""}
+{"task_id": "test/intermediate_algebra/2152.json", "status": "FAIL", "level": 5, "subject": "Intermediate Algebra", "candidate": "2", "reference": "0", "cost": 0.004607, "error": "got '2' want '0'"}
+{"task_id": "test/algebra/2735.json", "status": "PASS", "level": 2, "subject": "Algebra", "candidate": "\\frac{11+9a}{20}", "reference": "\\frac{11+9a}{20}", "cost": 0.001453, "error": ""}
+{"task_id": "test/algebra/425.json", "status": "PASS", "level": 3, "subject": "Algebra", "candidate": "-128", "reference": "-128", "cost": 0.001176, "error": ""}
+{"task_id": "test/geometry/947.json", "status": "PASS", "level": 5, "subject": "Geometry", "candidate": "-\\frac{24}{25}", "reference": "-\\frac{24}{25}", "cost": 0.002945, "error": ""}
+{"task_id": "test/prealgebra/954.json", "status": "PASS", "level": 5, "subject": "Prealgebra", "candidate": "10", "reference": "10", "cost": 0.000943, "error": ""}
+{"task_id": "test/algebra/1936.json", "status": "PASS", "level": 3, "subject": "Algebra", "candidate": "-1", "reference": "-1", "cost": 0.000995, "error": ""}
+{"task_id": "test/counting_and_probability/870.json", "status": "PASS", "level": 5, "subject": "Counting & Probability", "candidate": "\\frac{1}{3}", "reference": "\\frac{1}{3}", "cost": 0.0043, "error": ""}
+{"task_id": "test/geometry/465.json", "status": "PASS", "level": 4, "subject": "Geometry", "candidate": "120", "reference": "120", "cost": 0.004425, "error": ""}
+{"task_id": "test/geometry/73.json", "status": "PASS", "level": 2, "subject": "Geometry", "candidate": "4", "reference": "4", "cost": 0.00127, "error": ""}
+{"task_id": "test/precalculus/742.json", "status": "PASS", "level": 2, "subject": "Precalculus", "candidate": "\\frac{9}{100}", "reference": "\\frac{9}{100}", "cost": 0.004625, "error": ""}
+{"task_id": "test/intermediate_algebra/117.json", "status": "FAIL", "level": 5, "subject": "Intermediate Algebra", "candidate": "\\frac{35}{2}", "reference": "15", "cost": 0.007934, "error": "got '\\\\frac{35}{2}' want '15'"}
+{"task_id": "test/algebra/2176.json", "status": "PASS", "level": 5, "subject": "Algebra", "candidate": "3", "reference": "3", "cost": 0.00605, "error": ""}
+{"task_id": "test/prealgebra/1973.json", "status": "FAIL", "level": 4, "subject": "Prealgebra", "candidate": "4 \\text{ inches per second}", "reference": "4", "cost": 0.000885, "error": "got '4 \\\\text{ inches per second}' want '4'"}
+{"task_id": "test/counting_and_probability/216.json", "status": "PASS", "level": 5, "subject": "Counting & Probability", "candidate": "1940", "reference": "1940", "cost": 0.001838, "error": ""}
+{"task_id": "test/algebra/509.json", "status": "PASS", "level": 5, "subject": "Algebra", "candidate": "\\dfrac{13}{6}", "reference": "\\frac{13}{6}", "cost": 0.003179, "error": ""}
+{"task_id": "test/intermediate_algebra/190.json", "status": "PASS", "level": 4, "subject": "Intermediate Algebra", "candidate": "2", "reference": "2", "cost": 0.005747, "error": ""}
+{"task_id": "test/intermediate_algebra/776.json", "status": "PASS", "level": 4, "subject": "Intermediate Algebra", "candidate": "3", "reference": "3", "cost": 0.004055, "error": ""}
+{"task_id": "test/algebra/1457.json", "status": "PASS", "level": 3, "subject": "Algebra", "candidate": "-120", "reference": "-120", "cost": 0.002259, "error": ""}
+{"task_id": "test/number_theory/483.json", "status": "PASS", "level": 4, "subject": "Number Theory", "candidate": "3", "reference": "3", "cost": 0.002527, "error": ""}
+{"task_id": "test/algebra/2592.json", "status": "PASS", "level": 1, "subject": "Algebra", "candidate": "26000", "reference": "26000", "cost": 0.000943, "error": ""}
+{"task_id": "test/prealgebra/1730.json", "status": "PASS", "level": 3, "subject": "Prealgebra", "candidate": "6", "reference": "6", "cost": 0.00151, "error": ""}
+{"task_id": "test/number_theory/368.json", "status": "PASS", "level": 3, "subject": "Number Theory", "candidate": "4343_6", "reference": "4343_6", "cost": 0.00127, "error": ""}
+{"task_id": "test/intermediate_algebra/1566.json", "status": "PASS", "level": 3, "subject": "Intermediate Algebra", "candidate": "2k", "reference": "2k", "cost": 0.003729, "error": ""}
+{"task_id": "test/precalculus/801.json", "status": "PASS", "level": 3, "subject": "Precalculus", "candidate": "55\u00b0", "reference": "55^\\circ", "cost": 0.005725, "error": ""}
+{"task_id": "test/algebra/858.json", "status": "PASS", "level": 4, "subject": "Algebra", "candidate": "-2", "reference": "-2", "cost": 0.001402, "error": ""}
+{"task_id": "test/prealgebra/1238.json", "status": "PASS", "level": 3, "subject": "Prealgebra", "candidate": "2", "reference": "2", "cost": 0.001705, "error": ""}
+{"task_id": "test/counting_and_probability/737.json", "status": "PASS", "level": 2, "subject": "Counting & Probability", "candidate": "58,500", "reference": "58,500", "cost": 0.000943, "error": ""}
+{"task_id": "test/intermediate_algebra/1572.json", "status": "PASS", "level": 2, "subject": "Intermediate Algebra", "candidate": "5", "reference": "5", "cost": 0.001784, "error": ""}
+{"task_id": "test/algebra/1529.json", "status": "PASS", "level": 3, "subject": "Algebra", "candidate": "1", "reference": "1", "cost": 0.001057, "error": ""}
+{"task_id": "test/algebra/1338.json", "status": "PASS", "level": 4, "subject": "Algebra", "candidate": "66", "reference": "66", "cost": 0.001895, "error": ""}
+{"task_id": "test/algebra/1547.json", "status": "PASS", "level": 3, "subject": "Algebra", "candidate": "6r^2 - 4r - 24", "reference": "6r^2-4r-24", "cost": 0.001734, "error": ""}
+{"task_id": "test/counting_and_probability/116.json", "status": "PASS", "level": 2, "subject": "Counting & Probability", "candidate": "4495", "reference": "4495", "cost": 0.001368, "error": ""}
+{"task_id": "test/counting_and_probability/238.json", "status": "PASS", "level": 4, "subject": "Counting & Probability", "candidate": "10080", "reference": "10080", "cost": 0.002225, "error": ""}
+{"task_id": "test/number_theory/686.json", "status": "PASS", "level": 2, "subject": "Number Theory", "candidate": "4", "reference": "4", "cost": 0.001501, "error": ""}
+{"task_id": "test/precalculus/826.json", "status": "PASS", "level": 3, "subject": "Precalculus", "candidate": "\\frac{1}{16}", "reference": "\\frac{1}{16}", "cost": 0.005689, "error": ""}
+{"task_id": "test/precalculus/1281.json", "status": "FAIL", "level": 4, "subject": "Precalculus", "candidate": "11(1+\\sqrt{5})", "reference": "11 \\sqrt{5} + 11", "cost": 0.007135, "error": "got '11(1+\\\\sqrt{5})' want '11 \\\\sqrt{5} + 11'"}
+{"task_id": "test/counting_and_probability/1014.json", "status": "PASS", "level": 4, "subject": "Counting & Probability", "candidate": "480", "reference": "480", "cost": 0.001431, "error": ""}
+{"task_id": "test/algebra/529.json", "status": "PASS", "level": 4, "subject": "Algebra", "candidate": "81", "reference": "81", "cost": 0.002042, "error": ""}
+{"task_id": "test/intermediate_algebra/1166.json", "status": "PASS", "level": 5, "subject": "Intermediate Algebra", "candidate": "100", "reference": "100", "cost": 0.005404, "error": ""}
+{"task_id": "test/algebra/1078.json", "status": "PASS", "level": 5, "subject": "Algebra", "candidate": "(-\\sqrt{3}, \\sqrt{3})", "reference": "(-\\sqrt{3}, \\sqrt{3})", "cost": 0.003137, "error": ""}
+{"task_id": "test/prealgebra/1353.json", "status": "PASS", "level": 5, "subject": "Prealgebra", "candidate": "4", "reference": "4", "cost": 0.003006, "error": ""}
+{"task_id": "test/intermediate_algebra/860.json", "status": "FAIL", "level": 2, "subject": "Intermediate Algebra", "candidate": "\\text{Circle}", "reference": "\\text{ellipse}", "cost": 0.002158, "error": "got '\\\\text{Circle}' want '\\\\text{ellipse}'"}
+{"task_id": "test/intermediate_algebra/1407.json", "status": "PASS", "level": 4, "subject": "Intermediate Algebra", "candidate": "6", "reference": "6", "cost": 0.005667, "error": ""}
+{"task_id": "test/precalculus/96.json", "status": "PASS", "level": 3, "subject": "Precalculus", "candidate": "\\frac{7}{4}", "reference": "\\frac{7}{4}", "cost": 0.002511, "error": ""}
+{"task_id": "test/intermediate_algebra/1405.json", "status": "PASS", "level": 4, "subject": "Intermediate Algebra", "candidate": "16\\sqrt{3}", "reference": "16 \\sqrt{3}", "cost": 0.003642, "error": ""}
+{"task_id": "test/counting_and_probability/14.json", "status": "PASS", "level": 1, "subject": "Counting & Probability", "candidate": "\\frac{1}{4}", "reference": "\\frac14", "cost": 0.001338, "error": ""}
+{"task_id": "test/algebra/251.json", "status": "PASS", "level": 2, "subject": "Algebra", "candidate": "2", "reference": "2", "cost": 0.001185, "error": ""}
+{"task_id": "test/intermediate_algebra/690.json", "status": "PASS", "level": 4, "subject": "Intermediate Algebra", "candidate": "(1, -16, -4, 43)", "reference": "(1,-16,-4,43)", "cost": 0.002891, "error": ""}
+{"task_id": "test/number_theory/820.json", "status": "PASS", "level": 5, "subject": "Number Theory", "candidate": "8", "reference": "8", "cost": 0.004465, "error": ""}
+{"task_id": "test/number_theory/109.json", "status": "PASS", "level": 4, "subject": "Number Theory", "candidate": "4", "reference": "4", "cost": 0.002102, "error": ""}
+{"task_id": "test/algebra/1199.json", "status": "PASS", "level": 4, "subject": "Algebra", "candidate": "1", "reference": "1", "cost": 0.001159, "error": ""}
+{"task_id": "test/geometry/106.json", "status": "PASS", "level": 2, "subject": "Geometry", "candidate": "31", "reference": "31", "cost": 0.001634, "error": ""}
+{"task_id": "test/prealgebra/1187.json", "status": "PASS", "level": 2, "subject": "Prealgebra", "candidate": "21", "reference": "21", "cost": 0.001645, "error": ""}
+{"task_id": "test/precalculus/1289.json", "status": "PASS", "level": 1, "subject": "Precalculus", "candidate": "-41", "reference": "-41", "cost": 0.00114, "error": ""}
+{"task_id": "test/intermediate_algebra/955.json", "status": "PASS", "level": 5, "subject": "Intermediate Algebra", "candidate": "17", "reference": "17", "cost": 0.004776, "error": ""}
+{"task_id": "test/geometry/846.json", "status": "PASS", "level": 2, "subject": "Geometry", "candidate": "90\u00b0", "reference": "90^\\circ", "cost": 0.003806, "error": ""}
+{"task_id": "test/algebra/2264.json", "status": "PASS", "level": 5, "subject": "Algebra", "candidate": "1+2i", "reference": "1+2i", "cost": 0.003429, "error": ""}
+{"task_id": "test/algebra/1303.json", "status": "PASS", "level": 1, "subject": "Algebra", "candidate": "4", "reference": "4", "cost": 0.000557, "error": ""}
+{"task_id": "test/number_theory/427.json", "status": "PASS", "level": 5, "subject": "Number Theory", "candidate": "25", "reference": "25", "cost": 0.002908, "error": ""}
+{"task_id": "test/geometry/538.json", "status": "PASS", "level": 4, "subject": "Geometry", "candidate": "(8, -2)", "reference": "(8,-2)", "cost": 0.003378, "error": ""}
+{"task_id": "test/number_theory/1185.json", "status": "PASS", "level": 3, "subject": "Number Theory", "candidate": "6", "reference": "6", "cost": 0.003077, "error": ""}
+{"task_id": "test/prealgebra/1743.json", "status": "PASS", "level": 3, "subject": "Prealgebra", "candidate": "3", "reference": "3", "cost": 0.002105, "error": ""}
+{"task_id": "test/prealgebra/1865.json", "status": "FAIL", "level": 4, "subject": "Prealgebra", "candidate": "12^{\\text{th}} \\text{ grade}", "reference": "12", "cost": 0.003138, "error": "got '12^{\\\\text{th}} \\\\text{ grade}' want '12'"}
+{"task_id": "test/intermediate_algebra/1992.json", "status": "PASS", "level": 4, "subject": "Intermediate Algebra", "candidate": "(0, 9) \\cup (9, 36)", "reference": "(0,9) \\cup (9,36)", "cost": 0.002718, "error": ""}
+{"task_id": "test/counting_and_probability/188.json", "status": "FAIL", "level": 5, "subject": "Counting & Probability", "candidate": "\\frac{4}{9}", "reference": "\\frac{1}{2}", "cost": 0.006394, "error": "got '\\\\frac{4}{9}' want '\\\\frac{1}{2}'"}
+{"task_id": "test/intermediate_algebra/1111.json", "status": "PASS", "level": 5, "subject": "Intermediate Algebra", "candidate": "\\frac{20000}{\\pi}", "reference": "\\frac{20000}{\\pi}", "cost": 0.00318, "error": ""}
+{"task_id": "test/algebra/101.json", "status": "FAIL", "level": 4, "subject": "Algebra", "candidate": "[-2, 7]", "reference": "x \\in [-2,7]", "cost": 0.002018, "error": "got '[-2, 7]' want 'x \\\\in [-2,7]'"}
+{"task_id": "test/prealgebra/1298.json", "status": "PASS", "level": 2, "subject": "Prealgebra", "candidate": "15x - 80", "reference": "15x - 80", "cost": 0.000564, "error": ""}
+{"task_id": "test/prealgebra/2066.json", "status": "PASS", "level": 5, "subject": "Prealgebra", "candidate": "22", "reference": "22", "cost": 0.001059, "error": ""}
+{"task_id": "test/algebra/170.json", "status": "PASS", "level": 3, "subject": "Algebra", "candidate": "11", "reference": "11", "cost": 0.001423, "error": ""}
+{"task_id": "test/algebra/849.json", "status": "PASS", "level": 1, "subject": "Algebra", "candidate": "18", "reference": "18", "cost": 0.001061, "error": ""}
+{"task_id": "test/algebra/1031.json", "status": "FAIL", "level": 5, "subject": "Algebra", "candidate": "5.5", "reference": "\\frac{11}{2}", "cost": 0.001689, "error": "got '5.5' want '\\\\frac{11}{2}'"}
+{"task_id": "test/geometry/795.json", "status": "PASS", "level": 3, "subject": "Geometry", "candidate": "\\frac{\\sqrt{21}}{5}", "reference": "\\frac{\\sqrt{21}}{5}", "cost": 0.001993, "error": ""}
+{"task_id": "test/algebra/853.json", "status": "PASS", "level": 5, "subject": "Algebra", "candidate": "12", "reference": "12", "cost": 0.004405, "error": ""}
+{"task_id": "test/algebra/2277.json", "status": "PASS", "level": 5, "subject": "Algebra", "candidate": "0", "reference": "0", "cost": 0.003777, "error": ""}
+{"task_id": "test/precalculus/902.json", "status": "PASS", "level": 5, "subject": "Precalculus", "candidate": "\\sqrt{66}", "reference": "\\sqrt{66}", "cost": 0.005094, "error": ""}
+{"task_id": "test/algebra/518.json", "status": "PASS", "level": 3, "subject": "Algebra", "candidate": "\\frac{3}{4}", "reference": "\\frac 34", "cost": 0.001632, "error": ""}
+{"task_id": "test/intermediate_algebra/1791.json", "status": "PASS", "level": 5, "subject": "Intermediate Algebra", "candidate": "-\\frac{3}{8}", "reference": "-\\frac{3}{8}", "cost": 0.004144, "error": ""}
+{"task_id": "test/algebra/114.json", "status": "PASS", "level": 1, "subject": "Algebra", "candidate": "4", "reference": "4", "cost": 0.001604, "error": ""}
+{"task_id": "test/prealgebra/631.json", "status": "PASS", "level": 3, "subject": "Prealgebra", "candidate": "2", "reference": "2", "cost": 0.00358, "error": ""}
+{"task_id": "test/prealgebra/977.json", "status": "PASS", "level": 2, "subject": "Prealgebra", "candidate": "23", "reference": "23", "cost": 0.001032, "error": ""}
+{"task_id": "test/prealgebra/1991.json", "status": "FAIL", "level": 4, "subject": "Prealgebra", "candidate": "\\text{Navin would earn the most after working an eight-hour day}", "reference": "\\text{Navin}", "cost": 0.001826, "error": "got '\\\\text{Navin would earn the most after working an eight-hour day}' want '\\\\text{Navin}'"}
+{"task_id": "test/prealgebra/1784.json", "status": "PASS", "level": 2, "subject": "Prealgebra", "candidate": "326.5", "reference": "326.5", "cost": 0.00073, "error": ""}
+{"task_id": "test/geometry/817.json", "status": "FAIL", "level": 5, "subject": "Geometry", "candidate": "7", "reference": "\\frac{14}{3}", "cost": 0.00633, "error": "got '7' want '\\\\frac{14}{3}'"}
+{"task_id": "test/intermediate_algebra/1806.json", "status": "PASS", "level": 5, "subject": "Intermediate Algebra", "candidate": "\\frac{13}{4}", "reference": "\\frac{13}{4}", "cost": 0.006392, "error": ""}
+{"task_id": "test/precalculus/1291.json", "status": "PASS", "level": 3, "subject": "Precalculus", "candidate": "1 - 12i", "reference": "1 - 12i", "cost": 0.001429, "error": ""}
+{"task_id": "test/number_theory/928.json", "status": "PASS", "level": 4, "subject": "Number Theory", "candidate": "3", "reference": "3", "cost": 0.002067, "error": ""}
+{"task_id": "test/counting_and_probability/761.json", "status": "PASS", "level": 1, "subject": "Counting & Probability", "candidate": "3", "reference": "3", "cost": 0.001028, "error": ""}
+{"task_id": "test/prealgebra/1572.json", "status": "PASS", "level": 4, "subject": "Prealgebra", "candidate": "60", "reference": "60", "cost": 0.001549, "error": ""}
+{"task_id": "test/number_theory/132.json", "status": "PASS", "level": 1, "subject": "Number Theory", "candidate": "0", "reference": "0", "cost": 0.00081, "error": ""}
+{"task_id": "test/algebra/1960.json", "status": "PASS", "level": 4, "subject": "Algebra", "candidate": "9", "reference": "9", "cost": 0.001251, "error": ""}
+{"task_id": "test/precalculus/398.json", "status": "FAIL", "level": 5, "subject": "Precalculus", "candidate": "\\begin{pmatrix} 0.2 \\\\ -3.6 \\end{pmatrix}", "reference": "\\begin{pmatrix} 1/5 \\\\ -18/5 \\end{pmatrix}", "cost": 0.006101, "error": "got '\\\\begin{pmatrix} 0.2 \\\\\\\\ -3.6 \\\\end{pmatrix}' want '\\\\begin{pmatrix} 1/5 \\\\\\\\ -18/5 \\\\end{pmatrix}'"}
+{"task_id": "test/intermediate_algebra/1797.json", "status": "FAIL", "level": 4, "subject": "Intermediate Algebra", "candidate": "7\\sqrt{10}", "reference": "2 \\sqrt{5}", "cost": 0.005714, "error": "got '7\\\\sqrt{10}' want '2 \\\\sqrt{5}'"}
+{"task_id": "test/prealgebra/65.json", "status": "PASS", "level": 2, "subject": "Prealgebra", "candidate": "6", "reference": "6", "cost": 0.002417, "error": ""}
+{"task_id": "test/prealgebra/1227.json", "status": "PASS", "level": 3, "subject": "Prealgebra", "candidate": "60", "reference": "60", "cost": 0.000967, "error": ""}
+{"task_id": "test/intermediate_algebra/2146.json", "status": "PASS", "level": 4, "subject": "Intermediate Algebra", "candidate": "406", "reference": "406", "cost": 0.007567, "error": ""}
+{"task_id": "test/algebra/2680.json", "status": "PASS", "level": 2, "subject": "Algebra", "candidate": "5r^5", "reference": "5r^5", "cost": 0.001187, "error": ""}
+{"task_id": "test/algebra/2391.json", "status": "PASS", "level": 4, "subject": "Algebra", "candidate": "10", "reference": "10", "cost": 0.002186, "error": ""}
+{"task_id": "test/number_theory/769.json", "status": "PASS", "level": 5, "subject": "Number Theory", "candidate": "9", "reference": "9", "cost": 0.004171, "error": ""}
+{"task_id": "test/precalculus/681.json", "status": "PASS", "level": 3, "subject": "Precalculus", "candidate": "\\frac{1}{8}", "reference": "\\frac{1}{8}", "cost": 0.004544, "error": ""}
+{"task_id": "test/algebra/776.json", "status": "PASS", "level": 5, "subject": "Algebra", "candidate": "-2", "reference": "-2", "cost": 0.003148, "error": ""}
+{"task_id": "test/algebra/1796.json", "status": "PASS", "level": 5, "subject": "Algebra", "candidate": "2\\sqrt{5}", "reference": "2\\sqrt{5}", "cost": 0.002193, "error": ""}
+{"task_id": "test/precalculus/145.json", "status": "PASS", "level": 4, "subject": "Precalculus", "candidate": "\\begin{pmatrix} -7 \\\\ 16 \\\\ 5 \\end{pmatrix}", "reference": "\\begin{pmatrix} -7 \\\\ 16 \\\\ 5 \\end{pmatrix}", "cost": 0.00707, "error": ""}
+{"task_id": "test/precalculus/625.json", "status": "FAIL", "level": 3, "subject": "Precalculus", "candidate": "\\begin{pmatrix} \\frac{16}{49} \\\\ \\frac{48}{49} \\\\ \\frac{24}{49} \\end{pmatrix}", "reference": "\\begin{pmatrix} 16/49 \\\\ 48/49 \\\\ 24/49 \\end{pmatrix}", "cost": 0.002015, "error": "got '\\\\begin{pmatrix} \\\\frac{16}{49} \\\\\\\\ \\\\frac{48}{49} \\\\\\\\ \\\\frac{24}{49} \\\\end{pmatrix}' want '\\\\begin{pmatrix} 16/49 \\\\\\\\ 48/49 \\\\\\\\ 24/49 \\\\end{pmatrix}'"}
+{"task_id": "test/precalculus/1202.json", "status": "PASS", "level": 5, "subject": "Precalculus", "candidate": "27", "reference": "27", "cost": 0.004979, "error": ""}
+{"task_id": "test/intermediate_algebra/2015.json", "status": "FAIL", "level": 5, "subject": "Intermediate Algebra", "candidate": "\\{-2, 1-\\sqrt{5}, 1+\\sqrt{5}\\}", "reference": "\\{1\\pm\\sqrt{5},-2\\}", "cost": 0.005833, "error": "got '\\\\{-2, 1-\\\\sqrt{5}, 1+\\\\sqrt{5}\\\\}' want '\\\\{1\\\\pm\\\\sqrt{5},-2\\\\}'"}
+{"task_id": "test/number_theory/1002.json", "status": "PASS", "level": 5, "subject": "Number Theory", "candidate": "1440", "reference": "1440", "cost": 0.003944, "error": ""}
+{"task_id": "test/algebra/1339.json", "status": "PASS", "level": 5, "subject": "Algebra", "candidate": "600", "reference": "600", "cost": 0.001577, "error": ""}
+{"task_id": "test/precalculus/1133.json", "status": "FAIL", "level": 5, "subject": "Precalculus", "candidate": "\\frac{5R^2}{3} + \\frac{2(a^2 + b^2 + c^2)}{9}", "reference": "3R^2", "cost": 0.008402, "error": "got '\\\\frac{5R^2}{3} + \\\\frac{2(a^2 + b^2 + c^2)}{9}' want '3R^2'"}
+{"task_id": "test/geometry/843.json", "status": "PASS", "level": 3, "subject": "Geometry", "candidate": "6\\sqrt{2}", "reference": "6\\sqrt{2}", "cost": 0.00213, "error": ""}
+{"task_id": "test/algebra/2743.json", "status": "PASS", "level": 2, "subject": "Algebra", "candidate": "29", "reference": "29", "cost": 0.001489, "error": ""}
+{"task_id": "test/intermediate_algebra/121.json", "status": "PASS", "level": 4, "subject": "Intermediate Algebra", "candidate": "64", "reference": "64", "cost": 0.004325, "error": ""}
+{"task_id": "test/intermediate_algebra/1014.json", "status": "PASS", "level": 3, "subject": "Intermediate Algebra", "candidate": "50", "reference": "50", "cost": 0.004115, "error": ""}
+{"task_id": "test/prealgebra/2019.json", "status": "PASS", "level": 2, "subject": "Prealgebra", "candidate": "4.5", "reference": "4.5", "cost": 0.000728, "error": ""}
+{"task_id": "test/precalculus/499.json", "status": "PASS", "level": 4, "subject": "Precalculus", "candidate": "\\left[\\frac{\\pi^2}{8}, \\frac{5\\pi^2}{4}\\right]", "reference": "\\left[ \\frac{\\pi^2}{8}, \\frac{5 \\pi^2}{4} \\right]", "cost": 0.005238, "error": ""}
+{"task_id": "test/intermediate_algebra/1462.json", "status": "PASS", "level": 5, "subject": "Intermediate Algebra", "candidate": "331", "reference": "331", "cost": 0.006708, "error": ""}
+{"task_id": "test/number_theory/410.json", "status": "PASS", "level": 2, "subject": "Number Theory", "candidate": "0.35625", "reference": ".35625", "cost": 0.001853, "error": ""}
+{"task_id": "test/prealgebra/1640.json", "status": "PASS", "level": 5, "subject": "Prealgebra", "candidate": "32", "reference": "32", "cost": 0.002632, "error": ""}
+{"task_id": "test/algebra/2043.json", "status": "PASS", "level": 5, "subject": "Algebra", "candidate": "(-\\infty, 2) \\cup (3, \\infty)", "reference": "(-\\infty, 2) \\cup (3, \\infty)", "cost": 0.001785, "error": ""}
+{"task_id": "test/counting_and_probability/10.json", "status": "PASS", "level": 4, "subject": "Counting & Probability", "candidate": "4", "reference": "4", "cost": 0.00403, "error": ""}
+{"task_id": "test/algebra/1553.json", "status": "PASS", "level": 3, "subject": "Algebra", "candidate": "3", "reference": "3", "cost": 0.002831, "error": ""}
+{"task_id": "test/number_theory/255.json", "status": "PASS", "level": 2, "subject": "Number Theory", "candidate": "4", "reference": "4", "cost": 0.001207, "error": ""}
+{"task_id": "test/intermediate_algebra/199.json", "status": "PASS", "level": 3, "subject": "Intermediate Algebra", "candidate": "x^8 + x^7 + x^6 + x^5 + x^4 + x^3 + x^2 + x + 1", "reference": "x^8 + x^7 + x^6 + x^5 + x^4 + x^3 + x^2 + x + 1", "cost": 0.004139, "error": ""}
+{"task_id": "test/algebra/2080.json", "status": "PASS", "level": 3, "subject": "Algebra", "candidate": "14", "reference": "14", "cost": 0.001309, "error": ""}
+{"task_id": "test/prealgebra/2037.json", "status": "FAIL", "level": 4, "subject": "Prealgebra", "candidate": "550 \\text{ gallons}", "reference": "550", "cost": 0.001035, "error": "got '550 \\\\text{ gallons}' want '550'"}
+{"task_id": "test/algebra/1343.json", "status": "PASS", "level": 4, "subject": "Algebra", "candidate": "256", "reference": "256", "cost": 0.001296, "error": ""}
+{"task_id": "test/algebra/668.json", "status": "PASS", "level": 4, "subject": "Algebra", "candidate": "45", "reference": "45", "cost": 0.001317, "error": ""}
+{"task_id": "test/counting_and_probability/731.json", "status": "PASS", "level": 5, "subject": "Counting & Probability", "candidate": "\\frac{1}{2}", "reference": "\\frac{1}{2}", "cost": 0.00593, "error": ""}
+{"task_id": "test/intermediate_algebra/1779.json", "status": "PASS", "level": 4, "subject": "Intermediate Algebra", "candidate": "15", "reference": "15", "cost": 0.006682, "error": ""}
+{"task_id": "test/algebra/2430.json", "status": "PASS", "level": 4, "subject": "Algebra", "candidate": "8", "reference": "8", "cost": 0.003341, "error": ""}
+{"task_id": "test/prealgebra/996.json", "status": "PASS", "level": 1, "subject": "Prealgebra", "candidate": "9", "reference": "9", "cost": 0.001675, "error": ""}
+{"task_id": "test/number_theory/1000.json", "status": "PASS", "level": 5, "subject": "Number Theory", "candidate": "44", "reference": "44", "cost": 0.002963, "error": ""}
+{"task_id": "test/algebra/2789.json", "status": "PASS", "level": 1, "subject": "Algebra", "candidate": "47", "reference": "47", "cost": 0.001077, "error": ""}
+{"task_id": "test/number_theory/13.json", "status": "PASS", "level": 5, "subject": "Number Theory", "candidate": "64", "reference": "64", "cost": 0.004075, "error": ""}
+{"task_id": "test/number_theory/459.json", "status": "PASS", "level": 3, "subject": "Number Theory", "candidate": "\\frac{639}{40}", "reference": "\\frac{639}{40}", "cost": 0.002162, "error": ""}
+{"task_id": "test/algebra/1814.json", "status": "PASS", "level": 2, "subject": "Algebra", "candidate": "143", "reference": "143", "cost": 0.00207, "error": ""}
+{"task_id": "test/algebra/2476.json", "status": "PASS", "level": 2, "subject": "Algebra", "candidate": "10", "reference": "10", "cost": 0.001092, "error": ""}
+{"task_id": "test/precalculus/323.json", "status": "PASS", "level": 5, "subject": "Precalculus", "candidate": "y = 2x + 3", "reference": "y = 2x + 3", "cost": 0.005229, "error": ""}
+{"task_id": "test/counting_and_probability/190.json", "status": "PASS", "level": 2, "subject": "Counting & Probability", "candidate": "6", "reference": "6", "cost": 0.001141, "error": ""}
+{"task_id": "test/intermediate_algebra/1102.json", "status": "PASS", "level": 1, "subject": "Intermediate Algebra", "candidate": "-2, 1", "reference": "-2,1", "cost": 0.004145, "error": ""}
+{"task_id": "test/number_theory/342.json", "status": "PASS", "level": 1, "subject": "Number Theory", "candidate": "0", "reference": "0", "cost": 0.000674, "error": ""}
+{"task_id": "test/prealgebra/805.json", "status": "PASS", "level": 3, "subject": "Prealgebra", "candidate": "41", "reference": "41", "cost": 0.002142, "error": ""}
+{"task_id": "test/algebra/2780.json", "status": "PASS", "level": 5, "subject": "Algebra", "candidate": "18.90", "reference": "\\$18.90", "cost": 0.002884, "error": ""}
+{"task_id": "test/prealgebra/914.json", "status": "PASS", "level": 4, "subject": "Prealgebra", "candidate": "75", "reference": "75^\\circ", "cost": 0.005244, "error": ""}
+{"task_id": "test/algebra/824.json", "status": "PASS", "level": 4, "subject": "Algebra", "candidate": "12", "reference": "12", "cost": 0.002869, "error": ""}
+{"task_id": "test/number_theory/679.json", "status": "PASS", "level": 2, "subject": "Number Theory", "candidate": "59", "reference": "59", "cost": 0.001592, "error": ""}
+{"task_id": "test/algebra/1425.json", "status": "PASS", "level": 2, "subject": "Algebra", "candidate": "2", "reference": "2", "cost": 0.001122, "error": ""}
+{"task_id": "test/intermediate_algebra/834.json", "status": "PASS", "level": 3, "subject": "Intermediate Algebra", "candidate": "9", "reference": "9", "cost": 0.002937, "error": ""}
+{"task_id": "test/number_theory/72.json", "status": "PASS", "level": 4, "subject": "Number Theory", "candidate": "121", "reference": "121", "cost": 0.002134, "error": ""}
+{"task_id": "test/precalculus/703.json", "status": "PASS", "level": 5, "subject": "Precalculus", "candidate": "8\\pi", "reference": "8 \\pi", "cost": 0.004125, "error": ""}
+{"task_id": "test/prealgebra/1114.json", "status": "PASS", "level": 2, "subject": "Prealgebra", "candidate": "15 \\text{ cm}^2", "reference": "15\\mbox{ cm}^2", "cost": 0.002807, "error": ""}
+{"task_id": "test/algebra/224.json", "status": "PASS", "level": 4, "subject": "Algebra", "candidate": "8", "reference": "8", "cost": 0.00209, "error": ""}
+{"task_id": "test/algebra/435.json", "status": "PASS", "level": 3, "subject": "Algebra", "candidate": "25", "reference": "25", "cost": 0.001178, "error": ""}
+{"task_id": "test/intermediate_algebra/158.json", "status": "PASS", "level": 5, "subject": "Intermediate Algebra", "candidate": "27648", "reference": "27648", "cost": 0.0059, "error": ""}
+{"task_id": "test/prealgebra/846.json", "status": "PASS", "level": 3, "subject": "Prealgebra", "candidate": "84", "reference": "84", "cost": 0.000844, "error": ""}
+{"task_id": "test/algebra/2470.json", "status": "FAIL", "level": 1, "subject": "Algebra", "candidate": "137\\frac{1}{2} \\text{ miles}", "reference": "137 \\frac{1}{2}", "cost": 0.001332, "error": "got '137\\\\frac{1}{2} \\\\text{ miles}' want '137 \\\\frac{1}{2}'"}
+{"task_id": "test/prealgebra/1930.json", "status": "PASS", "level": 5, "subject": "Prealgebra", "candidate": "7", "reference": "7", "cost": 0.002996, "error": ""}
+{"task_id": "test/intermediate_algebra/752.json", "status": "PASS", "level": 1, "subject": "Intermediate Algebra", "candidate": "3", "reference": "3", "cost": 0.002889, "error": ""}
+{"task_id": "test/counting_and_probability/1003.json", "status": "PASS", "level": 5, "subject": "Counting & Probability", "candidate": "29", "reference": "29", "cost": 0.006538, "error": ""}
+{"task_id": "test/prealgebra/1252.json", "status": "PASS", "level": 2, "subject": "Prealgebra", "candidate": "200", "reference": "200", "cost": 0.001068, "error": ""}
+{"task_id": "test/number_theory/22.json", "status": "PASS", "level": 3, "subject": "Number Theory", "candidate": "2", "reference": "2", "cost": 0.002872, "error": ""}
+{"task_id": "test/intermediate_algebra/1279.json", "status": "FAIL", "level": 5, "subject": "Intermediate Algebra", "candidate": "0", "reference": "\\frac{2}{1005}", "cost": 0.006087, "error": "got '0' want '\\\\frac{2}{1005}'"}
+{"task_id": "test/number_theory/1128.json", "status": "PASS", "level": 5, "subject": "Number Theory", "candidate": "2", "reference": "2", "cost": 0.001904, "error": ""}
+{"task_id": "test/precalculus/1252.json", "status": "PASS", "level": 2, "subject": "Precalculus", "candidate": "1", "reference": "1", "cost": 0.003895, "error": ""}
+{"task_id": "test/intermediate_algebra/1467.json", "status": "FAIL", "level": 5, "subject": "Intermediate Algebra", "candidate": "\\frac{8n^2+4n+1}{5}", "reference": "8n^2 + 4n + 1", "cost": 0.008016, "error": "got '\\\\frac{8n^2+4n+1}{5}' want '8n^2 + 4n + 1'"}
+{"task_id": "test/number_theory/1090.json", "status": "PASS", "level": 5, "subject": "Number Theory", "candidate": "202", "reference": "202", "cost": 0.003171, "error": ""}
+{"task_id": "test/precalculus/1082.json", "status": "PASS", "level": 3, "subject": "Precalculus", "candidate": "\\frac{8}{15}", "reference": "\\frac{8}{15}", "cost": 0.004659, "error": ""}
+{"task_id": "test/intermediate_algebra/101.json", "status": "PASS", "level": 3, "subject": "Intermediate Algebra", "candidate": "10", "reference": "10", "cost": 0.003659, "error": ""}
+{"task_id": "test/counting_and_probability/199.json", "status": "PASS", "level": 2, "subject": "Counting & Probability", "candidate": "13", "reference": "13", "cost": 0.004926, "error": ""}
+{"task_id": "test/geometry/477.json", "status": "PASS", "level": 3, "subject": "Geometry", "candidate": "216", "reference": "216", "cost": 0.001047, "error": ""}
+{"task_id": "test/number_theory/239.json", "status": "PASS", "level": 1, "subject": "Number Theory", "candidate": "2", "reference": "2", "cost": 0.001176, "error": ""}
+{"task_id": "test/prealgebra/1203.json", "status": "PASS", "level": 5, "subject": "Prealgebra", "candidate": "36", "reference": "\\$36", "cost": 0.001059, "error": ""}
+{"task_id": "test/intermediate_algebra/1365.json", "status": "PASS", "level": 3, "subject": "Intermediate Algebra", "candidate": "15", "reference": "15", "cost": 0.002356, "error": ""}
+{"task_id": "test/intermediate_algebra/1350.json", "status": "PASS", "level": 5, "subject": "Intermediate Algebra", "candidate": "14", "reference": "14", "cost": 0.007042, "error": ""}
+{"task_id": "test/prealgebra/1128.json", "status": "PASS", "level": 5, "subject": "Prealgebra", "candidate": "64", "reference": "64", "cost": 0.001828, "error": ""}
+{"task_id": "test/precalculus/356.json", "status": "PASS", "level": 3, "subject": "Precalculus", "candidate": "y = -2x", "reference": "y = -2x", "cost": 0.002566, "error": ""}
+{"task_id": "test/algebra/2779.json", "status": "PASS", "level": 5, "subject": "Algebra", "candidate": "20", "reference": "20", "cost": 0.003099, "error": ""}
+{"task_id": "test/intermediate_algebra/1930.json", "status": "FAIL", "level": 5, "subject": "Intermediate Algebra", "candidate": "0", "reference": "\\frac{1}{4}", "cost": 0.005804, "error": "got '0' want '\\\\frac{1}{4}'"}
+{"task_id": "test/intermediate_algebra/1981.json", "status": "FAIL", "level": 4, "subject": "Intermediate Algebra", "candidate": "(2, 12) \\cup (12, 102)", "reference": "(2,12) \\cup (12,102)", "cost": 0.00224, "error": "got '(2, 12) \\\\cup (12, 102)' want '(2,12) \\\\cup (12,102)'"}
+{"task_id": "test/intermediate_algebra/1232.json", "status": "PASS", "level": 3, "subject": "Intermediate Algebra", "candidate": "\\frac{5}{13}", "reference": "\\frac{5}{13}", "cost": 0.002936, "error": ""}
+{"task_id": "test/geometry/561.json", "status": "FAIL", "level": 5, "subject": "Geometry", "candidate": "\\frac{27}{8}", "reference": "\\frac{7}{2}", "cost": 0.007131, "error": "got '\\\\frac{27}{8}' want '\\\\frac{7}{2}'"}
+{"task_id": "test/intermediate_algebra/1508.json", "status": "PASS", "level": 5, "subject": "Intermediate Algebra", "candidate": "-1", "reference": "-1", "cost": 0.004644, "error": ""}
+{"task_id": "test/geometry/615.json", "status": "PASS", "level": 4, "subject": "Geometry", "candidate": "106\u00b0", "reference": "106^\\circ", "cost": 0.002691, "error": ""}
