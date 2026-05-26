@@ -109,11 +109,11 @@ class AnthropicProvider(Provider):
         if resolved_key is None:
             resolved_key = os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")
 
-        # Claude Code Max OAuth tokens (sk-ant-oat01-*) authenticate via
+        # Max-subscription OAuth tokens (sk-ant-oat01-*) authenticate via
         # Bearer, not x-api-key. The SDK accepts them via auth_token, but
         # ANTHROPIC_API_KEY in env would still poison the client with an
         # invalid x-api-key header -- pop it during construction.
-        is_oauth = bool(resolved_key) and resolved_key.startswith("sk-ant-oat01-")
+        is_oauth = resolved_key is not None and resolved_key.startswith("sk-ant-oat01-")
 
         client_kwargs: dict[str, Any] = {}
         if is_oauth:

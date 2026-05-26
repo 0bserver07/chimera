@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """HumanEval runner that uses the `claude` CLI for inference.
 
-Why this script exists: the Claude Code Max subscription's quota for
-Sonnet/Opus is only billable through Claude Code itself, not direct
+Why this script exists: the Anthropic Max subscription's quota for
+Sonnet/Opus is only billable through the Max-tier `claude` CLI itself, not direct
 /v1/messages API calls. The `claude -p --no-session-persistence` CLI
 taps the Max quota first and then spills into the Additional Usage
 credit automatically; raw API calls with the same OAuth token return
@@ -17,7 +17,7 @@ Usage:
     python examples/benchmarks/humaneval_cli.py --model claude-opus-4-7 --count 20
 
 Cost note: each invocation spawns a fresh CLI process which reloads the
-Claude Code system context (~13K tokens). At Sonnet rates that adds
+CLI system context (~13K tokens). At Sonnet rates that adds
 ~$0.05/call regardless of completion size; full 164 costs ~$8-10.
 The CLI's --output-format=json gives back the true `total_cost_usd`
 per call, which we sum and report.

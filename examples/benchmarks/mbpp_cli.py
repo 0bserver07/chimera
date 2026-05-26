@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """MBPP sanitized runner via the `claude` CLI.
 
-Same rationale as humaneval_cli.py: routes inference through Claude Code
+Same rationale as humaneval_cli.py: routes inference through the `claude` CLI
 so Sonnet/Opus calls are billed against Max + Additional Usage (raw API
 calls return 429 on this account).
 
