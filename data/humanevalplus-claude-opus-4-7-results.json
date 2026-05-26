@@ -1,0 +1,42 @@
+{
+  "model": "claude-opus-4-7",
+  "backend": "claude-cli",
+  "passed": 156,
+  "total": 164,
+  "pass_rate": 0.9512195121951219,
+  "total_cost_usd": 21.4945,
+  "errors": [
+    [
+      "HumanEval/32",
+      "TypeError: Value after * must be an iterable, not float"
+    ],
+    [
+      "HumanEval/44",
+      "AssertionError"
+    ],
+    [
+      "HumanEval/76",
+      "AssertionError"
+    ],
+    [
+      "HumanEval/91",
+      "AssertionError"
+    ],
+    [
+      "HumanEval/124",
+      "AssertionError"
+    ],
+    [
+      "HumanEval/132",
+      "AssertionError"
+    ],
+    [
+      "HumanEval/139",
+      "TIMEOUT (>10.0s)"
+    ],
+    [
+      "HumanEval/154",
+      "AssertionError"
+    ]
+  ]
+}
