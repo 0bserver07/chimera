@@ -107,6 +107,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="Model to use (default: claude-sonnet-4-20250514)",
     )
 
+    # ---- bench-compare subcommand ----
+    from chimera.cli.bench_compare import add_bench_compare_parser
+    add_bench_compare_parser(subparsers)
+
     # ---- code subcommand ----
     code_parser = subparsers.add_parser(
         "code",
@@ -1211,6 +1215,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         return run_eval(args)
     elif args.command == "bench":
         return run_bench(args)
+    elif args.command == "bench-compare":
+        from chimera.cli.bench_compare import run_bench_compare
+        return run_bench_compare(args)
     elif args.command == "code":
         from chimera.cli.code import run_code
         return run_code(args)

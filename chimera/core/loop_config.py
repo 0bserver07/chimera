@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from chimera.checkpoints_ghost import GhostCommitManager
     from chimera.compaction.base import CompactionStrategy
     from chimera.compaction.summary import SummaryCompaction
+    from chimera.core.budget import BudgetEnforcer
     from chimera.core.cancellation import CancellationToken
     from chimera.core.file_tracker import FileTracker
     from chimera.core.message_queue import MessageQueues
@@ -111,6 +112,13 @@ class LoopConfig:
     # than crashing the whole run. ``None`` (default) disables the wrap.
     # Audit H-4. See chimera/core/tool_executor.py:async_execute_tool_calls_incremental.
     tool_timeout_s: float | None = None
+
+    # Uniform run budget (tool calls / LLM calls / wall-clock / cost).
+    # tool_executor records each completed tool call against the enforcer;
+    # on exhaustion the enforcer cancels `cancellation`, so every loop stops
+    # via its existing cooperative-cancel path. None = unchanged behaviour.
+    # See chimera/core/budget.py and docs/specs/comparative-bench-cli.md.
+    budget_enforcer: BudgetEnforcer | None = None
 
     # -- LLM-condensation (M11) --
     # When BOTH fields are set, ``ReAct.async_iter_steps`` will run the

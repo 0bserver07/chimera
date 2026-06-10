@@ -394,6 +394,10 @@ def execute_tool_calls(
                 if config.detector.on_detect == OnDetect.ASK:
                     raise PermissionAsk(f"loop_detected:{tc.name}")
 
+        # -- Budget enforcement (after-completion semantics) --
+        if config and config.budget_enforcer:
+            config.budget_enforcer.record_tool_call(tc.name)
+
     return count
 
 
@@ -625,6 +629,10 @@ def execute_tool_calls_incremental(
                     )
                     result.remaining = list(tool_calls[i + 1:])
                     return result
+
+        # -- Budget enforcement (after-completion semantics) --
+        if config and config.budget_enforcer:
+            config.budget_enforcer.record_tool_call(tc.name)
 
     return result
 

@@ -20,7 +20,7 @@ Example:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Callable
 
 from chimera.providers.base import Provider
@@ -126,6 +126,51 @@ class ComparisonReport:
         return pivot
 
 
+@dataclass
+class CompareReport(ComparisonReport):
+    """A :class:`ComparisonReport` plus the controlled-run provenance.
+
+    Attributes:
+        budget: The :class:`~chimera.core.budget.BudgetSpec` applied
+            uniformly to every (config, problem) run.
+        model: Model identifier shared by all configurations.
+        task_pool: Benchmark identifier (e.g. ``"harbor:deep-swe?n=10"``).
+        seed: Task-sampling seed, recorded for reproducibility.
+        budget_hits: Per-config count of runs stopped by the budget —
+            kept distinct from task failures.
+        budget_reasons: Per-config list of which cap tripped, per hit.
+    """
+
+    budget: Any = None
+    model: str = ""
+    task_pool: str = ""
+    seed: int = 0
+    budget_hits: dict[str, int] = field(default_factory=dict)
+    budget_reasons: dict[str, list[str]] = field(default_factory=dict)
+
+    def summary(self) -> str:
+        """Summary table with a distinct budget-hits column per config."""
+        lines = [
+            "Controlled Comparative Matrix",
+            f"model={self.model or '?'}  task_pool={self.task_pool or '?'}  seed={self.seed}",
+            "=" * 60,
+        ]
+        for config_name in self.configs:
+            task_results = self.results.get(config_name, [])
+            total = len(task_results)
+            passed = sum(1 for r in task_results if r.passed)
+            pass_rate = passed / total if total > 0 else 0.0
+            avg_cost = sum(r.cost for r in task_results) / total if total else 0.0
+            avg_steps = sum(r.steps for r in task_results) / total if total else 0.0
+            hits = self.budget_hits.get(config_name, 0)
+            lines.append(
+                f"{config_name}: pass_rate={pass_rate:.1%}, "
+                f"avg_cost=${avg_cost:.4f}, avg_steps={avg_steps:.1f}, "
+                f"budget_hits={hits}/{total}"
+            )
+        return "\n".join(lines)
+
+
 class ComparativeEval:
     """Run the same task set through different agent configs and compare.
 
@@ -159,15 +204,19 @@ class ComparativeEval:
         self.provider = provider
         self.problems = problems
         self.env_factory = env_factory
-        self._configs: dict[str, Callable[[Provider], Any]] = {}
+        self._configs: dict[str, Callable[..., Any]] = {}
 
-    def add_config(self, name: str, agent_factory: Callable[[Provider], Any]) -> None:
+    def add_config(self, name: str, agent_factory: Callable[..., Any]) -> None:
         """Add a named agent configuration to test.
 
         Args:
             name: Human-readable identifier for this configuration.
             agent_factory: Callable that receives the provider and returns an
-                agent-like object with a ``run(task, env)`` method.
+                agent-like object with a ``run(task, env)`` method. For
+                budgeted runs (:meth:`run_with_budget`) it may instead accept
+                ``(provider, loop_config)`` to receive the per-task
+                :class:`~chimera.core.loop_config.LoopConfig` carrying the
+                budget enforcer and cancellation token.
         """
         self._configs[name] = agent_factory
 
@@ -216,3 +265,126 @@ class ComparativeEval:
             all_results[config_name] = config_results
 
         return ComparisonReport(configs=config_names, results=all_results)
+
+    def run_with_budget(
+        self,
+        budget: Any,
+        model: str = "",
+        task_pool: str = "",
+        seed: int = 0,
+        evaluator: Callable[[dict[str, Any], str, Any], bool] | None = None,
+    ) -> CompareReport:
+        """Run every config under an identical per-task budget.
+
+        For each ``(config, problem)`` pair a fresh
+        :class:`~chimera.core.cancellation.CancellationToken` and
+        :class:`~chimera.core.budget.BudgetEnforcer` are created, the
+        provider is wrapped in a
+        :class:`~chimera.core.budget.BudgetedProvider`, and the agent is
+        rebuilt via its factory so no budget state leaks across tasks.
+        Factories that accept ``(provider, loop_config)`` get full
+        tool-call-level enforcement; single-argument factories still get
+        provider-level (LLM-call / cost / wall-clock) enforcement.
+
+        Budget hits never raise: a run stopped by the budget is recorded
+        as a failed :class:`TaskResult` and counted in
+        :attr:`CompareReport.budget_hits` separately from ordinary
+        failures.
+
+        Args:
+            budget: The :class:`~chimera.core.budget.BudgetSpec` to apply.
+            model: Model identifier, recorded in the report.
+            task_pool: Benchmark identifier, recorded in the report.
+            seed: Task-sampling seed, recorded in the report.
+            evaluator: Optional ``(problem, output, env) -> bool`` judge
+                (e.g. a benchmark's ``evaluate``). Falls back to the
+                ``"expected"`` substring check.
+
+        Returns:
+            A :class:`CompareReport` over all configs and problems.
+        """
+        import inspect
+
+        from chimera.core.budget import BudgetedProvider, BudgetEnforcer
+        from chimera.core.cancellation import CancellationToken, OperationCancelled
+        from chimera.core.loop_config import LoopConfig
+        from chimera.permissions.presets import AutoApprove
+
+        all_results: dict[str, list[TaskResult]] = {}
+        budget_hits: dict[str, int] = {}
+        budget_reasons: dict[str, list[str]] = {}
+        config_names = list(self._configs.keys())
+
+        for config_name, factory in self._configs.items():
+            config_results: list[TaskResult] = []
+            budget_hits[config_name] = 0
+            budget_reasons[config_name] = []
+
+            for problem in self.problems:
+                env = self.env_factory() if self.env_factory else None
+                prompt = problem.get("prompt", "")
+                problem_id = problem.get("id", "unknown")
+
+                token = CancellationToken()
+                enforcer = BudgetEnforcer(budget, cancellation=token)
+                loop_config = LoopConfig(
+                    budget_enforcer=enforcer,
+                    cancellation=token,
+                    permissions=AutoApprove(),
+                )
+                provider = BudgetedProvider(self.provider, enforcer)
+                try:
+                    n_params = len(inspect.signature(factory).parameters)
+                except (TypeError, ValueError):
+                    n_params = 1
+                if n_params >= 2:
+                    agent = factory(provider, loop_config)
+                else:
+                    agent = factory(provider)
+
+                enforcer.start()
+                output, cost, steps = "", 0.0, 0
+                try:
+                    agent_result = agent.run(prompt, env)
+                    output = agent_result.output
+                    cost = agent_result.cost
+                    steps = agent_result.steps
+                except OperationCancelled:
+                    output = f"[budget exhausted: {enforcer.exhausted_reason}]"
+                    cost = enforcer.tally.cost_usd
+                    steps = enforcer.tally.tool_calls
+
+                if enforcer.exhausted:
+                    budget_hits[config_name] += 1
+                    budget_reasons[config_name].append(
+                        str(enforcer.exhausted_reason)
+                    )
+                    passed = False
+                elif evaluator is not None:
+                    passed = bool(evaluator(problem, output, env))
+                else:
+                    expected = problem.get("expected")
+                    passed = True if expected is None else expected in output
+
+                config_results.append(
+                    TaskResult(
+                        problem_id=problem_id,
+                        output=output,
+                        cost=cost,
+                        steps=steps,
+                        passed=passed,
+                    )
+                )
+
+            all_results[config_name] = config_results
+
+        return CompareReport(
+            configs=config_names,
+            results=all_results,
+            budget=budget,
+            model=model,
+            task_pool=task_pool,
+            seed=seed,
+            budget_hits=budget_hits,
+            budget_reasons=budget_reasons,
+        )
