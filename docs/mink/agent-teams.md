@@ -90,11 +90,14 @@ CHIMERA_TEAM=<name> CHIMERA_AGENT=<id> CHIMERA_ROLE=lead chimera-team-mcp
 | `team_complete_task` | Mark a claimed task done | — |
 | `team_send_message` | DM another teammate's mailbox | — |
 | `team_recv_messages` | Drain own mailbox | — |
+| `team_propose_plan` | Propose an implementation plan for a claimed task (needed when the task has `requires_plan`) | — |
+| `team_approve_plan` | Approve / reject a teammate's proposed plan | **yes** |
 
 ### Role gating
 
 `--role teammate` (default) blocks `team_add_task` — only the lead
 creates work. The role can also come from `CHIMERA_ROLE`.
+`team_approve_plan` is lead-only as well.
 
 ### Task dependencies
 
@@ -110,6 +113,20 @@ unsatisfied deps is **blocked**:
 
 On the CLI, pass `--depends-on <task_id>` (repeat for multiple) to
 `chimera team task add`.
+
+### Plan approval
+
+`team_add_task` accepts `requires_plan: true`. A task created with it
+cannot be completed until its plan is approved:
+
+- The claiming agent proposes via `team_propose_plan`.
+- The lead approves or rejects via `team_approve_plan` (rejection
+  feedback lands on the task as `plan_feedback`), or a human runs the
+  interactive loop: `chimera team approvals <name>`.
+- `team_complete_task` on an unapproved plan returns
+  `{"completed": false, "reason": "plan requires approval"}`.
+- `CHIMERA_AUTO_APPROVE_PLANS=1` auto-approves at propose time
+  (headless runs).
 
 ## Runner layer: `chimera-team-run`
 

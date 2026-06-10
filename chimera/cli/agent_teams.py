@@ -167,6 +167,7 @@ class Team:
         description: str,
         created_by: str = "lead",
         depends_on: list[str] | None = None,
+        requires_plan: bool = False,
     ) -> str:
         """Append a new task to ``task_list.jsonl`` and return its id.
 
@@ -176,6 +177,8 @@ class Team:
             depends_on: Optional list of task ids that must reach status
                 ``"completed"`` before this task is claimable. Defaults to
                 an empty list (no dependencies).
+            requires_plan: Whether this task requires a plan to be proposed
+                and approved before completion.
 
         Returns:
             The hex task id assigned to the new record.
@@ -190,6 +193,10 @@ class Team:
             "status": "open",
             "result": None,
             "depends_on": list(depends_on or []),
+            "requires_plan": requires_plan,
+            "proposed_plan": None,
+            "plan_status": None,
+            "plan_feedback": None,
         }
         with _flock(self.task_path):
             with open(self.task_path, "a", encoding="utf-8") as f:
@@ -343,9 +350,77 @@ class Team:
             changed = False
             for rec in tasks:
                 if rec["id"] == task_id and rec.get("claimed_by") == agent_id:
+                    if rec.get("requires_plan", False) and rec.get("plan_status") != "approved":
+                        return False
                     rec["status"] = "completed"
                     rec["result"] = result
                     rec["completed_at"] = time.time()
+                    changed = True
+                    break
+            if changed:
+                self._rewrite_tasks(tasks)
+            return changed
+
+    def propose_plan(self, task_id: str, agent_id: str, plan_text: str) -> bool:
+        """Propose a plan for a task.
+
+        Sets ``plan_status`` to ``"approved"`` when ``CHIMERA_AUTO_APPROVE_PLANS=1``
+        is set, otherwise transitions it to ``"pending"``.
+
+        Args:
+            task_id: Task to attach the plan to.
+            agent_id: Must match the task's current claimant.
+            plan_text: The proposed implementation plan.
+
+        Returns:
+            True if the plan was recorded, False if there is no matching
+            claimed task or the task's plan is already approved.
+        """
+        with _flock(self.task_path):
+            tasks = self._read_tasks_unlocked()
+            changed = False
+            for rec in tasks:
+                if rec["id"] == task_id and rec.get("claimed_by") == agent_id:
+                    if rec.get("plan_status") == "approved":
+                        break  # never clobber an approved plan; caller sees False
+                    rec["proposed_plan"] = plan_text
+                    if os.environ.get("CHIMERA_AUTO_APPROVE_PLANS") == "1":
+                        rec["plan_status"] = "approved"
+                    else:
+                        rec["plan_status"] = "pending"
+                    rec["plan_feedback"] = None
+                    changed = True
+                    break
+            if changed:
+                self._rewrite_tasks(tasks)
+            return changed
+
+    def approve_plan(self, task_id: str, decision: str, feedback: str | None = None) -> bool:
+        """Approve or reject a proposed plan for a task.
+
+        Args:
+            task_id: Task whose plan is being decided.
+            decision: Either ``"approve"`` or ``"reject"``.
+            feedback: Optional reason recorded on the task as ``plan_feedback``.
+
+        Returns:
+            True if the task was found and updated, False otherwise.
+
+        Raises:
+            ValueError: If ``decision`` is not ``"approve"`` or ``"reject"``.
+        """
+        if decision not in ("approve", "reject"):
+            raise ValueError("Decision must be 'approve' or 'reject'")
+        with _flock(self.task_path):
+            tasks = self._read_tasks_unlocked()
+            changed = False
+            for rec in tasks:
+                if rec["id"] == task_id:
+                    if decision == "approve":
+                        rec["plan_status"] = "approved"
+                    else:
+                        rec["plan_status"] = "rejected"
+                    rec["plan_feedback"] = feedback
                     changed = True
                     break
             if changed:

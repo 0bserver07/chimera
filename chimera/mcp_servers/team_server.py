@@ -18,13 +18,16 @@ Exposed tools:
 - ``team_complete_task`` -- mark a claimed task as completed
 - ``team_send_message`` -- deliver a message to another agent's mailbox
 - ``team_recv_messages`` -- drain the current agent's mailbox
+- ``team_propose_plan`` -- propose an implementation plan for a claimed task
+- ``team_approve_plan`` -- approve or reject a proposed plan (lead only)
 
 Role gating:
 
 The server can be started with ``--role lead`` or ``--role teammate``
 (default: ``teammate``). ``CHIMERA_ROLE`` is honoured as a fallback. When
 running as a teammate, ``team_add_task`` returns an ``isError`` response
-and refuses to create new tasks; every other tool is unchanged.
+and refuses to create new tasks, and ``team_approve_plan`` is likewise
+lead-only; every other tool is unchanged.
 
 Usage::
 
@@ -157,6 +160,11 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
                         "'completed' before this task is claimable."
                     ),
                     "default": [],
+                },
+                "requires_plan": {
+                    "type": "boolean",
+                    "description": "Whether a plan must be proposed and approved before completion.",
+                    "default": False,
                 },
                 "name": {
                     "type": "string",
@@ -296,6 +304,54 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
             "required": ["agent_id"],
         },
     },
+    {
+        "name": "team_propose_plan",
+        "description": (
+            "Propose a detailed implementation plan for a task. "
+            "Only the agent currently claiming the task can propose its plan."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "agent_id": {"type": "string", "description": "Agent id proposing the plan."},
+                "task_id": {"type": "string", "description": "Task id for which the plan is proposed."},
+                "plan": {"type": "string", "description": "The detailed proposed implementation plan."},
+                "name": {
+                    "type": "string",
+                    "description": "Team name. Defaults to the server's --team flag.",
+                },
+            },
+            "required": ["agent_id", "task_id", "plan"],
+        },
+    },
+    {
+        "name": "team_approve_plan",
+        "description": (
+            "Approve or reject a proposed plan for a task. "
+            "Only available when the server is started with --role lead."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "task_id": {"type": "string", "description": "Task id whose plan is being approved or rejected."},
+                "decision": {
+                    "type": "string",
+                    "enum": ["approve", "reject"],
+                    "description": "Whether to approve or reject the plan.",
+                },
+                "feedback": {
+                    "type": "string",
+                    "description": "Optional feedback explaining the decision (especially for rejection).",
+                    "default": "",
+                },
+                "name": {
+                    "type": "string",
+                    "description": "Team name. Defaults to the server's --team flag.",
+                },
+            },
+            "required": ["task_id", "decision"],
+        },
+    },
 ]
 
 
@@ -389,6 +445,8 @@ class TeamMCPServer:
             "team_complete_task": self._call_complete_task,
             "team_send_message": self._call_send_message,
             "team_recv_messages": self._call_recv_messages,
+            "team_propose_plan": self._call_propose_plan,
+            "team_approve_plan": self._call_approve_plan,
         }
         fn = dispatch.get(tool_name)
         if fn is None:
@@ -458,7 +516,13 @@ class TeamMCPServer:
         if not isinstance(depends_on_raw, list):
             return _text_error("Error: 'depends_on' must be an array of task ids.")
         depends_on = [str(d) for d in depends_on_raw]
-        task_id = team.add_task(str(description), created_by=created_by, depends_on=depends_on)
+        requires_plan = bool(arguments.get("requires_plan", False))
+        task_id = team.add_task(
+            str(description),
+            created_by=created_by,
+            depends_on=depends_on,
+            requires_plan=requires_plan,
+        )
         return _json_ok({"task_id": task_id})
 
     def _call_list_tasks(self, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -510,8 +574,78 @@ class TeamMCPServer:
         if not agent_id or not task_id:
             return _text_error("Error: 'agent_id' and 'task_id' are required.")
         result = str(arguments.get("result") or "")
+
+        # Check if completion is refused due to plan approval
+        tasks = team.list_tasks(status_filter="all")
+        target_task = None
+        for t in tasks:
+            if t["id"] == task_id:
+                target_task = t
+                break
+        if target_task and target_task.get("claimed_by") == agent_id:
+            if target_task.get("requires_plan", False) and target_task.get("plan_status") != "approved":
+                return _json_ok({"completed": False, "reason": "plan requires approval"})
+
         completed = team.complete_task(str(task_id), str(agent_id), result=result)
         return _json_ok({"completed": completed})
+
+    def _call_propose_plan(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        team, err = self._require_team(arguments)
+        if err is not None or team is None:
+            return err or _text_error("Error: team unavailable.")
+        agent_id = arguments.get("agent_id")
+        task_id = arguments.get("task_id")
+        plan = arguments.get("plan")
+        if not agent_id or not task_id or plan is None:
+            return _text_error("Error: 'agent_id', 'task_id', and 'plan' are required.")
+
+        tasks = team.list_tasks(status_filter="all")
+        target_task = None
+        for t in tasks:
+            if t["id"] == task_id:
+                target_task = t
+                break
+        if not target_task:
+            return _text_error(f"Error: task '{task_id}' not found.")
+        if target_task.get("claimed_by") != agent_id:
+            return _text_error(f"Error: task '{task_id}' is not claimed by agent '{agent_id}'.")
+        if target_task.get("plan_status") == "approved":
+            return _text_error(f"Error: plan for task '{task_id}' is already approved.")
+
+        proposed = team.propose_plan(str(task_id), str(agent_id), str(plan))
+        return _json_ok({"proposed": proposed})
+
+    def _call_approve_plan(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        if self._role != "lead":
+            return _text_error(
+                "only lead can approve/reject plans (set --role lead or CHIMERA_ROLE=lead)"
+            )
+        team, err = self._require_team(arguments)
+        if err is not None or team is None:
+            return err or _text_error("Error: team unavailable.")
+        task_id = arguments.get("task_id")
+        decision = arguments.get("decision")
+        feedback = arguments.get("feedback")
+        if not task_id or not decision:
+            return _text_error("Error: 'task_id' and 'decision' are required.")
+        if decision not in ("approve", "reject"):
+            return _text_error("Error: 'decision' must be 'approve' or 'reject'.")
+
+        tasks = team.list_tasks(status_filter="all")
+        target_task = None
+        for t in tasks:
+            if t["id"] == task_id:
+                target_task = t
+                break
+        if not target_task:
+            return _text_error(f"Error: task '{task_id}' not found.")
+
+        approved = team.approve_plan(
+            str(task_id),
+            str(decision),
+            feedback=str(feedback) if feedback is not None else None,
+        )
+        return _json_ok({"approved": approved})
 
     def _call_send_message(self, arguments: dict[str, Any]) -> dict[str, Any]:
         team, err = self._require_team(arguments)

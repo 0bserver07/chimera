@@ -14,6 +14,7 @@ Subcommands::
     chimera team ls                       list all teams
     chimera team rm <name> [--force]      destroy a team
     chimera team watch <name>             live status dashboard
+    chimera team approvals <name>         interactive plan-approval loop
     chimera team roles                    list discovered team roles
 """
 from __future__ import annotations
@@ -85,6 +86,10 @@ def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") 
     p_watch.add_argument("name")
     p_watch.add_argument("--interval", type=float, default=1.0)
     p_watch.add_argument("--max-recent", type=int, default=10)
+
+    p_approvals = team_sub.add_parser("approvals", help="Interactive approvals loop for proposed task plans")
+    p_approvals.add_argument("name")
+    p_approvals.add_argument("--interval", type=float, default=1.0)
 
     p_roles = team_sub.add_parser("roles", help="List discovered team roles")
     p_roles.add_argument("--workdir", default=None, help="Project dir to scan.")
@@ -177,6 +182,10 @@ def run(args: argparse.Namespace) -> int:
             stop_after_n_renders=None,
         )
 
+    if action == "approvals":
+        from chimera.mink.team_approvals import run_approvals
+        return run_approvals(team_name=args.name, poll_interval=args.interval)
+
     if action == "roles":
         workdir = None
         if args.workdir:
@@ -194,7 +203,7 @@ def run(args: argparse.Namespace) -> int:
         return 0
 
     print(
-        "usage: chimera team {create|join|task|status|ls|rm|watch|roles} ...",
+        "usage: chimera team {create|join|task|status|ls|rm|watch|approvals|roles} ...",
         file=sys.stderr,
     )
     return 1

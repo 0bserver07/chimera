@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -28,7 +29,7 @@ def _isolated_teams_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Pat
     return tmp_path
 
 
-def _call(server: TeamMCPServer, tool: str, args: dict, msg_id: int = 1) -> dict:
+def _call(server: TeamMCPServer, tool: str, args: dict[str, Any], msg_id: int = 1) -> dict[str, Any]:
     """Send a tools/call and return the result payload."""
     response = server.handle_message({
         "jsonrpc": "2.0",
@@ -37,13 +38,17 @@ def _call(server: TeamMCPServer, tool: str, args: dict, msg_id: int = 1) -> dict
         "params": {"name": tool, "arguments": args},
     })
     assert response is not None
-    return response["result"]
+    res = response["result"]
+    assert isinstance(res, dict)
+    return res
 
 
-def _parse_json_content(result: dict) -> dict:
+def _parse_json_content(result: dict[str, Any]) -> dict[str, Any]:
     """Decode the JSON payload from the first content block."""
     text = result["content"][0]["text"]
-    return json.loads(text)
+    val = json.loads(text)
+    assert isinstance(val, dict)
+    return val
 
 
 def _make_lead_server(team_name: str = "alpha") -> TeamMCPServer:
@@ -91,6 +96,7 @@ class TestProtocol:
             "team_add_task", "team_list_tasks", "team_claim_task",
             "team_release_task", "team_complete_task",
             "team_send_message", "team_recv_messages",
+            "team_propose_plan", "team_approve_plan",
         }
         assert expected.issubset(names)
 
@@ -589,3 +595,155 @@ class TestRoleGating:
         # And it actually landed:
         tasks = Team("alpha").list_tasks()
         assert any(t["id"] == payload["task_id"] for t in tasks)
+
+
+# -- TestPlanApproval ------------------------------------------------------
+
+
+class TestPlanApproval:
+    """Feature 3: plan-approval workflow."""
+
+    def test_propose_approve_roundtrip(self) -> None:
+        server = _make_lead_server()
+        _call(server, "team_join", {"agent_id": "agent-A"})
+
+        # Add a task that requires a plan
+        tid = _parse_json_content(
+            _call(server, "team_add_task", {"description": "needs plan", "requires_plan": True})
+        )["task_id"]
+
+        # Check task record
+        tasks = Team("alpha").list_tasks()
+        rec = next(t for t in tasks if t["id"] == tid)
+        assert rec["requires_plan"] is True
+        assert rec["plan_status"] is None
+
+        # Claim task
+        _call(server, "team_claim_task", {"agent_id": "agent-A", "task_id": tid})
+
+        # Propose a plan
+        prop_res = _parse_json_content(
+            _call(server, "team_propose_plan", {"agent_id": "agent-A", "task_id": tid, "plan": "Do X, then Y."})
+        )
+        assert prop_res["proposed"] is True
+
+        tasks = Team("alpha").list_tasks()
+        rec = next(t for t in tasks if t["id"] == tid)
+        assert rec["plan_status"] == "pending"
+        assert rec["proposed_plan"] == "Do X, then Y."
+        assert rec["plan_feedback"] is None
+
+        # Approve the plan (as lead)
+        app_res = _parse_json_content(
+            _call(server, "team_approve_plan", {"task_id": tid, "decision": "approve"})
+        )
+        assert app_res["approved"] is True
+
+        tasks = Team("alpha").list_tasks()
+        rec = next(t for t in tasks if t["id"] == tid)
+        assert rec["plan_status"] == "approved"
+        assert rec["plan_feedback"] is None
+
+    def test_reject_revise_resubmit(self) -> None:
+        server = _make_lead_server()
+        _call(server, "team_join", {"agent_id": "agent-A"})
+
+        tid = _parse_json_content(
+            _call(server, "team_add_task", {"description": "needs plan", "requires_plan": True})
+        )["task_id"]
+        _call(server, "team_claim_task", {"agent_id": "agent-A", "task_id": tid})
+
+        # Propose initial plan
+        _call(server, "team_propose_plan", {"agent_id": "agent-A", "task_id": tid, "plan": "Weak plan."})
+
+        # Reject the plan (as lead) with feedback
+        app_res = _parse_json_content(
+            _call(server, "team_approve_plan", {"task_id": tid, "decision": "reject", "feedback": "Too weak."})
+        )
+        assert app_res["approved"] is True
+
+        tasks = Team("alpha").list_tasks()
+        rec = next(t for t in tasks if t["id"] == tid)
+        assert rec["plan_status"] == "rejected"
+        assert rec["plan_feedback"] == "Too weak."
+
+        # Propose revised plan
+        _call(server, "team_propose_plan", {"agent_id": "agent-A", "task_id": tid, "plan": "Stronger plan."})
+
+        tasks = Team("alpha").list_tasks()
+        rec = next(t for t in tasks if t["id"] == tid)
+        assert rec["plan_status"] == "pending"
+        assert rec["proposed_plan"] == "Stronger plan."
+        assert rec["plan_feedback"] is None
+
+    def test_complete_refuses_pre_approval(self) -> None:
+        server = _make_lead_server()
+        _call(server, "team_join", {"agent_id": "agent-A"})
+
+        tid = _parse_json_content(
+            _call(server, "team_add_task", {"description": "needs plan", "requires_plan": True})
+        )["task_id"]
+        _call(server, "team_claim_task", {"agent_id": "agent-A", "task_id": tid})
+
+        # Try to complete before plan proposed
+        comp_res = _parse_json_content(
+            _call(server, "team_complete_task", {"agent_id": "agent-A", "task_id": tid, "result": "sneaky"})
+        )
+        assert comp_res["completed"] is False
+        assert comp_res["reason"] == "plan requires approval"
+
+        # Propose plan (status = pending)
+        _call(server, "team_propose_plan", {"agent_id": "agent-A", "task_id": tid, "plan": "Some plan."})
+
+        # Try to complete after proposing but before approval
+        comp_res = _parse_json_content(
+            _call(server, "team_complete_task", {"agent_id": "agent-A", "task_id": tid, "result": "sneaky"})
+        )
+        assert comp_res["completed"] is False
+        assert comp_res["reason"] == "plan requires approval"
+
+        # Reject plan
+        _call(server, "team_approve_plan", {"task_id": tid, "decision": "reject", "feedback": "no"})
+
+        # Try to complete after rejection
+        comp_res = _parse_json_content(
+            _call(server, "team_complete_task", {"agent_id": "agent-A", "task_id": tid, "result": "sneaky"})
+        )
+        assert comp_res["completed"] is False
+        assert comp_res["reason"] == "plan requires approval"
+
+        # Approve plan
+        _call(server, "team_approve_plan", {"task_id": tid, "decision": "approve"})
+
+        # Completion should now succeed
+        comp_res = _parse_json_content(
+            _call(server, "team_complete_task", {"agent_id": "agent-A", "task_id": tid, "result": "done"})
+        )
+        assert comp_res["completed"] is True
+
+    def test_auto_approve_env_var_skips_gate(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("CHIMERA_AUTO_APPROVE_PLANS", "1")
+        server = _make_lead_server()
+        _call(server, "team_join", {"agent_id": "agent-A"})
+
+        tid = _parse_json_content(
+            _call(server, "team_add_task", {"description": "needs plan", "requires_plan": True})
+        )["task_id"]
+        _call(server, "team_claim_task", {"agent_id": "agent-A", "task_id": tid})
+
+        # Propose plan
+        prop_res = _parse_json_content(
+            _call(server, "team_propose_plan", {"agent_id": "agent-A", "task_id": tid, "plan": "Immediate plan."})
+        )
+        assert prop_res["proposed"] is True
+
+        # Plan should be auto-approved
+        tasks = Team("alpha").list_tasks()
+        rec = next(t for t in tasks if t["id"] == tid)
+        assert rec["plan_status"] == "approved"
+
+        # Completion should succeed immediately
+        comp_res = _parse_json_content(
+            _call(server, "team_complete_task", {"agent_id": "agent-A", "task_id": tid, "result": "done"})
+        )
+        assert comp_res["completed"] is True
