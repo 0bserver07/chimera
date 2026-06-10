@@ -25,3 +25,5 @@ data/
 # research/ — uncommitted internal handoff, see research/POLICY.md
 research/*
 !research/POLICY.md
+# local AI-CLI tool state (symlinks into ~/)
+.antigravitycli/
