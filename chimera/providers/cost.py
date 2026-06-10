@@ -13,10 +13,11 @@ import threading
 # Only entries with publicly-published pricing are listed. New IDs whose
 # pricing is unverified are intentionally omitted rather than fabricated.
 PRICING: dict[str, tuple[float, float]] = {
-    # Anthropic — Opus 4 family ($15 / $75 across 4.0, 4.1, 4.5, 4.6, 4.7).
-    "claude-opus-4-7": (15.0, 75.0),
-    "claude-opus-4-6": (15.0, 75.0),
-    "claude-opus-4-5": (15.0, 75.0),
+    # Anthropic — Opus family ($5 / $25 from 4.5 onward; $15 / $75 for 4.0 / 4.1).
+    "claude-opus-4-8": (5.0, 25.0),
+    "claude-opus-4-7": (5.0, 25.0),
+    "claude-opus-4-6": (5.0, 25.0),
+    "claude-opus-4-5": (5.0, 25.0),
     "claude-opus-4-1": (15.0, 75.0),
     "claude-opus-4": (15.0, 75.0),
     # Anthropic — Sonnet 4 family ($3 / $15).

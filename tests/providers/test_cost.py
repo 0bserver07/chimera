@@ -107,15 +107,22 @@ class TestRefreshedCatalog:
         cost = calculate_cost("claude-opus-4-7", {
             "input_tokens": 1_000_000, "output_tokens": 1_000_000,
         })
-        # Opus 4.x: $15 in / $75 out per 1M
-        assert abs(cost - 90.0) < 1e-9
+        # Opus 4.5+: $5 in / $25 out per 1M
+        assert abs(cost - 30.0) < 1e-9
 
     def test_claude_opus_4_7_dated_id(self):
         # Real Anthropic IDs include date suffixes; longest-prefix match must win.
         cost = calculate_cost("claude-opus-4-7-20260315", {
             "input_tokens": 1_000_000, "output_tokens": 0,
         })
-        assert abs(cost - 15.0) < 1e-9
+        assert abs(cost - 5.0) < 1e-9
+
+    def test_claude_opus_4_1_keeps_legacy_rate(self):
+        # 4.0 / 4.1 stay at the pre-4.5 rate; the 4.5+ repricing must not leak down.
+        cost = calculate_cost("claude-opus-4-1", {
+            "input_tokens": 1_000_000, "output_tokens": 1_000_000,
+        })
+        assert abs(cost - 90.0) < 1e-9
 
     def test_claude_haiku_4_5(self):
         cost = calculate_cost("claude-haiku-4-5", {
