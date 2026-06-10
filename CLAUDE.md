@@ -8,7 +8,7 @@ Compose coding agents from modular primitives. Synthesize codebases from specifi
 - **Build:** hatchling + uv
 - **License:** MIT
 - **Setup:** `uv sync --extra dev --extra anthropic`
-- **Tests:** `uv run pytest` (3922 passing + 67 skipped)
+- **Tests:** `uv run pytest` (8242 passing + 98 skipped)
 - **Lint:** `uv run ruff check chimera/`
 - **Types:** `uv run mypy chimera/`
 - **Docs:** Astro/Starlight in `site/`. Local: `cd site && pnpm install && pnpm dev`. Deploys to <https://0bserver07.github.io/chimera/> via `.github/workflows/ci.yml`.
@@ -171,12 +171,19 @@ Layer 1: Environment     Local, Docker, Git, Remote, Cloud, PersistentShell
 - `chimera/streaming/` — Stream handlers, StreamingReAct
 - `chimera/detection/` — Loop detection (exact repeat, pattern cycle)
 - `chimera/mcp/` — MCPClient (stdio/HTTP), MCPToolSource, from_config()
+- `chimera/mcp_servers/` — 7 stdin/stdout JSON-RPC servers (search, review, testgen, migration, rag, benchmark, team coordination) + teammate_runner (drives external agent CLIs against a team queue)
 - `chimera/lsp/` — LSP client, diagnostics, completion, rename
 - `chimera/auth/` — API key, OAuth device/browser flows (real stdlib HTTP impl), credential store (file-based, 0o600 perms)
 - `chimera/rpc/` — JSON-RPC server (stdin/stdout), RpcHandler (prompt/steer/cancel/get_state/compact), command/response/event types
 
+### Codename Agent CLIs (`chimera/{mink,otter,ferret,weasel,shrew,stoat,badger}/`)
+- 7 replicated coding-agent CLIs: `chimera mink|otter|ferret|weasel|shrew|stoat|badger` (aliases: tui, multi, sandbox, mini, tiny, shell, strict)
+- `mink/team.py` — `chimera team` subcommand (create/join/task/status/ls/rm/watch/approvals/roles)
+- `mink/team_approvals.py` — interactive plan-approval loop for team leads
+- `cli/agent_teams.py` — Team + TeamMailbox primitives (file-locked JSONL task queue, deps, requires_plan gate)
+
 ### CLI (`chimera/cli/`)
-- `main.py` — 11 subcommands: synthesize, eval, bench, code, review, ci-fix, research, docs, testgen, migrate, plugins
+- `main.py` — 30+ subcommands: synthesize, eval, bench, code, the 7 codename CLIs, team, resume, agents, review, ci-fix, research, docs, testgen, migrate, fs, config, which, tier-status, completion, plugins, doctor, auth
 - `code.py` — Interactive REPL with 19 slash commands, two-mode terminal (readline idle / raw stdin running), threaded agent execution
   - Commands: /help, /model (next/prev cycling), /cost, /clear, /history, /tools, /context, /debug, /session, /compact, /audit, /checkpoint, /agent, /init, /yolo, /tree, /branch, /switch, /exit
   - Flags: `--mode interactive|rpc|json`, `--models glm-5,claude-sonnet-4` (comma-separated for cycling)
