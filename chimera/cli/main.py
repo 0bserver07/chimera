@@ -627,6 +627,7 @@ create_parser = build_parser
 
 
 _BENCHMARKS: dict[str, str] = {
+    "harbor": "chimera.eval.benchmarks.harbor:HarborBenchmark",
     "human-eval": "chimera.eval.benchmarks.human_eval:HumanEval",
     "humaneval": "chimera.eval.benchmarks.human_eval:HumanEval",
     "humaneval-x": "chimera.eval.benchmarks.humaneval_x:HumanEvalX",

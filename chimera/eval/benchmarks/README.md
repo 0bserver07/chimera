@@ -5,6 +5,7 @@ Built-in benchmark adapters for the Chimera evaluation harness
 
 | Benchmark   | Adapter file     | Class       | Notes                                           |
 |-------------|------------------|-------------|-------------------------------------------------|
+| Harbor      | `harbor.py`      | `HarborBenchmark` | Any Harbor-format task dir (e.g. DeepSWE); verifier = test.patch + test.sh |
 | SWE-bench   | `swe_bench.py`   | `SWEBench`  | Real GitHub issues with test verification       |
 | HumanEval   | `human_eval.py`  | `HumanEval` | 164 hand-written Python problems                |
 | AIMO        | `aimo.py`        | `AIMO`      | AI Mathematical Olympiad                        |

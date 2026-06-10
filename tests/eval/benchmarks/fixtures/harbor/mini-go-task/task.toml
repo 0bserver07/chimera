@@ -1,0 +1,37 @@
+schema_version = "1.1"
+artifacts = []
+[task]
+name = "fixtures/mini-go-task"
+description = ""
+authors = []
+keywords = []
+[metadata]
+ext_id = "fixture0000000000000000000000000"
+task_id = "mini-go-task"
+display_title = "Mini fixture task"
+display_description = "A tiny Harbor-format fixture mirroring the DeepSWE v1.1 schema."
+original_title = "Mini Fixture Task"
+category = "enhancement"
+language = "go"
+repository_url = "https://github.com/example/mini"
+base_commit_hash = "0123456789abcdef0123456789abcdef01234567"
+[verifier]
+timeout_sec = 600.0
+
+[verifier.env]
+MINI_FLAG = "1"
+[agent]
+timeout_sec = 1200.0
+[environment]
+build_timeout_sec = 300.0
+docker_image = "example.test/mini:latest"
+os = "linux"
+cpus = 2
+memory_mb = 4096
+storage_mb = 8192
+gpus = 0
+allow_internet = false
+mcp_servers = []
+
+[environment.env]
+[solution.env]
