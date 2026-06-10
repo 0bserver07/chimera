@@ -24,7 +24,10 @@ four contracts:
 from __future__ import annotations
 
 import inspect
+from pathlib import Path
 from typing import Any
+
+import pytest
 
 from chimera.ferret.slash import (
     APPROVAL_PRESETS,
@@ -269,8 +272,11 @@ def test_approval_unknown_value_rejected() -> None:
     assert "unknown preset" in text
 
 
-def test_diff_with_no_tracker_prints_no_changes() -> None:
+def test_diff_with_no_tracker_prints_no_changes(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """/diff with no file tracker and no env hook reports cleanly."""
+    monkeypatch.chdir(tmp_path)  # the git fallback must not see this repo's real diff
     out = _CapturePrinter()
     cmd_diff(_FakeSession(), None, "", out)
     text = "\n".join(out.lines)
