@@ -399,12 +399,24 @@ def run_loop(
     # Per-task counter of consecutive nudges we've sent for a stuck claim.
     # Resets to 0 (entry removed) when the task transitions out of "claimed".
     nudge_counts: dict[str, int] = {}
-    # Tasks the runner has force-released back to the pool. We won't spawn
-    # this agent again purely on the strength of a released-by-us task being
-    # open again — that would create a claim/release cycle. The set is
-    # cleared per-task when something else (another teammate or the lead)
-    # transitions the task out of "open".
-    released_by_runner: set[str] = set()
+    # Tasks the runner has force-released back to the pool, mapped to a
+    # fingerprint of their approval-relevant fields at release time. We won't
+    # spawn this agent again purely on the strength of a released-by-us task
+    # being open again — that would create a claim/release cycle. The entry
+    # is cleared when something else acts on the task: it transitions out of
+    # "open", or its record materially changes while open (e.g. the lead
+    # approves a pending plan), at which point re-claiming can succeed.
+    released_by_runner: dict[str, tuple[object, ...]] = {}
+
+    def _release_fingerprint(rec: dict[str, object]) -> tuple[object, ...]:
+        return (
+            rec.get("plan_status"),
+            rec.get("plan_feedback"),
+            rec.get("proposed_plan"),
+            rec.get("result"),
+            rec.get("description"),
+            rec.get("depends_on"),
+        )
 
     def _handle_stuck_claims(current_tasks: list[dict[str, object]]) -> bool:
         """Nudge or force-release tasks this agent claimed but didn't finish.
@@ -444,7 +456,7 @@ def run_loop(
                         file=log,
                     )
                     nudge_counts.pop(tid, None)
-                    released_by_runner.add(tid)
+                    released_by_runner[tid] = _release_fingerprint(t)
                     released_any = True
             else:
                 mailbox.send(
@@ -479,17 +491,27 @@ def run_loop(
                 return 0
 
             tasks = team.list_tasks()
-            open_tasks = [t for t in tasks if t.get("status") == "open"]
+            # "open" must mean *claimable* open — mirror list_tasks("open"),
+            # which excludes tasks whose depends_on are unsatisfied. Counting
+            # dep-blocked tasks as spawnable cues the agent for work it
+            # cannot claim yet.
+            claimable_ids = {t["id"] for t in team.list_tasks(status_filter="open")}
+            open_tasks = [t for t in tasks if t["id"] in claimable_ids]
             # Tasks we released earlier and that are now back in the pool —
             # we don't count those as "open work for me" to avoid an infinite
             # claim/release cycle with the same misbehaving agent.
             if released_by_runner:
-                # Drop ids that have transitioned out of "open" (someone else
-                # acted on them) so the next round can reconsider.
-                status_by_id = {t["id"]: t.get("status") for t in tasks}
+                # Drop ids that transitioned out of "open" (someone else
+                # acted on them) — and ids whose record materially changed
+                # while open (e.g. the lead approved a pending plan): the
+                # condition that made the claim stuck may be gone.
+                rec_by_id = {t["id"]: t for t in tasks}
                 for tid in list(released_by_runner):
-                    if status_by_id.get(tid) != "open":
-                        released_by_runner.discard(tid)
+                    rec = rec_by_id.get(tid)
+                    if rec is None or rec.get("status") != "open":
+                        released_by_runner.pop(tid)
+                    elif _release_fingerprint(rec) != released_by_runner[tid]:
+                        released_by_runner.pop(tid)
             spawnable_open = [t for t in open_tasks if t["id"] not in released_by_runner]
             my_stuck = [
                 t for t in tasks
@@ -555,16 +577,15 @@ def run_loop(
                         pass
 
             after_tasks = team.list_tasks()
+            after = {t["id"]: t.get("status") for t in after_tasks}
+            progressed = before != after
+
+            # A runner-initiated release still resets the idle timer below
+            # (the team state did change), but only *agent* progress earns an
+            # immediate re-spawn — otherwise a stuck claim / force-release
+            # cycle hot-loops with no sleep between iterations.
             runner_acted = _handle_stuck_claims(after_tasks)
 
-            # Refresh task state after any runner-initiated releases so the
-            # progress check below sees the runner's own action as a state
-            # change for the *next* iteration.
-            if runner_acted:
-                after_tasks = team.list_tasks()
-            after = {t["id"]: t.get("status") for t in after_tasks}
-
-            progressed = before != after
             if progressed:
                 last_progress = time.time()
                 print(
@@ -572,6 +593,8 @@ def run_loop(
                     file=log,
                 )
             else:
+                if runner_acted:
+                    last_progress = time.time()
                 print(
                     f"chimera-team-run: agent exited rc={rc} but team state "
                     f"did not change. Sleeping {poll_interval:.0f}s before retry.",
