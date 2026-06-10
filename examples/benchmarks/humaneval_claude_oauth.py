@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""HumanEval runner for Claude via Claude Code Max OAuth token.
+"""HumanEval runner for Claude via a Max-subscription OAuth token.
 
 Chimera's anthropic provider uses x-api-key auth, which the API rejects
 for OAuth tokens (sk-ant-oat01-*). This script bypasses chimera's provider
 and hits api.anthropic.com directly with `Authorization: Bearer <token>`
-plus `anthropic-beta: oauth-2025-04-20` -- the auth pattern Claude Code
-uses for Max subscriptions.
+plus `anthropic-beta: oauth-2025-04-20` -- the auth pattern the upstream
+CLI uses for Max subscriptions.
 
 Reuses extract_code, run_test, and the result schema from
 examples/benchmarks/humaneval_full.py so all chimera HumanEval rows
@@ -103,7 +103,7 @@ def call_oauth(token: str, model: str, msg: str, max_tokens: int = 1024,
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(description="HumanEval against Claude via Claude Code Max OAuth")
+    p = argparse.ArgumentParser(description="HumanEval against Claude via Max-subscription OAuth")
     p.add_argument("--model", required=True, help="Claude model id")
     p.add_argument("--count", type=int, default=164)
     p.add_argument("--dataset", type=str, default=None)
