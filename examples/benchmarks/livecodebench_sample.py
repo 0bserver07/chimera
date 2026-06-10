@@ -33,7 +33,7 @@ a 10s wall-clock timeout to bound runaway loops.
 
 Usage:
     # Smoke (5 problems via Haiku, direct provider):
-    source /tmp/claude_oauth_env.sh
+    export ANTHROPIC_API_KEY=<your sk-ant-oat01-... OAuth token>
     python examples/benchmarks/livecodebench_sample.py \\
         --model claude-haiku-4-5-20251001 --count 5
 

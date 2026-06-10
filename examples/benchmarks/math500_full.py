@@ -24,7 +24,7 @@ Two modes:
         raw API returns 429 there.
 
 Usage:
-    source /tmp/claude_oauth_env.sh
+    export ANTHROPIC_API_KEY=<your sk-ant-oat01-... OAuth token>
     python examples/benchmarks/math500_full.py \\
         --model claude-haiku-4-5-20251001 --count 500 \\
         --output data/math500-claude-haiku-4-5-20251001-results.json

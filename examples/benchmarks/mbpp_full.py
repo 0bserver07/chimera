@@ -18,7 +18,7 @@ Usage:
     python examples/benchmarks/mbpp_full.py --count 427
 
     # Claude via Max OAuth (after the OAuth provider patch in 2ec8329)
-    source /tmp/claude_oauth_env.sh
+    export ANTHROPIC_API_KEY=<your sk-ant-oat01-... OAuth token>
     python examples/benchmarks/mbpp_full.py --model claude-haiku-4-5-20251001 --count 427
 """
 from __future__ import annotations
