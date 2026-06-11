@@ -60,6 +60,15 @@ class PlanAndExecute:
                 context.to_messages(),
                 tools=schemas if schemas else None,
             )
+            if event_bus:
+                from chimera.events.types import ModelResponseEvent
+                event_bus.publish(ModelResponseEvent(
+                    model=provider.model_name,
+                    content_length=len(response.content),
+                    tool_calls_count=len(response.tool_calls),
+                    input_tokens=response.usage.get("input_tokens", 0),
+                    output_tokens=response.usage.get("output_tokens", 0),
+                ))
             step_cost = calculate_cost(provider.model_name, response.usage)
             total_cost += step_cost
             context.add(Message.assistant(response.content, tool_calls=response.tool_calls))

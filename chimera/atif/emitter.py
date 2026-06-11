@@ -154,7 +154,12 @@ class ATIFEmitter:
             self._draft["metrics"] = metrics
 
     def _on_step(self, event: Event) -> None:
-        # The loop's own record of the assistant text for this turn.
+        # The loop's own record of the assistant text for this turn. A
+        # second StepEvent without an intervening model-response boundary
+        # means a new turn (loops that don't publish ModelResponseEvent) —
+        # seal the previous draft instead of overwriting its message.
+        if self._draft is not None and self._draft.get("message"):
+            self._seal_draft()
         if self._draft is None:
             self._draft = {
                 "step_id": len(self._steps) + 1,

@@ -107,6 +107,24 @@ class TestEmitter:
         traj = _emit_scripted_run(tmp_path / "run.atif.json")
         assert ATIFValidator().check(traj).valid
 
+    def test_consecutive_step_events_become_separate_turns(self, tmp_path: Path) -> None:
+        # Loops that don't publish ModelResponseEvent still get one ATIF
+        # step per StepEvent rather than collapsing into one.
+        bus = EventBus()
+        emitter = ATIFEmitter(tmp_path / "x.atif.json", agent_name="a", agent_version="1")
+        emitter.attach(bus)
+        emitter.record_user_message("go")
+        bus.publish(StepEvent(step_number=1, content="planning"))
+        bus.publish(ToolCallEvent(tool_name="read", arguments={}, call_id="c1"))
+        bus.publish(StepEvent(step_number=2, content="executing"))
+        bus.publish(StepEvent(step_number=3, content="done"))
+        path = emitter.close()
+        traj = json.loads(path.read_text(encoding="utf-8"))
+        agent_steps = [s for s in traj["steps"] if s["source"] == "agent"]
+        assert [s["message"] for s in agent_steps] == ["planning", "executing", "done"]
+        assert agent_steps[0]["tool_calls"][0]["tool_call_id"] == "c1"
+        assert ATIFValidator().check(traj).valid
+
 
 class TestValidator:
     def _valid(self, tmp_path: Path) -> dict[str, Any]:
