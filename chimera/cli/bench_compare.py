@@ -59,16 +59,27 @@ def add_bench_compare_parser(
     p.add_argument(
         "--format",
         dest="fmt",
-        choices=("terminal", "json", "markdown"),
+        choices=("terminal", "json", "markdown", "html"),
         default="terminal",
         help="Stdout rendering",
     )
-    p.add_argument("--output", default=None, help="Also write the full JSON report here")
+    p.add_argument(
+        "--output",
+        default=None,
+        help="Also write the full report here (.html gets the HTML report, anything else JSON)",
+    )
     p.add_argument(
         "--emit-atif",
         default=None,
         metavar="DIR",
         help="Emit one ATIF v1.7 trajectory per (agent, task) under DIR",
+    )
+    p.add_argument(
+        "--env",
+        dest="env_kind",
+        choices=("local", "none"),
+        default="local",
+        help="Per-task environment: a fresh temp-dir LocalEnvironment (default) or none",
     )
 
 
@@ -148,6 +159,85 @@ def report_to_markdown(report: Any) -> str:
     return "\n".join(lines)
 
 
+def report_to_html(report: Any) -> str:
+    """Render a CompareReport as a standalone HTML page.
+
+    Sortable matrix (click a column header) plus a per-config, per-task
+    drill-down. No external assets — safe to attach to an issue or
+    email.
+    """
+    import html as _html
+
+    def esc(value: Any) -> str:
+        return _html.escape(str(value))
+
+    matrix_rows = []
+    for name in report.configs:
+        results = report.results.get(name, [])
+        total = len(results)
+        passed = sum(1 for r in results if r.passed)
+        rate = passed / total if total else 0.0
+        avg_cost = sum(r.cost for r in results) / total if total else 0.0
+        avg_steps = sum(r.steps for r in results) / total if total else 0.0
+        hits = report.budget_hits.get(name, 0)
+        matrix_rows.append(
+            f"<tr><td>{esc(name)}</td>"
+            f'<td data-sort="{rate:.4f}">{rate:.1%} ({passed}/{total})</td>'
+            f'<td data-sort="{avg_cost:.6f}">${avg_cost:.4f}</td>'
+            f'<td data-sort="{avg_steps:.2f}">{avg_steps:.1f}</td>'
+            f'<td data-sort="{hits}">{hits}/{total}</td></tr>'
+        )
+
+    drilldowns = []
+    for name in report.configs:
+        rows = "".join(
+            f"<tr><td>{esc(r.problem_id)}</td>"
+            f"<td>{'pass' if r.passed else 'fail'}</td>"
+            f"<td>{r.steps}</td><td>${r.cost:.4f}</td></tr>"
+            for r in report.results.get(name, [])
+        )
+        reasons = ", ".join(report.budget_reasons.get(name, [])) or "none"
+        drilldowns.append(
+            f"<details><summary>{esc(name)} — per-task results</summary>"
+            f"<p>Budget hits: {esc(reasons)}</p>"
+            "<table><thead><tr><th>Task</th><th>Result</th><th>Steps</th>"
+            f"<th>Cost</th></tr></thead><tbody>{rows}</tbody></table></details>"
+        )
+
+    sort_js = (
+        "document.querySelectorAll('th').forEach(function(th){"
+        "th.style.cursor='pointer';"
+        "th.addEventListener('click',function(){"
+        "var table=th.closest('table'),tbody=table.querySelector('tbody'),"
+        "idx=Array.prototype.indexOf.call(th.parentNode.children,th),"
+        "dir=th.dataset.dir==='asc'?-1:1;th.dataset.dir=dir===1?'asc':'desc';"
+        "Array.from(tbody.rows).sort(function(a,b){"
+        "var x=a.cells[idx].dataset.sort||a.cells[idx].textContent,"
+        "y=b.cells[idx].dataset.sort||b.cells[idx].textContent,"
+        "nx=parseFloat(x),ny=parseFloat(y);"
+        "return (isNaN(nx)||isNaN(ny)?x.localeCompare(y):nx-ny)*dir;"
+        "}).forEach(function(r){tbody.appendChild(r);});});});"
+    )
+
+    return (
+        "<!doctype html><html><head><meta charset='utf-8'>"
+        f"<title>Comparative matrix — {esc(report.model)}</title>"
+        "<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:60rem}"
+        "table{border-collapse:collapse;margin:1rem 0}"
+        "td,th{border:1px solid #ccc;padding:.35rem .6rem;text-align:left}"
+        "th{background:#f3f3f3}details{margin:.75rem 0}</style></head><body>"
+        f"<h1>Controlled comparative matrix</h1>"
+        f"<p>model <code>{esc(report.model)}</code> · task pool "
+        f"<code>{esc(report.task_pool)}</code> · seed {esc(report.seed)} · "
+        f"budget <code>{esc(report.budget)}</code></p>"
+        "<table id='matrix'><thead><tr><th>Agent</th><th>Pass rate</th>"
+        "<th>Avg cost</th><th>Avg steps</th><th>Budget hits</th></tr></thead>"
+        f"<tbody>{''.join(matrix_rows)}</tbody></table>"
+        f"{''.join(drilldowns)}"
+        f"<script>{sort_js}</script></body></html>"
+    )
+
+
 def run_bench_compare(args: argparse.Namespace) -> int:
     """Execute the bench-compare command."""
     from chimera.cli.main import _load_benchmark
@@ -176,8 +266,19 @@ def run_bench_compare(args: argparse.Namespace) -> int:
     )
     task_pool = f"{args.benchmark}:{args.dataset or 'builtin'}?n={len(problems)}"
 
+    env_factory: Any = None
+    if args.env_kind == "local":
+        import tempfile
+
+        from chimera.env.local import LocalEnvironment
+
+        def _local_env() -> LocalEnvironment:
+            return LocalEnvironment(workdir=tempfile.mkdtemp(prefix="chimera-compare-"))
+
+        env_factory = _local_env
+
     provider = create_provider(model=args.model)
-    comp = ComparativeEval(provider, problems)
+    comp = ComparativeEval(provider, problems, env_factory=env_factory)
     for name, factory in factories.items():
         comp.add_config(name, factory)
 
@@ -202,13 +303,18 @@ def run_bench_compare(args: argparse.Namespace) -> int:
         print(json.dumps(report_to_dict(report), indent=2))
     elif args.fmt == "markdown":
         print(report_to_markdown(report))
+    elif args.fmt == "html":
+        print(report_to_html(report))
     else:
         print(report.summary())
         print(f"Best config: {report.best_config()}")
 
     if args.output:
         with open(args.output, "w", encoding="utf-8") as f:
-            json.dump(report_to_dict(report), f, indent=2)
+            if args.output.endswith(".html"):
+                f.write(report_to_html(report))
+            else:
+                json.dump(report_to_dict(report), f, indent=2)
         print(f"Report written to {args.output}", file=sys.stderr)
 
     return 0

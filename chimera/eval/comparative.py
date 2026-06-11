@@ -372,6 +372,7 @@ class ComparativeEval:
 
                 enforcer.start()
                 output, cost, steps = "", 0.0, 0
+                agent_errored = False
                 try:
                     agent_result = agent.run(prompt, env)
                     output = agent_result.output
@@ -381,16 +382,23 @@ class ComparativeEval:
                     output = f"[budget exhausted: {enforcer.exhausted_reason}]"
                     cost = enforcer.tally.cost_usd
                     steps = enforcer.tally.tool_calls
+                except Exception as exc:  # noqa: BLE001 — one task must never kill the matrix
+                    agent_errored = True
+                    output = f"[agent error: {type(exc).__name__}: {exc}]"
+                    cost = enforcer.tally.cost_usd
+                    steps = enforcer.tally.tool_calls
                 finally:
                     if emitter is not None:
                         trajectory_paths[config_name].append(str(emitter.close()))
 
-                if enforcer.exhausted:
+                if agent_errored:
+                    passed = False
+                elif enforcer.exhausted:
                     budget_hits[config_name] += 1
                     budget_reasons[config_name].append(
                         str(enforcer.exhausted_reason)
                     )
-                    passed = False
+                    passed = False  # a budget hit is reported distinctly, never as a pass
                 elif evaluator is not None:
                     passed = bool(evaluator(problem, output, env))
                 else:

@@ -11,6 +11,7 @@ from chimera.cli.bench_compare import (
     LOOP_TYPES,
     _build_factories,
     report_to_dict,
+    report_to_html,
     report_to_markdown,
     run_bench_compare,
 )
@@ -80,6 +81,7 @@ def _args(**overrides: Any) -> argparse.Namespace:
         fmt="terminal",
         output=None,
         emit_atif=None,
+        env_kind="none",
     )
     base.update(overrides)
     return argparse.Namespace(**base)
@@ -156,3 +158,26 @@ def test_renderers_on_synthetic_report() -> None:
     md = report_to_markdown(report)
     assert "| react | 100.0% (1/1) | $0.0100 | 2.0 | 0/1 |" in md
     json.dumps(report_to_dict(report))  # JSON-safe end to end
+
+    html = report_to_html(report)
+    assert "<title>Comparative matrix — glm-5</title>" in html
+    assert 'data-sort="1.0000"' in html  # sortable pass-rate cell
+    assert "react — per-task results" in html
+    assert "<script>" in html  # click-to-sort enhancement embedded
+
+
+def test_html_output_file(monkeypatch, capsys, tmp_path) -> None:
+    monkeypatch.setattr(
+        "chimera.cli.main._load_benchmark",
+        lambda name, dataset=None, limit=None, tasks_dir=None: _FakeBenchmark(),
+    )
+    monkeypatch.setattr(
+        "chimera.providers.factory.create_provider",
+        lambda model=None, **kw: _DoneProvider(),
+    )
+    out_path = tmp_path / "matrix.html"
+    rc = run_bench_compare(_args(fmt="terminal", output=str(out_path)))
+    assert rc == 0
+    html = out_path.read_text(encoding="utf-8")
+    assert html.startswith("<!doctype html>")
+    assert "Controlled comparative matrix" in html

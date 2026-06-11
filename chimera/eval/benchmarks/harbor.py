@@ -289,3 +289,43 @@ class HarborBenchmark(Benchmark):
     def harbor_tasks(self) -> list[HarborTask]:
         """The parsed :class:`HarborTask` records (copy)."""
         return list(self._tasks)
+
+
+def docker_env_factory(
+    task: dict[str, Any] | HarborTask,
+    image_override: str | None = None,
+    workdir: str = "/workspace",
+) -> Any:
+    """Provision a :class:`~chimera.env.docker.DockerEnvironment` for a task.
+
+    Harbor task images are prebuilt per task (the repository at
+    ``base_commit_hash`` is baked in), so provisioning is starting the
+    task's ``docker_image``. The caller owns the lifecycle: call
+    ``setup()`` before use and ``cleanup()`` after.
+
+    Args:
+        task: A task dict from :meth:`HarborBenchmark.tasks` or a
+            :class:`HarborTask`.
+        image_override: Use this image instead of the task's
+            ``docker_image`` (small images for plumbing tests).
+        workdir: Working directory inside the container.
+
+    Returns:
+        An unstarted ``DockerEnvironment``.
+
+    Raises:
+        ImportError: When the optional ``docker`` package is missing
+            (install with ``uv sync --extra docker``).
+        ValueError: When neither an image override nor a task image is
+            available.
+    """
+    from chimera.env.docker import DockerEnvironment
+
+    if isinstance(task, HarborTask):
+        image = task.docker_image
+    else:
+        image = str(task.get("docker_image", ""))
+    image = image_override or image
+    if not image:
+        raise ValueError("Harbor task has no docker_image and no override was given")
+    return DockerEnvironment(image=image, workdir=workdir)

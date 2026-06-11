@@ -164,6 +164,35 @@ def test_llm_call_budget_enforced_at_provider_level() -> None:
     assert report.budget_reasons["react"][0].startswith("llm_calls")
 
 
+def test_agent_crash_is_a_task_failure_not_a_harness_failure() -> None:
+    from chimera.eval.comparative import ComparativeEval
+
+    class _BoomAgent:
+        def run(self, task: Any, env: Any) -> Any:
+            raise AssertionError("tool blew up")
+
+    problems = [{"id": "p1", "prompt": "x"}, {"id": "p2", "prompt": "y"}]
+    comp = ComparativeEval(AlwaysToolProvider(), problems)
+    comp.add_config("boom", lambda provider, loop_config: _BoomAgent())
+
+    def ok_factory(provider: Any, loop_config: Any) -> Agent:
+        return Agent(
+            provider=provider,
+            tools=[PingTool()],
+            loop=ReAct(max_steps=20, config=loop_config),
+        )
+
+    comp.add_config("react", ok_factory)
+    report = comp.run_with_budget(BudgetSpec(max_tool_calls=2), model="scripted")
+
+    boom = report.results["boom"]
+    assert [r.passed for r in boom] == [False, False]
+    assert all("[agent error: AssertionError" in r.output for r in boom)
+    assert report.budget_hits["boom"] == 0  # crash is not a budget hit
+    # the healthy config still ran and recorded its budget hits
+    assert report.budget_hits["react"] == 2
+
+
 def test_same_budget_same_tasks_reproduces_identical_matrix() -> None:
     from chimera.eval.comparative import ComparativeEval
 
