@@ -49,6 +49,11 @@ export default defineConfig({
 					],
 				},
 				{
+					label: 'Field Guide',
+					collapsed: true,
+					autogenerate: { directory: 'field-guide' },
+				},
+				{
 					label: 'Tutorials',
 					items: [
 						{ label: 'Build SWE-Agent in 60 lines', slug: 'tutorials/build-swe-agent-in-60-lines' },

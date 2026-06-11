@@ -1,0 +1,70 @@
+---
+title: "Field Guide to Coding Agents"
+description: "An architecture catalog of the coding agents Chimera replicates: loop, tool set, edit format, context strategy, and termination — from firsthand source reading."
+---
+
+The coding-agent field has dozens of agents and very little rigorous
+documentation of what each one's *architecture* actually is. Practitioners
+pick agents by leaderboard score, not by understanding the loop, tool set,
+context strategy, or termination heuristic underneath. This guide catalogs
+exactly that, for every agent Chimera replicates.
+
+Two ground rules, inherited from the spec that produced these pages:
+
+1. **Replicated agents only.** Every entry has a runnable Chimera
+   primitive — either a full CLI replica (one of the
+   [seven codenames](/chimera/inspirations/)) or a loop-level agent style in
+   `chimera/agents/presets/agent_styles.py`. The primitive path on each
+   page is verified against a pinned commit.
+2. **Firsthand reading only.** Each page was written from the upstream
+   source, docs, or paper plus the Chimera replica's code — never from
+   secondhand summaries. Claims that could not be verified were omitted.
+   Benchmark scores are deliberately absent; for controlled comparisons,
+   use [`chimera bench-compare`](/chimera/modules/eval/).
+
+## Taxonomy
+
+| Agent | Loop type | Edit format | Context strategy | Primary surface | Year | Chimera primitive |
+|---|---|---|---|---|---|---|
+| [SWE-Agent](/chimera/field-guide/swe-agent/) | ReAct, one command per turn | line-range replacement, lint-guarded | history with old observations collapsed | autonomous batch runner | 2024 | `swe_agent` style |
+| [Aider](/chimera/field-guide/aider/) | edit–apply–reflect chat loop | search/replace diff blocks | graph-ranked repo map | terminal chat | 2023 | `aider` style |
+| [Cline](/chimera/field-guide/cline/) | Plan/Act dual-mode ReAct | diff-reviewed edits | tool-invocable compaction + checkpoints | IDE-embedded (VS Code) | 2024 | `cline` style |
+| [Claude Code](/chimera/field-guide/claude-code/) | gather–act–verify tool loop | exact string replacement | auto-compaction (clear, then summarize) | terminal TUI | 2025 | `chimera/mink/` |
+| [Codex CLI](/chimera/field-guide/codex-cli/) | ReAct with sandbox-mediated escalation | `apply_patch` patch dialect | AGENTS.md chain + resumable sessions | terminal TUI + exec + IDE | 2025 | `chimera/ferret/` + `codex` style |
+| [opencode](/chimera/field-guide/opencode/) | ReAct over a headless server | string-replace + patch + whole-file | auto-compact on overflow; LSP-checked edits | TUI client of a local HTTP server | 2025 | `chimera/otter/` |
+| [pi](/chimera/field-guide/pi/) | ReAct, four operating modes | exact-string search/replace | JSONL session tree + summarizing compaction | terminal CLI (TUI/print/RPC/SDK) | 2025 | `chimera/weasel/` |
+| [little-coder](/chimera/field-guide/little-coder/) | ReAct + 20 lifecycle extensions | search/replace with write-guard | per-turn budgeted skill injection | terminal, local llama.cpp models | 2026 | `chimera/shrew/` |
+| [Kimi CLI](/chimera/field-guide/kimi-cli/) | checkpointed step loop | whole-file write + string replace | ratio-triggered auto-compaction | terminal REPL with shell-mode toggle | 2025 | `chimera/stoat/` |
+| [claw-code](/chimera/field-guide/claw-code/) | streaming tool-call loop | tool-call file edits | resumable sessions; rerun resets | terminal REPL + one-shot | 2026 | `chimera/badger/` |
+
+## Reading order
+
+Start with the archetypes, then branch by the surface you care about:
+
+1. **[SWE-Agent](/chimera/field-guide/swe-agent/)** — the agent-computer
+   interface archetype: bash as the primary tool, a ReAct loop, and the
+   case for LM-tuned commands over raw shell.
+2. **[Aider](/chimera/field-guide/aider/)** — the edit-format archetype:
+   search/replace diff blocks, the repo map, and git as the undo stack.
+3. **[Cline](/chimera/field-guide/cline/)** — the human-in-the-loop
+   archetype: dual Plan/Act modes with approval-gated actions.
+4. Then the terminal-CLI generation: [Claude Code](/chimera/field-guide/claude-code/)
+   (TUI-first), [Codex CLI](/chimera/field-guide/codex-cli/)
+   (sandbox-first), [opencode](/chimera/field-guide/opencode/)
+   (server-first), [pi](/chimera/field-guide/pi/) (minimal harness),
+   [little-coder](/chimera/field-guide/little-coder/) (small-model fit),
+   [Kimi CLI](/chimera/field-guide/kimi-cli/) (shell-mode toggle), and
+   [claw-code](/chimera/field-guide/claw-code/) (harness-rewrite
+   discipline).
+
+## How these map to Chimera
+
+The seven CLI postures are full replicas — each a shipping `chimera`
+subcommand documented in [Inspirations](/chimera/inspirations/) with a
+per-codename parity matrix. The agent *styles* are loop-level replicas:
+compositions of Chimera's own loop, tool, and prompt primitives that
+encode an upstream's architecture in a few dozen lines (see the
+[Build SWE-Agent in 60 lines](/chimera/tutorials/build-swe-agent-in-60-lines/)
+tutorial for the pattern). Same model, same harness, different
+architecture — which is what makes them comparable under
+`chimera bench-compare`.
