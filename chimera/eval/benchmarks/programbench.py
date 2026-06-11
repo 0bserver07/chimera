@@ -396,8 +396,8 @@ class ProgramBench(Benchmark):
             1. Resolves the :class:`ProgramBenchInstance` from ``task``.
             2. Runs :func:`check_runtime_or_skip` (unless ``runtime_check=False``).
             3. Pulls ``instance.cleanroom_image()`` (unless ``pull_image=False``).
-            4. Extracts ``/agent-workspace/_inputs`` (binary + docs) from
-               the cleanroom image into ``<workspace>/_inputs/`` (unless
+            4. Extracts ``/workspace`` (binary + docs) from the
+               cleanroom image into ``<workspace>/_inputs/`` (unless
                ``extract_artifacts=False``).
             5. Calls ``agent.run(prompt, env=env)`` with the rebuild
                prompt. ``env`` defaults to a
@@ -466,6 +466,15 @@ class ProgramBench(Benchmark):
             extractor(image_ref, inputs_dir)
 
         run_agent = _resolve_agent(instance, ws, agent, agent_factory)
+        if not is_linux_amd64():
+            # The oracle binary is a linux/amd64 ELF; on any other host the
+            # agent cannot execute it and will burn its step budget trying
+            # (observed live on the first cmatrix probes). Say so up front.
+            extra_prompt = (
+                "NOTE: this host CANNOT execute `_inputs/executable` (it is a "
+                "linux/amd64 binary). Do not attempt to run it — rebuild from "
+                "the documentation alone.\n" + (extra_prompt or "")
+            )
         prompt = build_rebuild_prompt(instance, ws, extra_prompt)
 
         run_env = env
@@ -621,17 +630,22 @@ REBUILD_PROMPT_TEMPLATE = (
     "Task: {instance_id} ({language}, difficulty={difficulty})\n"
     "Repo: {repo}\n"
     "\n"
-    "You are inside a fresh ProgramBench cleanroom workspace at {workspace}.\n"
-    "The original program's compiled binary and documentation are mounted\n"
-    "read-only under {workspace}/_inputs/. Your task is to **rebuild** a\n"
-    "complete source tree at the workspace root that, when graded by the\n"
-    "upstream programbench eval harness, reproduces the binary's behaviour.\n"
+    "You are inside a fresh ProgramBench cleanroom workspace rooted at\n"
+    "{workspace}. Your file tools (read_file, write_file, list_files, ...)\n"
+    "operate RELATIVE to that root — always pass relative paths, never\n"
+    "absolute ones. The original program's compiled binary and its\n"
+    "documentation are under `_inputs/` (read-only). Your task is to\n"
+    "**rebuild** a complete source tree at the workspace root that, when\n"
+    "graded by the upstream programbench eval harness, reproduces the\n"
+    "binary's behaviour.\n"
     "\n"
     "Rules:\n"
-    "  - Read everything under {workspace}/_inputs/docs/ first — it is the spec.\n"
-    "  - Treat {workspace}/_inputs/binary/ as the oracle: run it on test\n"
+    "  - Read the documentation under `_inputs/` first (README, man pages,\n"
+    "    docs) — it is the spec.\n"
+    "  - Treat `_inputs/executable` as the oracle: run it via bash on test\n"
     "    inputs to confirm behaviour when docs are ambiguous.\n"
-    "  - Write your rebuilt source under {workspace}/ (NOT under _inputs/).\n"
+    "  - Write your rebuilt source tree at the workspace root with relative\n"
+    "    paths (e.g. `Makefile`, `src/main.c`) — NEVER under `_inputs/`.\n"
     "  - The cleanroom container has NO internet — do not attempt fetches.\n"
     "  - Stop when you have a runnable project; partial rebuilds count.\n"
 )
@@ -681,12 +695,15 @@ def pull_cleanroom_image(image_ref: str) -> None:
 
 
 def extract_cleanroom_artifacts(image_ref: str, dest: Path) -> None:
-    """Extract ``/agent-workspace/_inputs`` from the cleanroom image.
+    """Extract the cleanroom inputs (``/workspace``) from the image.
 
     Uses ``docker create`` + ``docker cp`` + ``docker rm`` so we don't
     need a long-running container. The destination directory is
     populated with whatever the upstream image puts under
-    ``/agent-workspace/_inputs``.
+    ``/workspace`` (the upstream ``WORKSPACE_DIR`` constant): the
+    original program's compiled binary (``executable``) plus its
+    documentation files, laid out flat — verified live against
+    ``programbench/abishekvashok_1776_cmatrix...:task_cleanroom``.
 
     Args:
         image_ref: Cleanroom image reference.
@@ -721,7 +738,7 @@ def extract_cleanroom_artifacts(image_ref: str, dest: Path) -> None:
             [
                 docker_path,
                 "cp",
-                f"{container_id}:/agent-workspace/_inputs/.",
+                f"{container_id}:/workspace/.",
                 str(dest),
             ],
             check=True,
@@ -796,9 +813,13 @@ def _coerce_instance(
 
 
 def _prepare_workspace(workspace: str | Path | None) -> Path:
+    # resolve(): LocalEnvironment resolves its workdir (macOS /tmp is a
+    # symlink to /private/tmp), and path-sandboxed tools compare prefixes
+    # literally — an unresolved workspace in the rebuild prompt makes every
+    # file invisible to the agent. Found live on the first cmatrix probe.
     if workspace is None:
-        return Path(tempfile.mkdtemp(prefix="programbench-ws-"))
-    ws = Path(workspace)
+        return Path(tempfile.mkdtemp(prefix="programbench-ws-")).resolve()
+    ws = Path(workspace).resolve()
     ws.mkdir(parents=True, exist_ok=True)
     return ws
 

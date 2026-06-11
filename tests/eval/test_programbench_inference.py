@@ -68,8 +68,8 @@ class TestBuildRebuildPrompt:
         assert "c" in prompt  # language
         assert "easy" in prompt  # difficulty
         assert str(tmp_path) in prompt
-        assert "_inputs/docs" in prompt
-        assert "_inputs/binary" in prompt
+        assert "_inputs/" in prompt
+        assert "_inputs/executable" in prompt
         assert "NO internet" in prompt
 
     def test_extra_text_appended(self, tmp_path):
@@ -163,9 +163,9 @@ class TestExtractCleanroomArtifacts:
         # Three calls: create -> cp -> rm
         verbs = [c[1] for c in commands]
         assert verbs == ["create", "cp", "rm"]
-        # cp source is the standard cleanroom inputs path
+        # cp source is the upstream WORKSPACE_DIR (verified live 2026-06-11)
         cp_src = commands[1][2]
-        assert cp_src.startswith("abc123:/agent-workspace/_inputs/")
+        assert cp_src.startswith("abc123:/workspace/")
 
     def test_cp_failure_still_removes_container(self, tmp_path):
         dest = tmp_path / "_inputs"
