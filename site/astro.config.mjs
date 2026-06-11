@@ -37,6 +37,10 @@ export default defineConfig({
 					tag: 'script',
 					attrs: { src: `${BASE}/mermaid-init.js`, type: 'module', defer: true },
 				},
+				{
+					tag: 'script',
+					attrs: { src: `${BASE}/table-sort.js`, type: 'module', defer: true },
+				},
 			],
 			sidebar: [
 				{
