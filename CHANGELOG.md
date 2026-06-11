@@ -1,5 +1,58 @@
 # Changelog
 
+## 0.8.0 — 2026-06-11 — The comparative-methodology release
+
+The mission deliverable ships: controlled comparative matrices with
+uniform budgets, the Harbor/DeepSWE task format, ATIF v1.7 trajectory
+interop with Pier, and the Field Guide. First live matrix published.
+
+### Added
+
+- **Uniform run budgets** (`chimera/core/budget.py`): `BudgetSpec` /
+  `BudgetTally` / `BudgetEnforcer` / `BudgetedProvider`. The universal
+  unit is completed tool calls, enforced once at the shared tool
+  executor and audited across all four loop types (ReAct,
+  PlanAndExecute, Reflexion, TreeOfThought stop at exactly N calls).
+- **`chimera bench-compare`**: the controlled comparative matrix CLI —
+  same model, tools, and per-task budget across N loop architectures;
+  terminal / json / markdown / html output; per-task temp-dir
+  environments; budget hits reported distinctly from failures; agent
+  crashes isolated per task.
+- **Harbor task-format adapter** (`--benchmark harbor`): consumes any
+  Harbor task directory (validated against all 117 DeepSWE tasks);
+  `docker_env_factory` provisions per-task images (new `docker` extra);
+  verifier flow proven inside a live container.
+- **ATIF v1.7** (`chimera/atif/`): emitter (EventBus subscriber, one
+  step per API turn, verbatim assistant text), reader, validator, and
+  the frozen upstream schema; `--emit-atif DIR` on bench-compare.
+  Interop proven: Pier's own trajectory models validate Chimera output.
+- **Teams plan-approval gate**: `requires_plan` tasks cannot complete
+  until a lead approves; `team_propose_plan` / `team_approve_plan` MCP
+  tools (lead-gated), `chimera team approvals` interactive loop.
+- **Field Guide** (`site/.../field-guide/`): architecture catalog of
+  the 10 replicated agents + sortable taxonomy, written from firsthand
+  source reading.
+- PlanAndExecute and Reflexion publish `ModelResponseEvent` per
+  provider call (telemetry parity with ReAct).
+- First controlled matrix + claude-models fan-out benchmark writeups;
+  four implementation specs landed under `docs/specs/`.
+
+### Fixed
+
+- teammate-runner claim/release spinning (dep-aware spawnable filter,
+  no-progress sleep, fingerprint-based reconsideration of released
+  tasks so plan approval re-cues the agent).
+- ProgramBench cleanroom reality fixes from the first live run
+  (#141): extraction path is `/workspace`, flat input layout,
+  workspace resolution for the macOS `/tmp` symlink, relative-path +
+  oracle-availability prompt guidance.
+- Opus 4.5/4.6/4.7 repriced to $5/$25 per MTok (4.8 added); legacy
+  4.0/4.1 rate pinned by a regression test.
+- Mocked docker tests no longer poison `chimera.env.docker` for
+  real-daemon integration tests.
+- ATIF emitter seals steps on consecutive `StepEvent`s (no more
+  collapsed multi-turn trajectories).
+
 ## 0.7.0 — 2026-05-09 — Deprecation cuts + P1/P2 polish + first PyPI release
 
 First release on PyPI (`pip install chimera-run`). Removes the v0.6.0

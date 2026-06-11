@@ -20,6 +20,16 @@ Full transparency on what Chimera can and cannot reproduce. Every benchmark has 
 | A8 | [tau-bench](https://github.com/) | Tool-use + business tasks | NOT RUN | — | TODO | #7 |
 | A9 | [Context-Bench](https://github.com/) | Long-running context | NOT RUN | — | TODO | #8 |
 | A10 | [SWE-PolyBench](https://github.com/) | Polyglot codebases | NOT RUN | — | TODO | #9 |
+| A11 | [ProgramBench](https://github.com/SWE-agent/ProgramBench) | Rebuild a codebase from binary + docs | Harness validated end-to-end (2026-06-11, glm-5.1 via Ollama bridge); agent never converges to writing within 80 steps — submissions grade empty | — | HARNESS OK / AGENT TUNING | #141 |
+| A12 | [DeepSWE](https://deepswe.datacurve.ai/) (Harbor format) | Long-horizon engineering tasks (117) | Adapter parses all 117 tasks; docker provisioning verified live; no agent runs yet | — | ADAPTER READY | — |
+
+## Controlled Comparative Matrices
+
+Same model, same tools, same budget — agent architecture as the only
+variable (`chimera bench-compare`). First run:
+[react vs plan-execute on GLM-5.1](2026-06-11-first-controlled-matrix.md)
+(react 3/3 @ $0.0009/task; plan-execute 0/3 @ ~16× cost, 3/3 budget
+exhaustions; six valid ATIF trajectories).
 
 ## LLM Benchmarks (Code)
 
