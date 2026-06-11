@@ -192,14 +192,16 @@ def _run(*args: str) -> subprocess.CompletedProcess[str]:
 
 
 def test_ferret_version_flag_prints_expected() -> None:
-    """``chimera ferret --version`` exits 0 and prints ``chimera ferret 0.7.0``."""
+    """``chimera ferret --version`` exits 0 and prints the package version."""
     proc = _run("ferret", "--version")
     assert proc.returncode == 0, proc.stderr
     combined = proc.stdout + proc.stderr
     assert "ferret" in combined, combined
     assert _SEMVER_RE.search(combined), combined
-    # The exact contract from the SPEC.
-    assert "chimera ferret 0.7.0" in combined, combined
+    # The exact contract from the SPEC, pinned to the live package version.
+    from chimera import __version__
+
+    assert f"chimera ferret {__version__}" in combined, combined
 
 
 def test_ferret_help_lists_core_flags() -> None:

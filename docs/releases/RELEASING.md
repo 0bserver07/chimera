@@ -125,6 +125,12 @@ first item that fails — none of these are "soft" warnings.
       (without the leading `v`). The publish workflow re-checks this
       and aborts on mismatch.
 - [ ] `chimera/__init__.py` `__version__` matches.
+- [ ] Run the full suite AFTER the bump and BEFORE tagging — CLI
+      version tests assert against `chimera.__version__` (they were
+      once hardcoded and broke the 0.8.0 cut). Note: with
+      `push.followTags = true` in your git config, `git push origin
+      master` also pushes any local release tag and triggers the
+      publish workflow — create the tag only when you mean to ship.
 - [ ] `pyproject.toml` `[project].name` is `chimera-run` (not
       `chimera-ai`). Trademark + memory rule.
 - [ ] `[project].license = {text = "MIT"}` — verified.
