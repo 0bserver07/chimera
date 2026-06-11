@@ -64,6 +64,12 @@ def add_bench_compare_parser(
         help="Stdout rendering",
     )
     p.add_argument("--output", default=None, help="Also write the full JSON report here")
+    p.add_argument(
+        "--emit-atif",
+        default=None,
+        metavar="DIR",
+        help="Emit one ATIF v1.7 trajectory per (agent, task) under DIR",
+    )
 
 
 def _build_factories(agent_names: list[str], max_steps: int) -> dict[str, Any]:
@@ -111,6 +117,7 @@ def report_to_dict(report: Any) -> dict[str, Any]:
         "configs": report.configs,
         "budget_hits": report.budget_hits,
         "budget_reasons": report.budget_reasons,
+        "trajectory_paths": getattr(report, "trajectory_paths", {}),
         "results": {
             name: [dataclasses.asdict(r) for r in results]
             for name, results in report.results.items()
@@ -185,7 +192,11 @@ def run_bench_compare(args: argparse.Namespace) -> int:
         task_pool=task_pool,
         seed=args.seed,
         evaluator=lambda problem, output, env: benchmark.evaluate(problem, output, env),
+        atif_dir=args.emit_atif,
     )
+    if args.emit_atif:
+        n_traj = sum(len(v) for v in report.trajectory_paths.values())
+        print(f"Emitted {n_traj} ATIF trajectories under {args.emit_atif}", file=sys.stderr)
 
     if args.fmt == "json":
         print(json.dumps(report_to_dict(report), indent=2))

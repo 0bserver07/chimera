@@ -139,6 +139,8 @@ class CompareReport(ComparisonReport):
         budget_hits: Per-config count of runs stopped by the budget —
             kept distinct from task failures.
         budget_reasons: Per-config list of which cap tripped, per hit.
+        trajectory_paths: Per-config list of emitted ATIF trajectory
+            files (populated when ``run_with_budget`` gets ``atif_dir``).
     """
 
     budget: Any = None
@@ -147,6 +149,7 @@ class CompareReport(ComparisonReport):
     seed: int = 0
     budget_hits: dict[str, int] = field(default_factory=dict)
     budget_reasons: dict[str, list[str]] = field(default_factory=dict)
+    trajectory_paths: dict[str, list[str]] = field(default_factory=dict)
 
     def summary(self) -> str:
         """Summary table with a distinct budget-hits column per config."""
@@ -273,6 +276,7 @@ class ComparativeEval:
         task_pool: str = "",
         seed: int = 0,
         evaluator: Callable[[dict[str, Any], str, Any], bool] | None = None,
+        atif_dir: str | None = None,
     ) -> CompareReport:
         """Run every config under an identical per-task budget.
 
@@ -299,6 +303,10 @@ class ComparativeEval:
             evaluator: Optional ``(problem, output, env) -> bool`` judge
                 (e.g. a benchmark's ``evaluate``). Falls back to the
                 ``"expected"`` substring check.
+            atif_dir: When set, every (config, problem) run emits an
+                ATIF v1.7 trajectory to
+                ``<atif_dir>/<config>/<problem_id>.atif.json`` and the
+                paths land in :attr:`CompareReport.trajectory_paths`.
 
         Returns:
             A :class:`CompareReport` over all configs and problems.
@@ -313,12 +321,14 @@ class ComparativeEval:
         all_results: dict[str, list[TaskResult]] = {}
         budget_hits: dict[str, int] = {}
         budget_reasons: dict[str, list[str]] = {}
+        trajectory_paths: dict[str, list[str]] = {}
         config_names = list(self._configs.keys())
 
         for config_name, factory in self._configs.items():
             config_results: list[TaskResult] = []
             budget_hits[config_name] = 0
             budget_reasons[config_name] = []
+            trajectory_paths[config_name] = []
 
             for problem in self.problems:
                 env = self.env_factory() if self.env_factory else None
@@ -327,10 +337,28 @@ class ComparativeEval:
 
                 token = CancellationToken()
                 enforcer = BudgetEnforcer(budget, cancellation=token)
+                emitter = None
+                event_bus = None
+                if atif_dir is not None:
+                    from pathlib import Path
+
+                    from chimera.atif import ATIFEmitter
+                    from chimera.events.base import EventBus
+
+                    event_bus = EventBus()
+                    emitter = ATIFEmitter(
+                        Path(atif_dir) / config_name / f"{problem_id}.atif.json",
+                        agent_name=f"chimera-{config_name}",
+                        model_name=model or None,
+                        session_id=f"{task_pool or 'compare'}::{config_name}::{problem_id}",
+                    )
+                    emitter.attach(event_bus)
+                    emitter.record_user_message(prompt)
                 loop_config = LoopConfig(
                     budget_enforcer=enforcer,
                     cancellation=token,
                     permissions=AutoApprove(),
+                    event_bus=event_bus,
                 )
                 provider = BudgetedProvider(self.provider, enforcer)
                 try:
@@ -353,6 +381,9 @@ class ComparativeEval:
                     output = f"[budget exhausted: {enforcer.exhausted_reason}]"
                     cost = enforcer.tally.cost_usd
                     steps = enforcer.tally.tool_calls
+                finally:
+                    if emitter is not None:
+                        trajectory_paths[config_name].append(str(emitter.close()))
 
                 if enforcer.exhausted:
                     budget_hits[config_name] += 1
@@ -387,4 +418,5 @@ class ComparativeEval:
             seed=seed,
             budget_hits=budget_hits,
             budget_reasons=budget_reasons,
+            trajectory_paths=trajectory_paths,
         )

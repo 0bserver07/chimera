@@ -79,6 +79,7 @@ def _args(**overrides: Any) -> argparse.Namespace:
         seed=0,
         fmt="terminal",
         output=None,
+        emit_atif=None,
     )
     base.update(overrides)
     return argparse.Namespace(**base)
