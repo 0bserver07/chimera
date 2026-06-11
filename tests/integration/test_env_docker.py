@@ -20,10 +20,22 @@ def _make_mock_docker() -> ModuleType:
 
 @pytest.fixture(autouse=True)
 def _inject_docker_module():
-    """Ensure `import docker` succeeds with a mock."""
+    """Ensure `import docker` succeeds with a mock — and un-poison after.
+
+    ``_import_docker_env`` reloads ``chimera.env.docker`` while the mock
+    is injected, which rebinds the module-level ``docker`` reference to
+    the mock. That binding outlives ``patch.dict``, so without the
+    reload below, later tests using a *real* Docker daemon would get
+    MagicMock containers.
+    """
     mock_mod = _make_mock_docker()
     with patch.dict(sys.modules, {"docker": mock_mod}):
         yield
+    import importlib
+
+    import chimera.env.docker as mod
+
+    importlib.reload(mod)
 
 
 def _import_docker_env():
