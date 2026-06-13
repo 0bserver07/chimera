@@ -1,6 +1,6 @@
 # Chimera
 
-[![PyPI](https://img.shields.io/pypi/v/chimera-run.svg)](https://pypi.org/project/chimera-run/) [![Python](https://img.shields.io/pypi/pyversions/chimera-run.svg)](https://pypi.org/project/chimera-run/) [![License](https://img.shields.io/github/license/0bserver07/chimera.svg)](LICENSE) [![CI](https://github.com/0bserver07/chimera/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/0bserver07/chimera/actions/workflows/ci.yml) [![Tests](https://img.shields.io/badge/tests-8206%20passing-brightgreen)](https://github.com/0bserver07/chimera/actions) [![Docs](https://img.shields.io/badge/docs-0bserver07.github.io%2Fchimera-blue)](https://0bserver07.github.io/chimera/)
+[![PyPI](https://img.shields.io/pypi/v/chimera-run.svg)](https://pypi.org/project/chimera-run/) [![Python](https://img.shields.io/pypi/pyversions/chimera-run.svg)](https://pypi.org/project/chimera-run/) [![License](https://img.shields.io/github/license/0bserver07/chimera.svg)](LICENSE) [![CI](https://github.com/0bserver07/chimera/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/0bserver07/chimera/actions/workflows/ci.yml) [![Tests](https://img.shields.io/badge/tests-8331%20passing-brightgreen)](https://github.com/0bserver07/chimera/actions) [![Docs](https://img.shields.io/badge/docs-0bserver07.github.io%2Fchimera-blue)](https://0bserver07.github.io/chimera/)
 
 **An open-source Python framework for building coding agents.** Pick your provider, pick your tools, pick your loop. Chimera wires them together. Recreate SWE-Agent, Aider, Cline, or Codex in a few lines, or design something entirely new.
 
@@ -10,7 +10,7 @@ chimera mink                        # TUI-first coding agent
 chimera agents                      # list all 7 CLIs with one-line pitches
 ```
 
-**v0.7.0 status** — 8206 passing tests, 101 skipped, 0 failed. ruff + mypy (641 modules) + 7 trademark scrubs all green. Reproducible benchmarks with GLM-5.1: HumanEval 66.5% pass@1 (109/164), SWE-bench Lite 10% (2/20, top-20 smallest patches). Raw results in `data/`.
+**v0.8.0 status** — 8331 passing tests, 96 skipped, 0 failed. ruff + mypy (653 modules) + 7 trademark scrubs all green. Reproducible benchmarks: HumanEval 92.7% pass@1 with GLM-5.1 (152/164; 4-model run up to Opus 4.7 at 100%), MBPP 87.4%, SWE-bench Lite 10% (2/20, gap analysis documented). New in 0.8.0: `chimera bench-compare` controlled comparative matrices under uniform budgets, the Harbor/DeepSWE task format, and ATIF v1.7 trajectory interop. Raw results in `data/`.
 
 ## Who This Is For
 
@@ -87,7 +87,7 @@ See [docs/architecture.md](docs/architecture.md) for the full 8-phase decomposit
 
 ## Install
 
-Latest release: **v0.7.0** ([release notes](https://github.com/0bserver07/chimera/releases/tag/v0.7.0) · [PyPI](https://pypi.org/project/chimera-run/0.7.0/)).
+Latest release: **v0.8.0** ([release notes](https://github.com/0bserver07/chimera/releases/tag/v0.8.0) · [PyPI](https://pypi.org/project/chimera-run/0.8.0/)).
 
 ```bash
 pip install chimera-run                       # core
@@ -350,10 +350,14 @@ Reproducible runs with raw data in `data/`:
 
 | Benchmark | GLM-5.1 | Raw data |
 |-----------|---------|----------|
-| HumanEval (164 problems) | 66.5% pass@1 (109/164) | `data/humaneval-glm51-results.json` |
+| HumanEval (164 problems) | 92.7% pass@1 (152/164) | `data/humaneval-glm51-results.json` |
+| HumanEval+ (164, EvalPlus tests) | 89.6% (147/164) | `data/humanevalplus-glm-5.1-results.json` |
+| MBPP (sanitized 427) | 87.4% (373/427) | `data/mbpp-glm-5.1-results.json` |
 | SWE-bench Lite (20 smallest patches) | 10% (2/20) | `data/swebench-lite-glm51-results.jsonl` |
 
-Earlier GLM-5 runs (HumanEval, Terminal-Bench) exist in our notes but the raw result files were not preserved; we won't publish unverifiable numbers. [Full transparency report](docs/benchmarks/README.md) — every benchmark has a status, methodology, and known gaps.
+(The previously published HumanEval 66.5% was a harness extraction bug, fixed and re-run 2026-05-20.) The same runs cover Haiku 4.5, Sonnet 4.6, and Opus 4.7 — see the [full transparency report](docs/benchmarks/README.md) for every benchmark's status, methodology, and known gaps.
+
+**Controlled comparisons** (new in 0.8.0): `chimera bench-compare` runs the same tasks, model, tools, and per-task budget across multiple agent loops and reports `pass_rate × cost × steps × budget_hits` — the [first published matrix](docs/benchmarks/2026-06-11-first-controlled-matrix.md) (react vs plan-execute on GLM-5.1) costs about five cents to reproduce and emits ATIF v1.7 trajectories that Pier's viewer can open.
 
 ## Run It Free with Ollama
 
@@ -396,6 +400,8 @@ Use Chimera if you want to:
   - 10 CLI sub-verbs: `compile`, `run`, `list`, `rm`, `info`, `push`, `pull`, `import-peft`, `login`, `rename`
 - [Benchmarks](docs/benchmarks/README.md) — transparency framework
 - [Benchmark adapters](docs/mink/benchmarks.md) — every adapter under `chimera/eval/benchmarks/`, status, and how to run
+- [Field Guide to Coding Agents](https://0bserver07.github.io/chimera/field-guide/) — architecture catalog of the 10 replicated agents (new in 0.8.0)
+- [Release notes: 0.8.0](docs/releases/0.8.0.md) — the comparative-methodology release
 - [Contributing](CONTRIBUTING.md) — setup, workflow, code style
 - [Changelog](CHANGELOG.md) — version history
 
