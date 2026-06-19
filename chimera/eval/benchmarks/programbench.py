@@ -646,7 +646,17 @@ REBUILD_PROMPT_TEMPLATE = (
     "    inputs to confirm behaviour when docs are ambiguous.\n"
     "  - Write your rebuilt source tree at the workspace root with relative\n"
     "    paths (e.g. `Makefile`, `src/main.c`) — NEVER under `_inputs/`.\n"
-    "  - The cleanroom container has NO internet — do not attempt fetches.\n"
+    "  - REQUIRED build contract: you MUST ship a `compile.sh` at the workspace\n"
+    "    root. The grader runs `chmod +x ./compile.sh && ./compile.sh`, then\n"
+    "    invokes `./executable`. So `compile.sh` must build your source and\n"
+    "    place the runnable program at `./executable` (that EXACT name). E.g.\n"
+    "    C: `gcc -O2 -o executable src/*.c <libs>` (or `make` then copy the\n"
+    "    binary to `executable`); Rust: `cargo build --release && cp\n"
+    "    target/release/<bin> executable`. Without `compile.sh -> ./executable`\n"
+    "    the submission cannot be graded at all.\n"
+    "  - The build/grading step CAN resolve dependencies (cargo/go fetch\n"
+    "    crates/modules normally) — use the same libraries the original uses,\n"
+    "    pinning versions that still exist.\n"
     "  - Stop when you have a runnable project; partial rebuilds count.\n"
 )
 
@@ -745,6 +755,13 @@ def extract_cleanroom_artifacts(image_ref: str, dest: Path) -> None:
             capture_output=True,
             text=True,
         )
+        # Drop the upstream repo's own ``.git`` tree: ``/workspace`` ships it,
+        # and it floods ``list_files`` output (hundreds of objects) — lured a
+        # live agent into reading ``.git/config`` / ``.git/HEAD`` instead of the
+        # spec. The rebuild never needs VCS history.
+        git_dir = dest / ".git"
+        if git_dir.is_dir():
+            shutil.rmtree(git_dir, ignore_errors=True)
     finally:
         subprocess.run(
             [docker_path, "rm", "-f", container_id],

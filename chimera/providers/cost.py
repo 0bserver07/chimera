@@ -47,11 +47,14 @@ PRICING: dict[str, tuple[float, float]] = {
     "gemini-2.0-flash": (0.10, 0.40),
     "gemini-1.5-pro": (1.25, 5.00),
     "gemini-1.5-flash": (0.075, 0.30),
-    # GLM. ``glm-5.1`` and ``glm-4.6`` are placeholders pending Zhipu's
-    # public rate sheet (longer prefixes win in ``calculate_cost`` so a
-    # future split is straightforward). 5.1 mirrors glm-5; 4.6 sits at
-    # glm-4 tier. TODO: confirm at
+    # GLM. ``glm-5.2``/``glm-5.1`` and ``glm-4.6`` are placeholders pending
+    # Zhipu's public rate sheet (longer prefixes win in ``calculate_cost``
+    # so a future split is straightforward). 5.2/5.1 mirror glm-5; 4.6 sits
+    # at glm-4 tier. NOTE: when served via the Ollama-Cloud bridge
+    # (``glm-5.2:cloud``) true billing is Ollama's, not z.ai's — these rates
+    # are an approximation. TODO: confirm at
     # https://docs.z.ai/api-reference/llm/chat-completion.
+    "glm-5.2": (2.0, 8.0),
     "glm-5.1": (2.0, 8.0),
     "glm-5": (2.0, 8.0),
     "glm-4.6": (0.6, 2.2),

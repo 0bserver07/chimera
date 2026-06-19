@@ -27,3 +27,9 @@ research/*
 !research/POLICY.md
 # local AI-CLI tool state (symlinks into ~/)
 .antigravitycli/
+
+# ProgramBench sweep artifacts + scratch harness
+pb-runs/
+pb_sweep.py
+scratch_bridge_smoke.py
+pb_repair.py

@@ -70,7 +70,11 @@ class TestBuildRebuildPrompt:
         assert str(tmp_path) in prompt
         assert "_inputs/" in prompt
         assert "_inputs/executable" in prompt
-        assert "NO internet" in prompt
+        # REQUIRED build contract: the grader runs ./compile.sh then ./executable,
+        # so the prompt must spell out the compile.sh -> ./executable requirement
+        # (without it every submission compile_fails before the code matters).
+        assert "compile.sh" in prompt
+        assert "executable" in prompt
 
     def test_extra_text_appended(self, tmp_path):
         prompt = build_rebuild_prompt(
