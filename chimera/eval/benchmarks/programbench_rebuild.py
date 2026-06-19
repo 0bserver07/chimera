@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
 
 if TYPE_CHECKING:
+    from chimera.eval.benchmarks.rebuild_docs import DocProvider
     from chimera.providers.base import Provider
 
 # A model emits each file as ``>>>> FILE: <path>\n<content>>>>> ENDFILE``.
@@ -226,6 +227,30 @@ def _is_better(summary: dict[str, Any], best: dict[str, Any]) -> bool:
     return int(summary.get("passed", 0) or 0) > int(best.get("passed", 0) or 0)
 
 
+def _augment_with_docs(
+    doc_provider: DocProvider, errors: str, language: str, files: dict[str, str]
+) -> str:
+    """Prepend fetched library docs to *errors* when the build named unknown
+    symbols. No-op (returns *errors*) if nothing parses or nothing is fetched."""
+    from chimera.eval.benchmarks.rebuild_docs import (
+        crates_from_cargo_toml,
+        parse_missing_symbols,
+    )
+
+    symbols = parse_missing_symbols(errors, language)
+    if not symbols:
+        return errors
+    cargo = files.get("Cargo.toml") or files.get("cargo.toml") or ""
+    crates = crates_from_cargo_toml(cargo) if cargo else []
+    docs = doc_provider.fetch(symbols, crates)
+    if not docs:
+        return errors
+    return (
+        "RELEVANT LIBRARY DOCS (use these EXACT APIs — your previous code "
+        "referenced symbols that do not exist):\n" + docs + "\n\n" + errors
+    )
+
+
 # ---------------------------------------------------------------------------
 # The loop
 # ---------------------------------------------------------------------------
@@ -240,6 +265,7 @@ def rebuild(
     grade_fn: Callable[[dict[str, str]], GradeOutcome],
     max_repair: int = 4,
     max_tokens: int = 8192,
+    doc_provider: DocProvider | None = None,
     on_attempt: Callable[[RebuildAttempt], None] | None = None,
 ) -> RebuildResult:
     """Generate a source tree and repair it against grader feedback.
@@ -259,6 +285,9 @@ def rebuild(
             ``max_repair + 1`` generations / grades).
         max_tokens: Per-completion output budget. 8192+ keeps reasoning models
             from truncating mid-thought.
+        doc_provider: Optional RAG hook — on a build failure with unknown-symbol
+            errors, its fetched library docs are prepended to the feedback (see
+            :mod:`chimera.eval.benchmarks.rebuild_docs`).
         on_attempt: Optional callback invoked with each :class:`RebuildAttempt`
             for progress reporting.
 
@@ -307,6 +336,8 @@ def rebuild(
         if outcome.resolved:
             return RebuildResult(files, True, attempts, best)
         errors = outcome.errors
+        if doc_provider is not None and errors:
+            errors = _augment_with_docs(doc_provider, errors, language, files)
 
     return RebuildResult(files, False, attempts, best)
 

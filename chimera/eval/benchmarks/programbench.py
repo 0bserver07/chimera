@@ -46,6 +46,7 @@ if TYPE_CHECKING:
         RebuildAttempt,
         RebuildResult,
     )
+    from chimera.eval.benchmarks.rebuild_docs import DocProvider
     from chimera.providers.base import Provider
     from chimera.types import AgentResult
 
@@ -524,6 +525,7 @@ class ProgramBench(Benchmark):
         image_puller: Callable[[str], None] | None = None,
         artifact_extractor: Callable[[str, Path], None] | None = None,
         runtime_check: bool = True,
+        doc_provider: DocProvider | None = None,
         on_attempt: Callable[[RebuildAttempt], None] | None = None,
     ) -> RebuildResult:
         """Rebuild one instance via one-shot codegen + compile-repair.
@@ -586,6 +588,7 @@ class ProgramBench(Benchmark):
             grade_fn=grade_fn,
             max_repair=max_repair,
             max_tokens=max_tokens,
+            doc_provider=doc_provider,
             on_attempt=on_attempt,
         )
 
