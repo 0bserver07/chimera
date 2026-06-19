@@ -33,3 +33,4 @@ pb-runs/
 pb_sweep.py
 scratch_bridge_smoke.py
 pb_repair.py
+pb_matrix.py
