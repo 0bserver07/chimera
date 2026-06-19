@@ -42,6 +42,11 @@ from chimera.eval.harness import Benchmark
 if TYPE_CHECKING:
     from chimera.core.agent import Agent
     from chimera.env.base import Environment
+    from chimera.eval.benchmarks.programbench_rebuild import (
+        RebuildAttempt,
+        RebuildResult,
+    )
+    from chimera.providers.base import Provider
     from chimera.types import AgentResult
 
 
@@ -503,6 +508,134 @@ class ProgramBench(Benchmark):
             error=error,
         )
 
+    # ------------------------------------------------------------------
+    # One-shot codegen + compile-repair inference (wave-15)
+    # ------------------------------------------------------------------
+    def rebuild_instance(
+        self,
+        task: dict[str, Any] | ProgramBenchInstance,
+        *,
+        provider: Provider,
+        workspace: str | Path | None = None,
+        max_repair: int = 4,
+        max_tokens: int = 8192,
+        pull_image: bool = True,
+        extract_artifacts: bool = True,
+        image_puller: Callable[[str], None] | None = None,
+        artifact_extractor: Callable[[str, Path], None] | None = None,
+        runtime_check: bool = True,
+        on_attempt: Callable[[RebuildAttempt], None] | None = None,
+    ) -> RebuildResult:
+        """Rebuild one instance via one-shot codegen + compile-repair.
+
+        Unlike :meth:`run_instance` (which drives an agent loop that tends to
+        over-explore and never write on this benchmark), this asks *provider* to
+        emit the whole source tree in a single completion — including the
+        required ``compile.sh -> ./executable`` build contract — then grades it,
+        feeds the focused build/test errors back, and repairs up to
+        ``max_repair`` times. See
+        :func:`chimera.eval.benchmarks.programbench_rebuild.rebuild`.
+
+        Args:
+            task: Task dict or :class:`ProgramBenchInstance`.
+            provider: Any chimera provider (a coder model works well).
+            workspace: Directory to stage in; a temp dir if ``None``.
+            max_repair: Repair rounds after the first attempt.
+            max_tokens: Per-completion output budget (8192+ for reasoning models).
+            pull_image / extract_artifacts / image_puller / artifact_extractor:
+                Same docker hooks as :meth:`run_instance` (the spec is read from
+                the extracted ``_inputs/``).
+            runtime_check: Gate on docker + linux/amd64 first.
+            on_attempt: Optional per-round progress callback.
+
+        Returns:
+            A :class:`~chimera.eval.benchmarks.programbench_rebuild.RebuildResult`.
+
+        Raises:
+            BenchmarkSkipped: If the runtime check fails or ``run_dir`` is unset
+                (grading stages the submission under ``run_dir``).
+        """
+        from chimera.eval.benchmarks.programbench_rebuild import assemble_spec, rebuild
+
+        if runtime_check:
+            check_runtime_or_skip()
+        if self._run_dir is None:
+            raise BenchmarkSkipped(
+                "ProgramBench.rebuild_instance requires run_dir to stage + grade "
+                "submissions. Pass run_dir=... to the constructor."
+            )
+        instance = _coerce_instance(task)
+        ws = _prepare_workspace(workspace)
+        inputs_dir = ws / "_inputs"
+        inputs_dir.mkdir(parents=True, exist_ok=True)
+
+        image_ref = instance.cleanroom_image(self._image_tag)
+        if pull_image:
+            (image_puller or pull_cleanroom_image)(image_ref)
+        if extract_artifacts:
+            (artifact_extractor or extract_cleanroom_artifacts)(image_ref, inputs_dir)
+
+        spec = assemble_spec(inputs_dir)
+        project = (instance.repo or instance.instance_id).split("/")[-1]
+        grade_fn = self._make_rebuild_grader({"instance_id": instance.instance_id}, ws)
+        return rebuild(
+            provider,
+            project=project,
+            language=instance.language or "unknown",
+            spec=spec,
+            grade_fn=grade_fn,
+            max_repair=max_repair,
+            max_tokens=max_tokens,
+            on_attempt=on_attempt,
+        )
+
+    def _make_rebuild_grader(
+        self, task: dict[str, Any], workspace: Path
+    ) -> Callable[[dict[str, str]], Any]:
+        """Return a ``grade_fn(files)`` for :func:`programbench_rebuild.rebuild`.
+
+        It writes a CLEAN candidate tree (everything except ``_inputs/``),
+        packages it, grades via :meth:`evaluate`, and reports a
+        :class:`~chimera.eval.benchmarks.programbench_rebuild.GradeOutcome` with
+        the focused build/test errors from the eval.json.
+        """
+        from chimera.eval.benchmarks.programbench_rebuild import (
+            GradeOutcome,
+            focus_errors,
+        )
+
+        def grade(files: dict[str, str]) -> Any:
+            for entry in list(workspace.iterdir()):
+                if entry.name == "_inputs":
+                    continue
+                if entry.is_dir():
+                    shutil.rmtree(entry, ignore_errors=True)
+                else:
+                    entry.unlink()
+            for rel, content in files.items():
+                fp = workspace / rel
+                fp.parent.mkdir(parents=True, exist_ok=True)
+                fp.write_text(content)
+            tar = workspace / "submission.tar.gz"
+            package_submission(workspace, tar)
+            try:
+                resolved = self.evaluate(task, str(tar))
+            except Exception as exc:  # noqa: BLE001 — surface as a soft failure
+                return GradeOutcome(
+                    False, f"grade error: {type(exc).__name__}: {exc}", {}
+                )
+            instance_id = task.get("instance_id") or task.get("id", "")
+            summary: dict[str, Any] = {}
+            errors = ""
+            if self._run_dir is not None and instance_id:
+                ejp = self._run_dir / instance_id / f"{instance_id}.eval.json"
+                if ejp.exists():
+                    summary = parse_eval_json(ejp)
+                    errors = focus_errors(_eval_build_log(ejp))
+            return GradeOutcome(resolved, errors, summary)
+
+        return grade
+
 
 # ---------------------------------------------------------------------------
 # Module-level helpers — exposed for testing and reuse
@@ -552,6 +685,34 @@ def check_runtime_or_skip() -> None:
             "ProgramBench images require linux/amd64; "
             "set CHIMERA_PROGRAMBENCH_LIVE=1 to attempt a QEMU run anyway."
         )
+
+
+def _eval_build_log(eval_json_path: Path) -> str:
+    """Extract raw build/test diagnostics from a programbench eval.json.
+
+    Concatenates the ``compile``/``run`` step outputs (and, when the build
+    succeeded but tests failed, a few failing-test names) into raw text suitable
+    for :func:`chimera.eval.benchmarks.programbench_rebuild.focus_errors`.
+    """
+    try:
+        data = json.loads(eval_json_path.read_text())
+    except (OSError, ValueError):
+        return ""
+    parts: list[str] = []
+    for step in data.get("log", []):
+        if step.get("step") in ("compile", "run") and step.get("output"):
+            parts.append(f"{step['step']} output:\n{step['output']}")
+    if not parts and data.get("error_details"):
+        parts.append(str(data["error_details"]))
+    if data.get("error_code") is None:
+        fails = [
+            t.get("name", "")
+            for t in data.get("test_results", [])
+            if not t.get("passed", True)
+        ][:8]
+        if fails:
+            parts.append("sample failing tests:\n" + "\n".join(fails))
+    return "\n\n".join(parts)
 
 
 def parse_eval_json(path: Path | str) -> dict[str, Any]:
