@@ -163,21 +163,46 @@ def focus_errors(text: str, limit: int = 3000) -> str:
     return (body + "TAIL:\n" + "\n".join(lines[-50:]))[-limit:]
 
 
-def assemble_spec(inputs_dir: str | Path, *, max_file_chars: int = 16000) -> str:
+def _doc_priority(relpath: str) -> int:
+    """Lower = more likely to be the actual spec (read first under the budget)."""
+    name = relpath.rsplit("/", 1)[-1].lower()
+    if name.startswith("readme"):
+        return 0
+    if re.search(r"\.[1-9]$", name) or name.endswith(".man"):  # man pages
+        return 1
+    if name.startswith(("usage", "manual", "help", "tutorial")) or name.endswith(
+        (".md", ".rst", ".adoc", ".txt")
+    ):
+        return 2
+    if name.startswith(("license", "copying", "authors", "changelog", "changes")):
+        return 8
+    return 5
+
+
+def assemble_spec(
+    inputs_dir: str | Path,
+    *,
+    max_file_chars: int = 16000,
+    max_total_chars: int = 50000,
+) -> str:
     """Build the spec text from a task's ``_inputs/`` directory.
 
-    Reads every text doc (README, man pages, usage, examples), skipping the
-    ``.git`` tree, the ``executable`` oracle binary, and image/binary files.
+    Reads text docs (README, man pages, usage, examples), skipping the ``.git``
+    tree, the ``executable`` oracle binary, and image/binary files. Docs are
+    ordered by likely relevance (README and man pages first) and the total is
+    capped at ``max_total_chars`` so data-heavy inputs — e.g. a program that
+    ships dozens of font/fixture files — can't blow the model's context window.
 
     Args:
         inputs_dir: The extracted ``_inputs/`` directory.
-        max_file_chars: Per-file cap so one large doc can't dominate the prompt.
+        max_file_chars: Per-file cap so one large doc can't dominate.
+        max_total_chars: Overall cap across all included files.
 
     Returns:
         A single string with each file under a ``=== <relpath> ===`` header.
     """
     root = Path(inputs_dir)
-    parts: list[str] = []
+    candidates: list[tuple[int, str, str]] = []
     for f in sorted(root.rglob("*")):
         if not f.is_file() or ".git" in f.parts or f.name == "executable":
             continue
@@ -187,7 +212,18 @@ def assemble_spec(inputs_dir: str | Path, *, max_file_chars: int = 16000) -> str
             txt = f.read_text(errors="replace")
         except OSError:
             continue
-        parts.append(f"=== {f.relative_to(root)} ===\n{txt[:max_file_chars]}")
+        rel = str(f.relative_to(root))
+        candidates.append((_doc_priority(rel), rel, txt[:max_file_chars]))
+
+    candidates.sort(key=lambda c: (c[0], c[1]))
+    parts: list[str] = []
+    total = 0
+    for _prio, rel, txt in candidates:
+        if total >= max_total_chars:
+            break
+        chunk = f"=== {rel} ===\n{txt}"[: max_total_chars - total]
+        parts.append(chunk)
+        total += len(chunk)
     return "\n\n".join(parts)
 
 

@@ -98,6 +98,18 @@ def test_assemble_spec_skips_git_binary_images(tmp_path):
     assert "PNG" not in spec
 
 
+def test_assemble_spec_caps_total_and_prioritizes_docs(tmp_path):
+    inp = tmp_path / "_inputs"
+    inp.mkdir()
+    (inp / "README.md").write_text("THE SPEC: cmd --flag does X")
+    # Data-heavy input (e.g. figlet's fonts) must not blow the context.
+    for i in range(20):
+        (inp / f"font{i}.flf").write_text("FONTDATA " * 4000)
+    spec = assemble_spec(inp, max_total_chars=8000)
+    assert "THE SPEC: cmd --flag does X" in spec  # README wins priority
+    assert len(spec) <= 8200  # total capped despite ~640k of font data
+
+
 def test_initial_prompt_carries_build_contract():
     prompt = build_initial_prompt("cmatrix", "c", "SPEC HERE")
     assert "compile.sh" in prompt
