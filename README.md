@@ -35,17 +35,17 @@ Chimera gives you two things:
 ```mermaid
 graph TD
     User["You<br/>(prompt + repo)"]
-    User --> Loop
+    User --> AgentLoop
 
-    subgraph Loop["Agent Loop (Phase 1)"]
+    subgraph AgentLoop["Agent Loop (Phase 1)"]
         direction LR
         Think["Reason<br/>(LLM call)"] --> Act["Act<br/>(tool call)"] --> Obs["Observe<br/>(tool result)"] --> Think
     end
 
-    Loop -->|reads/writes| FS["Your filesystem"]
-    Loop -->|fires events| Hooks["Hooks · Permissions · Sessions"]
+    AgentLoop -->|reads/writes| FS["Your filesystem"]
+    AgentLoop -->|fires events| Hooks["Hooks · Permissions · Sessions"]
 
-    Loop --> Provider{"Provider routing"}
+    AgentLoop --> Provider{"Provider routing"}
     Provider -- "claude-* / glm-* / kimi-*" --> Anth["Anthropic-compat"]
     Provider -- "gpt-* / o1 / o3" --> OAI["OpenAI"]
     Provider -- "gemini-*" --> G["Google"]
@@ -53,7 +53,7 @@ graph TD
     Provider -- "grok-*" --> X["xAI"]
 
     Tools["24 built-in tools<br/>read · write · edit · bash · search · git · test ·<br/>web_fetch · apply_patch · think · todo · todo · …"]
-    Loop -.uses.-> Tools
+    AgentLoop -.uses.-> Tools
 
     classDef loop fill:#352b5e,stroke:#7c3aed,color:#fff
     classDef provider fill:#1e3a2a,stroke:#22c55e,color:#fff
