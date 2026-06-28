@@ -41,7 +41,8 @@ mcp = ["websockets>=12"]
 ssh = ["asyncssh>=2.14"]
 tui = ["textual>=0.50"]
 modal-sandbox = ["modal>=0.62"]
-all = ["chimera-run[anthropic,openai,browser,remote,mink,notebook,mcp,ssh,tui,modal-sandbox]"]
+e2b = ["e2b>=1.0"]
+all = ["chimera-run[anthropic,openai,browser,remote,mink,notebook,mcp,ssh,tui,modal-sandbox,e2b]"]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
