@@ -60,6 +60,16 @@ class BenchmarkSkipped(Exception):
     """
 
 
+class ProgramBenchGradingError(RuntimeError):
+    """Raised when grading fails to produce a result.
+
+    Distinct from a legitimate ``0`` score: the grader never ran to
+    completion — e.g. the Docker daemon was unreachable or the cleanroom
+    build crashed — so no ``eval.json`` was written. Surfaced loudly so a
+    sweep cannot silently report all-zeros when grading never actually ran.
+    """
+
+
 @dataclass
 class ProgramBenchInstance:
     """A single ProgramBench task instance.
@@ -298,7 +308,11 @@ class ProgramBench(Benchmark):
 
         Raises:
             BenchmarkSkipped: If Docker is unavailable, the host is not
-                ``linux/amd64``, or no ``run_dir`` was configured.
+                ``linux/amd64``, the ``programbench`` CLI is missing, or no
+                ``run_dir`` was configured.
+            ProgramBenchGradingError: If the grader exits without writing an
+                eval.json (Docker daemon down, cleanroom build crash, CLI
+                error) — distinct from a legitimate failing score.
         """
         check_runtime_or_skip()
         if self._run_dir is None:
@@ -335,17 +349,32 @@ class ProgramBench(Benchmark):
             "--image-tag",
             self._image_tag.replace("_cleanroom", ""),
         ]
+        proc_error: subprocess.CalledProcessError | None = None
         try:
             subprocess.run(cmd, check=True, capture_output=True, text=True)
         except FileNotFoundError as exc:
             raise BenchmarkSkipped(
                 f"programbench CLI not found on PATH: {self._cli[0]}"
             ) from exc
-        except subprocess.CalledProcessError:
-            return False
+        except subprocess.CalledProcessError as exc:
+            # A non-zero exit is tolerable only if the grader still wrote an
+            # eval.json (the CLI signalling a failed task, handled below).
+            proc_error = exc
 
         if not eval_json.exists():
-            return False
+            # No eval.json means grading never ran to completion — the Docker
+            # daemon was down, the cleanroom build crashed, the CLI errored.
+            # That is NOT a legitimate 0-score: raise so a sweep cannot quietly
+            # report all-zeros when nothing was actually graded.
+            tail = ""
+            if proc_error is not None:
+                tail = (proc_error.stderr or proc_error.stdout or "").strip()[-2000:]
+            raise ProgramBenchGradingError(
+                f"grading produced no eval.json for {instance_id!r} "
+                f"(programbench exit={proc_error.returncode if proc_error else 0}). "
+                f"Is the Docker daemon running and the cleanroom image built?"
+                + (f"\n--- grader output (tail) ---\n{tail}" if tail else "")
+            )
         summary = parse_eval_json(eval_json)
         return bool(summary["total"] > 0 and summary["passed"] == summary["total"])
 

@@ -22,6 +22,7 @@ import pytest
 from chimera.eval.benchmarks.programbench import (
     BenchmarkSkipped,
     ProgramBench,
+    ProgramBenchGradingError,
     ProgramBenchInstance,
     check_runtime_or_skip,
     docker_available,
@@ -453,7 +454,10 @@ class TestEvaluateOrchestration:
         ):
             assert bench.evaluate(bench.tasks()[0], str(submission)) is False
 
-    def test_evaluate_returns_false_when_cli_errors(self, tmp_path):
+    def test_evaluate_raises_when_cli_errors_without_eval_json(self, tmp_path):
+        # A grader crash that writes no eval.json is an infrastructure failure
+        # (e.g. Docker down), NOT a legitimate 0-score — it must be raised so a
+        # sweep cannot silently report all-zeros.
         submission = tmp_path / "submission.tar.gz"
         submission.write_bytes(b"\x1f\x8b")
         run_dir = tmp_path / "run"
@@ -466,7 +470,50 @@ class TestEvaluateOrchestration:
         )
 
         def fake_run(cmd, **kwargs):
-            raise subprocess.CalledProcessError(returncode=2, cmd=cmd)
+            raise subprocess.CalledProcessError(
+                returncode=2, cmd=cmd, stderr="Cannot connect to the Docker daemon"
+            )
+
+        with (
+            patch(
+                "chimera.eval.benchmarks.programbench.check_runtime_or_skip",
+                return_value=None,
+            ),
+            patch(
+                "chimera.eval.benchmarks.programbench.subprocess.run",
+                side_effect=fake_run,
+            ),
+        ):
+            with pytest.raises(ProgramBenchGradingError, match="Docker daemon"):
+                bench.evaluate(bench.tasks()[0], str(submission))
+
+    def test_evaluate_uses_eval_json_even_when_cli_exits_nonzero(self, tmp_path):
+        # If the grader DID write an eval.json, a non-zero CLI exit is just the
+        # task failing — parse the result, do not raise.
+        submission = tmp_path / "submission.tar.gz"
+        submission.write_bytes(b"\x1f\x8b")
+        run_dir = tmp_path / "run"
+        run_dir.mkdir()
+        bench = ProgramBench(run_dir=str(run_dir))
+        bench.add_instance(
+            ProgramBenchInstance(
+                instance_id="o__r.abc1234", repo="o/r", commit="abc"
+            )
+        )
+
+        def fake_run(cmd, **kwargs):
+            inst_dir = run_dir / "o__r.abc1234"
+            (inst_dir / "o__r.abc1234.eval.json").write_text(
+                json.dumps(
+                    {
+                        "test_results": [
+                            {"name": "t1", "branch": "b", "status": "failure"},
+                        ],
+                        "test_branches": ["b"],
+                    }
+                )
+            )
+            raise subprocess.CalledProcessError(returncode=1, cmd=cmd)
 
         with (
             patch(
