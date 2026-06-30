@@ -61,7 +61,7 @@ class AgentLoop:
         tools: list[BaseTool],
         provider: Any,
         system_prompt: str | SystemPrompt,
-        max_turns: int = 100,
+        max_turns: int | None = 100,
         abort_signal: AbortSignal | None = None,
         query_source: QuerySource = QuerySource.FOREGROUND,
         hook_executor: HookExecutor | None = None,
@@ -86,6 +86,8 @@ class AgentLoop:
             system_prompt: System prompt prepended to the conversation.
                 Accepts a plain string or a :class:`SystemPrompt` object.
             max_turns: Maximum number of LLM calls before forcing a stop.
+                ``None`` runs unlimited — until the task completes, the loop
+                detector trips, or abort fires.
             abort_signal: Optional signal to cooperatively cancel the loop.
             query_source: Categorises the caller (foreground / background / fork).
             hook_executor: Optional hook executor for lifecycle hooks.
@@ -173,8 +175,8 @@ class AgentLoop:
                 )
                 return
 
-            # ----- Check max turns -----
-            if state.turn_count >= max_turns:
+            # ----- Check max turns (None = unlimited) -----
+            if max_turns is not None and state.turn_count >= max_turns:
                 yield LoopEvent(
                     type=LoopEventType.result,
                     data=LoopResult(
@@ -190,9 +192,13 @@ class AgentLoop:
                 return
 
             # ----- Compaction: auto-compact if needed -----
+            # Budget tracks the provider's real context window so a 1M-token
+            # model isn't compacted as if it only had 100K. Falls back to 100K
+            # when the provider advertises no window.
             if compaction is not None:
+                ctx_window = getattr(provider, "context_window", 100_000) or 100_000
                 working_messages, compacted = await compaction.auto_compact_if_needed(
-                    working_messages, token_budget=100_000,
+                    working_messages, token_budget=ctx_window,
                 )
                 if compacted:
                     yield LoopEvent(
@@ -294,6 +300,15 @@ class AgentLoop:
                 turn=state.turn_count,
             )
 
+            # Surface each tool call before execution so a TUI can render the
+            # call (name + args) ahead of its result.
+            for _tc in response.tool_calls:
+                yield LoopEvent(
+                    type=LoopEventType.tool_use,
+                    data=_tc,
+                    turn=state.turn_count,
+                )
+
             # ----- Phase C: No tool calls -> completed -----
             if not response.tool_calls:
                 # Fire STOP hook before completing
@@ -390,7 +405,7 @@ class AgentLoop:
                     and _has_edit_tools  # only auto-continue when edit tools are available
                     and not _files_edited
                     and _any_tools_called
-                    and state.turn_count < max_turns - 5
+                    and (max_turns is None or state.turn_count < max_turns - 5)
                     and _nudge_count < 2
                 ):
                     _nudge_count += 1

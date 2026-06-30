@@ -45,13 +45,33 @@ def coding_tools(**kwargs: Any) -> list[BaseTool]:
         from chimera.commands.registry import CommandRegistry
         command_registry = CommandRegistry()
 
+    # Root file/shell tools at the agent's working directory so it operates on
+    # the directory it was pointed at (e.g. ``chimera code --workdir X``)
+    # instead of the process CWD. Without a workdir, ops stay None and the
+    # tools keep their default process-CWD behavior.
+    read_ops = write_ops = bash_ops = search_ops = None
+    workdir = kwargs.get("workdir")
+    if workdir is not None:
+        from chimera.core.operations import (
+            LocalBashOps,
+            LocalReadOps,
+            LocalSearchOps,
+            LocalWriteOps,
+        )
+
+        _wd = str(workdir)
+        read_ops = LocalReadOps(cwd=_wd)
+        write_ops = LocalWriteOps(cwd=_wd)
+        bash_ops = LocalBashOps(cwd=_wd)
+        search_ops = LocalSearchOps(cwd=_wd)
+
     tools = [
-        BashTool(),
-        CachedReadTool(cache=file_cache),
-        WriteFileTool(),
-        EditFileTool(),
-        SearchTool(),
-        ListFilesTool(),
+        BashTool(ops=bash_ops),
+        CachedReadTool(cache=file_cache, ops=read_ops),
+        WriteFileTool(read_ops=read_ops, write_ops=write_ops),
+        EditFileTool(read_ops=read_ops, write_ops=write_ops),
+        SearchTool(ops=search_ops),
+        ListFilesTool(ops=search_ops),
         ReplaceInFileTool(),
         GitTool(),
         TestTool(),

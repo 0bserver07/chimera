@@ -25,6 +25,10 @@ from chimera.core.loop_events import LoopEvent, LoopEventType
 
 __all__ = ["CodingAgent"]
 
+# Sentinel: distinguishes "caller did not specify max_turns" (use the preset's
+# value) from "caller explicitly passed None" (unlimited — run until done).
+_USE_CONFIG_MAX_TURNS: Any = object()
+
 
 def _warn_if_deprecated_preset(preset: str) -> None:
     """Emit a one-line DeprecationWarning if `preset` is a deprecated alias.
@@ -67,6 +71,8 @@ class CodingAgent:
         provider: Any = None,
         permission_callback: Any = None,
         tools_override: list[Any] | None = None,
+        max_turns: Any = _USE_CONFIG_MAX_TURNS,
+        enable_nudges: bool = True,
     ) -> None:
         from chimera.assembly.presets import PRESETS
         from chimera.assembly.system_prompts import CODING_AGENT_PROMPT, PRESET_PROMPTS
@@ -88,7 +94,21 @@ class CodingAgent:
         # Load config
         config = PRESETS.get(preset, PRESETS["coding_agent"])
         self._config = config
+        self._max_turns: int | None = (
+            config.max_turns if max_turns is _USE_CONFIG_MAX_TURNS else max_turns
+        )
         self._project_dir = Path(project_dir or ".").resolve()
+
+        # Conversation history persisted across run() calls so a REPL/TUI keeps
+        # context between turns; steering queue enables mid-turn injection.
+        from chimera.core.message_queue import SteeringMessageQueue
+
+        self._history: list[Any] = []
+        self._message_queue = SteeringMessageQueue()
+        # Autonomous nudges (action / keep-going) help -p and benchmark runs but
+        # make interactive Q&A ramble ("you didn't use any tools"); a REPL/TUI
+        # turns them off via enable_nudges=False.
+        self._enable_nudges = enable_nudges
 
         # Feature flags
         FeatureFlags.from_env()
@@ -125,6 +145,7 @@ class CodingAgent:
                 file_cache=self._file_cache,
                 task_manager=self._task_manager,
                 command_registry=self._command_registry,
+                workdir=str(self._project_dir),
             )
 
         # Agent spawner (for sub-agents and forked skills)
@@ -290,11 +311,11 @@ class CodingAgent:
         last_turn = 0
 
         async for event in loop.run(
-            messages=[Message.user(task)],
+            messages=list(getattr(self, "_history", None) or []) + [Message.user(task)],
             tools=self.tools,
             provider=self.provider,
             system_prompt=system_prompt,
-            max_turns=self._config.max_turns,
+            max_turns=getattr(self, "_max_turns", self._config.max_turns),
             abort_signal=self._abort_signal,
             permission_checker=self._permission_checker,
             permission_context=self._permission_context,
@@ -304,6 +325,9 @@ class CodingAgent:
             content_replacement=self._content_replacement,
             compaction=self._compaction,
             stream=self._config.streaming,
+            message_queue=getattr(self, "_message_queue", None),
+            enable_action_nudge=getattr(self, "_enable_nudges", True),
+            enable_auto_continue=getattr(self, "_enable_nudges", True),
         ):
             # Track modified files from tool_result events
             if event.type == LoopEventType.tool_result:
@@ -321,6 +345,12 @@ class CodingAgent:
                     )
                     turn_modified.clear()
                 last_turn = event.turn
+
+            # Persist the full conversation so the next run() has context.
+            if event.type == LoopEventType.result:
+                _res = event.data
+                if getattr(_res, "messages", None):
+                    self._history = list(_res.messages)
 
             yield event
 
@@ -340,3 +370,25 @@ class CodingAgent:
         from chimera.core.abort import AbortSignal
 
         self._abort_signal = AbortSignal()
+
+    def steer(self, text: str) -> None:
+        """Inject a steering message, delivered between tool turns mid-run."""
+        from chimera.types import Message
+
+        self._message_queue.add_steering(Message.user(text))
+
+    def queue_follow_up(self, text: str) -> None:
+        """Queue a message delivered after the agent would otherwise stop."""
+        from chimera.types import Message
+
+        self._message_queue.add_follow_up(Message.user(text))
+
+    def clear_history(self) -> None:
+        """Forget the conversation so the next run() starts fresh."""
+        self._history = []
+        self._message_queue.clear()
+
+    @property
+    def history(self) -> list[Any]:
+        """The accumulated conversation messages across run() calls."""
+        return self._history

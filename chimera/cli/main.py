@@ -156,6 +156,16 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     code_parser.add_argument(
+        "--max-turns",
+        dest="max_turns",
+        type=int,
+        default=None,
+        help=(
+            "Max LLM turns before stopping. 0 (or negative) = unlimited "
+            "(run until the task completes). Default: the preset's value (100)."
+        ),
+    )
+    code_parser.add_argument(
         "-p", "--print",
         dest="print_mode",
         default=None,

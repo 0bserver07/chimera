@@ -662,6 +662,12 @@ def run_code(args: Any) -> int:
         )
         cwd = os.path.abspath(getattr(args, "workdir", None) or os.getcwd())
 
+        # max_turns: 0/negative -> unlimited (None); absent -> preset default.
+        _raw_max_turns = getattr(args, "max_turns", None)
+        agent_kwargs: dict = {}
+        if _raw_max_turns is not None:
+            agent_kwargs["max_turns"] = None if _raw_max_turns <= 0 else _raw_max_turns
+
         # Non-interactive -p mode
         print_task = getattr(args, "print_mode", None)
         if print_task:
@@ -671,20 +677,27 @@ def run_code(args: Any) -> int:
             async def _print_run() -> None:
                 agent = CodingAgent(
                     model=model, preset=effective_preset, project_dir=cwd,
+                    **agent_kwargs,
                 )
+                saw_chunk = False
                 async for event in agent.run(print_task):
-                    if event.type == LoopEventType.assistant:
+                    if event.type == LoopEventType.assistant_chunk:
+                        saw_chunk = True
+                        print(str(event.data), end="", flush=True)
+                    elif event.type == LoopEventType.assistant and not saw_chunk:
                         content = getattr(event.data, 'content', str(event.data))
                         if content.strip():
                             print(content)
-                    elif event.type == LoopEventType.assistant_chunk:
-                        print(str(event.data), end="", flush=True)
+                print()
 
             asyncio.run(_print_run())
             return 0
 
         asyncio.run(
-            _run_new_stack(model=model, preset=effective_preset, cwd=cwd),
+            _run_new_stack(
+                model=model, preset=effective_preset, cwd=cwd,
+                agent_kwargs=agent_kwargs,
+            ),
         )
         return 0
 
@@ -930,33 +943,37 @@ def run_code(args: Any) -> int:
     return 0
 
 
-async def _run_new_stack(model: str, preset: str, cwd: str) -> None:
+async def _run_new_stack(
+    model: str, preset: str, cwd: str, agent_kwargs: dict | None = None,
+) -> None:
     """REPL using the new CodingAgent assembly.
 
     Note: this is a lean REPL. The rich REPL (default, no --preset) currently
     has more slash commands (sessions, checkpoints, tree, steering). Parity is
     tracked for v0.3.
     """
-    from chimera.assembly.coding_agent import CodingAgent
+    from chimera.assembly.driver import AgentDriver, render_event
     from chimera.core.loop_events import LoopEventType
 
-    agent = CodingAgent(model=model, preset=preset, project_dir=cwd)
-    print(f"Chimera ({preset}) — {model} — {len(agent.tools)} tools")
-    print("Type /help for commands, Ctrl+C to exit\n")
-
-    total_cost = 0.0
+    driver = AgentDriver(
+        model=model, preset=preset, project_dir=cwd, interactive=True,
+        **(agent_kwargs or {}),
+    )
+    _ctx = driver.context_window
+    _ctx_str = f"{_ctx:,}" if _ctx else "?"
+    print(f"Chimera ({preset}) — {driver.model} — {len(driver.tools)} tools — {_ctx_str} ctx")
+    print("Type /help for commands, Ctrl+C to interrupt a turn, /exit to quit\n")
 
     def print_help() -> None:
         print("Commands:")
-        print("  /help         — show this list")
-        print("  /tools        — list available tools")
-        print("  /model        — show the active model")
-        print("  /cost         — show cumulative cost for this session")
-        print("  /clear        — clear the screen")
-        print("  /exit, /quit  — leave the REPL")
-        print()
-        print("For session trees, checkpoints, steering, and /compact use the")
-        print("rich REPL (run `chimera code` without --preset).")
+        print("  /help          — show this list")
+        print("  /tools         — list available tools")
+        print("  /model         — model and context window")
+        print("  /cost          — cumulative cost this session")
+        print("  /history       — messages currently in context")
+        print("  /clear         — forget the conversation (fresh context)")
+        print("  /cls           — clear the screen")
+        print("  /exit, /quit   — leave the REPL")
 
     while True:
         try:
@@ -970,23 +987,30 @@ async def _run_new_stack(model: str, preset: str, cwd: str) -> None:
 
         # Handle local slash commands that don't need the model
         if user_input == "/exit" or user_input == "/quit":
-            print("Bye!")
+            print(f"Total cost: ${driver.total_cost:.4f}. Bye!")
             break
         if user_input == "/help":
             print_help()
             continue
         if user_input == "/tools":
-            for t in agent.tools:
+            for t in driver.tools:
                 desc = getattr(t, "description", "") or ""
                 print(f"  {t.name}: {desc[:60]}")
             continue
         if user_input == "/model":
-            print(f"  Model: {agent.provider.model_name}")
+            print(f"  {driver.model}  ({_ctx_str} ctx)")
             continue
         if user_input == "/cost":
-            print(f"  Cumulative cost: ${total_cost:.4f}")
+            print(f"  Cumulative cost: ${driver.total_cost:.4f}")
+            continue
+        if user_input == "/history":
+            print(f"  {len(driver.history)} messages in context")
             continue
         if user_input == "/clear":
+            driver.clear()
+            print("  (conversation cleared — next message starts fresh)")
+            continue
+        if user_input == "/cls":
             # ANSI clear-screen + move cursor to top-left. Works on most terminals.
             print("\033[2J\033[H", end="", flush=True)
             continue
@@ -994,47 +1018,35 @@ async def _run_new_stack(model: str, preset: str, cwd: str) -> None:
             print(f"Unknown command: {user_input}. Type /help for available commands.")
             continue
 
-        # Run through CodingAgent
-        agent.reset_abort()
+        # Run a turn through the driver. render_event() handles tool calls,
+        # results, errors, and compaction; assistant text streams via chunks
+        # (with a non-streaming fallback) so nothing prints twice.
+        saw_chunk = False
         try:
-            async for event in agent.run(user_input):
+            async for event in driver.send(user_input):
                 t = event.type
-                if t == LoopEventType.assistant:
-                    content = getattr(event.data, 'content', str(event.data))
-                    if content.strip():
-                        print(content)
-                elif t == LoopEventType.tool_result:
-                    tc, result = event.data if isinstance(event.data, tuple) else (None, event.data)
-                    tool_name = getattr(tc, 'name', '?') if tc else '?'
-                    output = getattr(result, 'output', str(result))
-                    success = getattr(result, 'success', True)
-                    if output.strip():
-                        marker = "+" if success else "!"
-                        # Truncate long output
-                        if len(output) > 2000:
-                            output = output[:1000] + f"\n... [{len(output)-2000} chars truncated] ...\n" + output[-1000:]
-                        print(f"[{marker} {tool_name}] {output}")
-                elif t == LoopEventType.assistant_chunk:
-                    # Streaming text
+                if t == LoopEventType.assistant_chunk:
+                    saw_chunk = True
                     print(str(event.data), end="", flush=True)
-                elif t == LoopEventType.error:
-                    print(f"[ERROR] {event.data}")
+                elif t == LoopEventType.assistant:
+                    if not saw_chunk:
+                        content = getattr(event.data, "content", "") or ""
+                        if content.strip():
+                            print(content)
                 elif t == LoopEventType.result:
-                    # Turn complete — show cost if available
-                    cost = getattr(event.data, 'cost_usd', 0)
-                    turns = getattr(event.data, 'turn_count', 0)
-                    if cost > 0:
-                        total_cost += cost
-                        print(f"  ({turns} turns, ${cost:.4f})")
-                elif t == LoopEventType.system:
-                    # Slash command output from InputHandler
-                    if event.data:
-                        print(event.data)
+                    r = event.data
+                    cost = getattr(r, "cost_usd", 0) or 0
+                    steps = getattr(r, "turn_count", 0)
+                    print(f"\n  · {steps} steps · ${cost:.4f} turn · ${driver.total_cost:.4f} total")
+                else:
+                    line = render_event(event)
+                    if line is not None:
+                        print(line)
         except KeyboardInterrupt:
-            agent.abort()
-            print("\n[Interrupted]")
+            driver.cancel()
+            print("\n[interrupted]")
         except Exception as e:
-            print(f"[ERROR] {e}")
+            print(f"\n[error] {e}")
 
 
 def _run_rpc_mode(args: Any) -> int:
