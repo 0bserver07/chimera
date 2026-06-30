@@ -2,7 +2,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from chimera.providers.anthropic import AnthropicProvider
+from chimera.providers.anthropic import AnthropicProvider, _parse_model_suffix
 from chimera.types import Message
 
 
@@ -14,6 +14,50 @@ def provider():
         p = AnthropicProvider(model="claude-sonnet-4-20250514", api_key="test-key")
         p._client = mock_client
         yield p, mock_client
+
+
+def test_parse_model_suffix_extracts_window():
+    assert _parse_model_suffix("glm-5.2[1m]") == ("glm-5.2", 1_000_000)
+    assert _parse_model_suffix("claude-sonnet-4[200k]") == ("claude-sonnet-4", 200_000)
+    assert _parse_model_suffix("glm-5.2[1.5m]") == ("glm-5.2", 1_500_000)
+    assert _parse_model_suffix("kimi-k2[256K]") == ("kimi-k2", 256_000)
+
+
+def test_parse_model_suffix_no_suffix_is_identity():
+    assert _parse_model_suffix("glm-5.2") == ("glm-5.2", None)
+    assert _parse_model_suffix("claude-sonnet-4-20250514") == (
+        "claude-sonnet-4-20250514",
+        None,
+    )
+
+
+def test_context_window_honors_suffix_override():
+    with patch("chimera.providers.anthropic.anthropic") as mock_mod:
+        mock_mod.Anthropic.return_value = MagicMock()
+        p = AnthropicProvider(model="glm-5.2[1m]", api_key="test-key")
+        # Suffix stripped from the wire id, kept as the declared window.
+        assert p.model_name == "glm-5.2"
+        assert p.context_window == 1_000_000
+
+
+def test_request_uses_stripped_model_id():
+    """Regression: z.ai 400s on 'glm-5.2[1m]'; the wire id must be 'glm-5.2'."""
+    with patch("chimera.providers.anthropic.anthropic") as mock_mod:
+        mock_client = MagicMock()
+        mock_mod.Anthropic.return_value = mock_client
+        p = AnthropicProvider(model="glm-5.2[1m]", api_key="test-key")
+        p._client = mock_client
+
+        mock_response = MagicMock()
+        mock_response.content = [MagicMock(type="text", text="pong")]
+        mock_response.stop_reason = "end_turn"
+        mock_response.usage.input_tokens = 1
+        mock_response.usage.output_tokens = 1
+        mock_client.messages.create.return_value = mock_response
+
+        p.complete([Message.user("hi")])
+        sent_model = mock_client.messages.create.call_args.kwargs["model"]
+        assert sent_model == "glm-5.2"
 
 
 def test_complete_text_response(provider):

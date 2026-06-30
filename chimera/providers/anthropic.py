@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import threading
 from collections.abc import AsyncIterator, Iterator
 from typing import TYPE_CHECKING, Any
@@ -17,6 +18,36 @@ try:
     import anthropic  # type: ignore[import-not-found]
 except ImportError:
     anthropic = None  # type: ignore[assignment]
+
+
+def _parse_model_suffix(model: str) -> tuple[str, int | None]:
+    """Split an optional ``[<window>]`` context-window suffix off a model id.
+
+    The suffix mirrors Anthropic's ``...[1m]`` convention and lets a user
+    declare the model's context window inline. It is stripped from the wire
+    id -- vendors such as z.ai reject unknown ids like ``glm-5.2[1m]`` with a
+    400 "Unknown Model" -- and returned as an explicit token budget so the
+    loop's compaction thresholds match the model's real capacity instead of
+    falling back to the 200K default.
+
+    Examples::
+
+        _parse_model_suffix("glm-5.2[1m]")           -> ("glm-5.2", 1_000_000)
+        _parse_model_suffix("claude-sonnet-4[200k]") -> ("claude-sonnet-4", 200_000)
+        _parse_model_suffix("glm-5.2")               -> ("glm-5.2", None)
+
+    Args:
+        model: Raw model id, optionally ending in ``[<number><k|m>]``.
+
+    Returns:
+        A ``(wire_model_id, context_window_or_None)`` tuple.
+    """
+    match = re.match(r"^(.*?)\[(\d+(?:\.\d+)?)([kKmM])\]$", model.strip())
+    if match is None:
+        return model, None
+    base, number, unit = match.group(1), float(match.group(2)), match.group(3).lower()
+    multiplier = 1_000 if unit == "k" else 1_000_000
+    return base, int(number * multiplier)
 
 
 class _AsyncCancelWatcher:
@@ -95,7 +126,7 @@ class AnthropicProvider(Provider):
     ) -> None:
         if anthropic is None:
             raise ImportError("pip install chimera-run[anthropic]")
-        self._model = model
+        self._model, self._context_override = _parse_model_suffix(model)
         self._enable_cache = enable_cache
         self._enable_thinking = enable_thinking
         self._thinking_budget = thinking_budget
@@ -554,6 +585,8 @@ class AnthropicProvider(Provider):
 
     @property
     def context_window(self) -> int:
+        if self._context_override is not None:
+            return self._context_override
         for prefix, size in self.CONTEXT_WINDOWS.items():
             if self._model.startswith(prefix):
                 return size
