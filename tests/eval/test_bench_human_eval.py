@@ -90,6 +90,32 @@ class TestHumanEval:
         result = bench.evaluate(task, "def add(a, b): return a - b", None)
         assert result is False
 
+    def test_evaluate_extracts_fenced_code_and_calls_check(self):
+        # Real-HumanEval shape: prose + a ```python``` fence, and a `test`
+        # field that only DEFINES check(candidate). Both must be handled.
+        bench = HumanEval()
+        task = {
+            "id": "HumanEval/0",
+            "entry_point": "add",
+            "test": "def check(candidate):\n    assert candidate(1, 2) == 3\n",
+        }
+        reply = (
+            "Here is the solution:\n\n```python\n"
+            "def add(a, b):\n    return a + b\n```\n\nThat works."
+        )
+        assert bench.evaluate(task, reply, None) is True
+
+    def test_evaluate_check_style_wrong_solution_fails(self):
+        # Proves check() is actually invoked — no silent pass for wrong code.
+        bench = HumanEval()
+        task = {
+            "id": "HumanEval/0",
+            "entry_point": "add",
+            "test": "def check(candidate):\n    assert candidate(1, 2) == 3\n",
+        }
+        reply = "```python\ndef add(a, b):\n    return a - b\n```"
+        assert bench.evaluate(task, reply, None) is False
+
     def test_evaluate_without_test_and_without_env(self):
         bench = HumanEval()
         task = {"id": "HumanEval/0", "prompt": "def add(a, b):"}

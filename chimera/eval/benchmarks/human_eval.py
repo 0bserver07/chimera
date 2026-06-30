@@ -1,8 +1,25 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from chimera.eval.harness import Benchmark
+
+_CODE_FENCE = re.compile(r"```(?:python|py)?\s*\n?(.*?)```", re.DOTALL | re.IGNORECASE)
+
+
+def _extract_code(output: str) -> str:
+    """Return executable Python from a model response.
+
+    Chat models wrap solutions in Markdown ``` fences surrounded by prose;
+    executing that raw text raises ``SyntaxError`` and grades a correct
+    solution as 0. Concatenate the fenced block(s) when present, otherwise
+    assume the response is already bare source.
+    """
+    blocks = _CODE_FENCE.findall(output)
+    if blocks:
+        return "\n\n".join(block.strip("\n") for block in blocks)
+    return output
 
 
 class HumanEval(Benchmark):
@@ -46,8 +63,19 @@ class HumanEval(Benchmark):
                 return False
             return bool(env.run_tests().all_passed)
 
-        # Combine generated code with test harness
-        full_code = f"{agent_output}\n\n{test_code}"
+        # Combine the (extracted) generated code with the test harness. A raw
+        # chat reply usually wraps the solution in Markdown fences with prose,
+        # which is not executable Python on its own.
+        code = _extract_code(agent_output)
+        full_code = f"{code}\n\n{test_code}"
+        # HumanEval's `test` field only DEFINES ``check(candidate)``; without an
+        # explicit call against the entry point no assertion ever runs, which
+        # would pass any output. Append the call when the dataset uses that
+        # convention.
+        entry_point = task.get("entry_point", "")
+        if entry_point and "def check" in test_code:
+            full_code += f"\n\ncheck({entry_point})\n"
+
         if env is not None:
             env.write_file("solution.py", full_code)
             result = env.run_command("python solution.py")
