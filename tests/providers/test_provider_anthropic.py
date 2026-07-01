@@ -60,6 +60,32 @@ def test_request_uses_stripped_model_id():
         assert sent_model == "glm-5.2"
 
 
+def test_default_max_tokens_is_model_aware():
+    with patch("chimera.providers.anthropic.anthropic") as mock_mod:
+        mock_mod.Anthropic.return_value = MagicMock()
+        glm = AnthropicProvider(model="glm-5.2[1m]", api_key="k")
+        claude = AnthropicProvider(model="claude-sonnet-4-20250514", api_key="k")
+        assert glm._default_max_tokens == 32_768
+        assert claude._default_max_tokens == 8_192
+
+
+def test_request_uses_model_aware_default_max_tokens():
+    with patch("chimera.providers.anthropic.anthropic") as mock_mod:
+        mock_client = MagicMock()
+        mock_mod.Anthropic.return_value = mock_client
+        p = AnthropicProvider(model="glm-5.2", api_key="k")
+        p._client = mock_client
+        resp = MagicMock()
+        resp.content = [MagicMock(type="text", text="ok")]
+        resp.stop_reason = "end_turn"
+        resp.usage.input_tokens = 1
+        resp.usage.output_tokens = 1
+        mock_client.messages.create.return_value = resp
+
+        p.complete([Message.user("hi")])
+        assert mock_client.messages.create.call_args.kwargs["max_tokens"] == 32_768
+
+
 def test_complete_text_response(provider):
     prov, mock_client = provider
 

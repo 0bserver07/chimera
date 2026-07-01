@@ -212,7 +212,7 @@ class AnthropicProvider(Provider):
         kwargs: dict[str, Any] = {
             "model": self._model,
             "messages": api_messages,
-            "max_tokens": max_tokens or 4096,
+            "max_tokens": max_tokens or self._default_max_tokens,
         }
 
         # Resolve thinking settings: per-call param overrides instance config
@@ -591,6 +591,19 @@ class AnthropicProvider(Provider):
             if self._model.startswith(prefix):
                 return size
         return 200_000  # Default
+
+    @property
+    def _default_max_tokens(self) -> int:
+        """Per-turn output cap when the caller doesn't pass ``max_tokens``.
+
+        Non-Anthropic models served over this API (GLM/Kimi/Qwen via z.ai)
+        support much larger outputs than Claude, so give them headroom for long
+        file writes; Claude stays at a safe 8192.
+        """
+        model = self._model.lower()
+        if model.startswith(("glm", "kimi", "qwen", "deepseek", "z-")):
+            return 32_768
+        return 8_192
 
     @property
     def supports_tool_use(self) -> bool:
