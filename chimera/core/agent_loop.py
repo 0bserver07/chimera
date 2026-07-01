@@ -76,6 +76,8 @@ class AgentLoop:
         message_queue: SteeringMessageQueue | None = None,
         enable_action_nudge: bool = True,
         enable_auto_continue: bool = True,
+        env: Any = None,
+        loop_detector: Any = None,
     ) -> AsyncGenerator[LoopEvent, None]:
         """Run the agent loop, yielding :class:`LoopEvent` instances.
 
@@ -529,7 +531,7 @@ class AgentLoop:
             ]
 
             if non_blocked_tcs:
-                executor = StreamingToolExecutor(tools)
+                executor = StreamingToolExecutor(tools, env=env)
                 for tc in non_blocked_tcs:
                     modified_tc = ToolCall(
                         id=tc.id,
@@ -655,6 +657,26 @@ class AgentLoop:
             ]
             working_messages.append(assistant_msg)
             working_messages.extend(tool_result_messages)
+
+            # Loop-detector safety net: stop if the agent repeats the same tool
+            # call (a stuck loop — matters most when max_turns is unlimited).
+            if loop_detector is not None:
+                for _tc, _r in results:
+                    loop_detector.record(_tc.name, _tc.arguments)
+                if loop_detector.check() is not None:
+                    yield LoopEvent(
+                        type=LoopEventType.result,
+                        data=LoopResult(
+                            reason="loop_detected",
+                            messages=working_messages,
+                            usage=total_usage,
+                            cost_usd=total_cost,
+                            duration_ms=(time.time() - start_time) * 1000,
+                            turn_count=state.turn_count,
+                        ),
+                        turn=state.turn_count,
+                    )
+                    return
 
             # --- #133: Error context injection ---
             for tc, result in results:

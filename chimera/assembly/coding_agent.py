@@ -306,6 +306,12 @@ class CodingAgent:
         # Tools that modify files on disk
         _FILE_TOOLS = {"write_file", "edit_file", "bash", "replace_in_file"}
 
+        from chimera.detection.exact import ExactRepeatDetector
+        from chimera.env.local import LocalEnvironment
+
+        _tool_env = LocalEnvironment(str(self._project_dir))
+        _loop_detector = ExactRepeatDetector(threshold=5)
+
         loop = AgentLoop()
         turn_modified: list[str] = []
         last_turn = 0
@@ -328,6 +334,8 @@ class CodingAgent:
             message_queue=getattr(self, "_message_queue", None),
             enable_action_nudge=getattr(self, "_enable_nudges", True),
             enable_auto_continue=getattr(self, "_enable_nudges", True),
+            env=_tool_env,
+            loop_detector=_loop_detector,
         ):
             # Track modified files from tool_result events
             if event.type == LoopEventType.tool_result:

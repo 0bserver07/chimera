@@ -126,7 +126,9 @@ class ApplyPatchTool(BaseTool):
             )
 
         # ---- Phase 2: pre-validate every operation ----
-        cwd = Path.cwd()
+        # Root at the env's working directory when available so apply_patch
+        # respects `chimera code --workdir`, not just the process CWD.
+        cwd = Path(getattr(env, "workdir", None) or Path.cwd())
         plan: list[_PlanItem] = []
         seen_paths: set[Path] = set()
         for fp in file_patches:
