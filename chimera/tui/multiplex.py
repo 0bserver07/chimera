@@ -494,20 +494,44 @@ class MultiplexApp(App):
 def parse_lane_specs(models: list[str] | str, default_preset: str = "coding_agent") -> list[dict[str, str]]:
     """Parse ``--models`` into lane specs.
 
-    Each entry is ``model`` or ``model:preset``. Lane ids are ``A``, ``B``, …;
-    labels are the model (with ``·preset`` when it differs from the default, and
-    ``#k`` to disambiguate duplicates) so the cohort summary is readable.
+    Each entry is ``model``, ``model:preset``, or ``model:preset:loop`` — the
+    three per-lane comparison axes (§13.3). Lane ids are ``A``, ``B``, …; labels
+    are the model with ``·preset`` / ``·loop`` appended when they differ from the
+    default, and ``#k`` to disambiguate duplicates.
+
+    Raises:
+        ValueError: on an unknown preset or loop posture.
     """
+    from chimera.assembly.coding_agent import LOOP_POSTURES
+    from chimera.assembly.presets import DEPRECATED_PRESET_ALIASES, PRESETS
+
+    valid_presets = set(PRESETS) | set(DEPRECATED_PRESET_ALIASES)
     items = models if isinstance(models, list) else models.split(",")
     raw = [m.strip() for m in items if m.strip()]
     parsed: list[dict[str, str]] = []
     for i, item in enumerate(raw):
-        model, _, preset = item.partition(":")
-        model = model.strip()
-        preset = preset.strip() or default_preset
-        base = model if preset == default_preset else f"{model}·{preset}"
+        parts = [p.strip() for p in item.split(":")]
+        model = parts[0]
+        preset = parts[1] if len(parts) > 1 and parts[1] else default_preset
+        loop = parts[2] if len(parts) > 2 and parts[2] else ""
+        if preset not in valid_presets:
+            raise ValueError(
+                f"unknown preset {preset!r} in {item!r}; choose from {sorted(valid_presets)}"
+            )
+        if loop and loop not in LOOP_POSTURES:
+            raise ValueError(
+                f"unknown loop posture {loop!r} in {item!r}; choose from {sorted(LOOP_POSTURES)}"
+            )
+        base = model
+        if preset != default_preset:
+            base += f"·{preset}"
+        if loop:
+            base += f"·{loop}"
         lane_id = chr(65 + i) if i < 26 else f"L{i + 1}"
-        parsed.append({"model": model, "preset": preset, "lane_id": lane_id, "base": base})
+        parsed.append({
+            "model": model, "preset": preset, "loop": loop,
+            "lane_id": lane_id, "base": base,
+        })
 
     totals = Counter(p["base"] for p in parsed)
     seen: Counter[str] = Counter()
@@ -547,7 +571,10 @@ def run_multiplexer(
     from chimera.assembly.driver import AgentDriver
     from chimera.tui.workspace import provision_workspaces
 
-    specs = parse_lane_specs(models, default_preset=preset)
+    try:
+        specs = parse_lane_specs(models, default_preset=preset)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
     if not specs:
         raise SystemExit("no models given (use --models glm-5.2,glm-5.1)")
 
@@ -556,10 +583,12 @@ def run_multiplexer(
 
     lanes: list[Lane] = []
     for spec, ws in zip(specs, workspaces):
+        lane_loop = spec.get("loop") or None
         driver = AgentDriver(
             model=spec["model"],
             project_dir=str(ws.path),
             preset=spec["preset"],
+            loop=lane_loop,
             **agent_kwargs,
         )
         config = LaneConfig(
@@ -567,6 +596,7 @@ def run_multiplexer(
             label=spec["label"],
             model=spec["model"],
             preset=spec["preset"],
+            loop=lane_loop,
         )
         lanes.append(Lane(config, driver, ws))
 
@@ -668,8 +698,10 @@ def resume_multiplexer(
         if spec.get("diff"):
             apply_diff(ws.path, spec["diff"])  # restore produced changes (best-effort)
         preset = spec.get("preset") or "coding_agent"
+        lane_loop = spec.get("loop") or None
         driver = AgentDriver(
-            model=spec["model"], project_dir=str(ws.path), preset=preset, **agent_kwargs,
+            model=spec["model"], project_dir=str(ws.path), preset=preset,
+            loop=lane_loop, **agent_kwargs,
         )
         driver.load_history(deserialize_history(spec.get("history") or []))
         config = LaneConfig(
@@ -677,6 +709,7 @@ def resume_multiplexer(
             label=spec.get("label", spec["lane_id"]),
             model=spec["model"],
             preset=preset,
+            loop=lane_loop,
         )
         lane = Lane(config, driver, ws)
         tel = spec.get("telemetry") or {}

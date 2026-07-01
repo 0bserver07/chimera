@@ -23,11 +23,30 @@ from typing import Any
 
 from chimera.core.loop_events import LoopEvent, LoopEventType
 
-__all__ = ["CodingAgent"]
+__all__ = ["CodingAgent", "LOOP_POSTURES"]
 
 # Sentinel: distinguishes "caller did not specify max_turns" (use the preset's
 # value) from "caller explicitly passed None" (unlimited — run until done).
 _USE_CONFIG_MAX_TURNS: Any = object()
+
+# Per-lane "loop posture" (§13.3): a system-prompt augmentation that changes how
+# the agent approaches a task. Applied *within* AgentLoop — only AgentLoop emits
+# the LoopEvents the TUI renders, so the reasoning loop itself is not swapped;
+# the posture shapes behaviour through the prompt. Lets a multiplexer cohort race
+# e.g. plan-first vs act-first on the same model + preset.
+LOOP_POSTURES: dict[str, str] = {
+    "plan": (
+        "\n\n## Working posture: plan-first\n"
+        "Before making any edits, write a short numbered plan (2-4 steps) for how "
+        "you will solve the task, then carry it out. Revise the plan if you learn "
+        "it is wrong."
+    ),
+    "tdd": (
+        "\n\n## Working posture: test-first\n"
+        "Work test-first: identify or write a failing test that captures the goal, "
+        "make it pass with the smallest change, and run the tests before finishing."
+    ),
+}
 
 
 def _warn_if_deprecated_preset(preset: str) -> None:
@@ -73,6 +92,7 @@ class CodingAgent:
         tools_override: list[Any] | None = None,
         max_turns: Any = _USE_CONFIG_MAX_TURNS,
         enable_nudges: bool = True,
+        loop: str | None = None,
     ) -> None:
         from chimera.assembly.presets import PRESETS
         from chimera.assembly.system_prompts import CODING_AGENT_PROMPT, PRESET_PROMPTS
@@ -136,6 +156,10 @@ class CodingAgent:
             PRESET_PROMPTS.get(config.name)
             or PRESET_PROMPTS.get(config.tool_set, CODING_AGENT_PROMPT)
         )
+        # Per-lane loop posture (§13.3): shape behaviour via a prompt suffix.
+        self._loop = loop
+        if loop and loop in LOOP_POSTURES:
+            self._system_prompt_text = str(self._system_prompt_text) + LOOP_POSTURES[loop]
 
         # Tools (must be built before the spawner, which needs them)
         if tools_override:
