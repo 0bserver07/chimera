@@ -8,14 +8,18 @@ Requires the ``tui`` extra (``pip install 'chimera-run[tui]'`` / ``textual``).
 """
 from __future__ import annotations
 
-__all__ = ["ChimeraTUI", "run_tui"]
+__all__ = ["ChimeraTUI", "run_tui", "MultiplexApp", "run_multiplexer"]
 
 
 def __getattr__(name: str) -> object:
     # Lazy import so importing chimera.tui without textual installed doesn't
     # explode until something is actually used.
-    if name in __all__:
+    if name in ("ChimeraTUI", "run_tui"):
         from chimera.tui.app import ChimeraTUI, run_tui
 
         return {"ChimeraTUI": ChimeraTUI, "run_tui": run_tui}[name]
+    if name in ("MultiplexApp", "run_multiplexer"):
+        from chimera.tui.multiplex import MultiplexApp, run_multiplexer
+
+        return {"MultiplexApp": MultiplexApp, "run_multiplexer": run_multiplexer}[name]
     raise AttributeError(name)
