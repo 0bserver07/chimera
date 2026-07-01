@@ -620,11 +620,61 @@ existing project concepts; the data model above is the *frontend's* view.
 
 ## 12. Phasing
 
-| Phase | Deliverable | Depends on |
-|-------|-------------|-----------|
-| **1** | Single-agent full-screen TUI: regions §5.1, transcript/commit §5.2–5.3, input router §5.4, slash cmds §5.5, keys §5.6, lifecycle/cancel §5.7, errors §5.8 | the Driver (exists) |
-| **2** | Multiplexer: lanes + isolation §6.2, layout §6.3, routing §6.4, telemetry/summary §6.5, lifecycle §6.6, limits §6.7 | Phase 1 + isolation strategy |
-| **3** | Polish: outcome diff/export §6.5, sidebar §5.11/§6.3, autocomplete §5.4, reasoning collapse §5.3, richer diff forms | Phases 1–2 |
+| Phase | Status | Deliverable | Depends on |
+|-------|--------|-------------|-----------|
+| **1** | ✅ shipped | Single-agent full-screen TUI: regions §5.1, transcript/commit §5.2–5.3, input router §5.4, slash cmds §5.5, keys §5.6, lifecycle/cancel §5.7, errors §5.8 | the Driver (exists) |
+| **2** | ✅ shipped | Multiplexer: lanes + isolation §6.2, layout §6.3, routing §6.4, telemetry/summary §6.5, lifecycle §6.6, limits §6.7 | Phase 1 + isolation strategy |
+| **3** | 🟡 in progress | Polish & depth — detailed in §13 | Phases 1–2 |
 
 The REPL remains a first-class, unchanged frontend throughout all phases.
+
+---
+
+## 13. Phase 3 — detailed scope
+
+Phase 3 is the polish-and-depth lap. The items are independent and land
+additively — none changes the Phase 1–2 contract — so they can ship one at a
+time. Priority is by user-visible value.
+
+### P1 — comparison, made visible
+
+**13.1 In-UI cohort comparison view** (§6.5) — *the flagship.* Today the
+multiplexer's payoff (what each model actually produced) lives in
+`~/.chimera/cohorts/<id>/lane-*.diff`; Phase 3 surfaces it inside the TUI. On
+cohort completion — and on demand via a key / `/results` — a full-screen overlay
+renders the ranked scoreboard (label · model · outcome · cost · tokens · steps ·
+time · finish order) over a per-lane **diff viewer** (cycle lanes to read each
+lane's produced changes).
+*Acceptance:* real diffs from each lane's workspace; keyboard-navigable across
+2–N lanes; a clear placeholder for empty/no-diff lanes; escapes back to the live
+panes without losing state.
+
+**13.2 Resumable per-lane sessions** (§6.8) — close the persistence gap. Each
+lane's conversation persists to the session store, and a cohort becomes
+reopenable: `--resume <cohort-id>` reconstructs the lanes and continues.
+*Acceptance:* a completed cohort id can be listed and reopened; each lane's
+history is restored; a new turn continues from where it left off.
+
+### P2 — depth
+
+**13.3 Heterogeneous agent backends per lane** (§6.1) — a lane may specify a
+loop/scaffold, not just a model + preset, so a cohort can race different agent
+*postures* on one task (the reserved `LaneConfig.loop` field is the hook). The
+cohort spec extends to a richer lane definition.
+*Acceptance:* two lanes with different loops run one task; the manifest records
+each lane's loop; telemetry stays attributable.
+
+**13.4 Reasoning display** (§5.3) — when the driver surfaces reasoning/thinking,
+render it as a collapsible, dim block, default collapsed, with a toggle key.
+
+### P3 — polish
+
+- **13.5 Multi-line input** (§5.4) — a Textual `TextArea`; distinct newline vs
+  submit gestures; history recall at input boundaries.
+- **13.6 Slash autocomplete** (§5.4) — filter the command catalog as the `/`
+  prefix is typed.
+- **13.7 Sidebar** (§5.11/§6.3) — per-lane tool-call timeline / file tree;
+  auto-hides on narrow terminals.
+- **13.8 Richer diff forms** (§6.5) — split/unified rendering with syntax-aware
+  styling, in the comparison view and single-agent tool results.
 ```

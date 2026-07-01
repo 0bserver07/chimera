@@ -44,8 +44,12 @@ Specs delivered in phases track their phases here.
       launch via `chimera code --tui --models a,b,c` or
       `chimera otter --multiplex a,b,c`. Verified live on GLM-5.2 + GLM-4.6
       (concurrent, isolated, ranked by finish).
-- [ ] **Phase 3 — polish**: outcome diff/export UI, sidebar, slash autocomplete,
-      reasoning collapse, richer diff forms, multi-line input.
+- [ ] **Phase 3 — polish & depth** (detailed in spec §13):
+  - [ ] 13.1 in-UI cohort comparison view (scoreboard + per-lane diff viewer) — *flagship, in progress*
+  - [ ] 13.2 resumable per-lane sessions (`--resume <cohort-id>`)
+  - [ ] 13.3 heterogeneous agent backends per lane (`LaneConfig.loop`)
+  - [ ] 13.4 reasoning display · 13.5 multi-line input · 13.6 slash autocomplete
+  - [ ] 13.7 per-lane sidebar · 13.8 richer split/unified diff forms
 
 The load-bearing Phase-2 open decision — **workspace isolation** (§6.2) — was
 resolved to *git worktree per lane, with a directory-copy fallback for non-git
