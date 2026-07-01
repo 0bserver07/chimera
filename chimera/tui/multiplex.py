@@ -144,6 +144,7 @@ class MultiplexApp(App):
         Binding("ctrl+b", "toggle_broadcast", "Broadcast/target"),
         Binding("ctrl+g", "cancel_focused", "Cancel lane"),
         Binding("ctrl+o", "clear_focused", "Clear lane"),
+        Binding("ctrl+r", "show_results", "Compare results"),
     ]
 
     def __init__(
@@ -267,7 +268,10 @@ class MultiplexApp(App):
                 f"{r['elapsed']:.1f}s{extra})"
             )
         summary = self.query_one("#summary", Static)
-        summary.update(Text("cohort · " + "   ".join(parts), style="bold"))
+        summary.update(Text(
+            "cohort · " + "   ".join(parts) + "   ·   Ctrl+R: compare outputs",
+            style="bold",
+        ))
         summary.display = True
 
     # -- focus & lanes --------------------------------------------------
@@ -420,6 +424,19 @@ class MultiplexApp(App):
         lane.driver.clear()
         self._pane(lane.id).query_one(RichLog).clear()
 
+    def action_show_results(self) -> None:
+        ran = any(
+            lane.telemetry.turns > 0 or lane.telemetry.busy for lane in self._cohort.lanes
+        )
+        if not ran:
+            lane = self._focused_lane()
+            if lane is not None:
+                self._pane(lane.id).note("no results yet — run a task first", style="dim")
+            return
+        from chimera.tui.results import ResultsScreen
+
+        self.push_screen(ResultsScreen(self._cohort))
+
     # -- slash commands (frontend-local) --------------------------------
     def _handle_command(self, text: str) -> None:
         cmd = text.split()[0]
@@ -434,9 +451,9 @@ class MultiplexApp(App):
             self.exit()
         elif cmd == "/help":
             say(
-                "/help /model /cost /tools /clear /summary /export "
+                "/help /model /cost /tools /clear /summary /results /export "
                 "/broadcast /target /exit  ·  Tab focus · Ctrl+B mode · "
-                "Ctrl+C cancel-all · Ctrl+G cancel-lane"
+                "Ctrl+R compare · Ctrl+C cancel-all · Ctrl+G cancel-lane"
             )
         elif cmd == "/model":
             say("  ".join(f"{ln.label}={ln.config.model}" for ln in self._cohort.lanes))
@@ -451,6 +468,8 @@ class MultiplexApp(App):
             self.action_clear_focused()
         elif cmd == "/summary":
             self._show_summary()
+        elif cmd == "/results":
+            self.action_show_results()
         elif cmd == "/export":
             try:
                 out = self._cohort.persist(root=self._persist_root)

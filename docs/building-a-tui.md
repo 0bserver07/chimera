@@ -146,5 +146,7 @@ the event loop; you watch them diverge in real time.
 **Launch:** `chimera code --tui --models glm-5.2,glm-4.6` (one model ⇒ the
 single-agent TUI; two or more ⇒ the multiplexer), or the comparison-oriented
 alias `chimera otter --multiplex glm-5.2,glm-4.6`. Keys: `Tab` cycles focus,
-`Ctrl+B` toggles broadcast/targeted, `Ctrl+C` cancels all (or quits when idle),
-`Ctrl+G` cancels the focused lane.
+`Ctrl+B` toggles broadcast/targeted, `Ctrl+R` opens the **comparison view** (a
+ranked scoreboard over each lane's produced diff — `Tab` through lanes, `Esc`
+back), `Ctrl+C` cancels all (or quits when idle), `Ctrl+G` cancels the focused
+lane.
