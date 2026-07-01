@@ -150,3 +150,9 @@ alias `chimera otter --multiplex glm-5.2,glm-4.6`. Keys: `Tab` cycles focus,
 ranked scoreboard over each lane's produced diff — `Tab` through lanes, `Esc`
 back), `Ctrl+C` cancels all (or quits when idle), `Ctrl+G` cancels the focused
 lane.
+
+A cohort is **resumable**: `chimera code --tui --resume <cohort-id>` (find ids
+with `--list-cohorts`) reopens the lanes with their conversation history and
+produced changes restored — a fresh workspace from the recorded base commit with
+the saved diff re-applied, plus a faithful history replay — and continues the
+race.
