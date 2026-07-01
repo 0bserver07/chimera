@@ -89,6 +89,14 @@ def build_parser() -> argparse.ArgumentParser:
             "tasks) or 'code' (the assembled `chimera code` CodingAgent)."
         ),
     )
+    eval_parser.add_argument(
+        "--resume",
+        action="store_true",
+        help=(
+            "Skip tasks already recorded in the <output>.progress.jsonl sidecar "
+            "and reuse their results (resume an interrupted run). Requires --output."
+        ),
+    )
 
     # ---- bench subcommand ----
     bench_parser = subparsers.add_parser(
@@ -772,7 +780,14 @@ def run_eval(args: argparse.Namespace) -> int:
         e.setup()
         return e
 
-    harness = Harness(benchmark, agent, env_factory=_eval_env_factory)
+    progress_path = f"{args.output}.progress.jsonl" if args.output else None
+    harness = Harness(
+        benchmark,
+        agent,
+        env_factory=_eval_env_factory,
+        progress_path=progress_path,
+        resume=getattr(args, "resume", False),
+    )
 
     print(f"Running {benchmark.name()} ({len(benchmark.tasks())} tasks) with {args.model}...", file=sys.stderr)
     result = harness.run()
