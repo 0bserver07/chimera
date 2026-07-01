@@ -323,9 +323,41 @@ class CodingAgent:
                 .build()
             )
 
+        from chimera.types import Message
+
+        # Real loop swap (§13.3): when the lane selects a genuinely different
+        # reasoning loop (plan-execute / reflexion / tot), bridge its steps to
+        # LoopEvents so the TUI still renders it. Postures (plan/tdd) and the
+        # default stay on AgentLoop below.
+        from chimera.assembly.loop_adapter import adapt_loop, is_real_loop
+
+        _loop_name = getattr(self, "_loop", None)
+        if _loop_name and is_real_loop(_loop_name):
+            from chimera.env.local import LocalEnvironment
+
+            _sp = (
+                system_prompt.to_string()
+                if hasattr(system_prompt, "to_string") else str(system_prompt)
+            )
+            _seed = list(getattr(self, "_history", None) or []) + [Message.user(task)]
+            _max = int(getattr(self, "_max_turns", None) or self._config.max_turns or 50)
+            async for event in adapt_loop(
+                _loop_name,
+                provider=self.provider,
+                tools=self.tools,
+                system_prompt=_sp,
+                messages=_seed,
+                env=LocalEnvironment(str(self._project_dir)),
+                max_steps=_max,
+                abort_signal=self._abort_signal,
+            ):
+                if event.type == LoopEventType.result and getattr(event.data, "messages", None):
+                    self._history = list(event.data.messages)
+                yield event
+            return
+
         # Run the loop with snapshot tracking
         from chimera.core.agent_loop import AgentLoop
-        from chimera.types import Message
 
         # Tools that modify files on disk
         _FILE_TOOLS = {"write_file", "edit_file", "bash", "replace_in_file"}

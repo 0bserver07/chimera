@@ -29,6 +29,11 @@ def test_parse_rejects_unknown_preset_and_loop():
         parse_lane_specs("glm-5.2:coding_agent:bogus")
 
 
+def test_parse_accepts_real_loops():
+    specs = parse_lane_specs("glm-5.2:coding_agent:plan-execute,glm-5.2:coding_agent:reflexion,glm-5.2:coding_agent:tot")
+    assert [s["loop"] for s in specs] == ["plan-execute", "reflexion", "tot"]
+
+
 def test_duplicate_labels_disambiguated():
     specs = parse_lane_specs("glm-5.2,glm-5.2")
     assert {s["label"] for s in specs} == {"glm-5.2#1", "glm-5.2#2"}
