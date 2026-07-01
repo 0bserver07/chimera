@@ -625,17 +625,19 @@ def _read_steering_input() -> str | None:
 
 def run_code(args: Any) -> int:
     """Run the interactive coding REPL."""
-    # Auto-load a project .env (model, base URL, keys) so `chimera code` works
-    # without exporting vars in every shell. The shell environment always wins.
+    # Load creds/model for `chimera code` WITHOUT polluting the shell, so other
+    # tools (e.g. Claude Code) keep their own ANTHROPIC_* config. Priority:
+    # shell env > project .env > ~/.config/chimera/env. load_dotenv never
+    # overrides a variable that is already set.
     from chimera.config.dotenv import load_dotenv
 
     _env_dir = os.path.abspath(getattr(args, "workdir", None) or os.getcwd())
     _loaded = load_dotenv(os.path.join(_env_dir, ".env"))
+    _loaded += load_dotenv(
+        os.path.join(os.path.expanduser("~"), ".config", "chimera", "env"),
+    )
     if _loaded:
-        print(
-            f"· loaded {len(_loaded)} var(s) from {os.path.join(_env_dir, '.env')}",
-            file=sys.stderr,
-        )
+        print(f"· loaded {len(_loaded)} var(s) (chimera config / .env)", file=sys.stderr)
 
     mode = getattr(args, "mode", "interactive")
     if mode == "rpc":
