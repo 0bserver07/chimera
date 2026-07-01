@@ -40,7 +40,14 @@ from chimera.tui.lane import Lane, LaneConfig
 from chimera.tui.render import LaneTranscript
 from chimera.tui.routing import Action, RoutingMode, route
 
-__all__ = ["MultiplexApp", "LanePane", "run_multiplexer", "parse_lane_specs"]
+__all__ = [
+    "MultiplexApp",
+    "LanePane",
+    "run_multiplexer",
+    "resume_multiplexer",
+    "print_saved_cohorts",
+    "parse_lane_specs",
+]
 
 # A pane narrower than this is unreadable; below it we degrade to tabs (§6.3).
 MIN_PANE_WIDTH = 32
@@ -591,4 +598,117 @@ def run_multiplexer(
     print(f"cohort saved: {cohort_dir}")
     if export:
         print(f"exported: {export}")
+    return str(cohort_dir) if cohort_dir else None
+
+
+def print_saved_cohorts(persist_root: str | None = None) -> None:
+    """Print persisted cohorts (id · when · task · lanes) for --resume discovery."""
+    rows = Cohort.list_saved(root=persist_root)
+    if not rows:
+        print("no saved cohorts yet.")
+        return
+    print(f"{len(rows)} saved cohort(s):")
+    for row in rows:
+        labels = ", ".join(f"{ln['label']}" for ln in row["lanes"])
+        task = (row["task"] or "—")
+        if len(task) > 50:
+            task = task[:49] + "…"
+        print(f"  {row['cohort_id']}  ·  {row.get('created_at', '?')}  ·  [{labels}]  ·  {task!r}")
+
+
+def resume_multiplexer(
+    cohort_id: str,
+    *,
+    isolation: str = "worktree",
+    lane_cap: int | None = None,
+    export: str | None = None,
+    persist_root: str | None = None,
+    **agent_kwargs: Any,
+) -> str | None:
+    """Reopen a saved cohort and continue it (spec §13.2).
+
+    Reconstructs each lane: a fresh workspace from the recorded base commit with
+    the lane's saved diff re-applied, a driver seeded with the lane's saved
+    history, and its telemetry restored so the scoreboard keeps accumulating. The
+    lanes start idle; the next broadcast continues the race.
+    """
+    if not sys.stdout.isatty():
+        raise SystemExit(
+            "the multiplexer needs an interactive terminal (a TTY); run it directly."
+        )
+
+    from chimera.assembly.driver import AgentDriver
+    from chimera.tui.history_io import deserialize_history
+    from chimera.tui.workspace import apply_diff, provision_workspaces
+
+    try:
+        saved = Cohort.load_saved(cohort_id, root=persist_root)
+    except FileNotFoundError as exc:
+        print(str(exc))
+        print_saved_cohorts(persist_root)
+        raise SystemExit(1) from exc
+
+    manifest = saved["manifest"]
+    lane_specs = saved["lanes"]
+    source = manifest.get("source") or os.getcwd()
+    task = manifest.get("task")
+    base_commit = next(
+        ((ls.get("workspace") or {}).get("base_commit") for ls in lane_specs
+         if (ls.get("workspace") or {}).get("base_commit")),
+        None,
+    )
+
+    lane_ids = [ls["lane_id"] for ls in lane_specs]
+    workspaces = provision_workspaces(
+        source, lane_ids, strategy=isolation, base_commit=base_commit,
+    )
+
+    lanes: list[Lane] = []
+    for spec, ws in zip(lane_specs, workspaces):
+        if spec.get("diff"):
+            apply_diff(ws.path, spec["diff"])  # restore produced changes (best-effort)
+        preset = spec.get("preset") or "coding_agent"
+        driver = AgentDriver(
+            model=spec["model"], project_dir=str(ws.path), preset=preset, **agent_kwargs,
+        )
+        driver.load_history(deserialize_history(spec.get("history") or []))
+        config = LaneConfig(
+            lane_id=spec["lane_id"],
+            label=spec.get("label", spec["lane_id"]),
+            model=spec["model"],
+            preset=preset,
+        )
+        lane = Lane(config, driver, ws)
+        tel = spec.get("telemetry") or {}
+        lane.telemetry.cost = float(tel.get("cost", 0.0) or 0.0)
+        lane.telemetry.steps = int(tel.get("steps", 0) or 0)
+        lane.telemetry.turns = int(tel.get("turns", 0) or 0)
+        lane.telemetry.tokens_in = int(tel.get("tokens_in", 0) or 0)
+        lane.telemetry.tokens_out = int(tel.get("tokens_out", 0) or 0)
+        lanes.append(lane)
+
+    try:
+        routing = RoutingMode(manifest.get("routing", "broadcast"))
+    except ValueError:
+        routing = RoutingMode.BROADCAST
+
+    cohort = Cohort(
+        lanes, task=task, source=source, isolation=workspaces.strategy,
+        routing=routing, cohort_id=cohort_id, workspaces=workspaces,
+    )
+    app = MultiplexApp(cohort, lane_cap=lane_cap, persist_root=persist_root)
+
+    cohort_dir = None
+    try:
+        app.run()
+    finally:
+        cohort_dir = cohort.persist(root=persist_root)
+        if export:
+            try:
+                cohort.export(export, cohort_dir=cohort_dir)
+            except Exception as exc:  # noqa: BLE001
+                sys.stderr.write(f"export failed: {exc}\n")
+        workspaces.cleanup_all()
+
+    print(f"cohort saved: {cohort_dir}")
     return str(cohort_dir) if cohort_dir else None

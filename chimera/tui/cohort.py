@@ -20,6 +20,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from chimera.tui.history_io import serialize_history
 from chimera.tui.lane import Lane
 from chimera.tui.routing import RoutingMode
 
@@ -210,6 +211,11 @@ class Cohort:
             (out / f"lane-{lane.id}.transcript.txt").write_text(
                 lane.transcript_text(), encoding="utf-8"
             )
+            # Faithful conversation history for resume (§13.2).
+            history = serialize_history(getattr(lane.driver, "history", []) or [])
+            (out / f"lane-{lane.id}.history.json").write_text(
+                json.dumps(history, indent=2), encoding="utf-8"
+            )
             if lane.workspace is not None:
                 try:
                     diff = lane.workspace.diff()
@@ -226,3 +232,57 @@ class Cohort:
         stem = str(dest.with_suffix("")) if dest.suffix == ".zip" else str(dest)
         archive = shutil.make_archive(stem, "zip", root_dir=str(src))
         return Path(archive)
+
+    # -- resume discovery / loading -------------------------------------
+    @staticmethod
+    def list_saved(root: str | Path | None = None) -> list[dict[str, Any]]:
+        """List persisted cohorts (newest first) for resume discovery."""
+        base = Path(root) if root is not None else default_cohort_root()
+        if not base.exists():
+            return []
+        rows: list[dict[str, Any]] = []
+        for entry in sorted(base.iterdir(), key=lambda p: p.name, reverse=True):
+            manifest_path = entry / "manifest.json"
+            if not manifest_path.is_file():
+                continue
+            try:
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            rows.append({
+                "cohort_id": manifest.get("cohort_id", entry.name),
+                "task": manifest.get("task"),
+                "created_at": manifest.get("created_at"),
+                "isolation": manifest.get("isolation"),
+                "lanes": [
+                    {"label": ln.get("label"), "model": ln.get("model")}
+                    for ln in manifest.get("lanes", [])
+                ],
+                "dir": str(entry),
+            })
+        return rows
+
+    @staticmethod
+    def load_saved(cohort_id: str, root: str | Path | None = None) -> dict[str, Any]:
+        """Load a persisted cohort's manifest + per-lane history/diff for resume.
+
+        Returns ``{manifest, cohort_dir, lanes}`` where each lane merges its
+        manifest entry with its saved ``history`` (rows) and ``diff`` (text).
+        """
+        base = Path(root) if root is not None else default_cohort_root()
+        cohort_dir = base / cohort_id
+        manifest_path = cohort_dir / "manifest.json"
+        if not manifest_path.is_file():
+            raise FileNotFoundError(f"no saved cohort {cohort_id!r} under {base}")
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        lanes: list[dict[str, Any]] = []
+        for entry in manifest.get("lanes", []):
+            lane_id = entry.get("lane_id", "")
+            hist_path = cohort_dir / f"lane-{lane_id}.history.json"
+            diff_path = cohort_dir / f"lane-{lane_id}.diff"
+            history = (
+                json.loads(hist_path.read_text(encoding="utf-8")) if hist_path.is_file() else []
+            )
+            diff = diff_path.read_text(encoding="utf-8") if diff_path.is_file() else ""
+            lanes.append({**entry, "history": history, "diff": diff})
+        return {"manifest": manifest, "cohort_dir": str(cohort_dir), "lanes": lanes}

@@ -682,10 +682,31 @@ def run_code(args: Any) -> int:
         if _raw_max_turns is not None:
             agent_kwargs["max_turns"] = None if _raw_max_turns <= 0 else _raw_max_turns
 
+        # Multiplexer: list saved cohorts (no TTY needed) and exit.
+        if getattr(args, "list_cohorts", False):
+            from chimera.tui.multiplex import print_saved_cohorts
+
+            print_saved_cohorts()
+            return 0
+
         # Full-screen Textual TUI (opt-in) — reuses the resolved model/cwd/env.
         # One model → single-agent TUI (Phase 1). Two or more → the multiplexer
         # (Phase 2): N lanes race the same task in isolated workspaces.
         if getattr(args, "tui", False):
+            # Resume a saved cohort (Phase 3.2): reopen its lanes and continue.
+            resume_id = getattr(args, "resume", None)
+            if resume_id:
+                from chimera.tui.multiplex import resume_multiplexer
+
+                resume_multiplexer(
+                    resume_id,
+                    isolation=getattr(args, "isolation", "auto"),
+                    lane_cap=getattr(args, "lane_cap", None),
+                    export=getattr(args, "export", None),
+                    **agent_kwargs,
+                )
+                return 0
+
             raw_models = getattr(args, "models", "") or ""
             models = [m.strip() for m in raw_models.split(",") if m.strip()]
             if len(models) > 1:
