@@ -99,6 +99,10 @@ class AgentDriver:
         """Forget the conversation so the next ``send()`` starts fresh."""
         self._agent.clear_history()
 
+    def load_history(self, messages: list[Any]) -> None:
+        """Seed the conversation from a saved history (for session resume)."""
+        self._agent.load_history(messages)
+
     # -- state ----------------------------------------------------------
     @property
     def agent(self) -> CodingAgent:

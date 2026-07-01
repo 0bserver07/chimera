@@ -37,6 +37,7 @@ __all__ = [
     "provision_workspaces",
     "is_git_repo",
     "resolve_strategy",
+    "apply_diff",
 ]
 
 _SNAPSHOT_MAX_BYTES = 1_000_000
@@ -194,11 +195,28 @@ class WorkspaceSet:
         self.cleanup_all()
 
 
+def apply_diff(worktree: Path, diff_text: str) -> bool:
+    """Apply a saved unified diff to *worktree* (best-effort).
+
+    Used by cohort resume to restore a lane's produced changes on top of a
+    freshly provisioned workspace. Returns ``True`` on success (an empty diff is
+    a no-op success); ``False`` if the patch does not apply cleanly.
+    """
+    if not diff_text.strip():
+        return True
+    proc = subprocess.run(
+        ["git", "apply", "--whitespace=nowarn", "-"],
+        cwd=str(worktree), input=diff_text, capture_output=True, text=True, check=False,
+    )
+    return proc.returncode == 0
+
+
 def provision_workspaces(
     source: str | Path,
     lane_ids: list[str],
     strategy: str = "auto",
     root: str | Path | None = None,
+    base_commit: str | None = None,
 ) -> WorkspaceSet:
     """Provision one isolated workspace per lane id.
 
@@ -225,7 +243,7 @@ def provision_workspaces(
         root_path = Path(root)
         owns_root = False
     root_path.mkdir(parents=True, exist_ok=True)
-    base = _git_head(source) if is_git_repo(source) else None
+    base = base_commit or (_git_head(source) if is_git_repo(source) else None)
 
     created: list[LaneWorkspace] = []
 

@@ -649,11 +649,15 @@ lane's produced changes).
 2–N lanes; a clear placeholder for empty/no-diff lanes; escapes back to the live
 panes without losing state.
 
-**13.2 Resumable per-lane sessions** (§6.8) — close the persistence gap. Each
-lane's conversation persists to the session store, and a cohort becomes
-reopenable: `--resume <cohort-id>` reconstructs the lanes and continues.
-*Acceptance:* a completed cohort id can be listed and reopened; each lane's
-history is restored; a new turn continues from where it left off.
+**13.2 Resumable per-lane sessions** (§6.8) — ✅ **shipped.** Closes the
+persistence gap. `persist()` writes each lane's faithful conversation history
+(`lane-<id>.history.json`, round-tripping tool calls so the next request stays
+valid). `chimera code --tui --resume <cohort-id>` (ids via `--list-cohorts`)
+reconstructs each lane: a fresh workspace from the recorded base commit with the
+saved diff re-applied, a driver seeded via `load_history`, and restored
+telemetry. Lanes start idle; the next broadcast continues the race.
+*Verified live (GLM-5.2):* full history + produced file restored, then a second
+turn built on it coherently.
 
 ### P2 — depth
 

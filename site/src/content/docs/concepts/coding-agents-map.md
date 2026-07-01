@@ -125,7 +125,9 @@ A cohort directory is self-contained and is the multiplexer's payoff:
 
 Those `lane-*.diff` files are the comparison: the same task, and exactly what
 each model produced for it. `--export run.zip` bundles the whole cohort into a
-portable archive.
+portable archive. A cohort is also **resumable** — `chimera code --tui --resume
+<id>` (list ids with `--list-cohorts`) reopens the lanes with their history and
+produced changes restored, and continues the race.
 
 ## Which do I use?
 

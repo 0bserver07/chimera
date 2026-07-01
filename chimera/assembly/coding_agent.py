@@ -396,6 +396,14 @@ class CodingAgent:
         self._history = []
         self._message_queue.clear()
 
+    def load_history(self, messages: list[Any]) -> None:
+        """Seed the conversation from a saved history (for session resume).
+
+        The next :meth:`run` continues from these messages, so a restored
+        cohort lane picks up where it left off.
+        """
+        self._history = list(messages)
+
     @property
     def history(self) -> list[Any]:
         """The accumulated conversation messages across run() calls."""

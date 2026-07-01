@@ -211,6 +211,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="Multiplexer only: also write the cohort comparison artifact to this .zip on exit.",
     )
     code_parser.add_argument(
+        "--resume",
+        default=None,
+        metavar="COHORT_ID",
+        help="Multiplexer (--tui): reopen a saved cohort by id and continue it (see --list-cohorts).",
+    )
+    code_parser.add_argument(
+        "--list-cohorts",
+        dest="list_cohorts",
+        action="store_true",
+        default=False,
+        help="Multiplexer: list saved cohorts (id · task · lanes) and exit.",
+    )
+    code_parser.add_argument(
         "-p", "--print",
         dest="print_mode",
         default=None,
