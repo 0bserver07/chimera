@@ -661,16 +661,19 @@ turn built on it coherently.
 
 ### P2 — depth
 
-**13.3 Heterogeneous agent backends per lane** (§6.1) — ✅ **shipped** (partial).
-The cohort spec is now `model[:preset[:loop]]`: each lane varies model, preset
-(tool set + prompt), and a **loop posture** (`plan` = plan-first, `tdd` =
-test-first) applied as a system-prompt augmentation *within* `AgentLoop`.
-`LaneConfig.loop` is recorded in the manifest, and unknown presets/loops are
-rejected with a clear error. Full reasoning-loop swaps (plan-execute / reflexion
-/ tree-of-thought) are deferred: only `AgentLoop` emits the `LoopEvent`s the TUI
-renders, so those loops need an event-emitting adapter first.
-*Verified live (GLM-5.2):* act-first vs plan-first lanes race one task; the
-manifest records each lane's loop.
+**13.3 Heterogeneous agent backends per lane** (§6.1) — ✅ **shipped.** The cohort
+spec is `model[:preset[:loop]]`: each lane varies model, preset (tool set +
+prompt), and a **loop** — either a *posture* (`plan` / `tdd`, a system-prompt
+augmentation on `AgentLoop`) or a genuinely different **reasoning loop**
+(`plan-execute` / `reflexion` / `tot`). The strategy loops in
+`chimera/core/loops/` expose `iter_steps() -> StepResult` rather than
+`LoopEvent`s, so a **loop adapter** (`chimera/assembly/loop_adapter.py`) runs one
+in a worker thread — keeping lanes concurrent — and translates each step into the
+`LoopEvent`s the TUI renders (a bounded-`max_tokens` provider wrapper keeps the
+loops' non-streaming `complete()` valid). `LaneConfig.loop` is recorded in the
+manifest; unknown presets/loops are rejected with a clear error.
+*Verified live (GLM-5.2):* a ReAct lane and a `plan-execute` lane race one task;
+the swapped loop executes real tools, writes its file, and streams into its pane.
 
 **13.4 Reasoning display** (§5.3) — when the driver surfaces reasoning/thinking,
 render it as a collapsible, dim block, default collapsed, with a toggle key.

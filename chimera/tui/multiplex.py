@@ -503,9 +503,11 @@ def parse_lane_specs(models: list[str] | str, default_preset: str = "coding_agen
         ValueError: on an unknown preset or loop posture.
     """
     from chimera.assembly.coding_agent import LOOP_POSTURES
+    from chimera.assembly.loop_adapter import REAL_LOOPS
     from chimera.assembly.presets import DEPRECATED_PRESET_ALIASES, PRESETS
 
     valid_presets = set(PRESETS) | set(DEPRECATED_PRESET_ALIASES)
+    valid_loops = set(LOOP_POSTURES) | set(REAL_LOOPS)
     items = models if isinstance(models, list) else models.split(",")
     raw = [m.strip() for m in items if m.strip()]
     parsed: list[dict[str, str]] = []
@@ -518,9 +520,9 @@ def parse_lane_specs(models: list[str] | str, default_preset: str = "coding_agen
             raise ValueError(
                 f"unknown preset {preset!r} in {item!r}; choose from {sorted(valid_presets)}"
             )
-        if loop and loop not in LOOP_POSTURES:
+        if loop and loop not in valid_loops:
             raise ValueError(
-                f"unknown loop posture {loop!r} in {item!r}; choose from {sorted(LOOP_POSTURES)}"
+                f"unknown loop {loop!r} in {item!r}; choose from {sorted(valid_loops)}"
             )
         base = model
         if preset != default_preset:

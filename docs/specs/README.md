@@ -47,7 +47,7 @@ Specs delivered in phases track their phases here.
 - 🟡 **Phase 3 — polish & depth** (detailed in spec §13):
   - [x] 13.1 in-UI cohort comparison view (scoreboard + per-lane diff viewer) — shipped (PR #162)
   - [x] 13.2 resumable per-lane sessions (`--resume <cohort-id>`, `--list-cohorts`) — shipped
-  - [x] 13.3 heterogeneous lanes — per-lane preset + loop posture (`model:preset:loop`) — shipped (full loop-swap deferred; see §13.3)
+  - [x] 13.3 heterogeneous lanes — per-lane preset + posture + **real loop swap** (`model:preset:loop`; loops `plan-execute`/`reflexion`/`tot` via the loop adapter) — shipped
   - [ ] 13.4 reasoning display · 13.5 multi-line input · 13.6 slash autocomplete
   - [ ] 13.7 per-lane sidebar · 13.8 richer split/unified diff forms
 
