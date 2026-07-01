@@ -1,5 +1,51 @@
 # Changelog
 
+## 0.8.1 — 2026-06-30 — `chimera code` becomes a real daily driver
+
+The assembly/`CodingAgent` stack behind `chimera code` is now a usable
+interactive coding agent: conversation memory, streaming with tool-call
+rendering, a clean driver API for TUIs, unlimited runs with a loop-detector
+safety net, and zero-config credential loading. Verified live on GLM-5.2.
+
+### Added
+
+- **`AgentDriver`** (`chimera/assembly/driver.py`): the control surface a REPL
+  or TUI drives — `send()` streams typed events, plus `steer()` /
+  `queue_follow_up()` / `cancel()` / `clear()`, and model / tools / cost /
+  history / context-window state, with a `render_event()` helper. See
+  `docs/building-a-tui.md`.
+- **Unlimited runs**: `max_turns=None` and `chimera code --max-turns 0` run
+  until the task completes; auto-compaction now tracks the provider's real
+  context window instead of a fixed 100K budget.
+- **Loop-detector safety net**: `AgentLoop` accepts a `loop_detector`; a stuck
+  agent stops with reason `loop_detected` instead of spinning.
+- **`.env` auto-load**: `chimera code` reads a project `.env` and
+  `~/.config/chimera/env` at startup (existing shell vars always win), so
+  GLM / Anthropic creds and model selection work without shell exports.
+- **`tool_use` loop events** emitted before execution, so a UI can render a
+  tool call ahead of its result.
+
+### Changed
+
+- **Conversation memory**: `CodingAgent` carries history across `run()` calls —
+  the REPL is no longer amnesiac between turns.
+- **`[1m]` model suffix** (e.g. `glm-5.2[1m]`) is stripped from the wire id
+  (z.ai rejects the suffix) and honored as the context-window declaration, so a
+  1M-token model is no longer compacted at the 200K default.
+- **Model-aware default `max_tokens`**: GLM / Kimi / Qwen get 32768, Claude
+  8192 (was a flat 4096) — no more truncated long edits. Callers can override.
+- **`--workdir` correctness**: the file, shell, `test`, `replace_in_file`, and
+  `apply_patch` tools now operate in the target directory, not the process CWD.
+- **Sharpened `coding_agent` system prompt**: tighter, action-first, CLI-tuned.
+- **Rebuilt `chimera code` REPL** on `AgentDriver`: fixed double-printing (REPL
+  and `-p`), renders tool calls, real slash commands, per-turn cost; interactive
+  turns disable the autonomous nudges that made plain questions ramble.
+
+### Fixed
+
+- Test isolation: the startup `.env` load no longer leaks credentials into
+  `os.environ` across the test suite.
+
 ## 0.8.0 — 2026-06-11 — The comparative-methodology release
 
 The mission deliverable ships: controlled comparative matrices with
