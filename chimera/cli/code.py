@@ -625,6 +625,18 @@ def _read_steering_input() -> str | None:
 
 def run_code(args: Any) -> int:
     """Run the interactive coding REPL."""
+    # Auto-load a project .env (model, base URL, keys) so `chimera code` works
+    # without exporting vars in every shell. The shell environment always wins.
+    from chimera.config.dotenv import load_dotenv
+
+    _env_dir = os.path.abspath(getattr(args, "workdir", None) or os.getcwd())
+    _loaded = load_dotenv(os.path.join(_env_dir, ".env"))
+    if _loaded:
+        print(
+            f"· loaded {len(_loaded)} var(s) from {os.path.join(_env_dir, '.env')}",
+            file=sys.stderr,
+        )
+
     mode = getattr(args, "mode", "interactive")
     if mode == "rpc":
         return _run_rpc_mode(args)
