@@ -626,7 +626,7 @@ def _read_steering_input() -> str | None:
 def run_code(args: Any) -> int:
     """Run the interactive coding REPL."""
     # Load creds/model for `chimera code` WITHOUT polluting the shell, so other
-    # tools (e.g. Claude Code) keep their own ANTHROPIC_* config. Priority:
+    # coding agents keep their own ANTHROPIC_* config. Priority:
     # shell env > project .env > ~/.config/chimera/env. load_dotenv never
     # overrides a variable that is already set.
     from chimera.config.dotenv import load_dotenv

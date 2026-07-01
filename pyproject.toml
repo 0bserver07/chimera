@@ -127,6 +127,7 @@ module = [
     "chimera.mink.cost",
     "chimera.otter.tui",
     "chimera.tools.notebook_edit",
+    "chimera.tui.render",
 ]
 disable_error_code = ["import-not-found"]
 
