@@ -678,15 +678,35 @@ def run_code(args: Any) -> int:
 
         # max_turns: 0/negative -> unlimited (None); absent -> preset default.
         _raw_max_turns = getattr(args, "max_turns", None)
-        agent_kwargs: dict = {}
+        agent_kwargs: dict[str, Any] = {}
         if _raw_max_turns is not None:
             agent_kwargs["max_turns"] = None if _raw_max_turns <= 0 else _raw_max_turns
 
         # Full-screen Textual TUI (opt-in) — reuses the resolved model/cwd/env.
+        # One model → single-agent TUI (Phase 1). Two or more → the multiplexer
+        # (Phase 2): N lanes race the same task in isolated workspaces.
         if getattr(args, "tui", False):
+            raw_models = getattr(args, "models", "") or ""
+            models = [m.strip() for m in raw_models.split(",") if m.strip()]
+            if len(models) > 1:
+                from chimera.tui.multiplex import run_multiplexer
+
+                run_multiplexer(
+                    models=models,
+                    project_dir=cwd,
+                    preset=effective_preset,
+                    task=getattr(args, "print_mode", None),
+                    isolation=getattr(args, "isolation", "auto"),
+                    lane_cap=getattr(args, "lane_cap", None),
+                    export=getattr(args, "export", None),
+                    **agent_kwargs,
+                )
+                return 0
+
             from chimera.tui.app import run_tui
 
-            run_tui(model=model, project_dir=cwd, preset=effective_preset, **agent_kwargs)
+            single_model = models[0] if models else model
+            run_tui(model=single_model, project_dir=cwd, preset=effective_preset, **agent_kwargs)
             return 0
 
         # Non-interactive -p mode
@@ -965,7 +985,7 @@ def run_code(args: Any) -> int:
 
 
 async def _run_new_stack(
-    model: str, preset: str, cwd: str, agent_kwargs: dict | None = None,
+    model: str, preset: str, cwd: str, agent_kwargs: dict[str, Any] | None = None,
 ) -> None:
     """REPL using the new CodingAgent assembly.
 
