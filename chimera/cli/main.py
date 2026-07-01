@@ -158,7 +158,11 @@ def build_parser() -> argparse.ArgumentParser:
     code_parser.add_argument(
         "--models",
         default="",
-        help="Comma-separated list of models to cycle through (e.g. glm-5,claude-sonnet-4)",
+        help=(
+            "Comma-separated models. In the REPL: models to cycle through. "
+            "With --tui and 2+ entries: one multiplexer lane each, as "
+            "model[:preset[:loop]] (e.g. glm-5.2:coding_agent:plan,glm-4.6:explore)."
+        ),
     )
     code_parser.add_argument(
         "--preset",
