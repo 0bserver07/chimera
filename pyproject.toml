@@ -127,8 +127,21 @@ module = [
     "chimera.mink.cost",
     "chimera.otter.tui",
     "chimera.tools.notebook_edit",
+    "chimera.tui.render",
 ]
 disable_error_code = ["import-not-found"]
+
+# The interactive TUI frontends (single-agent app + multiplexer) subclass
+# textual widgets and use its decorators. CI does not install the [tui] extra,
+# so textual resolves to Any: subclassing it, its decorators, and the imports
+# themselves trip strict-mode errors that don't reflect real problems. Same
+# posture as chimera.otter.tui's per-site ``# type: ignore[misc, type-arg]``.
+[[tool.mypy.overrides]]
+module = [
+    "chimera.tui.app",
+    "chimera.tui.multiplex",
+]
+disable_error_code = ["import-not-found", "misc", "type-arg", "untyped-decorator"]
 
 # asyncssh ships no PEP 561 marker. Silence the missing-stubs error so
 # `mypy chimera/` stays clean both with and without the [ssh] extra

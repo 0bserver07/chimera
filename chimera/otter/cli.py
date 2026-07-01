@@ -218,6 +218,25 @@ _LONG_HELP: dict[str, str] = {
         "[tui] extra is installed. Equivalent to setting "
         "CHIMERA_NO_TUI=1 in the environment."
     ),
+    "--multiplex": (
+        "Race N models on one task in side-by-side panes — the Phase-2 "
+        "multiplexer (alias of 'chimera code --tui --models a,b,c'). "
+        "Comma-separated model[:preset] lanes, each in its own isolated "
+        "workspace. Requires the [tui] extra. Task via -p, or type it in."
+    ),
+    "--isolation": (
+        "Multiplexer per-lane workspace isolation: 'auto' (git worktree for "
+        "a repo, else copy), 'worktree', 'copy', or 'inplace' (shared — "
+        "unsafe for file-writing agents). Default: auto."
+    ),
+    "--lane-cap": (
+        "Multiplexer: max lanes running a turn concurrently (default: all "
+        "lanes). Bounds CPU / provider rate limits for large cohorts."
+    ),
+    "--export": (
+        "Multiplexer: also write the cohort comparison artifact (manifest + "
+        "per-lane transcripts + diffs) to this .zip when the app exits."
+    ),
     "--user": (
         "With 'agents create': write the new agent file to the "
         "user-scope directory (~/.opencode/agent/) instead of the "
@@ -602,6 +621,38 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         dest="no_tui",
         action="store_true",
         default=False,
+        help=argparse.SUPPRESS,
+    )
+    # Phase 2 multiplexer alias: `chimera otter --multiplex a,b,c` mirrors
+    # `chimera code --tui --models a,b,c` — N lanes race one task in isolated
+    # workspaces. The comparison-oriented "multi" entry point is its natural home.
+    # Hidden from short --help (like --tui) to keep it under the line budget;
+    # documented in --help-long via _LONG_HELP below.
+    behavior.add_argument(
+        "--multiplex",
+        dest="multiplex",
+        metavar="MODELS",
+        default=None,
+        help=argparse.SUPPRESS,
+    )
+    behavior.add_argument(
+        "--isolation",
+        dest="isolation",
+        choices=["auto", "worktree", "copy", "inplace"],
+        default="auto",
+        help=argparse.SUPPRESS,
+    )
+    behavior.add_argument(
+        "--lane-cap",
+        dest="lane_cap",
+        type=int,
+        default=None,
+        help=argparse.SUPPRESS,
+    )
+    behavior.add_argument(
+        "--export",
+        dest="export",
+        default=None,
         help=argparse.SUPPRESS,
     )
     # WHY (O1 — wave 9): ``--user`` flips agents create scope. Hidden.
@@ -2883,6 +2934,23 @@ def run(args: argparse.Namespace) -> int:
         from chimera.cli.help_long import print_help_long
 
         print_help_long(_PARSER, _LONG_HELP)
+        return 0
+
+    # Phase 2 multiplexer alias: mirrors `chimera code --tui --models a,b,c`.
+    # N lanes race one task in isolated workspaces (chimera.tui.multiplex).
+    if getattr(args, "multiplex", None):
+        from chimera.tui.multiplex import run_multiplexer
+
+        models = [m.strip() for m in str(args.multiplex).split(",") if m.strip()]
+        run_multiplexer(
+            models=models,
+            project_dir=getattr(args, "cwd", None) or os.getcwd(),
+            preset=(getattr(args, "preset", None) or "coding_agent"),
+            task=getattr(args, "print_mode", None),
+            isolation=getattr(args, "isolation", "auto"),
+            lane_cap=getattr(args, "lane_cap", None),
+            export=getattr(args, "export", None),
+        )
         return 0
 
     sub = getattr(args, "subcommand", None)

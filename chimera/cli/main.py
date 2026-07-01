@@ -189,6 +189,28 @@ def build_parser() -> argparse.ArgumentParser:
         help="Launch the full-screen Textual TUI instead of the line REPL (needs the 'tui' extra).",
     )
     code_parser.add_argument(
+        "--isolation",
+        choices=["auto", "worktree", "copy", "inplace"],
+        default="auto",
+        help=(
+            "Multiplexer only (--tui with 2+ --models): how each lane's workspace "
+            "is isolated. 'auto' = git worktree for a repo else copy. 'inplace' "
+            "shares the tree (unsafe for file-writing agents). Default: auto."
+        ),
+    )
+    code_parser.add_argument(
+        "--lane-cap",
+        dest="lane_cap",
+        type=int,
+        default=None,
+        help="Multiplexer only: max lanes running a turn at once (default: all lanes).",
+    )
+    code_parser.add_argument(
+        "--export",
+        default=None,
+        help="Multiplexer only: also write the cohort comparison artifact to this .zip on exit.",
+    )
+    code_parser.add_argument(
         "-p", "--print",
         dest="print_mode",
         default=None,

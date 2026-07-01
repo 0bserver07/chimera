@@ -1,0 +1,575 @@
+"""Chimera Multiplexer (Phase 2) — N agent lanes racing one task, side by side.
+
+This is the comparison mission rendered as an interface: several coding agents
+(different models / presets) attack the same task in their own isolated
+workspaces, and you watch cost, tokens, steps, time, and outcome diverge in real
+time. No mainstream terminal agent multiplexes — that is the differentiator.
+
+Each lane is an independent :class:`~chimera.tui.lane.Lane` (its own
+:class:`AgentDriver`, workspace, history, cost). The app is presentation only:
+it renders each lane's ``LoopEvent`` stream into a pane and routes input to one
+lane or all of them. Concurrency is real — the driver streams via async I/O, so
+lanes overlap on Textual's event loop (see :mod:`chimera.tui.lane`).
+
+Launch: ``chimera code --tui --models glm-5.2,glm-5.1`` (or ``chimera otter``).
+"""
+from __future__ import annotations
+
+import os
+import sys
+import time
+from collections import Counter
+from typing import Any
+
+try:
+    from rich.text import Text
+    from textual import on
+    from textual.app import App, ComposeResult
+    from textual.binding import Binding
+    from textual.containers import Horizontal, Vertical
+    from textual.widgets import Footer, Header, Input, RichLog, Static
+except ImportError as exc:  # pragma: no cover
+    raise ImportError(
+        "The Chimera multiplexer needs the 'tui' extra:\n"
+        "  pip install 'chimera-run[tui]'   (or: pip install textual)"
+    ) from exc
+
+from chimera.core.loop_events import LoopEventType
+from chimera.tui.cohort import Cohort
+from chimera.tui.lane import Lane, LaneConfig
+from chimera.tui.render import LaneTranscript
+from chimera.tui.routing import Action, RoutingMode, route
+
+__all__ = ["MultiplexApp", "LanePane", "run_multiplexer", "parse_lane_specs"]
+
+# A pane narrower than this is unreadable; below it we degrade to tabs (§6.3).
+MIN_PANE_WIDTH = 32
+_HEADER_REFRESH_EVENTS = frozenset({
+    LoopEventType.tool_use, LoopEventType.tool_result, LoopEventType.result,
+})
+
+
+class LanePane(Vertical):
+    """One lane rendered as a pane: a status header over a scrolling transcript.
+
+    A pane is essentially a Phase-1 TUI reduced to a widget. It renders the
+    lane's event stream via the shared :class:`LaneTranscript` so panes look
+    identical to the single-agent TUI.
+    """
+
+    def __init__(self, lane: Lane, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self._lane = lane
+        self._transcript: LaneTranscript | None = None
+        self._is_focus = False
+
+    def compose(self) -> ComposeResult:
+        yield Static(self._header_text(), classes="lane-header")
+        yield RichLog(classes="lane-log", wrap=True, markup=False, highlight=False)
+
+    def on_mount(self) -> None:
+        self._transcript = LaneTranscript(self.query_one(RichLog).write)
+
+    # -- rendering ------------------------------------------------------
+    def _header_text(self) -> Text:
+        t = self._lane.telemetry
+        marker = "▸ " if self._is_focus else "  "
+        reason = t.terminal_reason
+        state = t.liveness.value
+        if reason and reason not in ("completed", None):
+            state = f"{state}:{reason}"
+        return Text(
+            f"{marker}{self._lane.label} · {self._lane.config.model} · "
+            f"${t.cost:.4f} · {state} · {t.steps} st",
+            style="bold" if self._is_focus else "",
+        )
+
+    def refresh_header(self) -> None:
+        self.query_one(".lane-header", Static).update(self._header_text())
+
+    def feed(self, ev: Any) -> None:
+        if self._transcript is not None:
+            self._transcript.handle(ev)
+
+    def commit(self) -> None:
+        if self._transcript is not None:
+            self._transcript.commit()
+
+    def echo_user(self, text: str) -> None:
+        self.query_one(RichLog).write(Text.assemble(("› ", "bold cyan"), (text, "bold")))
+
+    def note(self, text: str, style: str = "magenta") -> None:
+        self.query_one(RichLog).write(Text(text, style=style))
+
+    def feed_error(self, exc: object) -> None:
+        self.query_one(RichLog).write(Text(f"turn failed: {exc}", style="red"))
+
+    def intro(self) -> None:
+        ws = self._lane.workspace
+        where = f" · {ws.strategy}" if ws else ""
+        self.query_one(RichLog).write(Text(
+            f"{self._lane.label} — {self._lane.config.model} — {self._lane.config.preset}{where}",
+            style="dim",
+        ))
+
+    def set_focused(self, value: bool) -> None:
+        self._is_focus = value
+        self.set_class(value, "focused-lane")
+        self.refresh_header()
+
+
+class MultiplexApp(App):
+    """Full-screen host for N lanes racing one task (spec §6)."""
+
+    TITLE = "Chimera Multiplexer"
+
+    CSS = """
+    Screen { layers: base; }
+    #global-status { height: 1; background: $primary; color: $text; padding: 0 1; }
+    #summary { height: auto; max-height: 4; background: $panel; color: $text; padding: 0 1; }
+    #tabstrip { height: 1; background: $panel; color: $text; padding: 0 1; }
+    #lanes { height: 1fr; }
+    .lane-pane { width: 1fr; border: round $secondary; }
+    .lane-pane.focused-lane { border: round $accent; }
+    .lane-header { height: 1; background: $boost; padding: 0 1; }
+    .lane-log { height: 1fr; padding: 0 1; }
+    #prompt { border: round $secondary; }
+    """
+
+    BINDINGS = [
+        Binding("ctrl+c", "cancel_all", "Cancel all / quit", priority=True),
+        Binding("ctrl+d", "quit", "Quit"),
+        Binding("tab", "focus_next_lane", "Focus →", priority=True),
+        Binding("shift+tab", "focus_prev_lane", "Focus ←", priority=True),
+        Binding("ctrl+b", "toggle_broadcast", "Broadcast/target"),
+        Binding("ctrl+g", "cancel_focused", "Cancel lane"),
+        Binding("ctrl+o", "clear_focused", "Clear lane"),
+    ]
+
+    def __init__(
+        self,
+        cohort: Cohort,
+        *,
+        lane_cap: int | None = None,
+        initial_task: str | None = None,
+        persist_root: str | None = None,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(**kwargs)
+        self._cohort = cohort
+        self._mode = cohort.routing
+        self._focus_index = 0
+        self._panes: list[LanePane] = []
+        self._pane_by_id: dict[str, LanePane] = {}
+        self._tabbed = False
+        self._lane_cap = lane_cap
+        self._initial_task = initial_task
+        self._persist_root = persist_root
+        self._race_start: float | None = None
+        self._race_end: float | None = None
+        self._completion_order = 0
+        self._slots: Any = None  # asyncio.Semaphore, created on mount
+
+    # -- layout ---------------------------------------------------------
+    def compose(self) -> ComposeResult:
+        yield Header(show_clock=True)
+        yield Static(self._global_status_text(), id="global-status")
+        yield Static("", id="summary")
+        yield Static("", id="tabstrip")
+        with Horizontal(id="lanes"):
+            for lane in self._cohort.lanes:
+                pane = LanePane(lane, classes="lane-pane")
+                self._panes.append(pane)
+                self._pane_by_id[lane.id] = pane
+                yield pane
+        yield Input(placeholder=self._placeholder(), id="prompt")
+        yield Footer()
+
+    def on_mount(self) -> None:
+        import asyncio
+
+        self._slots = asyncio.Semaphore(self._lane_cap or len(self._cohort.lanes))
+        self.query_one("#prompt", Input).focus()
+        self.query_one("#summary", Static).display = False
+        self._update_focus_styles()
+        self._relayout()
+        for pane in self._panes:
+            pane.intro()
+        self.set_interval(0.5, self._refresh_global)
+        if self._initial_task:
+            self._submit_text(self._initial_task)
+
+    def on_resize(self) -> None:
+        self._relayout()
+
+    def _relayout(self) -> None:
+        n = len(self._panes)
+        width = self.size.width or 80
+        self._tabbed = (width // max(n, 1)) < MIN_PANE_WIDTH
+        for i, pane in enumerate(self._panes):
+            pane.display = (not self._tabbed) or (i == self._focus_index)
+        strip = self.query_one("#tabstrip", Static)
+        strip.display = self._tabbed
+        if self._tabbed:
+            strip.update(self._tabstrip_text())
+
+    def _tabstrip_text(self) -> Text:
+        parts: list[tuple[str, str]] = []
+        for i, lane in enumerate(self._cohort.lanes):
+            style = "bold reverse" if i == self._focus_index else "dim"
+            parts.append((f" {lane.label} ", style))
+            parts.append((" ", ""))
+        return Text.assemble("tabs: ", *parts)
+
+    # -- status ---------------------------------------------------------
+    def _placeholder(self) -> str:
+        if self._mode is RoutingMode.BROADCAST:
+            return "Broadcast to all lanes, or /help …"
+        lane = self._focused_lane()
+        return f"Target @{lane.label if lane else '?'}, or /help …"
+
+    def _global_status_text(self) -> str:
+        c = self._cohort
+        n = len(c.lanes)
+        mode = self._mode.value
+        if self._race_start is None:
+            return f" idle · lanes: {n} · Σ$0.0000 · [{mode}]  (type a task, Enter to race)"
+        first = c.first_finisher
+        task = c.task or "—"
+        if len(task) > 40:
+            task = task[:39] + "…"
+        return (
+            f" task: {task!r} · lanes: {n} · done: {c.done_count}/{n} · "
+            f"Σ${c.total_cost:.4f} · {self._elapsed():.1f}s · "
+            f"first: {first.label if first else '—'} · [{mode}]"
+        )
+
+    def _elapsed(self) -> float:
+        if self._race_start is None:
+            return 0.0
+        end = self._race_end if self._race_end is not None else time.monotonic()
+        return end - self._race_start
+
+    def _refresh_global(self) -> None:
+        self.query_one("#global-status", Static).update(self._global_status_text())
+
+    def _show_summary(self) -> None:
+        rows = self._cohort.summary_rows()
+        parts: list[str] = []
+        for r in rows:
+            tag = {"done": "✓", "error": "✗"}.get(r["liveness"], "·")
+            order = f"#{r['finished_order']}" if r["finished_order"] else "—"
+            extra = ""
+            if r["terminal_reason"] and r["terminal_reason"] not in ("completed", None):
+                extra = f",{r['terminal_reason']}"
+            parts.append(
+                f"{tag} {r['label']}({order},${r['cost']:.4f},{r['steps']}st,"
+                f"{r['elapsed']:.1f}s{extra})"
+            )
+        summary = self.query_one("#summary", Static)
+        summary.update(Text("cohort · " + "   ".join(parts), style="bold"))
+        summary.display = True
+
+    # -- focus & lanes --------------------------------------------------
+    def _focused_lane(self) -> Lane | None:
+        if not self._cohort.lanes:
+            return None
+        return self._cohort.lanes[self._focus_index]
+
+    def _focused_lane_id(self) -> str | None:
+        lane = self._focused_lane()
+        return lane.id if lane else None
+
+    def _pane(self, lane_id: str) -> LanePane:
+        return self._pane_by_id[lane_id]
+
+    def _update_focus_styles(self) -> None:
+        for i, pane in enumerate(self._panes):
+            pane.set_focused(i == self._focus_index)
+
+    # -- input ----------------------------------------------------------
+    @on(Input.Submitted, "#prompt")
+    def _on_input(self, event: Input.Submitted) -> None:
+        text = event.value.strip()
+        event.input.value = ""
+        self._submit_text(text)
+
+    def _submit_text(self, text: str) -> None:
+        text = text.strip()
+        if not text:
+            return
+        lanes_state = [(lane.id, lane.telemetry.busy) for lane in self._cohort.lanes]
+        actions = route(text, self._mode, lanes_state, self._focused_lane_id())
+        if actions and actions[0].lane_id == "*":
+            self._handle_command(text)
+            return
+
+        starting = [self._cohort.lane(a.lane_id) for a in actions if a.action is Action.NEW_TURN]
+        starting_lanes = [lane for lane in starting if lane is not None]
+        if starting_lanes:
+            self._begin_race(starting_lanes)
+
+        for a in actions:
+            lane = self._cohort.lane(a.lane_id)
+            if lane is None:
+                continue
+            pane = self._pane(lane.id)
+            if a.action is Action.NEW_TURN:
+                pane.echo_user(text)
+                lane.note(f"› {text}")
+                self._start_turn(lane, text)
+            elif a.action is Action.STEER:
+                lane.driver.steer(text)
+                pane.note(f"↳ steer: {text}")
+                lane.note(f"↳ steer: {text}")
+            elif a.action is Action.FOLLOW_UP:
+                lane.driver.queue_follow_up(text)
+                pane.note(f"↳ queued: {text}", style="cyan")
+        self._refresh_global()
+
+    def _begin_race(self, lanes: list[Lane]) -> None:
+        self._race_start = time.monotonic()
+        self._race_end = None
+        self._completion_order = 0
+        for lane in self._cohort.lanes:
+            lane.telemetry.finished_order = None
+        for lane in lanes:
+            lane.reset_race()
+        self.query_one("#summary", Static).display = False
+
+    def _start_turn(self, lane: Lane, text: str) -> None:
+        lane.mark_queued()
+        self._pane(lane.id).refresh_header()
+        self.run_worker(
+            self._drive(lane, text),
+            group=f"lane-{lane.id}",
+            name=f"drive-{lane.id}",
+            exclusive=True,
+        )
+
+    async def _drive(self, lane: Lane, text: str) -> None:
+        pane = self._pane(lane.id)
+        assert self._slots is not None
+        async with self._slots:
+            lane.on_turn_begin()
+            pane.refresh_header()
+            try:
+                async for ev in lane.driver.send(text):
+                    lane.record(ev)
+                    pane.feed(ev)
+                    if ev.type in _HEADER_REFRESH_EVENTS:
+                        pane.refresh_header()
+            except Exception as exc:  # noqa: BLE001 - surfaced to the pane
+                lane.telemetry.terminal_reason = "error"
+                pane.feed_error(exc)
+            finally:
+                pane.commit()
+                self._completion_order += 1
+                lane.on_turn_end(order=self._completion_order)
+                pane.refresh_header()
+                self._refresh_global()
+                if self._cohort.all_done:
+                    self._finish_race()
+
+    def _finish_race(self) -> None:
+        if self._race_start is not None and self._race_end is None:
+            self._race_end = time.monotonic()
+        self._show_summary()
+
+    # -- actions --------------------------------------------------------
+    def action_cancel_all(self) -> None:
+        running = [lane for lane in self._cohort.lanes if lane.telemetry.busy]
+        if running:
+            for lane in running:
+                lane.driver.cancel()
+                self._pane(lane.id).note("· cancel requested", style="red")
+        else:
+            self.exit()
+
+    def action_cancel_focused(self) -> None:
+        lane = self._focused_lane()
+        if lane and lane.telemetry.busy:
+            lane.driver.cancel()
+            self._pane(lane.id).note("· cancel requested", style="red")
+
+    def action_focus_next_lane(self) -> None:
+        if self._panes:
+            self._focus_index = (self._focus_index + 1) % len(self._panes)
+            self._update_focus_styles()
+            self._relayout()
+            self.query_one("#prompt", Input).placeholder = self._placeholder()
+
+    def action_focus_prev_lane(self) -> None:
+        if self._panes:
+            self._focus_index = (self._focus_index - 1) % len(self._panes)
+            self._update_focus_styles()
+            self._relayout()
+            self.query_one("#prompt", Input).placeholder = self._placeholder()
+
+    def action_toggle_broadcast(self) -> None:
+        self._mode = (
+            RoutingMode.TARGETED if self._mode is RoutingMode.BROADCAST else RoutingMode.BROADCAST
+        )
+        self.query_one("#prompt", Input).placeholder = self._placeholder()
+        self._refresh_global()
+
+    def action_clear_focused(self) -> None:
+        lane = self._focused_lane()
+        if lane is None:
+            return
+        lane.driver.clear()
+        self._pane(lane.id).query_one(RichLog).clear()
+
+    # -- slash commands (frontend-local) --------------------------------
+    def _handle_command(self, text: str) -> None:
+        cmd = text.split()[0]
+        lane = self._focused_lane()
+        pane = self._pane(lane.id) if lane else None
+
+        def say(msg: str, style: str = "dim") -> None:
+            if pane is not None:
+                pane.note(msg, style=style)
+
+        if cmd in ("/exit", "/quit"):
+            self.exit()
+        elif cmd == "/help":
+            say(
+                "/help /model /cost /tools /clear /summary /export "
+                "/broadcast /target /exit  ·  Tab focus · Ctrl+B mode · "
+                "Ctrl+C cancel-all · Ctrl+G cancel-lane"
+            )
+        elif cmd == "/model":
+            say("  ".join(f"{ln.label}={ln.config.model}" for ln in self._cohort.lanes))
+        elif cmd == "/cost":
+            say(f"Σ ${self._cohort.total_cost:.4f}  ·  " + "  ".join(
+                f"{ln.label}=${ln.telemetry.cost:.4f}" for ln in self._cohort.lanes
+            ))
+        elif cmd == "/tools":
+            if lane is not None:
+                say(", ".join(t.name for t in lane.driver.tools) or "(none)")
+        elif cmd == "/clear":
+            self.action_clear_focused()
+        elif cmd == "/summary":
+            self._show_summary()
+        elif cmd == "/export":
+            try:
+                out = self._cohort.persist(root=self._persist_root)
+                say(f"saved: {out}", style="green")
+            except Exception as exc:  # noqa: BLE001
+                say(f"export failed: {exc}", style="red")
+        elif cmd in ("/broadcast", "/target"):
+            self._mode = RoutingMode.BROADCAST if cmd == "/broadcast" else RoutingMode.TARGETED
+            self.query_one("#prompt", Input).placeholder = self._placeholder()
+            self._refresh_global()
+        else:
+            say(f"unknown command: {cmd}", style="red")
+
+
+def parse_lane_specs(models: list[str] | str, default_preset: str = "coding_agent") -> list[dict[str, str]]:
+    """Parse ``--models`` into lane specs.
+
+    Each entry is ``model`` or ``model:preset``. Lane ids are ``A``, ``B``, …;
+    labels are the model (with ``·preset`` when it differs from the default, and
+    ``#k`` to disambiguate duplicates) so the cohort summary is readable.
+    """
+    items = models if isinstance(models, list) else models.split(",")
+    raw = [m.strip() for m in items if m.strip()]
+    parsed: list[dict[str, str]] = []
+    for i, item in enumerate(raw):
+        model, _, preset = item.partition(":")
+        model = model.strip()
+        preset = preset.strip() or default_preset
+        base = model if preset == default_preset else f"{model}·{preset}"
+        lane_id = chr(65 + i) if i < 26 else f"L{i + 1}"
+        parsed.append({"model": model, "preset": preset, "lane_id": lane_id, "base": base})
+
+    totals = Counter(p["base"] for p in parsed)
+    seen: Counter[str] = Counter()
+    for p in parsed:
+        if totals[p["base"]] > 1:
+            seen[p["base"]] += 1
+            p["label"] = f"{p['base']}#{seen[p['base']]}"
+        else:
+            p["label"] = p["base"]
+    return parsed
+
+
+def run_multiplexer(
+    models: list[str] | str,
+    project_dir: str | None = None,
+    preset: str = "coding_agent",
+    *,
+    task: str | None = None,
+    isolation: str = "auto",
+    lane_cap: int | None = None,
+    export: str | None = None,
+    persist_root: str | None = None,
+    **agent_kwargs: Any,
+) -> str | None:
+    """Provision isolated workspaces, build the cohort, run the multiplexer.
+
+    On exit the cohort is persisted (manifest + transcripts + diffs) *before*
+    the ephemeral workspaces are torn down, and optionally exported to a zip.
+    Returns the persisted cohort directory (or ``None`` if nothing ran).
+    """
+    if not sys.stdout.isatty():
+        raise SystemExit(
+            "the multiplexer needs an interactive terminal (a TTY); "
+            "run it directly, not piped."
+        )
+
+    from chimera.assembly.driver import AgentDriver
+    from chimera.tui.workspace import provision_workspaces
+
+    specs = parse_lane_specs(models, default_preset=preset)
+    if not specs:
+        raise SystemExit("no models given (use --models glm-5.2,glm-5.1)")
+
+    source = os.path.abspath(project_dir or os.getcwd())
+    workspaces = provision_workspaces(source, [s["lane_id"] for s in specs], strategy=isolation)
+
+    lanes: list[Lane] = []
+    for spec, ws in zip(specs, workspaces):
+        driver = AgentDriver(
+            model=spec["model"],
+            project_dir=str(ws.path),
+            preset=spec["preset"],
+            **agent_kwargs,
+        )
+        config = LaneConfig(
+            lane_id=spec["lane_id"],
+            label=spec["label"],
+            model=spec["model"],
+            preset=spec["preset"],
+        )
+        lanes.append(Lane(config, driver, ws))
+
+    cohort = Cohort(
+        lanes,
+        task=task,
+        source=source,
+        isolation=workspaces.strategy,
+        workspaces=workspaces,
+    )
+    app = MultiplexApp(
+        cohort, lane_cap=lane_cap, initial_task=task, persist_root=persist_root,
+    )
+
+    cohort_dir = None
+    try:
+        app.run()
+    finally:
+        # Capture the artifact BEFORE tearing down the workspaces (diffs read
+        # from the live worktrees).
+        cohort_dir = cohort.persist(root=persist_root)
+        if export:
+            try:
+                cohort.export(export, cohort_dir=cohort_dir)
+            except Exception as exc:  # noqa: BLE001
+                sys.stderr.write(f"export failed: {exc}\n")
+        workspaces.cleanup_all()
+
+    print(f"cohort saved: {cohort_dir}")
+    if export:
+        print(f"exported: {export}")
+    return str(cohort_dir) if cohort_dir else None

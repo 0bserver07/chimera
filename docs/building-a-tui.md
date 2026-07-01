@@ -111,3 +111,40 @@ UX (à la a real coding TUI) without blocking the stream.
   long sessions don't overflow.
 - **Cost.** Accrued from each turn's `result` event using the provider's
   pricing; unknown models report `0.0`.
+
+## Multiplexer — N lanes racing one task
+
+The same driver contract scales to *N* agents side by side. `chimera/tui/`
+composes six small, presentation-agnostic pieces on top of `AgentDriver`:
+
+| Module | Role |
+|--------|------|
+| `workspace.py` | Per-lane isolation: a git **worktree** on a fresh branch (or a directory **copy** for non-git sources). N file-writing agents never share a mutable tree. |
+| `lane.py` | One lane = one `AgentDriver` + workspace + `LaneTelemetry` (cost, tokens, steps, elapsed, liveness, terminal reason). Folds the event stream into telemetry + a plain-text transcript. |
+| `routing.py` | Pure input router. `classify(text, running)` and `route(text, mode, lanes, focus)` decide, per lane, between new-turn / steer / follow-up / local-command. |
+| `render.py` | Shared `LoopEvent` → transcript rendering, so every pane looks like the single-agent TUI. |
+| `cohort.py` | The lanes + shared task + manifest. Persists a self-contained artifact (manifest + per-lane transcripts + per-lane diffs) and exports a zip. |
+| `multiplex.py` | The Textual app: responsive panes (tabs on narrow terminals), a global status bar (done *k/N*, Σcost, elapsed, first-to-finish), broadcast/targeted input, per-lane concurrent workers. |
+
+```python
+from chimera.tui.multiplex import run_multiplexer
+
+run_multiplexer(
+    models=["glm-5.2", "glm-4.6", "glm-5.2:codex"],  # model or model:preset
+    project_dir=".",
+    task="fix the failing test in calc.py",  # optional; auto-broadcasts on launch
+    isolation="auto",   # auto | worktree | copy | inplace
+    export="run.zip",   # optional cohort artifact
+)
+```
+
+Each lane is a full `AgentDriver` — the single-agent TUI reduced to a pane — so
+comparison stays sound: separate history, cost, workspace, and event stream.
+Because `send()` streams via async I/O, lanes run **genuinely concurrently** on
+the event loop; you watch them diverge in real time.
+
+**Launch:** `chimera code --tui --models glm-5.2,glm-4.6` (one model ⇒ the
+single-agent TUI; two or more ⇒ the multiplexer), or the comparison-oriented
+alias `chimera otter --multiplex glm-5.2,glm-4.6`. Keys: `Tab` cycles focus,
+`Ctrl+B` toggles broadcast/targeted, `Ctrl+C` cancels all (or quits when idle),
+`Ctrl+G` cancels the focused lane.
