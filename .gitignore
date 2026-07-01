@@ -34,3 +34,5 @@ pb_sweep.py
 scratch_bridge_smoke.py
 pb_repair.py
 pb_matrix.py
+scratch_modal_smoke.py
+scratch_modal_grade.py
