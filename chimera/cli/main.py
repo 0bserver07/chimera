@@ -80,6 +80,15 @@ def build_parser() -> argparse.ArgumentParser:
         default="claude-sonnet-4-20250514",
         help="Model to use (default: claude-sonnet-4-20250514)",
     )
+    eval_parser.add_argument(
+        "--agent",
+        choices=["react", "code"],
+        default="react",
+        help=(
+            "Agent under test: 'react' (core ReAct Agent, ~single-shot on simple "
+            "tasks) or 'code' (the assembled `chimera code` CodingAgent)."
+        ),
+    )
 
     # ---- bench subcommand ----
     bench_parser = subparsers.add_parser(
@@ -749,7 +758,12 @@ def run_eval(args: argparse.Namespace) -> int:
         return 1
 
     provider = create_provider(model=args.model)
-    agent = Agent(provider=provider, tools=list(DEFAULT_TOOLS))
+    if getattr(args, "agent", "react") == "code":
+        from chimera.eval.coding_agent_adapter import CodingAgentAdapter
+
+        agent: Any = CodingAgentAdapter(provider=provider)
+    else:
+        agent = Agent(provider=provider, tools=list(DEFAULT_TOOLS))
 
     def _eval_env_factory() -> LocalEnvironment:
         import tempfile
