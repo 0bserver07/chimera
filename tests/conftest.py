@@ -42,3 +42,17 @@ def _default_unsafe_mode_for_tests(monkeypatch, request):
         # autouse fixture clears the env var explicitly.
         return
     monkeypatch.setenv(UNSAFE_ENV_VAR, "1")
+
+
+@pytest.fixture(autouse=True)
+def _no_dotenv_autoload(monkeypatch):
+    """Stop ``chimera code``'s startup .env auto-load from leaking real creds
+    (e.g. ``~/.config/chimera/env``) into ``os.environ`` across tests.
+
+    ``run_code`` imports ``load_dotenv`` lazily, so patching the module
+    attribute neutralises it there; ``test_dotenv`` imports the function at
+    module load time and keeps its own real reference, so it is unaffected.
+    """
+    monkeypatch.setattr(
+        "chimera.config.dotenv.load_dotenv", lambda *a, **k: [], raising=False,
+    )

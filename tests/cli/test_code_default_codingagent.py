@@ -60,7 +60,7 @@ class TestBareReplDefaultsToCodingAgent:
 
         captured: dict[str, Any] = {}
 
-        async def _fake_new_stack(*, model: str, preset: str, cwd: str) -> None:
+        async def _fake_new_stack(*, model: str, preset: str, cwd: str, agent_kwargs: Any = None) -> None:
             captured["model"] = model
             captured["preset"] = preset
             captured["cwd"] = cwd
@@ -85,7 +85,7 @@ class TestBareReplDefaultsToCodingAgent:
 
         captured: dict[str, Any] = {}
 
-        async def _fake_new_stack(*, model: str, preset: str, cwd: str) -> None:
+        async def _fake_new_stack(*, model: str, preset: str, cwd: str, agent_kwargs: Any = None) -> None:
             captured["preset"] = preset
 
         monkeypatch.setattr(_code, "_run_new_stack", _fake_new_stack)
@@ -152,7 +152,7 @@ class TestLegacyReactFlag:
 
         new_stack_calls: list[Any] = []
 
-        async def _fake_new_stack(*, model: str, preset: str, cwd: str) -> None:
+        async def _fake_new_stack(*, model: str, preset: str, cwd: str, agent_kwargs: Any = None) -> None:
             new_stack_calls.append((model, preset, cwd))
 
         monkeypatch.setattr(_code, "_run_new_stack", _fake_new_stack)
@@ -196,7 +196,7 @@ class TestPostSessionInitMarkerKeepsLegacy:
 
         new_stack_calls: list[Any] = []
 
-        async def _fake_new_stack(*, model: str, preset: str, cwd: str) -> None:
+        async def _fake_new_stack(*, model: str, preset: str, cwd: str, agent_kwargs: Any = None) -> None:
             new_stack_calls.append((model, preset, cwd))
 
         monkeypatch.setattr(_code, "_run_new_stack", _fake_new_stack)

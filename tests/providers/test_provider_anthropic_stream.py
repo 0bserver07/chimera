@@ -139,7 +139,7 @@ class TestPrepareRequest:
         msgs = [Message.user("hello")]
         kwargs = provider._prepare_request(msgs)
         assert kwargs["model"] == "claude-sonnet-4"
-        assert kwargs["max_tokens"] == 4096
+        assert kwargs["max_tokens"] == 8192
         assert len(kwargs["messages"]) == 1
 
     def test_system_extracted(self, provider) -> None:
