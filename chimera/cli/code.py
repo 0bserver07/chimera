@@ -682,6 +682,13 @@ def run_code(args: Any) -> int:
         if _raw_max_turns is not None:
             agent_kwargs["max_turns"] = None if _raw_max_turns <= 0 else _raw_max_turns
 
+        # Full-screen Textual TUI (opt-in) — reuses the resolved model/cwd/env.
+        if getattr(args, "tui", False):
+            from chimera.tui.app import run_tui
+
+            run_tui(model=model, project_dir=cwd, preset=effective_preset, **agent_kwargs)
+            return 0
+
         # Non-interactive -p mode
         print_task = getattr(args, "print_mode", None)
         if print_task:

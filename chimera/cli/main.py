@@ -183,6 +183,12 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     code_parser.add_argument(
+        "--tui",
+        action="store_true",
+        default=False,
+        help="Launch the full-screen Textual TUI instead of the line REPL (needs the 'tui' extra).",
+    )
+    code_parser.add_argument(
         "-p", "--print",
         dest="print_mode",
         default=None,
