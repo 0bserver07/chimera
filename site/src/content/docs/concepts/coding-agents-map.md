@@ -135,6 +135,7 @@ produced changes restored, and continues the race.
 - **Understand a repo first** → `chimera code --preset explore`.
 - **Decide between two models for a task** → `chimera code --tui --models a,b`.
 - **Compare a model against itself under two presets** → `--models m:coding_agent,m:codex`.
+- **Compare reasoning postures** → `--models m:coding_agent:plan,m:coding_agent` (plan-first vs act-first; postures: `plan`, `tdd`).
 - **A different posture** (server / sandbox / small-model / shell) → the matching
   [codename CLI](/chimera/concepts/agents/).
 

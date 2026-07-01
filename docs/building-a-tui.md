@@ -130,7 +130,7 @@ composes six small, presentation-agnostic pieces on top of `AgentDriver`:
 from chimera.tui.multiplex import run_multiplexer
 
 run_multiplexer(
-    models=["glm-5.2", "glm-4.6", "glm-5.2:codex"],  # model or model:preset
+    models=["glm-5.2", "glm-4.6", "glm-5.2:codex:plan"],  # model[:preset[:loop]]
     project_dir=".",
     task="fix the failing test in calc.py",  # optional; auto-broadcasts on launch
     isolation="auto",   # auto | worktree | copy | inplace

@@ -661,12 +661,16 @@ turn built on it coherently.
 
 ### P2 — depth
 
-**13.3 Heterogeneous agent backends per lane** (§6.1) — a lane may specify a
-loop/scaffold, not just a model + preset, so a cohort can race different agent
-*postures* on one task (the reserved `LaneConfig.loop` field is the hook). The
-cohort spec extends to a richer lane definition.
-*Acceptance:* two lanes with different loops run one task; the manifest records
-each lane's loop; telemetry stays attributable.
+**13.3 Heterogeneous agent backends per lane** (§6.1) — ✅ **shipped** (partial).
+The cohort spec is now `model[:preset[:loop]]`: each lane varies model, preset
+(tool set + prompt), and a **loop posture** (`plan` = plan-first, `tdd` =
+test-first) applied as a system-prompt augmentation *within* `AgentLoop`.
+`LaneConfig.loop` is recorded in the manifest, and unknown presets/loops are
+rejected with a clear error. Full reasoning-loop swaps (plan-execute / reflexion
+/ tree-of-thought) are deferred: only `AgentLoop` emits the `LoopEvent`s the TUI
+renders, so those loops need an event-emitting adapter first.
+*Verified live (GLM-5.2):* act-first vs plan-first lanes race one task; the
+manifest records each lane's loop.
 
 **13.4 Reasoning display** (§5.3) — when the driver surfaces reasoning/thinking,
 render it as a collapsible, dim block, default collapsed, with a toggle key.
