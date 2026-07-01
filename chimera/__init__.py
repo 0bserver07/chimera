@@ -17,7 +17,7 @@ import sys as _sys
 import types as _types
 from typing import Any
 
-__version__ = "0.8.1"
+__version__ = "0.8.2.dev0"
 
 # Map public name -> fully-qualified submodule that owns it.
 # Grouped by section to mirror the original eager-import layout.
