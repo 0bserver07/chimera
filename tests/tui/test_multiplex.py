@@ -232,3 +232,74 @@ async def test_slash_commands_do_not_crash():
             await pilot.press("enter")
             await pilot.pause()
         assert app.is_running
+
+
+@pytest.mark.asyncio
+async def test_command_palette_does_not_crash():
+    """Regression: SLASH_COMMANDS must not shadow Textual's App.COMMANDS.
+
+    A class attr named ``COMMANDS`` is Textual's command-palette provider
+    registry; filling it with strings made Ctrl+P raise
+    ``TypeError: 'str' object is not callable`` and crash the app.
+    """
+    from textual.app import App
+
+    from chimera.tui.multiplex import MultiplexApp
+
+    # the catalog must live under a non-colliding name
+    assert MultiplexApp.COMMANDS == App.COMMANDS
+    assert all(isinstance(c, str) for c in MultiplexApp.SLASH_COMMANDS)
+
+    co = _cohort([FakeDriver("m1"), FakeDriver("m2")])
+    app = MultiplexApp(co)
+    async with app.run_test() as pilot:
+        await pilot.press("ctrl+p")   # opens the palette — must not crash
+        await pilot.pause()
+        await pilot.press("escape")
+        await pilot.pause()
+        assert app.is_running
+
+
+def test_launch_failure_rolls_back_workspaces(tmp_path, monkeypatch):
+    """Regression: a driver-construction failure must not leak lane worktrees.
+
+    Workspaces are provisioned before the drivers are built; an exception in
+    that window (bad model/preset/loop spec, provider error) previously leaked
+    N worktrees + branches with no cohort artifact explaining them.
+    """
+    import subprocess
+    import sys as _sys
+
+    import chimera.assembly.driver as driver_mod
+    from chimera.tui.multiplex import run_multiplexer
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.email", "t@t"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.name", "t"], cwd=repo, check=True)
+    (repo / "f.txt").write_text("x\n")
+    subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-qm", "init"], cwd=repo, check=True)
+
+    class Boom(RuntimeError):
+        pass
+
+    def exploding_driver(*args, **kwargs):
+        raise Boom("driver construction failed")
+
+    monkeypatch.setattr(driver_mod, "AgentDriver", exploding_driver)
+    monkeypatch.setattr(_sys.stdout, "isatty", lambda: True)
+
+    with pytest.raises(Boom):
+        run_multiplexer(models="glm-5.2,glm-4.6", project_dir=str(repo))
+
+    worktrees = subprocess.run(
+        ["git", "worktree", "list"], cwd=repo, capture_output=True, text=True,
+    ).stdout.strip().splitlines()
+    assert len(worktrees) == 1, f"leaked worktrees: {worktrees}"
+    branches = subprocess.run(
+        ["git", "branch", "--list", "chimera-lane-*"],
+        cwd=repo, capture_output=True, text=True,
+    ).stdout.strip()
+    assert branches == "", f"leaked branches: {branches}"

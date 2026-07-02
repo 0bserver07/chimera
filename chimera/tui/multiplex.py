@@ -168,8 +168,11 @@ class MultiplexApp(App):
         Binding("ctrl+t", "toggle_sidebar", "Sidebar"),
     ]
 
-    #: Local command catalog (drives /help and slash autocomplete).
-    COMMANDS = [
+    #: Local slash-command catalog (drives /help and slash autocomplete).
+    #: NOT named ``COMMANDS`` — that shadows Textual's command-palette provider
+    #: registry on ``App``, and the palette then crashes on Ctrl+P trying to
+    #: instantiate strings as providers.
+    SLASH_COMMANDS = [
         "/broadcast", "/clear", "/cost", "/exit", "/export", "/help",
         "/model", "/quit", "/results", "/summary", "/target", "/tools",
     ]
@@ -214,7 +217,7 @@ class MultiplexApp(App):
                 yield pane
             yield Static("", id="sidebar")
         yield Static("", id="hint")
-        yield PromptArea(placeholder=self._placeholder(), commands=self.COMMANDS, id="prompt")
+        yield PromptArea(placeholder=self._placeholder(), commands=self.SLASH_COMMANDS, id="prompt")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -346,7 +349,7 @@ class MultiplexApp(App):
     def _on_prompt_changed(self, event: TextArea.Changed) -> None:
         # Autocomplete hint (§13.6): show matching commands while a "/" prefix
         # is being typed; Tab completes.
-        matches = filter_commands(event.text_area.text, self.COMMANDS)
+        matches = filter_commands(event.text_area.text, self.SLASH_COMMANDS)
         hint = self.query_one("#hint", Static)
         if matches:
             hint.update(Text("  ".join(matches) + "   (Tab completes)", style="dim"))
@@ -504,7 +507,7 @@ class MultiplexApp(App):
         if prompt.has_focus and prompt.text.lstrip().startswith("/"):
             from chimera.tui.prompt import complete_command
 
-            completed = complete_command(prompt.text, self.COMMANDS)
+            completed = complete_command(prompt.text, self.SLASH_COMMANDS)
             if completed != prompt.text:
                 prompt.text = completed
                 prompt.move_cursor(prompt.document.end)
@@ -686,35 +689,43 @@ def run_multiplexer(
     source = os.path.abspath(project_dir or os.getcwd())
     workspaces = provision_workspaces(source, [s["lane_id"] for s in specs], strategy=isolation)
 
-    lanes: list[Lane] = []
-    for spec, ws in zip(specs, workspaces):
-        lane_loop = spec.get("loop") or None
-        driver = AgentDriver(
-            model=spec["model"],
-            project_dir=str(ws.path),
-            preset=spec["preset"],
-            loop=lane_loop,
-            **agent_kwargs,
-        )
-        config = LaneConfig(
-            lane_id=spec["lane_id"],
-            label=spec["label"],
-            model=spec["model"],
-            preset=spec["preset"],
-            loop=lane_loop,
-        )
-        lanes.append(Lane(config, driver, ws))
+    # From here until app.run()'s own try/finally takes over, any failure
+    # (driver construction — bad model / preset / loop spec, provider errors —
+    # or Ctrl+C) must roll the worktrees back, or they leak with no cohort
+    # artifact to explain them.
+    try:
+        lanes: list[Lane] = []
+        for spec, ws in zip(specs, workspaces):
+            lane_loop = spec.get("loop") or None
+            driver = AgentDriver(
+                model=spec["model"],
+                project_dir=str(ws.path),
+                preset=spec["preset"],
+                loop=lane_loop,
+                **agent_kwargs,
+            )
+            config = LaneConfig(
+                lane_id=spec["lane_id"],
+                label=spec["label"],
+                model=spec["model"],
+                preset=spec["preset"],
+                loop=lane_loop,
+            )
+            lanes.append(Lane(config, driver, ws))
 
-    cohort = Cohort(
-        lanes,
-        task=task,
-        source=source,
-        isolation=workspaces.strategy,
-        workspaces=workspaces,
-    )
-    app = MultiplexApp(
-        cohort, lane_cap=lane_cap, initial_task=task, persist_root=persist_root,
-    )
+        cohort = Cohort(
+            lanes,
+            task=task,
+            source=source,
+            isolation=workspaces.strategy,
+            workspaces=workspaces,
+        )
+        app = MultiplexApp(
+            cohort, lane_cap=lane_cap, initial_task=task, persist_root=persist_root,
+        )
+    except BaseException:
+        workspaces.cleanup_all()
+        raise
 
     cohort_dir = None
     try:

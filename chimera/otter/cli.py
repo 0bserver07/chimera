@@ -2939,7 +2939,16 @@ def run(args: argparse.Namespace) -> int:
     # Phase 2 multiplexer alias: mirrors `chimera code --tui --models a,b,c`.
     # N lanes race one task in isolated workspaces (chimera.tui.multiplex).
     if getattr(args, "multiplex", None):
+        from chimera.config.dotenv import load_dotenv
         from chimera.tui.multiplex import run_multiplexer
+
+        # Cred parity with `chimera code`: project .env, then the global
+        # config. Without this, lanes launched via the otter alias run
+        # credential-less in a clean shell (ANTHROPIC_* is deliberately not
+        # exported globally). load_dotenv never overrides an already-set var.
+        _mux_dir = getattr(args, "cwd", None) or os.getcwd()
+        load_dotenv(os.path.join(_mux_dir, ".env"))
+        load_dotenv(os.path.expanduser("~/.config/chimera/env"))
 
         models = [m.strip() for m in str(args.multiplex).split(",") if m.strip()]
         run_multiplexer(
