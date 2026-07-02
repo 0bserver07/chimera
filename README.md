@@ -1,6 +1,6 @@
 # Chimera
 
-[![PyPI](https://img.shields.io/pypi/v/chimera-run.svg)](https://pypi.org/project/chimera-run/) [![Python](https://img.shields.io/pypi/pyversions/chimera-run.svg)](https://pypi.org/project/chimera-run/) [![License](https://img.shields.io/github/license/0bserver07/chimera.svg)](LICENSE) [![CI](https://github.com/0bserver07/chimera/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/0bserver07/chimera/actions/workflows/ci.yml) [![Tests](https://img.shields.io/badge/tests-8331%20passing-brightgreen)](https://github.com/0bserver07/chimera/actions) [![Docs](https://img.shields.io/badge/docs-0bserver07.github.io%2Fchimera-blue)](https://0bserver07.github.io/chimera/)
+[![PyPI](https://img.shields.io/pypi/v/chimera-run.svg)](https://pypi.org/project/chimera-run/) [![Python](https://img.shields.io/pypi/pyversions/chimera-run.svg)](https://pypi.org/project/chimera-run/) [![License](https://img.shields.io/github/license/0bserver07/chimera.svg)](LICENSE) [![CI](https://github.com/0bserver07/chimera/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/0bserver07/chimera/actions/workflows/ci.yml) [![Tests](https://img.shields.io/badge/tests-8549%20passing-brightgreen)](https://github.com/0bserver07/chimera/actions) [![Docs](https://img.shields.io/badge/docs-0bserver07.github.io%2Fchimera-blue)](https://0bserver07.github.io/chimera/)
 
 **An open-source Python framework for building coding agents.** Pick your provider, pick your tools, pick your loop. Chimera wires them together. Recreate SWE-Agent, Aider, Cline, or Codex in a few lines, or design something entirely new.
 
@@ -10,7 +10,7 @@ chimera mink                        # TUI-first coding agent
 chimera agents                      # list all 7 CLIs with one-line pitches
 ```
 
-**v0.8.0 status** — 8331 passing tests, 96 skipped, 0 failed. ruff + mypy (653 modules) + 7 trademark scrubs all green. Reproducible benchmarks: HumanEval 92.7% pass@1 with GLM-5.1 (152/164; 4-model run up to Opus 4.7 at 100%), MBPP 87.4%, SWE-bench Lite 10% (2/20, gap analysis documented). New in 0.8.0: `chimera bench-compare` controlled comparative matrices under uniform budgets, the Harbor/DeepSWE task format, and ATIF v1.7 trajectory interop. Raw results in `data/`.
+**v0.9.0 status** — 8549 passing tests, 97 skipped, 0 failed. ruff + mypy (675 modules) + 7 trademark scrubs all green. Reproducible benchmarks: HumanEval 92.7% pass@1 with GLM-5.1 (152/164; 4-model run up to Opus 4.7 at 100%), MBPP 87.4%, SWE-bench Lite 10% (2/20, gap analysis documented). New in 0.9.0: the TUI multiplexer (below) — plus resumable cohorts, heterogeneous lanes (`model[:preset[:loop]]`), live reasoning display, and markdown transcripts. Raw results in `data/`.
 
 ## New in 0.9.0 — the multiplexer: race N agents on one task
 
