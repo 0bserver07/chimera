@@ -25,6 +25,7 @@ except ImportError as exc:  # pragma: no cover
     ) from exc
 
 from chimera.core.loop_events import LoopEventType
+from chimera.tui.render import assistant_renderable
 
 if TYPE_CHECKING:
     from chimera.assembly.driver import AgentDriver
@@ -184,7 +185,7 @@ class ChimeraTUI(App):
             else:
                 content = getattr(ev.data, "content", "") or ""
                 if content.strip():
-                    self._log(Text(content))
+                    self._log(assistant_renderable(content, markdown=True))
         elif t == LoopEventType.tool_use:
             tc = ev.data
             args = getattr(tc, "arguments", {}) or {}
@@ -217,7 +218,7 @@ class ChimeraTUI(App):
         if self._think:
             self._commit_thinking()
         if self._chunks:
-            self._log(Text("".join(self._chunks)))
+            self._log(assistant_renderable("".join(self._chunks), markdown=True))
             self._chunks = []
 
     def _commit_thinking(self) -> None:

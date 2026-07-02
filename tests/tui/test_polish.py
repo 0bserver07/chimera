@@ -8,7 +8,7 @@ pytest.importorskip("rich")
 
 from chimera.core.loop_events import LoopEvent, LoopEventType  # noqa: E402
 from chimera.tui.lane import Lane, LaneConfig  # noqa: E402
-from chimera.tui.render import LaneTranscript  # noqa: E402
+from chimera.tui.render import LaneTranscript, plain  # noqa: E402
 from chimera.tui.results import split_diff_files, split_rows  # noqa: E402
 from chimera.types import ToolCall  # noqa: E402
 
@@ -76,13 +76,13 @@ def test_lane_transcript_collapses_reasoning_by_default():
     t.handle(_think_ev("step 2"))
     assert sink == []  # buffered until a boundary
     t.handle(_assistant_ev("answer"))
-    plain = [getattr(r, "plain", str(r)) for r in sink]
-    assert any("reasoning hidden (14 chars)" in p for p in plain)
-    assert any("answer" in p for p in plain)
-    assert not any("step 1" in p for p in plain)  # collapsed
+    texts = [plain(r) for r in sink]
+    assert any("reasoning hidden (14 chars)" in p for p in texts)
+    assert any("answer" in p for p in texts)
+    assert not any("step 1" in p for p in texts)  # collapsed
     # reveal_last prints the hidden block on demand
     assert t.reveal_last() is True
-    assert any("step 1" in getattr(r, "plain", "") for r in sink)
+    assert any("step 1" in plain(r) for r in sink)
 
 
 def test_lane_transcript_shows_reasoning_when_toggled():
@@ -91,7 +91,41 @@ def test_lane_transcript_shows_reasoning_when_toggled():
     t.show_reasoning = True
     t.handle(_think_ev("visible thought"))
     t.handle(_assistant_ev("answer"))
-    assert any("∴ visible thought" in getattr(r, "plain", "") for r in sink)
+    assert any("∴ visible thought" in plain(r) for r in sink)
+
+
+# -- markdown rendering (display sinks only) --------------------------------
+def test_assistant_prose_renders_as_markdown_in_display_sink():
+    from rich.markdown import Markdown
+
+    sink: list = []
+    t = LaneTranscript(sink.append)  # display sink: markdown on by default
+    t.handle(LoopEvent(LoopEventType.assistant_chunk, "# Title\n**bold**", 0))
+    t.handle(_assistant_ev("x"))
+    assert any(isinstance(r, Markdown) for r in sink)
+    assert any("# Title" in plain(r) for r in sink)  # source recoverable
+
+
+def test_tool_output_stays_literal_even_with_markdown_on():
+    from rich.markdown import Markdown
+
+    sink: list = []
+    t = LaneTranscript(sink.append)
+    t.handle(LoopEvent(
+        LoopEventType.tool_result,
+        (ToolCall("1", "read_file", {}), SimpleNamespace(output="**raw file**", success=True)),
+        0,
+    ))
+    assert not any(isinstance(r, Markdown) for r in sink)
+    assert any("**raw file**" in plain(r) for r in sink)
+
+
+def test_persisted_transcript_stays_plain_markdown_source():
+    lane = Lane(LaneConfig("A", "A", "glm-5.2"), driver=SimpleNamespace())
+    lane.record(LoopEvent(LoopEventType.assistant_chunk, "## Head\n`code`", 0))
+    lane.record(_assistant_ev("x"))
+    text = lane.transcript_text()
+    assert "## Head" in text and "`code`" in text  # raw source, not objects
 
 
 def test_lane_transcript_commit_flushes_pending_reasoning():
