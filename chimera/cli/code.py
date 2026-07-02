@@ -690,8 +690,11 @@ def run_code(args: Any) -> int:
             return 0
 
         # Full-screen Textual TUI (opt-in) — reuses the resolved model/cwd/env.
-        # One model → single-agent TUI (Phase 1). Two or more → the multiplexer
-        # (Phase 2): N lanes race the same task in isolated workspaces.
+        # Any --models spec (INCLUDING a single model) → the multiplexer, so one
+        # lane still gets the full surface (sidebar, results, resume). A lone
+        # lane defaults to inplace isolation (edits the real tree, daily-driver
+        # style); 2+ lanes isolate from each other (worktree/copy). Bare --tui
+        # with no --models keeps the classic single-agent app.
         if getattr(args, "tui", False):
             # Resume a saved cohort (Phase 3.2): reopen its lanes and continue.
             resume_id = getattr(args, "resume", None)
@@ -700,7 +703,7 @@ def run_code(args: Any) -> int:
 
                 resume_multiplexer(
                     resume_id,
-                    isolation=getattr(args, "isolation", "auto"),
+                    isolation=getattr(args, "isolation", None),
                     lane_cap=getattr(args, "lane_cap", None),
                     export=getattr(args, "export", None),
                     **agent_kwargs,
@@ -709,15 +712,15 @@ def run_code(args: Any) -> int:
 
             raw_models = getattr(args, "models", "") or ""
             models = [m.strip() for m in raw_models.split(",") if m.strip()]
-            if len(models) > 1:
-                from chimera.tui.multiplex import run_multiplexer
+            if models:
+                from chimera.tui.multiplex import default_isolation, run_multiplexer
 
                 run_multiplexer(
                     models=models,
                     project_dir=cwd,
                     preset=effective_preset,
                     task=getattr(args, "print_mode", None),
-                    isolation=getattr(args, "isolation", "auto"),
+                    isolation=default_isolation(len(models), getattr(args, "isolation", None)),
                     lane_cap=getattr(args, "lane_cap", None),
                     export=getattr(args, "export", None),
                     **agent_kwargs,
@@ -726,8 +729,7 @@ def run_code(args: Any) -> int:
 
             from chimera.tui.app import run_tui
 
-            single_model = models[0] if models else model
-            run_tui(model=single_model, project_dir=cwd, preset=effective_preset, **agent_kwargs)
+            run_tui(model=model, project_dir=cwd, preset=effective_preset, **agent_kwargs)
             return 0
 
         # Non-interactive -p mode

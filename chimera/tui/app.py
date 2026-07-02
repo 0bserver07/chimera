@@ -51,8 +51,11 @@ class ChimeraTUI(App):
         Binding("ctrl+e", "toggle_reasoning", "Reasoning"),
     ]
 
-    #: Local command catalog (drives /help and slash autocomplete).
-    COMMANDS = ["/clear", "/cost", "/exit", "/help", "/model", "/quit", "/tools"]
+    #: Local slash-command catalog (drives /help and slash autocomplete).
+    #: NOT named ``COMMANDS`` — that shadows Textual's command-palette provider
+    #: registry on ``App``, and the palette then crashes on Ctrl+P trying to
+    #: instantiate strings as providers.
+    SLASH_COMMANDS = ["/clear", "/cost", "/exit", "/help", "/model", "/quit", "/tools"]
 
     def __init__(self, driver: AgentDriver, **kwargs: Any) -> None:
         super().__init__(**kwargs)
@@ -69,20 +72,20 @@ class ChimeraTUI(App):
         yield Static(self._status_text(), id="status")
         yield RichLog(id="transcript", wrap=True, markup=False, highlight=False)
         yield Static("", id="hint")
-        yield PromptArea(placeholder="Ask, or /help …", commands=self.COMMANDS, id="prompt")
+        yield PromptArea(placeholder="Ask, or /help …", commands=self.SLASH_COMMANDS, id="prompt")
         yield Footer()
 
     def on_mount(self) -> None:
         self.query_one("#prompt", PromptArea).focus()
         self.query_one("#hint", Static).display = False
-        self._log(Text(
+        self._tlog(Text(
             f"Chimera TUI — {self._agent.model} — {self._fmt_ctx()} ctx.  "
             f"/help for commands · Ctrl+C cancels a turn.",
             style="dim",
         ))
 
     # -- helpers --------------------------------------------------------
-    def _log(self, renderable: Any) -> None:
+    def _tlog(self, renderable: Any) -> None:
         self.query_one("#transcript", RichLog).write(renderable)
 
     def _fmt_ctx(self) -> str:
@@ -112,15 +115,15 @@ class ChimeraTUI(App):
         if self._turn_active:
             # Mid-run: steer the running turn instead of starting a new one.
             self._agent.steer(text)
-            self._log(Text.assemble(("↳ steer: ", "magenta"), (text, "magenta")))
+            self._tlog(Text.assemble(("↳ steer: ", "magenta"), (text, "magenta")))
             return
-        self._log(Text.assemble(("› ", "bold cyan"), (text, "bold")))
+        self._tlog(Text.assemble(("› ", "bold cyan"), (text, "bold")))
         self._run_turn(text)
 
     @on(TextArea.Changed, "#prompt")
     def _on_prompt_changed(self, event: TextArea.Changed) -> None:
         # Autocomplete hint (§13.6): matching commands while typing a "/" prefix.
-        matches = filter_commands(event.text_area.text, self.COMMANDS)
+        matches = filter_commands(event.text_area.text, self.SLASH_COMMANDS)
         hint = self.query_one("#hint", Static)
         if matches:
             hint.update(Text("  ".join(matches) + "   (Tab completes)", style="dim"))
@@ -133,7 +136,7 @@ class ChimeraTUI(App):
         if cmd in ("/exit", "/quit"):
             self.exit()
         elif cmd == "/help":
-            self._log(Text(
+            self._tlog(Text(
                 "/help /model /cost /tools /clear /exit   ·   "
                 "Ctrl+C cancel · Ctrl+L clear · Ctrl+E reasoning · "
                 "Ctrl+J newline · Tab completes /commands · "
@@ -141,18 +144,18 @@ class ChimeraTUI(App):
                 style="dim",
             ))
         elif cmd == "/model":
-            self._log(Text(f"{self._agent.model}  ({self._fmt_ctx()} ctx)", style="dim"))
+            self._tlog(Text(f"{self._agent.model}  ({self._fmt_ctx()} ctx)", style="dim"))
         elif cmd == "/cost":
-            self._log(Text(f"cumulative: ${self._agent.total_cost:.4f}", style="dim"))
+            self._tlog(Text(f"cumulative: ${self._agent.total_cost:.4f}", style="dim"))
         elif cmd == "/tools":
             names = ", ".join(t.name for t in self._agent.tools)
-            self._log(Text(names or "(none)", style="dim"))
+            self._tlog(Text(names or "(none)", style="dim"))
         elif cmd == "/clear":
             self._agent.clear()
             self.query_one("#transcript", RichLog).clear()
-            self._log(Text("(conversation cleared)", style="dim"))
+            self._tlog(Text("(conversation cleared)", style="dim"))
         else:
-            self._log(Text(f"unknown command: {cmd}", style="red"))
+            self._tlog(Text(f"unknown command: {cmd}", style="red"))
 
     # -- the agent turn (async worker) ---------------------------------
     @work(exclusive=True)
@@ -164,7 +167,7 @@ class ChimeraTUI(App):
             async for ev in self._agent.send(text):
                 self._render_event(ev)
         except Exception as exc:  # pragma: no cover - surfaced to the UI
-            self._log(Text(f"turn failed: {exc}", style="red"))
+            self._tlog(Text(f"turn failed: {exc}", style="red"))
         finally:
             self._commit_assistant()
             self._turn_active = False
@@ -185,12 +188,12 @@ class ChimeraTUI(App):
             else:
                 content = getattr(ev.data, "content", "") or ""
                 if content.strip():
-                    self._log(assistant_renderable(content, markdown=True))
+                    self._tlog(assistant_renderable(content, markdown=True))
         elif t == LoopEventType.tool_use:
             tc = ev.data
             args = getattr(tc, "arguments", {}) or {}
             preview = ", ".join(f"{k}={_short(v)}" for k, v in list(args.items())[:3])
-            self._log(Text.assemble(
+            self._tlog(Text.assemble(
                 ("⚙ ", "yellow"), (getattr(tc, "name", "?"), "bold yellow"),
                 (f"({preview})", "dim"),
             ))
@@ -201,24 +204,24 @@ class ChimeraTUI(App):
                 if len(out) > 1500:
                     out = out[:800] + "\n… [truncated] …\n" + out[-500:]
                 ok = getattr(result, "success", True)
-                self._log(Text(out, style="green" if ok else "red"))
+                self._tlog(Text(out, style="green" if ok else "red"))
         elif t == LoopEventType.error:
-            self._log(Text(f"error: {ev.data}", style="red"))
+            self._tlog(Text(f"error: {ev.data}", style="red"))
         elif t == LoopEventType.result:
             r = ev.data
-            self._log(Text(
+            self._tlog(Text(
                 f"· {getattr(r, 'turn_count', 0)} steps · "
                 f"${getattr(r, 'cost_usd', 0) or 0:.4f} · ${self._agent.total_cost:.4f} total",
                 style="dim",
             ))
         elif t == LoopEventType.system and ev.data:
-            self._log(Text(str(ev.data), style="dim"))
+            self._tlog(Text(str(ev.data), style="dim"))
 
     def _commit_assistant(self) -> None:
         if self._think:
             self._commit_thinking()
         if self._chunks:
-            self._log(assistant_renderable("".join(self._chunks), markdown=True))
+            self._tlog(assistant_renderable("".join(self._chunks), markdown=True))
             self._chunks = []
 
     def _commit_thinking(self) -> None:
@@ -230,9 +233,9 @@ class ChimeraTUI(App):
             return
         self._last_think = block
         if self._show_reasoning:
-            self._log(Text(f"∴ {block}", style="dim italic"))
+            self._tlog(Text(f"∴ {block}", style="dim italic"))
         else:
-            self._log(Text(
+            self._tlog(Text(
                 f"∴ reasoning hidden ({len(block)} chars) — Ctrl+E to show",
                 style="dim",
             ))
@@ -241,7 +244,7 @@ class ChimeraTUI(App):
     def action_cancel(self) -> None:
         if self._turn_active:
             self._agent.cancel()
-            self._log(Text("· cancel requested", style="red"))
+            self._tlog(Text("· cancel requested", style="red"))
         else:
             self.exit()
 
@@ -253,11 +256,11 @@ class ChimeraTUI(App):
         self._show_reasoning = not self._show_reasoning
         if self._show_reasoning:
             if self._last_think:
-                self._log(Text(f"∴ {self._last_think}", style="dim italic"))
+                self._tlog(Text(f"∴ {self._last_think}", style="dim italic"))
             else:
-                self._log(Text("reasoning: shown (none captured yet)", style="dim"))
+                self._tlog(Text("reasoning: shown (none captured yet)", style="dim"))
         else:
-            self._log(Text("reasoning: hidden", style="dim"))
+            self._tlog(Text("reasoning: hidden", style="dim"))
 
 
 def _short(value: Any, limit: int = 40) -> str:

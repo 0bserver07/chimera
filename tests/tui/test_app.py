@@ -92,3 +92,22 @@ async def test_slash_commands_do_not_crash():
             await pilot.press("enter")
             await pilot.pause()
         assert app.is_running  # still alive after all commands
+
+
+@pytest.mark.asyncio
+async def test_command_palette_does_not_crash():
+    """Regression: the slash catalog must not shadow Textual's App.COMMANDS."""
+    from textual.app import App
+
+    from chimera.tui.app import ChimeraTUI
+
+    assert ChimeraTUI.COMMANDS == App.COMMANDS
+    assert all(isinstance(c, str) for c in ChimeraTUI.SLASH_COMMANDS)
+
+    app = ChimeraTUI(FakeDriver())
+    async with app.run_test() as pilot:
+        await pilot.press("ctrl+p")
+        await pilot.pause()
+        await pilot.press("escape")
+        await pilot.pause()
+        assert app.is_running

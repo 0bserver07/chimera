@@ -27,7 +27,9 @@ try:
     from textual.app import App, ComposeResult
     from textual.binding import Binding
     from textual.containers import Horizontal, Vertical
-    from textual.widgets import Footer, Header, RichLog, Static, TextArea
+    from textual.screen import Screen
+    from textual.widgets import Footer, Header, OptionList, RichLog, Static, TextArea
+    from textual.widgets.option_list import Option
 
     from chimera.tui.prompt import PromptArea, filter_commands
 except ImportError as exc:  # pragma: no cover
@@ -49,7 +51,21 @@ __all__ = [
     "resume_multiplexer",
     "print_saved_cohorts",
     "parse_lane_specs",
+    "default_isolation",
 ]
+
+
+def default_isolation(lane_count: int, explicit: str | None) -> str:
+    """Resolve the workspace-isolation strategy for a cohort.
+
+    An explicit user choice always wins. Otherwise a single lane runs
+    ``inplace`` — a lone agent edits the real tree, daily-driver style, since
+    isolation only protects lanes from *each other* — and 2+ lanes get
+    ``auto`` (git worktree for a repo, else copy).
+    """
+    if explicit:
+        return explicit
+    return "inplace" if lane_count == 1 else "auto"
 
 # A pane narrower than this is unreadable; below it we degrade to tabs (§6.3).
 MIN_PANE_WIDTH = 32
@@ -168,10 +184,14 @@ class MultiplexApp(App):
         Binding("ctrl+t", "toggle_sidebar", "Sidebar"),
     ]
 
-    #: Local command catalog (drives /help and slash autocomplete).
-    COMMANDS = [
-        "/broadcast", "/clear", "/cost", "/exit", "/export", "/help",
-        "/model", "/quit", "/results", "/summary", "/target", "/tools",
+    #: Local slash-command catalog (drives /help and slash autocomplete).
+    #: NOT named ``COMMANDS`` — that shadows Textual's command-palette provider
+    #: registry on ``App``, and the palette then crashes on Ctrl+P trying to
+    #: instantiate strings as providers.
+    SLASH_COMMANDS = [
+        "/broadcast", "/clear", "/cohorts", "/cost", "/exit", "/export",
+        "/help", "/model", "/quit", "/resume", "/results", "/summary",
+        "/target", "/tools",
     ]
 
     def __init__(
@@ -199,6 +219,9 @@ class MultiplexApp(App):
         self._slots: Any = None  # asyncio.Semaphore, created on mount
         self._show_reasoning = False
         self._sidebar_on = False
+        #: Set by /resume (or the /cohorts picker) just before exit; the outer
+        #: run loop reads it and relaunches on the requested saved cohort.
+        self.resume_request: str | None = None
 
     # -- layout ---------------------------------------------------------
     def compose(self) -> ComposeResult:
@@ -214,7 +237,7 @@ class MultiplexApp(App):
                 yield pane
             yield Static("", id="sidebar")
         yield Static("", id="hint")
-        yield PromptArea(placeholder=self._placeholder(), commands=self.COMMANDS, id="prompt")
+        yield PromptArea(placeholder=self._placeholder(), commands=self.SLASH_COMMANDS, id="prompt")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -290,7 +313,11 @@ class MultiplexApp(App):
         return end - self._race_start
 
     def _refresh_global(self) -> None:
-        self.query_one("#global-status", Static).update(self._global_status_text())
+        # Interval-timer callback: it can race app teardown (the widget tree is
+        # already unmounting), so a missing node is a no-op, not an error.
+        nodes = self.query("#global-status")
+        if nodes:
+            nodes.first(Static).update(self._global_status_text())
 
     def _show_summary(self) -> None:
         rows = self._cohort.summary_rows()
@@ -342,7 +369,7 @@ class MultiplexApp(App):
     def _on_prompt_changed(self, event: TextArea.Changed) -> None:
         # Autocomplete hint (§13.6): show matching commands while a "/" prefix
         # is being typed; Tab completes.
-        matches = filter_commands(event.text_area.text, self.COMMANDS)
+        matches = filter_commands(event.text_area.text, self.SLASH_COMMANDS)
         hint = self.query_one("#hint", Static)
         if matches:
             hint.update(Text("  ".join(matches) + "   (Tab completes)", style="dim"))
@@ -500,7 +527,7 @@ class MultiplexApp(App):
         if prompt.has_focus and prompt.text.lstrip().startswith("/"):
             from chimera.tui.prompt import complete_command
 
-            completed = complete_command(prompt.text, self.COMMANDS)
+            completed = complete_command(prompt.text, self.SLASH_COMMANDS)
             if completed != prompt.text:
                 prompt.text = completed
                 prompt.move_cursor(prompt.document.end)
@@ -557,7 +584,8 @@ class MultiplexApp(App):
         elif cmd == "/help":
             say(
                 "/help /model /cost /tools /clear /summary /results /export "
-                "/broadcast /target /exit  ·  Tab complete-or-focus · Ctrl+B mode · "
+                "/cohorts /resume [id] /broadcast /target /exit  ·  "
+                "Tab complete-or-focus · Ctrl+B mode · "
                 "Ctrl+R compare · Ctrl+E reasoning · Ctrl+T sidebar · "
                 "Ctrl+J newline · Ctrl+C cancel-all · Ctrl+G cancel-lane"
             )
@@ -586,8 +614,112 @@ class MultiplexApp(App):
             self._mode = RoutingMode.BROADCAST if cmd == "/broadcast" else RoutingMode.TARGETED
             self.query_one("#prompt", PromptArea).placeholder = self._placeholder()
             self._refresh_global()
+        elif cmd == "/cohorts":
+            self._open_cohort_picker()
+        elif cmd == "/resume":
+            parts = text.split()
+            if len(parts) > 1:
+                self.request_resume(parts[1])
+            else:
+                self._open_cohort_picker()
         else:
             say(f"unknown command: {cmd}", style="red")
+
+    # -- in-TUI cohort resume (§13.2, interactive) -----------------------
+    def _say_focused(self, msg: str, style: str = "dim") -> None:
+        lane = self._focused_lane()
+        if lane is not None:
+            self._pane(lane.id).note(msg, style=style)
+
+    def request_resume(self, cohort_id: str) -> None:
+        """Switch to a saved cohort: exit this app with a resume request.
+
+        The outer run loop persists + tears down the current cohort first, so
+        nothing is lost, then relaunches on the requested one. Refused while a
+        lane is mid-turn — cancel or let it finish first.
+        """
+        if any(lane.telemetry.busy for lane in self._cohort.lanes):
+            self._say_focused(
+                "lanes are still running — cancel (Ctrl+C) or wait, then /resume",
+                style="red",
+            )
+            return
+        known = {row["cohort_id"] for row in Cohort.list_saved(root=self._persist_root)}
+        if cohort_id not in known:
+            self._say_focused(f"no saved cohort {cohort_id!r} — try /cohorts", style="red")
+            return
+        if cohort_id == self._cohort.cohort_id:
+            self._say_focused("that is the current cohort", style="red")
+            return
+        self.resume_request = cohort_id
+        self.exit()
+
+    def _open_cohort_picker(self) -> None:
+        rows = Cohort.list_saved(root=self._persist_root)
+        if not rows:
+            self._say_focused("(no saved cohorts yet — they persist on exit)")
+            return
+        self.push_screen(CohortPickerScreen(rows))
+
+
+class CohortPickerScreen(Screen):
+    """In-TUI list of saved cohorts: Enter resumes the highlighted one.
+
+    Reached via ``/cohorts`` (or bare ``/resume``). Selecting a cohort asks the
+    app to exit with a resume request; the outer run loop persists the current
+    cohort and relaunches on the chosen one.
+    """
+
+    BINDINGS = [
+        Binding("escape", "close", "Back"),
+        Binding("q", "close", "Back"),
+    ]
+
+    CSS = """
+    #picker-title { height: 1; background: $primary; color: $text; padding: 0 1; }
+    #picker-list { height: 1fr; }
+    """
+
+    def __init__(self, rows: list[dict[str, Any]], **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self._rows = rows
+
+    def compose(self) -> ComposeResult:
+        yield Static(
+            Text(
+                f" Saved cohorts · {len(self._rows)} · Enter resumes · Esc back",
+                style="bold",
+            ),
+            id="picker-title",
+        )
+        yield OptionList(id="picker-list")
+        yield Footer()
+
+    def on_mount(self) -> None:
+        picker = self.query_one(OptionList)
+        for row in self._rows:
+            labels = ", ".join(str(ln.get("label")) for ln in row.get("lanes", []))
+            task = row.get("task") or "—"
+            if len(task) > 46:
+                task = task[:45] + "…"
+            picker.add_option(Option(
+                f"{row['cohort_id']}  ·  {row.get('created_at', '?')}  ·  "
+                f"[{labels}]  ·  {task}",
+                id=row["cohort_id"],
+            ))
+        if self._rows:
+            picker.highlighted = 0  # keyboard-first: Enter resumes the newest
+        picker.focus()
+
+    @on(OptionList.OptionSelected)
+    def _picked(self, event: OptionList.OptionSelected) -> None:
+        app = self.app
+        self.app.pop_screen()
+        if isinstance(app, MultiplexApp) and event.option.id:
+            app.request_resume(str(event.option.id))
+
+    def action_close(self) -> None:
+        self.app.pop_screen()
 
 
 def parse_lane_specs(models: list[str] | str, default_preset: str = "coding_agent") -> list[dict[str, str]]:
@@ -682,103 +814,122 @@ def run_multiplexer(
     source = os.path.abspath(project_dir or os.getcwd())
     workspaces = provision_workspaces(source, [s["lane_id"] for s in specs], strategy=isolation)
 
-    lanes: list[Lane] = []
-    for spec, ws in zip(specs, workspaces):
-        lane_loop = spec.get("loop") or None
-        driver = AgentDriver(
-            model=spec["model"],
-            project_dir=str(ws.path),
-            preset=spec["preset"],
-            loop=lane_loop,
-            **agent_kwargs,
-        )
-        config = LaneConfig(
-            lane_id=spec["lane_id"],
-            label=spec["label"],
-            model=spec["model"],
-            preset=spec["preset"],
-            loop=lane_loop,
-        )
-        lanes.append(Lane(config, driver, ws))
-
-    cohort = Cohort(
-        lanes,
-        task=task,
-        source=source,
-        isolation=workspaces.strategy,
-        workspaces=workspaces,
-    )
-    app = MultiplexApp(
-        cohort, lane_cap=lane_cap, initial_task=task, persist_root=persist_root,
-    )
-
-    cohort_dir = None
+    # From here until app.run()'s own try/finally takes over, any failure
+    # (driver construction — bad model / preset / loop spec, provider errors —
+    # or Ctrl+C) must roll the worktrees back, or they leak with no cohort
+    # artifact to explain them.
     try:
-        app.run()
-    finally:
-        # Capture the artifact BEFORE tearing down the workspaces (diffs read
-        # from the live worktrees).
-        cohort_dir = cohort.persist(root=persist_root)
-        if export:
-            try:
-                cohort.export(export, cohort_dir=cohort_dir)
-            except Exception as exc:  # noqa: BLE001
-                sys.stderr.write(f"export failed: {exc}\n")
-        workspaces.cleanup_all()
+        lanes: list[Lane] = []
+        for spec, ws in zip(specs, workspaces):
+            lane_loop = spec.get("loop") or None
+            driver = AgentDriver(
+                model=spec["model"],
+                project_dir=str(ws.path),
+                preset=spec["preset"],
+                loop=lane_loop,
+                **agent_kwargs,
+            )
+            config = LaneConfig(
+                lane_id=spec["lane_id"],
+                label=spec["label"],
+                model=spec["model"],
+                preset=spec["preset"],
+                loop=lane_loop,
+            )
+            lanes.append(Lane(config, driver, ws))
 
-    print(f"cohort saved: {cohort_dir}")
-    if export:
-        print(f"exported: {export}")
+        cohort = Cohort(
+            lanes,
+            task=task,
+            source=source,
+            isolation=workspaces.strategy,
+            workspaces=workspaces,
+        )
+    except BaseException:
+        workspaces.cleanup_all()
+        raise
+
+    return _run_cohort_loop(
+        cohort, workspaces,
+        lane_cap=lane_cap, initial_task=task, persist_root=persist_root,
+        export=export, **agent_kwargs,
+    )
+
+
+def _run_cohort_loop(
+    cohort: Cohort,
+    workspaces: Any,
+    *,
+    lane_cap: int | None = None,
+    initial_task: str | None = None,
+    persist_root: str | None = None,
+    export: str | None = None,
+    **agent_kwargs: Any,
+) -> str | None:
+    """Run cohorts until the user leaves without requesting an in-TUI resume.
+
+    Each iteration owns one cohort's full lifecycle: run the app, persist the
+    artifact *before* tearing down the workspaces, then either stop or relaunch
+    on the saved cohort the user picked inside the TUI (``/resume``,
+    ``/cohorts``). One cohort's teardown always completes before the next
+    cohort starts, so switching never loses work.
+    """
+    cohort_dir = None
+    task = initial_task
+    while True:
+        try:
+            app = MultiplexApp(
+                cohort, lane_cap=lane_cap, initial_task=task, persist_root=persist_root,
+            )
+            app.run()
+        finally:
+            # Capture the artifact BEFORE tearing down the workspaces (diffs
+            # read from the live worktrees).
+            cohort_dir = cohort.persist(root=persist_root)
+            if export:
+                try:
+                    cohort.export(export, cohort_dir=cohort_dir)
+                except Exception as exc:  # noqa: BLE001
+                    sys.stderr.write(f"export failed: {exc}\n")
+            workspaces.cleanup_all()
+        print(f"cohort saved: {cohort_dir}")
+        if export:
+            print(f"exported: {export}")
+        requested = app.resume_request
+        if not requested:
+            break
+        task = None
+        try:
+            cohort, workspaces = _load_saved_cohort(
+                requested, isolation=None, persist_root=persist_root, **agent_kwargs,
+            )
+        except Exception as exc:  # noqa: BLE001 - never crash after a clean session
+            print(f"resume failed: {exc}")
+            break
     return str(cohort_dir) if cohort_dir else None
 
 
-def print_saved_cohorts(persist_root: str | None = None) -> None:
-    """Print persisted cohorts (id · when · task · lanes) for --resume discovery."""
-    rows = Cohort.list_saved(root=persist_root)
-    if not rows:
-        print("no saved cohorts yet.")
-        return
-    print(f"{len(rows)} saved cohort(s):")
-    for row in rows:
-        labels = ", ".join(f"{ln['label']}" for ln in row["lanes"])
-        task = (row["task"] or "—")
-        if len(task) > 50:
-            task = task[:49] + "…"
-        print(f"  {row['cohort_id']}  ·  {row.get('created_at', '?')}  ·  [{labels}]  ·  {task!r}")
-
-
-def resume_multiplexer(
+def _load_saved_cohort(
     cohort_id: str,
     *,
-    isolation: str = "worktree",
-    lane_cap: int | None = None,
-    export: str | None = None,
+    isolation: str | None = None,
     persist_root: str | None = None,
     **agent_kwargs: Any,
-) -> str | None:
-    """Reopen a saved cohort and continue it (spec §13.2).
+) -> tuple[Cohort, Any]:
+    """Rebuild a saved cohort for resume (spec §13.2).
 
-    Reconstructs each lane: a fresh workspace from the recorded base commit with
-    the lane's saved diff re-applied, a driver seeded with the lane's saved
-    history, and its telemetry restored so the scoreboard keeps accumulating. The
-    lanes start idle; the next broadcast continues the race.
+    Fresh workspaces from the recorded base commit with each lane's saved diff
+    re-applied, drivers seeded with saved history, telemetry restored. The
+    isolation strategy resolves by lane count unless *isolation* is explicit.
+
+    Raises:
+        FileNotFoundError: Unknown cohort id.
     """
-    if not sys.stdout.isatty():
-        raise SystemExit(
-            "the multiplexer needs an interactive terminal (a TTY); run it directly."
-        )
-
     from chimera.assembly.driver import AgentDriver
     from chimera.tui.history_io import deserialize_history
     from chimera.tui.workspace import apply_diff, provision_workspaces
 
-    try:
-        saved = Cohort.load_saved(cohort_id, root=persist_root)
-    except FileNotFoundError as exc:
-        print(str(exc))
-        print_saved_cohorts(persist_root)
-        raise SystemExit(1) from exc
-
+    saved = Cohort.load_saved(cohort_id, root=persist_root)
     manifest = saved["manifest"]
     lane_specs = saved["lanes"]
     source = manifest.get("source") or os.getcwd()
@@ -791,7 +942,9 @@ def resume_multiplexer(
 
     lane_ids = [ls["lane_id"] for ls in lane_specs]
     workspaces = provision_workspaces(
-        source, lane_ids, strategy=isolation, base_commit=base_commit,
+        source, lane_ids,
+        strategy=default_isolation(len(lane_ids), isolation),
+        base_commit=base_commit,
     )
 
     lanes: list[Lane] = []
@@ -830,19 +983,58 @@ def resume_multiplexer(
         lanes, task=task, source=source, isolation=workspaces.strategy,
         routing=routing, cohort_id=cohort_id, workspaces=workspaces,
     )
-    app = MultiplexApp(cohort, lane_cap=lane_cap, persist_root=persist_root)
+    return cohort, workspaces
 
-    cohort_dir = None
+
+def print_saved_cohorts(persist_root: str | None = None) -> None:
+    """Print persisted cohorts (id · when · task · lanes) for --resume discovery."""
+    rows = Cohort.list_saved(root=persist_root)
+    if not rows:
+        print("no saved cohorts yet.")
+        return
+    print(f"{len(rows)} saved cohort(s):")
+    for row in rows:
+        labels = ", ".join(f"{ln['label']}" for ln in row["lanes"])
+        task = (row["task"] or "—")
+        if len(task) > 50:
+            task = task[:49] + "…"
+        print(f"  {row['cohort_id']}  ·  {row.get('created_at', '?')}  ·  [{labels}]  ·  {task!r}")
+
+
+def resume_multiplexer(
+    cohort_id: str,
+    *,
+    isolation: str | None = None,
+    lane_cap: int | None = None,
+    export: str | None = None,
+    persist_root: str | None = None,
+    **agent_kwargs: Any,
+) -> str | None:
+    """Reopen a saved cohort and continue it (spec §13.2).
+
+    Reconstructs each lane: a fresh workspace from the recorded base commit with
+    the lane's saved diff re-applied, a driver seeded with the lane's saved
+    history, and its telemetry restored so the scoreboard keeps accumulating. The
+    lanes start idle; the next broadcast continues the race. Isolation resolves
+    by lane count (single lane → inplace) unless given explicitly. From inside
+    the running app, ``/cohorts`` / ``/resume`` switch cohorts the same way.
+    """
+    if not sys.stdout.isatty():
+        raise SystemExit(
+            "the multiplexer needs an interactive terminal (a TTY); run it directly."
+        )
+
     try:
-        app.run()
-    finally:
-        cohort_dir = cohort.persist(root=persist_root)
-        if export:
-            try:
-                cohort.export(export, cohort_dir=cohort_dir)
-            except Exception as exc:  # noqa: BLE001
-                sys.stderr.write(f"export failed: {exc}\n")
-        workspaces.cleanup_all()
+        cohort, workspaces = _load_saved_cohort(
+            cohort_id, isolation=isolation, persist_root=persist_root, **agent_kwargs,
+        )
+    except FileNotFoundError as exc:
+        print(str(exc))
+        print_saved_cohorts(persist_root)
+        raise SystemExit(1) from exc
 
-    print(f"cohort saved: {cohort_dir}")
-    return str(cohort_dir) if cohort_dir else None
+    return _run_cohort_loop(
+        cohort, workspaces,
+        lane_cap=lane_cap, initial_task=None, persist_root=persist_root,
+        export=export, **agent_kwargs,
+    )

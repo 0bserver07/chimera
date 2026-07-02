@@ -68,9 +68,9 @@ This is the pair that trips people up:
 - **`--models glm-5.2,glm-4.6`** — plural, comma-separated. The *list* of models,
   one per lane, for the multiplexer.
 
-In `--tui` mode, a non-empty `--models` wins: one entry runs the single-agent
-TUI, two or more launch the multiplexer. Each entry may pin a preset with
-`model:preset`, so you can compare configurations too:
+In `--tui` mode, a non-empty `--models` launches the multiplexer — even with a
+single entry, which gets one full-featured lane. Each entry may pin a preset
+with `model:preset`, so you can compare configurations too:
 
 ```bash
 chimera code --tui --models glm-5.2,glm-5.2:codex,glm-4.6
@@ -79,9 +79,13 @@ chimera code --tui --models glm-5.2,glm-5.2:codex,glm-4.6
 
 ## Knob 4 — one agent, or the multiplexer
 
-- **One model** (`--tui`, or `--tui --models glm-5.2`) → the single-agent TUI:
-  a full-screen transcript, live streaming, mid-run steering.
-- **Two or more** (`--tui --models a,b,c`) → the **multiplexer**: N lanes racing
+- **Bare `--tui`** (no `--models`) → the classic single-agent TUI: a full-screen
+  transcript, live streaming, mid-run steering.
+- **`--tui --models glm-5.2`** (one entry) → a **single-lane multiplexer**: the
+  same agent, plus the sidebar, the results screen, and `--resume`. A lone lane
+  defaults to `inplace` isolation — it edits your real tree, daily-driver style
+  (pass `--isolation worktree` for a sandbox + diff artifact instead).
+- **`--tui --models a,b,c`** (two or more) → the **multiplexer race**: N lanes on
   the *same task*, side by side, each in its own isolated workspace.
 
 The comparison-oriented alias `chimera otter --multiplex a,b,c` launches the

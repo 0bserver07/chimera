@@ -143,8 +143,12 @@ comparison stays sound: separate history, cost, workspace, and event stream.
 Because `send()` streams via async I/O, lanes run **genuinely concurrently** on
 the event loop; you watch them diverge in real time.
 
-**Launch:** `chimera code --tui --models glm-5.2,glm-4.6` (one model ⇒ the
-single-agent TUI; two or more ⇒ the multiplexer), or the comparison-oriented
+**Launch:** `chimera code --tui --models glm-5.2,glm-4.6`. Any `--models` spec —
+including a single model — launches the multiplexer, so one lane still gets the
+full surface (sidebar, results, resume); a lone lane defaults to `inplace`
+isolation (it edits the real tree, daily-driver style), while 2+ lanes isolate
+from each other. Bare `--tui` with no `--models` keeps the classic single-agent
+app. Also available via the comparison-oriented
 alias `chimera otter --multiplex glm-5.2,glm-4.6`.
 
 **Keys:** `Tab` completes a `/command` being typed, else cycles lane focus ·
@@ -159,4 +163,8 @@ A cohort is **resumable**: `chimera code --tui --resume <cohort-id>` (find ids
 with `--list-cohorts`) reopens the lanes with their conversation history and
 produced changes restored — a fresh workspace from the recorded base commit with
 the saved diff re-applied, plus a faithful history replay — and continues the
-race.
+race. The same works **from inside the TUI**: `/cohorts` opens a picker of
+saved cohorts (Enter resumes the highlighted one), and `/resume <id>` switches
+directly. The current cohort is persisted and torn down cleanly before the
+requested one loads, so switching never loses work; switching is refused while
+a lane is mid-turn.
