@@ -10,6 +10,7 @@ class LoopEventType(Enum):
     stream_start = "stream_start"
     assistant = "assistant"
     assistant_chunk = "assistant_chunk"
+    thinking_chunk = "thinking_chunk"
     tool_use = "tool_use"
     tool_progress = "tool_progress"
     tool_result = "tool_result"

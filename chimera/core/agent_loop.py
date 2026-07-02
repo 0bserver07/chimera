@@ -238,6 +238,14 @@ class AgentLoop:
                                 data=stream_event.content,
                                 turn=state.turn_count,
                             )
+                        elif stream_event.type == "thinking_delta":
+                            # Reasoning text: forwarded for display only — never
+                            # accumulated into the assistant message content.
+                            yield LoopEvent(
+                                type=LoopEventType.thinking_chunk,
+                                data=stream_event.content,
+                                turn=state.turn_count,
+                            )
                         elif stream_event.type == "tool_call_start" and stream_event.tool_call is not None:
                             accumulated_tool_calls.append(stream_event.tool_call)
                         elif stream_event.type == "tool_call_complete" and stream_event.tool_call is not None:

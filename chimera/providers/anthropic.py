@@ -408,6 +408,13 @@ class AnthropicProvider(Provider):
                 yield StreamEvent(type="text_delta", content=delta.text)
             elif delta.type == "input_json_delta":
                 yield StreamEvent(type="tool_call_delta", content=delta.partial_json)
+            elif delta.type == "thinking_delta":
+                # Extended-thinking reasoning text: surfaced as its own event so
+                # frontends can render it (collapsed by default). Never merged
+                # into the assistant message content.
+                yield StreamEvent(
+                    type="thinking_delta", content=getattr(delta, "thinking", "") or "",
+                )
 
         elif event_type == "content_block_stop":
             # If we were accumulating a tool call, it's now complete
