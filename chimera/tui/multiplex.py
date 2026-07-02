@@ -290,7 +290,11 @@ class MultiplexApp(App):
         return end - self._race_start
 
     def _refresh_global(self) -> None:
-        self.query_one("#global-status", Static).update(self._global_status_text())
+        # Interval-timer callback: it can race app teardown (the widget tree is
+        # already unmounting), so a missing node is a no-op, not an error.
+        nodes = self.query("#global-status")
+        if nodes:
+            nodes.first(Static).update(self._global_status_text())
 
     def _show_summary(self) -> None:
         rows = self._cohort.summary_rows()

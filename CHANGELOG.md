@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — the TUI multiplexer: race N agents on one task
+## 0.9.0 — 2026-07-01 — the TUI multiplexer: race N agents on one task
 
 The `interactive-frontends` spec shipped in full (all 3 phases). Chimera's
 comparison mission is now a live terminal interface: N agent lanes — different
