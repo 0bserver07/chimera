@@ -24,11 +24,12 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from rich.markdown import Markdown
 from rich.text import Text
 
 from chimera.core.loop_events import LoopEventType
 
-__all__ = ["LaneTranscript", "format_event", "plain", "short"]
+__all__ = ["LaneTranscript", "format_event", "assistant_renderable", "plain", "short"]
 
 _TOOL_OUT_LIMIT = 1500
 
@@ -41,16 +42,39 @@ def short(value: Any, limit: int = 40) -> str:
 
 def plain(renderable: Any) -> str:
     """Best-effort plain-text of a renderable (for the persisted transcript)."""
-    return renderable.plain if hasattr(renderable, "plain") else str(renderable)
+    if hasattr(renderable, "plain"):
+        return str(renderable.plain)
+    if isinstance(renderable, Markdown):
+        return str(renderable.markup)  # the original source text
+    return str(renderable)
 
 
-def format_event(ev: Any, chunks: list[str]) -> list[Any]:
+def assistant_renderable(text: str, *, markdown: bool = False) -> Any:
+    """Assistant prose as a renderable: rich ``Markdown`` when *markdown* is on
+    (headers, bold, syntax-highlighted code fences), plain ``Text`` otherwise.
+
+    Only assistant prose is ever markdown-rendered — tool output, user echo,
+    and reasoning stay literal (§5.2 content safety: file contents and command
+    output must never be reinterpreted). Falls back to plain text if parsing
+    fails.
+    """
+    if markdown:
+        try:
+            return Markdown(text)
+        except Exception:  # noqa: BLE001 - display fallback, never fail a turn
+            return Text(text)
+    return Text(text)
+
+
+def format_event(ev: Any, chunks: list[str], *, markdown: bool = False) -> list[Any]:
     """Render one loop event to zero or more renderables, in order.
 
     ``chunks`` is the caller's streaming-text accumulator: this appends
     ``assistant_chunk`` fragments to it and drains it (committing one assistant
     item) when the block completes. Returning a list keeps the function pure and
-    testable — the caller decides where the renderables go.
+    testable — the caller decides where the renderables go. With ``markdown``
+    on, committed assistant prose renders as rich Markdown (display sinks);
+    persistence callers keep the default plain text.
     """
     t = ev.type
     out: list[Any] = []
@@ -58,12 +82,12 @@ def format_event(ev: Any, chunks: list[str]) -> list[Any]:
         chunks.append(str(ev.data))
     elif t == LoopEventType.assistant:
         if chunks:
-            out.append(Text("".join(chunks)))
+            out.append(assistant_renderable("".join(chunks), markdown=markdown))
             chunks.clear()
         else:
             content = getattr(ev.data, "content", "") or ""
             if content.strip():
-                out.append(Text(content))
+                out.append(assistant_renderable(content, markdown=markdown))
     elif t == LoopEventType.tool_use:
         tc = ev.data
         args = getattr(tc, "arguments", {}) or {}
@@ -112,12 +136,13 @@ class LaneTranscript:
     :meth:`reveal_last` prints the most recent hidden block on demand.
     """
 
-    def __init__(self, sink: Callable[[Any], object]) -> None:
+    def __init__(self, sink: Callable[[Any], object], *, markdown: bool = True) -> None:
         self._sink = sink
         self._chunks: list[str] = []
         self._think: list[str] = []
         self._last_thinking = ""
         self.show_reasoning = False
+        self.markdown = markdown
 
     def handle(self, ev: Any) -> None:
         """Render one event, writing any produced renderables to the sink."""
@@ -126,7 +151,7 @@ class LaneTranscript:
             return
         if self._think:
             self._commit_thinking()
-        for renderable in format_event(ev, self._chunks):
+        for renderable in format_event(ev, self._chunks, markdown=self.markdown):
             self._sink(renderable)
 
     def _commit_thinking(self) -> None:
@@ -155,7 +180,7 @@ class LaneTranscript:
         if self._think:
             self._commit_thinking()
         if self._chunks:
-            self._sink(Text("".join(self._chunks)))
+            self._sink(assistant_renderable("".join(self._chunks), markdown=self.markdown))
             self._chunks.clear()
 
     def note(self, text: str, style: str = "dim") -> None:
