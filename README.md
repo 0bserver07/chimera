@@ -12,6 +12,29 @@ chimera agents                      # list all 7 CLIs with one-line pitches
 
 **v0.8.0 status** — 8331 passing tests, 96 skipped, 0 failed. ruff + mypy (653 modules) + 7 trademark scrubs all green. Reproducible benchmarks: HumanEval 92.7% pass@1 with GLM-5.1 (152/164; 4-model run up to Opus 4.7 at 100%), MBPP 87.4%, SWE-bench Lite 10% (2/20, gap analysis documented). New in 0.8.0: `chimera bench-compare` controlled comparative matrices under uniform budgets, the Harbor/DeepSWE task format, and ATIF v1.7 trajectory interop. Raw results in `data/`.
 
+## New in 0.9.0 — the multiplexer: race N agents on one task
+
+Chimera's comparison mission as a live interface: N agent lanes — different
+models, presets, or genuinely different reasoning loops — attack the **same
+task side by side**, each in its own isolated git worktree, while you watch
+cost, tokens, steps, time, and the actual produced code diverge in real time.
+
+```bash
+pip install 'chimera-run[tui,anthropic]'
+chimera code --tui --models glm-5.2,glm-4.6      # two models race one task
+chimera code --tui --models glm-5.2              # one full-featured lane, edits your tree
+chimera code --tui --models glm-5.2,glm-5.2:coding_agent:plan-execute
+#                            same model, genuinely different reasoning loops
+```
+
+Broadcast a prompt to start the race (`Ctrl+B` targets one lane). `Ctrl+R`
+opens a ranked scoreboard over per-lane diffs (side-by-side split with `s`);
+`Ctrl+E` reveals the model's reasoning; `Ctrl+T` shows a tool-call sidebar.
+Every run persists a comparison artifact under `~/.chimera/cohorts/<id>/`
+(manifest, ranked summary, per-lane transcripts + diffs) and is resumable —
+`/cohorts` in-app, or `--resume <id>`. Full notes:
+[docs/releases/0.9.0.md](docs/releases/0.9.0.md).
+
 ## Who This Is For
 
 **You build with CLI coding agents.**

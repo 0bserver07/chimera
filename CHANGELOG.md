@@ -45,6 +45,31 @@ isolated git worktrees, side by side.
 - **Docs**: `concepts/coding-agents-map.md` on the site — the "4 knobs"
   orientation page (CLIs · presets · models · the multiplexer, and where each
   surface persists).
+- **Single-lane multiplexer**: any `--tui --models` spec — including a single
+  model — launches the multiplexer, so one lane keeps the full surface
+  (sidebar, results, resume). A lone lane defaults to `inplace` isolation and
+  edits the real tree, daily-driver style (isolation exists to protect lanes
+  from *each other*); 2+ lanes keep `auto`. An explicit `--isolation` always
+  wins. Bare `--tui` with no `--models` keeps the classic single-agent app.
+- **In-TUI cohort resume**: `/cohorts` opens a picker of saved cohorts and
+  `/resume [id]` reopens one from inside the multiplexer — no relaunch flags
+  needed.
+
+### Fixed
+
+- **Command-palette crash (`Ctrl+P`)**: both TUIs named their slash-command
+  catalog `COMMANDS`, shadowing Textual's command-palette provider registry on
+  `App` — opening the palette crashed the app
+  (`TypeError: 'str' object is not callable`). Renamed to `SLASH_COMMANDS`
+  (and the internal `_log` helper, the same collision class), with regression
+  tests pressing `Ctrl+P` in both apps.
+- **Launch-failure worktree leak**: an error between workspace provisioning and
+  the app starting (bad `model[:preset[:loop]]` spec, provider error, `Ctrl+C`)
+  leaked lane worktrees and branches with no cohort artifact explaining them.
+  Launch construction now rolls the workspaces back before re-raising.
+- **`chimera otter --multiplex` credentials**: the otter alias now loads the
+  project `.env` and `~/.config/chimera/env` like `chimera code` does, instead
+  of launching credential-less lanes in a clean shell.
 
 ## 0.8.1 — 2026-06-30 — `chimera code` becomes a real daily driver
 
