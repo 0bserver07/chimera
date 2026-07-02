@@ -143,8 +143,12 @@ comparison stays sound: separate history, cost, workspace, and event stream.
 Because `send()` streams via async I/O, lanes run **genuinely concurrently** on
 the event loop; you watch them diverge in real time.
 
-**Launch:** `chimera code --tui --models glm-5.2,glm-4.6` (one model ⇒ the
-single-agent TUI; two or more ⇒ the multiplexer), or the comparison-oriented
+**Launch:** `chimera code --tui --models glm-5.2,glm-4.6`. Any `--models` spec —
+including a single model — launches the multiplexer, so one lane still gets the
+full surface (sidebar, results, resume); a lone lane defaults to `inplace`
+isolation (it edits the real tree, daily-driver style), while 2+ lanes isolate
+from each other. Bare `--tui` with no `--models` keeps the classic single-agent
+app. Also available via the comparison-oriented
 alias `chimera otter --multiplex glm-5.2,glm-4.6`.
 
 **Keys:** `Tab` completes a `/command` being typed, else cycles lane focus ·

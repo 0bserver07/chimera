@@ -49,7 +49,21 @@ __all__ = [
     "resume_multiplexer",
     "print_saved_cohorts",
     "parse_lane_specs",
+    "default_isolation",
 ]
+
+
+def default_isolation(lane_count: int, explicit: str | None) -> str:
+    """Resolve the workspace-isolation strategy for a cohort.
+
+    An explicit user choice always wins. Otherwise a single lane runs
+    ``inplace`` — a lone agent edits the real tree, daily-driver style, since
+    isolation only protects lanes from *each other* — and 2+ lanes get
+    ``auto`` (git worktree for a repo, else copy).
+    """
+    if explicit:
+        return explicit
+    return "inplace" if lane_count == 1 else "auto"
 
 # A pane narrower than this is unreadable; below it we degrade to tabs (§6.3).
 MIN_PANE_WIDTH = 32

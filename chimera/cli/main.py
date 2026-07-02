@@ -160,8 +160,9 @@ def build_parser() -> argparse.ArgumentParser:
         default="",
         help=(
             "Comma-separated models. In the REPL: models to cycle through. "
-            "With --tui and 2+ entries: one multiplexer lane each, as "
-            "model[:preset[:loop]] (e.g. glm-5.2:coding_agent:plan,glm-4.6:explore)."
+            "With --tui: one multiplexer lane each, as model[:preset[:loop]] "
+            "(e.g. glm-5.2:coding_agent:plan,glm-4.6:explore); a single model "
+            "gets one full-featured lane editing the real tree."
         ),
     )
     code_parser.add_argument(
@@ -195,11 +196,12 @@ def build_parser() -> argparse.ArgumentParser:
     code_parser.add_argument(
         "--isolation",
         choices=["auto", "worktree", "copy", "inplace"],
-        default="auto",
+        default=None,
         help=(
-            "Multiplexer only (--tui with 2+ --models): how each lane's workspace "
-            "is isolated. 'auto' = git worktree for a repo else copy. 'inplace' "
-            "shares the tree (unsafe for file-writing agents). Default: auto."
+            "Multiplexer (--tui with --models): how each lane's workspace is "
+            "isolated. 'auto' = git worktree for a repo else copy; 'inplace' "
+            "shares the real tree (unsafe with 2+ file-writing lanes). "
+            "Default: inplace for a single lane, auto for 2+."
         ),
     )
     code_parser.add_argument(

@@ -227,7 +227,8 @@ _LONG_HELP: dict[str, str] = {
     "--isolation": (
         "Multiplexer per-lane workspace isolation: 'auto' (git worktree for "
         "a repo, else copy), 'worktree', 'copy', or 'inplace' (shared — "
-        "unsafe for file-writing agents). Default: auto."
+        "unsafe with 2+ file-writing lanes). Default: inplace for a single "
+        "lane, auto for 2+."
     ),
     "--lane-cap": (
         "Multiplexer: max lanes running a turn concurrently (default: all "
@@ -639,7 +640,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         "--isolation",
         dest="isolation",
         choices=["auto", "worktree", "copy", "inplace"],
-        default="auto",
+        default=None,
         help=argparse.SUPPRESS,
     )
     behavior.add_argument(
@@ -2940,7 +2941,7 @@ def run(args: argparse.Namespace) -> int:
     # N lanes race one task in isolated workspaces (chimera.tui.multiplex).
     if getattr(args, "multiplex", None):
         from chimera.config.dotenv import load_dotenv
-        from chimera.tui.multiplex import run_multiplexer
+        from chimera.tui.multiplex import default_isolation, run_multiplexer
 
         # Cred parity with `chimera code`: project .env, then the global
         # config. Without this, lanes launched via the otter alias run
@@ -2956,7 +2957,7 @@ def run(args: argparse.Namespace) -> int:
             project_dir=getattr(args, "cwd", None) or os.getcwd(),
             preset=(getattr(args, "preset", None) or "coding_agent"),
             task=getattr(args, "print_mode", None),
-            isolation=getattr(args, "isolation", "auto"),
+            isolation=default_isolation(len(models), getattr(args, "isolation", None)),
             lane_cap=getattr(args, "lane_cap", None),
             export=getattr(args, "export", None),
         )

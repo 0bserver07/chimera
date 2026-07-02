@@ -303,3 +303,50 @@ def test_launch_failure_rolls_back_workspaces(tmp_path, monkeypatch):
         cwd=repo, capture_output=True, text=True,
     ).stdout.strip()
     assert branches == "", f"leaked branches: {branches}"
+
+
+def test_default_isolation_rule():
+    """One lane defaults to inplace (daily-driver); 2+ isolate; explicit wins."""
+    from chimera.tui.multiplex import default_isolation
+
+    assert default_isolation(1, None) == "inplace"
+    assert default_isolation(2, None) == "auto"
+    assert default_isolation(3, None) == "auto"
+    assert default_isolation(1, "worktree") == "worktree"  # explicit wins
+    assert default_isolation(2, "inplace") == "inplace"    # explicit wins (even if unwise)
+
+
+def test_single_model_launches_multiplexer_inplace(tmp_path, monkeypatch):
+    """A single --models entry is a full multiplexer lane, not the Phase-1 app.
+
+    With inplace isolation nothing is provisioned or torn down: the lane's
+    workspace IS the project dir, and a launch failure must leave it untouched.
+    """
+    import sys as _sys
+
+    import chimera.assembly.driver as driver_mod
+    from chimera.tui.multiplex import run_multiplexer
+
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    (proj / "keep.txt").write_text("precious\n")
+
+    seen: dict = {}
+
+    class Boom(RuntimeError):
+        pass
+
+    def capturing_driver(*args, **kwargs):
+        seen.update(kwargs)
+        raise Boom("stop after capture")
+
+    monkeypatch.setattr(driver_mod, "AgentDriver", capturing_driver)
+    monkeypatch.setattr(_sys.stdout, "isatty", lambda: True)
+
+    with pytest.raises(Boom):
+        run_multiplexer(models="glm-5.2", project_dir=str(proj), isolation="inplace")
+
+    # single lane accepted; its workspace is the real tree, left untouched
+    assert seen["model"] == "glm-5.2"
+    assert seen["project_dir"] == str(proj)
+    assert (proj / "keep.txt").read_text() == "precious\n"
