@@ -140,6 +140,7 @@ disable_error_code = ["import-not-found"]
 module = [
     "chimera.tui.app",
     "chimera.tui.multiplex",
+    "chimera.tui.prompt",
     "chimera.tui.results",
 ]
 disable_error_code = ["import-not-found", "misc", "type-arg", "untyped-decorator"]

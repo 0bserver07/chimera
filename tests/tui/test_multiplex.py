@@ -77,8 +77,8 @@ def _cohort(drivers, routing=RoutingMode.BROADCAST, task="fix the bug"):
 
 
 async def _submit(app, pilot, text):
-    from textual.widgets import Input
-    app.query_one("#prompt", Input).value = text
+    from chimera.tui.prompt import PromptArea
+    app.query_one("#prompt", PromptArea).value = text
     await pilot.press("enter")
     await pilot.pause()
     await app.workers.wait_for_complete()
@@ -130,10 +130,10 @@ async def test_broadcast_steers_running_lane_and_starts_idle_lane():
     co = _cohort([d1, d2])
     app = MultiplexApp(co)
     async with app.run_test() as pilot:
-        from textual.widgets import Input
+        from chimera.tui.prompt import PromptArea
 
         co.lanes[0].telemetry.liveness = Liveness.RUNNING  # A is mid-turn
-        app.query_one("#prompt", Input).value = "go"
+        app.query_one("#prompt", PromptArea).value = "go"
         await pilot.press("enter")
         await pilot.pause()
         # A is steered (not restarted); B starts a fresh turn.
@@ -220,7 +220,7 @@ async def test_initial_task_auto_broadcasts():
 
 @pytest.mark.asyncio
 async def test_slash_commands_do_not_crash():
-    from textual.widgets import Input
+    from chimera.tui.prompt import PromptArea
 
     from chimera.tui.multiplex import MultiplexApp
 
@@ -228,7 +228,7 @@ async def test_slash_commands_do_not_crash():
     app = MultiplexApp(co)
     async with app.run_test() as pilot:
         for cmd in ("/help", "/model", "/cost", "/tools", "/summary", "/target", "/broadcast"):
-            app.query_one("#prompt", Input).value = cmd
+            app.query_one("#prompt", PromptArea).value = cmd
             await pilot.press("enter")
             await pilot.pause()
         assert app.is_running

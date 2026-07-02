@@ -42,7 +42,7 @@ __all__ = [
 
 _SNAPSHOT_MAX_BYTES = 1_000_000
 _SKIP_DIRS = frozenset({
-    ".git", "__pycache__", ".venv", "venv", "node_modules",
+    ".git", ".chimera", "__pycache__", ".venv", "venv", "node_modules",
     ".mypy_cache", ".pytest_cache", ".ruff_cache",
 })
 
@@ -129,7 +129,9 @@ class LaneWorkspace:
         if (self.path / ".git").exists() or self.strategy == "worktree":
             base = self.base_commit or "HEAD"
             _git(self.path, "add", "-A", "-N")  # surface untracked in the diff
-            out = _git(self.path, "diff", base)
+            # Exclude the agent's own bookkeeping (.chimera/ sessions etc.) so
+            # the comparison shows what the lane produced, not how it ran.
+            out = _git(self.path, "diff", base, "--", ".", ":(exclude).chimera")
             return out.stdout
         return self._snapshot_diff()
 

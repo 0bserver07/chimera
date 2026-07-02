@@ -113,6 +113,9 @@ class Lane:
         self.workspace = workspace
         self.telemetry = LaneTelemetry()
         self.transcript_lines: list[str] = []
+        # Tool-call timeline for the sidebar (§13.7): (name, ok) — ok is None
+        # while the call is in flight, then True/False from its result.
+        self.tool_log: list[tuple[str, bool | None]] = []
         self._text_chunks: list[str] = []
         self._turn_started: float | None = None
 
@@ -158,6 +161,15 @@ class Lane:
         self._observe(ev)
 
     def _observe(self, ev: Any) -> None:
+        if ev.type == LoopEventType.tool_use:
+            self.tool_log.append((str(getattr(ev.data, "name", "?")), None))
+        elif ev.type == LoopEventType.tool_result:
+            _, result = ev.data if isinstance(ev.data, tuple) else (None, ev.data)
+            ok = bool(getattr(result, "success", True))
+            for i in range(len(self.tool_log) - 1, -1, -1):
+                if self.tool_log[i][1] is None:
+                    self.tool_log[i] = (self.tool_log[i][0], ok)
+                    break
         if ev.type == LoopEventType.result:
             r = ev.data
             self.telemetry.turns += 1
