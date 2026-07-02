@@ -163,4 +163,8 @@ A cohort is **resumable**: `chimera code --tui --resume <cohort-id>` (find ids
 with `--list-cohorts`) reopens the lanes with their conversation history and
 produced changes restored — a fresh workspace from the recorded base commit with
 the saved diff re-applied, plus a faithful history replay — and continues the
-race.
+race. The same works **from inside the TUI**: `/cohorts` opens a picker of
+saved cohorts (Enter resumes the highlighted one), and `/resume <id>` switches
+directly. The current cohort is persisted and torn down cleanly before the
+requested one loads, so switching never loses work; switching is refused while
+a lane is mid-turn.

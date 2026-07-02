@@ -350,3 +350,144 @@ def test_single_model_launches_multiplexer_inplace(tmp_path, monkeypatch):
     assert seen["model"] == "glm-5.2"
     assert seen["project_dir"] == str(proj)
     assert (proj / "keep.txt").read_text() == "precious\n"
+
+
+# -- in-TUI cohort resume (/cohorts picker + /resume) --------------------
+
+def _persist_cohort(tmp_root, model="glm-5.2", task="earlier race"):
+    """Persist a small real cohort artifact and return its id."""
+    d = FakeDriver(model)
+    co = _cohort([d], task=task)
+    co.persist(root=tmp_root)
+    return co.cohort_id
+
+
+@pytest.mark.asyncio
+async def test_cohorts_command_opens_picker(tmp_path):
+    from chimera.tui.multiplex import CohortPickerScreen, MultiplexApp
+
+    root = tmp_path / "cohorts"
+    saved_id = _persist_cohort(root)
+    app = MultiplexApp(_cohort([FakeDriver("m1")]), persist_root=str(root))
+    async with app.run_test() as pilot:
+        from chimera.tui.prompt import PromptArea
+        app.query_one("#prompt", PromptArea).value = "/cohorts"
+        await pilot.press("enter")
+        await pilot.pause()
+        assert isinstance(app.screen, CohortPickerScreen)
+        # the saved cohort is listed
+        from textual.widgets import OptionList
+        picker = app.screen.query_one(OptionList)
+        assert picker.option_count == 1
+        assert picker.get_option_at_index(0).id == saved_id
+        await pilot.press("escape")
+        await pilot.pause()
+        assert not isinstance(app.screen, CohortPickerScreen)
+
+
+@pytest.mark.asyncio
+async def test_resume_command_requests_and_exits(tmp_path):
+    from chimera.tui.multiplex import MultiplexApp
+
+    root = tmp_path / "cohorts"
+    saved_id = _persist_cohort(root)
+    app = MultiplexApp(_cohort([FakeDriver("m1")]), persist_root=str(root))
+    async with app.run_test() as pilot:
+        from chimera.tui.prompt import PromptArea
+        app.query_one("#prompt", PromptArea).value = f"/resume {saved_id}"
+        await pilot.press("enter")
+        await pilot.pause()
+    assert app.resume_request == saved_id
+
+
+@pytest.mark.asyncio
+async def test_resume_unknown_id_stays_running(tmp_path):
+    from chimera.tui.multiplex import MultiplexApp
+
+    root = tmp_path / "cohorts"
+    _persist_cohort(root)
+    app = MultiplexApp(_cohort([FakeDriver("m1")]), persist_root=str(root))
+    async with app.run_test() as pilot:
+        from chimera.tui.prompt import PromptArea
+        app.query_one("#prompt", PromptArea).value = "/resume nope-1234"
+        await pilot.press("enter")
+        await pilot.pause()
+        assert app.is_running
+        assert app.resume_request is None
+
+
+@pytest.mark.asyncio
+async def test_resume_refused_while_lanes_busy(tmp_path):
+    from chimera.tui.multiplex import MultiplexApp
+
+    root = tmp_path / "cohorts"
+    saved_id = _persist_cohort(root)
+    co = _cohort([FakeDriver("m1")])
+    app = MultiplexApp(co, persist_root=str(root))
+    async with app.run_test() as pilot:
+        co.lanes[0].telemetry.liveness = Liveness.RUNNING
+        from chimera.tui.prompt import PromptArea
+        app.query_one("#prompt", PromptArea).value = f"/resume {saved_id}"
+        await pilot.press("enter")
+        await pilot.pause()
+        assert app.is_running
+        assert app.resume_request is None
+
+
+@pytest.mark.asyncio
+async def test_picker_selection_requests_resume(tmp_path):
+    from chimera.tui.multiplex import MultiplexApp
+
+    root = tmp_path / "cohorts"
+    saved_id = _persist_cohort(root)
+    app = MultiplexApp(_cohort([FakeDriver("m1")]), persist_root=str(root))
+    async with app.run_test() as pilot:
+        from chimera.tui.prompt import PromptArea
+        app.query_one("#prompt", PromptArea).value = "/resume"  # bare → picker
+        await pilot.press("enter")
+        await pilot.pause()
+        await pilot.press("enter")  # select the highlighted (only) cohort
+        await pilot.pause()
+    assert app.resume_request == saved_id
+
+
+def test_run_cohort_loop_switches_cohorts(tmp_path, monkeypatch):
+    """The runner persists + tears down each cohort, then relaunches on the
+    requested one; a session with no request ends the loop."""
+    import chimera.tui.multiplex as mux
+
+    root = tmp_path / "cohorts"
+    first = _cohort([FakeDriver("m1")], task="first")
+    second = _cohort([FakeDriver("m2")], task="second")
+
+    class FakeWS:
+        def __init__(self):
+            self.cleaned = 0
+        def cleanup_all(self):
+            self.cleaned += 1
+
+    ws1, ws2 = FakeWS(), FakeWS()
+    built = []
+
+    class FakeApp:
+        def __init__(self, cohort, **kwargs):
+            self._cohort = cohort
+            built.append(cohort)
+            # first app requests a switch; second exits plainly
+            self.resume_request = second.cohort_id if cohort is first else None
+        def run(self):
+            pass
+
+    monkeypatch.setattr(mux, "MultiplexApp", FakeApp)
+    monkeypatch.setattr(
+        mux, "_load_saved_cohort",
+        lambda cid, **kw: (second, ws2) if cid == second.cohort_id else (_ for _ in ()).throw(FileNotFoundError(cid)),
+    )
+
+    out = mux._run_cohort_loop(first, ws1, persist_root=str(root))
+
+    assert built == [first, second]          # relaunched on the requested cohort
+    assert ws1.cleaned == 1 and ws2.cleaned == 1
+    assert (root / first.cohort_id / "manifest.json").exists()
+    assert (root / second.cohort_id / "manifest.json").exists()
+    assert out == str(root / second.cohort_id)

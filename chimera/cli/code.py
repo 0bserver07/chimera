@@ -703,7 +703,7 @@ def run_code(args: Any) -> int:
 
                 resume_multiplexer(
                     resume_id,
-                    isolation=getattr(args, "isolation", None) or "auto",
+                    isolation=getattr(args, "isolation", None),
                     lane_cap=getattr(args, "lane_cap", None),
                     export=getattr(args, "export", None),
                     **agent_kwargs,
