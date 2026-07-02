@@ -145,11 +145,15 @@ the event loop; you watch them diverge in real time.
 
 **Launch:** `chimera code --tui --models glm-5.2,glm-4.6` (one model ⇒ the
 single-agent TUI; two or more ⇒ the multiplexer), or the comparison-oriented
-alias `chimera otter --multiplex glm-5.2,glm-4.6`. Keys: `Tab` cycles focus,
-`Ctrl+B` toggles broadcast/targeted, `Ctrl+R` opens the **comparison view** (a
-ranked scoreboard over each lane's produced diff — `Tab` through lanes, `Esc`
-back), `Ctrl+C` cancels all (or quits when idle), `Ctrl+G` cancels the focused
-lane.
+alias `chimera otter --multiplex glm-5.2,glm-4.6`.
+
+**Keys:** `Tab` completes a `/command` being typed, else cycles lane focus ·
+`Ctrl+B` toggles broadcast/targeted · `Ctrl+R` opens the **comparison view** (a
+ranked scoreboard over each lane's produced diff — `Tab` through lanes, `n`/`p`
+through files, `s` for split view, `Esc` back) · `Ctrl+E` shows/hides reasoning
+(thinking streams render collapsed by default) · `Ctrl+T` toggles the per-lane
+tool-call sidebar · `Ctrl+J` inserts a newline in the multi-line prompt ·
+`Ctrl+C` cancels all (or quits when idle) · `Ctrl+G` cancels the focused lane.
 
 A cohort is **resumable**: `chimera code --tui --resume <cohort-id>` (find ids
 with `--list-cohorts`) reopens the lanes with their conversation history and

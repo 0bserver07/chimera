@@ -104,19 +104,56 @@ class LaneTranscript:
     ``sink`` is any callable taking one renderable — e.g. ``RichLog.write`` for a
     live pane, or ``list.append`` in a test. Streaming assistant text is
     accumulated internally so the sink never has to know about the commit rule.
+
+    Reasoning (``thinking_chunk``) is accumulated separately and committed as a
+    dim block when the next non-thinking content arrives (§13.4). Default is
+    **collapsed**: a one-line marker with the size; set :attr:`show_reasoning`
+    (the frontends bind a toggle key) to render the text, and
+    :meth:`reveal_last` prints the most recent hidden block on demand.
     """
 
     def __init__(self, sink: Callable[[Any], object]) -> None:
         self._sink = sink
         self._chunks: list[str] = []
+        self._think: list[str] = []
+        self._last_thinking = ""
+        self.show_reasoning = False
 
     def handle(self, ev: Any) -> None:
         """Render one event, writing any produced renderables to the sink."""
+        if getattr(ev, "type", None) == LoopEventType.thinking_chunk:
+            self._think.append(str(ev.data))
+            return
+        if self._think:
+            self._commit_thinking()
         for renderable in format_event(ev, self._chunks):
             self._sink(renderable)
 
+    def _commit_thinking(self) -> None:
+        block = "".join(self._think).strip()
+        self._think.clear()
+        if not block:
+            return
+        self._last_thinking = block
+        if self.show_reasoning:
+            self._sink(Text(f"∴ {block}", style="dim italic"))
+        else:
+            self._sink(Text(
+                f"∴ reasoning hidden ({len(block)} chars) — toggle to show",
+                style="dim",
+            ))
+
+    def reveal_last(self) -> bool:
+        """Print the most recent reasoning block; True if there was one."""
+        if not self._last_thinking:
+            return False
+        self._sink(Text(f"∴ {self._last_thinking}", style="dim italic"))
+        return True
+
     def commit(self) -> None:
         """Flush any un-committed streaming text (call on turn end / cancel)."""
+        if self._think:
+            self._commit_thinking()
         if self._chunks:
             self._sink(Text("".join(self._chunks)))
             self._chunks.clear()

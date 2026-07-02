@@ -15,7 +15,9 @@ try:
     from textual import on, work
     from textual.app import App, ComposeResult
     from textual.binding import Binding
-    from textual.widgets import Footer, Header, Input, RichLog, Static
+    from textual.widgets import Footer, Header, RichLog, Static, TextArea
+
+    from chimera.tui.prompt import PromptArea, filter_commands
 except ImportError as exc:  # pragma: no cover
     raise ImportError(
         "The Chimera TUI needs the 'tui' extra:\n"
@@ -37,31 +39,41 @@ class ChimeraTUI(App):
     Screen { layers: base; }
     #status { height: 1; background: $primary; color: $text; padding: 0 1; }
     #transcript { height: 1fr; padding: 0 1; }
-    #prompt { dock: bottom; border: round $secondary; }
+    #hint { height: 1; color: $text-muted; padding: 0 1; }
+    #prompt { border: round $secondary; height: auto; max-height: 8; }
     """
 
     BINDINGS = [
         Binding("ctrl+c", "cancel", "Cancel / quit", priority=True),
         Binding("ctrl+d", "quit", "Quit"),
         Binding("ctrl+l", "clear_convo", "Clear"),
+        Binding("ctrl+e", "toggle_reasoning", "Reasoning"),
     ]
+
+    #: Local command catalog (drives /help and slash autocomplete).
+    COMMANDS = ["/clear", "/cost", "/exit", "/help", "/model", "/quit", "/tools"]
 
     def __init__(self, driver: AgentDriver, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self._agent = driver
         self._chunks: list[str] = []
         self._turn_active = False
+        self._think: list[str] = []
+        self._last_think = ""
+        self._show_reasoning = False
 
     # -- layout ---------------------------------------------------------
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
         yield Static(self._status_text(), id="status")
         yield RichLog(id="transcript", wrap=True, markup=False, highlight=False)
-        yield Input(placeholder="Ask, or /help …", id="prompt")
+        yield Static("", id="hint")
+        yield PromptArea(placeholder="Ask, or /help …", commands=self.COMMANDS, id="prompt")
         yield Footer()
 
     def on_mount(self) -> None:
-        self.query_one("#prompt", Input).focus()
+        self.query_one("#prompt", PromptArea).focus()
+        self.query_one("#hint", Static).display = False
         self._log(Text(
             f"Chimera TUI — {self._agent.model} — {self._fmt_ctx()} ctx.  "
             f"/help for commands · Ctrl+C cancels a turn.",
@@ -85,10 +97,12 @@ class ChimeraTUI(App):
         self.query_one("#status", Static).update(self._status_text())
 
     # -- input ----------------------------------------------------------
-    @on(Input.Submitted, "#prompt")
-    def _on_submit(self, event: Input.Submitted) -> None:
+    @on(PromptArea.Submitted, "#prompt")
+    def _on_submit(self, event: PromptArea.Submitted) -> None:
         text = event.value.strip()
-        event.input.value = ""
+        event.prompt.remember(event.value)
+        event.prompt.value = ""
+        self.query_one("#hint", Static).display = False
         if not text:
             return
         if text.startswith("/"):
@@ -102,6 +116,17 @@ class ChimeraTUI(App):
         self._log(Text.assemble(("› ", "bold cyan"), (text, "bold")))
         self._run_turn(text)
 
+    @on(TextArea.Changed, "#prompt")
+    def _on_prompt_changed(self, event: TextArea.Changed) -> None:
+        # Autocomplete hint (§13.6): matching commands while typing a "/" prefix.
+        matches = filter_commands(event.text_area.text, self.COMMANDS)
+        hint = self.query_one("#hint", Static)
+        if matches:
+            hint.update(Text("  ".join(matches) + "   (Tab completes)", style="dim"))
+            hint.display = True
+        else:
+            hint.display = False
+
     def _handle_command(self, text: str) -> None:
         cmd = text.split()[0]
         if cmd in ("/exit", "/quit"):
@@ -109,7 +134,9 @@ class ChimeraTUI(App):
         elif cmd == "/help":
             self._log(Text(
                 "/help /model /cost /tools /clear /exit   ·   "
-                "Ctrl+C cancel · Ctrl+L clear · type while running to steer",
+                "Ctrl+C cancel · Ctrl+L clear · Ctrl+E reasoning · "
+                "Ctrl+J newline · Tab completes /commands · "
+                "type while running to steer",
                 style="dim",
             ))
         elif cmd == "/model":
@@ -144,6 +171,11 @@ class ChimeraTUI(App):
 
     def _render_event(self, ev: Any) -> None:
         t = ev.type
+        if t == LoopEventType.thinking_chunk:
+            self._think.append(str(ev.data))
+            return
+        if self._think:
+            self._commit_thinking()
         if t == LoopEventType.assistant_chunk:
             self._chunks.append(str(ev.data))
         elif t == LoopEventType.assistant:
@@ -182,9 +214,27 @@ class ChimeraTUI(App):
             self._log(Text(str(ev.data), style="dim"))
 
     def _commit_assistant(self) -> None:
+        if self._think:
+            self._commit_thinking()
         if self._chunks:
             self._log(Text("".join(self._chunks)))
             self._chunks = []
+
+    def _commit_thinking(self) -> None:
+        """Commit an accumulated reasoning block (§13.4): dim text when shown,
+        a one-line size marker when collapsed (the default)."""
+        block = "".join(self._think).strip()
+        self._think = []
+        if not block:
+            return
+        self._last_think = block
+        if self._show_reasoning:
+            self._log(Text(f"∴ {block}", style="dim italic"))
+        else:
+            self._log(Text(
+                f"∴ reasoning hidden ({len(block)} chars) — Ctrl+E to show",
+                style="dim",
+            ))
 
     # -- actions --------------------------------------------------------
     def action_cancel(self) -> None:
@@ -197,6 +247,16 @@ class ChimeraTUI(App):
     def action_clear_convo(self) -> None:
         self._agent.clear()
         self.query_one("#transcript", RichLog).clear()
+
+    def action_toggle_reasoning(self) -> None:
+        self._show_reasoning = not self._show_reasoning
+        if self._show_reasoning:
+            if self._last_think:
+                self._log(Text(f"∴ {self._last_think}", style="dim italic"))
+            else:
+                self._log(Text("reasoning: shown (none captured yet)", style="dim"))
+        else:
+            self._log(Text("reasoning: hidden", style="dim"))
 
 
 def _short(value: Any, limit: int = 40) -> str:

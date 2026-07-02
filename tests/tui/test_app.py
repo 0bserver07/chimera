@@ -62,13 +62,15 @@ class FakeDriver:
 
 @pytest.mark.asyncio
 async def test_tui_runs_a_turn_and_renders():
-    from textual.widgets import Input, RichLog
+    from textual.widgets import RichLog
+
+    from chimera.tui.prompt import PromptArea
 
     from chimera.tui.app import ChimeraTUI
 
     app = ChimeraTUI(FakeDriver())
     async with app.run_test() as pilot:
-        app.query_one("#prompt", Input).value = "fix the bug"
+        app.query_one("#prompt", PromptArea).value = "fix the bug"
         await pilot.press("enter")
         await pilot.pause()
         await app.workers.wait_for_complete()
@@ -78,7 +80,7 @@ async def test_tui_runs_a_turn_and_renders():
 
 @pytest.mark.asyncio
 async def test_slash_commands_do_not_crash():
-    from textual.widgets import Input
+    from chimera.tui.prompt import PromptArea
 
     from chimera.tui.app import ChimeraTUI
 
@@ -86,7 +88,7 @@ async def test_slash_commands_do_not_crash():
     app = ChimeraTUI(d)
     async with app.run_test() as pilot:
         for cmd in ("/help", "/model", "/cost", "/tools", "/clear"):
-            app.query_one("#prompt", Input).value = cmd
+            app.query_one("#prompt", PromptArea).value = cmd
             await pilot.press("enter")
             await pilot.pause()
         assert app.is_running  # still alive after all commands

@@ -27,7 +27,9 @@ try:
     from textual.app import App, ComposeResult
     from textual.binding import Binding
     from textual.containers import Horizontal, Vertical
-    from textual.widgets import Footer, Header, Input, RichLog, Static
+    from textual.widgets import Footer, Header, RichLog, Static, TextArea
+
+    from chimera.tui.prompt import PromptArea, filter_commands
 except ImportError as exc:  # pragma: no cover
     raise ImportError(
         "The Chimera multiplexer needs the 'tui' extra:\n"
@@ -124,6 +126,13 @@ class LanePane(Vertical):
         self.set_class(value, "focused-lane")
         self.refresh_header()
 
+    def set_show_reasoning(self, value: bool) -> None:
+        if self._transcript is not None:
+            self._transcript.show_reasoning = value
+
+    def reveal_reasoning(self) -> bool:
+        return self._transcript.reveal_last() if self._transcript is not None else False
+
 
 class MultiplexApp(App):
     """Full-screen host for N lanes racing one task (spec §6)."""
@@ -140,18 +149,29 @@ class MultiplexApp(App):
     .lane-pane.focused-lane { border: round $accent; }
     .lane-header { height: 1; background: $boost; padding: 0 1; }
     .lane-log { height: 1fr; padding: 0 1; }
-    #prompt { border: round $secondary; }
+    #sidebar { width: 32; border: round $secondary; padding: 0 1; }
+    #prompt { border: round $secondary; height: auto; max-height: 8; }
+    #hint { height: 1; color: $text-muted; padding: 0 1; }
     """
 
     BINDINGS = [
         Binding("ctrl+c", "cancel_all", "Cancel all / quit", priority=True),
         Binding("ctrl+d", "quit", "Quit"),
-        Binding("tab", "focus_next_lane", "Focus →", priority=True),
+        # Tab completes a "/" command when one is being typed, else cycles focus.
+        Binding("tab", "smart_tab", "Complete / focus →", priority=True),
         Binding("shift+tab", "focus_prev_lane", "Focus ←", priority=True),
         Binding("ctrl+b", "toggle_broadcast", "Broadcast/target"),
         Binding("ctrl+g", "cancel_focused", "Cancel lane"),
         Binding("ctrl+o", "clear_focused", "Clear lane"),
         Binding("ctrl+r", "show_results", "Compare results"),
+        Binding("ctrl+e", "toggle_reasoning", "Reasoning"),
+        Binding("ctrl+t", "toggle_sidebar", "Sidebar"),
+    ]
+
+    #: Local command catalog (drives /help and slash autocomplete).
+    COMMANDS = [
+        "/broadcast", "/clear", "/cost", "/exit", "/export", "/help",
+        "/model", "/quit", "/results", "/summary", "/target", "/tools",
     ]
 
     def __init__(
@@ -177,6 +197,8 @@ class MultiplexApp(App):
         self._race_end: float | None = None
         self._completion_order = 0
         self._slots: Any = None  # asyncio.Semaphore, created on mount
+        self._show_reasoning = False
+        self._sidebar_on = False
 
     # -- layout ---------------------------------------------------------
     def compose(self) -> ComposeResult:
@@ -190,15 +212,18 @@ class MultiplexApp(App):
                 self._panes.append(pane)
                 self._pane_by_id[lane.id] = pane
                 yield pane
-        yield Input(placeholder=self._placeholder(), id="prompt")
+            yield Static("", id="sidebar")
+        yield Static("", id="hint")
+        yield PromptArea(placeholder=self._placeholder(), commands=self.COMMANDS, id="prompt")
         yield Footer()
 
     def on_mount(self) -> None:
         import asyncio
 
         self._slots = asyncio.Semaphore(self._lane_cap or len(self._cohort.lanes))
-        self.query_one("#prompt", Input).focus()
+        self.query_one("#prompt", PromptArea).focus()
         self.query_one("#summary", Static).display = False
+        self.query_one("#hint", Static).display = False
         self._update_focus_styles()
         self._relayout()
         for pane in self._panes:
@@ -220,6 +245,12 @@ class MultiplexApp(App):
         strip.display = self._tabbed
         if self._tabbed:
             strip.update(self._tabstrip_text())
+        # Sidebar (§13.7): only when toggled on AND the terminal is wide enough
+        # to spare its column (auto-hide, §5.11).
+        sidebar = self.query_one("#sidebar", Static)
+        sidebar.display = self._sidebar_on and not self._tabbed and width >= 100
+        if sidebar.display:
+            self._refresh_sidebar()
 
     def _tabstrip_text(self) -> Text:
         parts: list[tuple[str, str]] = []
@@ -299,11 +330,28 @@ class MultiplexApp(App):
             pane.set_focused(i == self._focus_index)
 
     # -- input ----------------------------------------------------------
-    @on(Input.Submitted, "#prompt")
-    def _on_input(self, event: Input.Submitted) -> None:
+    @on(PromptArea.Submitted, "#prompt")
+    def _on_input(self, event: PromptArea.Submitted) -> None:
         text = event.value.strip()
-        event.input.value = ""
+        event.prompt.remember(event.value)
+        event.prompt.value = ""
+        self._hide_hint()
         self._submit_text(text)
+
+    @on(TextArea.Changed, "#prompt")
+    def _on_prompt_changed(self, event: TextArea.Changed) -> None:
+        # Autocomplete hint (§13.6): show matching commands while a "/" prefix
+        # is being typed; Tab completes.
+        matches = filter_commands(event.text_area.text, self.COMMANDS)
+        hint = self.query_one("#hint", Static)
+        if matches:
+            hint.update(Text("  ".join(matches) + "   (Tab completes)", style="dim"))
+            hint.display = True
+        else:
+            hint.display = False
+
+    def _hide_hint(self) -> None:
+        self.query_one("#hint", Static).display = False
 
     def _submit_text(self, text: str) -> None:
         text = text.strip()
@@ -370,6 +418,8 @@ class MultiplexApp(App):
                     pane.feed(ev)
                     if ev.type in _HEADER_REFRESH_EVENTS:
                         pane.refresh_header()
+                        if self._sidebar_on and lane is self._focused_lane():
+                            self._refresh_sidebar()
             except Exception as exc:  # noqa: BLE001 - surfaced to the pane
                 lane.telemetry.terminal_reason = "error"
                 pane.feed_error(exc)
@@ -408,20 +458,20 @@ class MultiplexApp(App):
             self._focus_index = (self._focus_index + 1) % len(self._panes)
             self._update_focus_styles()
             self._relayout()
-            self.query_one("#prompt", Input).placeholder = self._placeholder()
+            self.query_one("#prompt", PromptArea).placeholder = self._placeholder()
 
     def action_focus_prev_lane(self) -> None:
         if self._panes:
             self._focus_index = (self._focus_index - 1) % len(self._panes)
             self._update_focus_styles()
             self._relayout()
-            self.query_one("#prompt", Input).placeholder = self._placeholder()
+            self.query_one("#prompt", PromptArea).placeholder = self._placeholder()
 
     def action_toggle_broadcast(self) -> None:
         self._mode = (
             RoutingMode.TARGETED if self._mode is RoutingMode.BROADCAST else RoutingMode.BROADCAST
         )
-        self.query_one("#prompt", Input).placeholder = self._placeholder()
+        self.query_one("#prompt", PromptArea).placeholder = self._placeholder()
         self._refresh_global()
 
     def action_clear_focused(self) -> None:
@@ -444,6 +494,54 @@ class MultiplexApp(App):
 
         self.push_screen(ResultsScreen(self._cohort))
 
+    def action_smart_tab(self) -> None:
+        """Tab: complete a "/" command being typed, else cycle lane focus."""
+        prompt = self.query_one("#prompt", PromptArea)
+        if prompt.has_focus and prompt.text.lstrip().startswith("/"):
+            from chimera.tui.prompt import complete_command
+
+            completed = complete_command(prompt.text, self.COMMANDS)
+            if completed != prompt.text:
+                prompt.text = completed
+                prompt.move_cursor(prompt.document.end)
+            return
+        self.action_focus_next_lane()
+
+    def action_toggle_reasoning(self) -> None:
+        """Show/hide reasoning blocks (§13.4); revealing shows the focused
+        lane's most recent hidden block."""
+        self._show_reasoning = not self._show_reasoning
+        for pane in self._panes:
+            pane.set_show_reasoning(self._show_reasoning)
+        lane = self._focused_lane()
+        if lane is not None:
+            pane = self._pane(lane.id)
+            if self._show_reasoning:
+                if not pane.reveal_reasoning():
+                    pane.note("reasoning: shown (none captured yet)", style="dim")
+            else:
+                pane.note("reasoning: hidden", style="dim")
+
+    def action_toggle_sidebar(self) -> None:
+        self._sidebar_on = not self._sidebar_on
+        self._relayout()
+
+    def _refresh_sidebar(self) -> None:
+        lane = self._focused_lane()
+        sidebar = self.query_one("#sidebar", Static)
+        if lane is None:
+            sidebar.update("")
+            return
+        rows: list[str] = [f"⚙ {lane.label} — tool calls"]
+        for name, ok in lane.tool_log[-30:]:
+            mark = "…" if ok is None else ("✓" if ok else "✗")
+            rows.append(f" {mark} {name}")
+        if len(lane.tool_log) > 30:
+            rows.insert(1, f" … ({len(lane.tool_log) - 30} earlier)")
+        if not lane.tool_log:
+            rows.append(" (none yet)")
+        sidebar.update(Text("\n".join(rows), style="dim"))
+
     # -- slash commands (frontend-local) --------------------------------
     def _handle_command(self, text: str) -> None:
         cmd = text.split()[0]
@@ -459,8 +557,9 @@ class MultiplexApp(App):
         elif cmd == "/help":
             say(
                 "/help /model /cost /tools /clear /summary /results /export "
-                "/broadcast /target /exit  ·  Tab focus · Ctrl+B mode · "
-                "Ctrl+R compare · Ctrl+C cancel-all · Ctrl+G cancel-lane"
+                "/broadcast /target /exit  ·  Tab complete-or-focus · Ctrl+B mode · "
+                "Ctrl+R compare · Ctrl+E reasoning · Ctrl+T sidebar · "
+                "Ctrl+J newline · Ctrl+C cancel-all · Ctrl+G cancel-lane"
             )
         elif cmd == "/model":
             say("  ".join(f"{ln.label}={ln.config.model}" for ln in self._cohort.lanes))
@@ -485,7 +584,7 @@ class MultiplexApp(App):
                 say(f"export failed: {exc}", style="red")
         elif cmd in ("/broadcast", "/target"):
             self._mode = RoutingMode.BROADCAST if cmd == "/broadcast" else RoutingMode.TARGETED
-            self.query_one("#prompt", Input).placeholder = self._placeholder()
+            self.query_one("#prompt", PromptArea).placeholder = self._placeholder()
             self._refresh_global()
         else:
             say(f"unknown command: {cmd}", style="red")

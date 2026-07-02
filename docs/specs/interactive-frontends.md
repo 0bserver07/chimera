@@ -675,17 +675,32 @@ manifest; unknown presets/loops are rejected with a clear error.
 *Verified live (GLM-5.2):* a ReAct lane and a `plan-execute` lane race one task;
 the swapped loop executes real tools, writes its file, and streams into its pane.
 
-**13.4 Reasoning display** (§5.3) — when the driver surfaces reasoning/thinking,
-render it as a collapsible, dim block, default collapsed, with a toggle key.
+**13.4 Reasoning display** (§5.3) — ✅ **shipped.** The full event path now
+exists: the provider stream mapper surfaces `thinking_delta`, `AgentLoop`
+forwards it as a `thinking_chunk` `LoopEvent` (never merged into assistant
+content), and both frontends render it as a dim block — **collapsed by default**
+(a one-line size marker), toggled with a key that also reveals the most recent
+hidden block. Reasoning stays out of the persisted transcript.
+*Verified live (GLM-5.2 via z.ai, thinking enabled): 7 real thinking chunks
+surfaced and rendered; 0 when disabled.*
 
 ### P3 — polish
 
-- **13.5 Multi-line input** (§5.4) — a Textual `TextArea`; distinct newline vs
-  submit gestures; history recall at input boundaries.
-- **13.6 Slash autocomplete** (§5.4) — filter the command catalog as the `/`
-  prefix is typed.
-- **13.7 Sidebar** (§5.11/§6.3) — per-lane tool-call timeline / file tree;
-  auto-hides on narrow terminals.
-- **13.8 Richer diff forms** (§6.5) — split/unified rendering with syntax-aware
-  styling, in the comparison view and single-agent tool results.
+- **13.5 Multi-line input** (§5.4) — ✅ **shipped.** `chimera/tui/prompt.py`
+  `PromptArea` (a Textual `TextArea`): `Enter` submits, `Ctrl+J` /
+  `Shift+Enter` inserts a newline, `Up`/`Down` at the boundaries recall history
+  (draft preserved). Used by both frontends as `#prompt`.
+- **13.6 Slash autocomplete** (§5.4) — ✅ **shipped.** While a `/` prefix is
+  typed, a hint line shows the filtered catalog and `Tab` completes (unique
+  match fully, else the common prefix). In the multiplexer, `Tab` completes when
+  a command is being typed and cycles lane focus otherwise. Pure helpers
+  (`filter_commands` / `complete_command`) are exhaustively unit-tested.
+- **13.7 Sidebar** (§5.11/§6.3) — ✅ **shipped.** A toggleable per-lane sidebar
+  showing the focused lane's tool-call timeline (`✓`/`✗`/in-flight), fed by the
+  lane's `tool_log`; auto-hides on narrow terminals and in tabbed mode.
+- **13.8 Richer diff forms** (§6.5) — ✅ **shipped.** The comparison view splits
+  the diff by file with `n`/`p` navigation, and `s` toggles **unified** (the
+  colorized form) vs **split** (side-by-side old│new built by pairing
+  removal/addition runs). Lane diffs now exclude the agent's own bookkeeping
+  (`.chimera/`), so the comparison shows what the lane produced.
 ```

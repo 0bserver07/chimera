@@ -13,7 +13,7 @@ in progress) · 🔵 Design (proposal, not yet implemented).
 
 | Spec | Covers | Status | Code / notes |
 |------|--------|--------|--------------|
-| [interactive-frontends](interactive-frontends.md) | Single-agent TUI + multi-agent multiplexer, as additive frontends over the agent driver (REPL unchanged) | 🟡 Partial | Phases 1–2 shipped — `chimera code --tui` (single) · `--tui --models a,b,c` + `chimera otter --multiplex` (multiplexer), `chimera/tui/`. Phase 3 (polish) remains. See phase checklist below |
+| [interactive-frontends](interactive-frontends.md) | Single-agent TUI + multi-agent multiplexer, as additive frontends over the agent driver (REPL unchanged) | ✅ Shipped | All 3 phases — `chimera code --tui` (single) · `--tui --models a,b,c` + `chimera otter --multiplex` (multiplexer), `chimera/tui/`. See phase checklist below |
 | [comparative-bench-cli](comparative-bench-cli.md) | `chimera bench-compare` — controlled comparative matrix under uniform budgets | ✅ Shipped | `chimera/core/budget.py`, `bench-compare` CLI |
 | [harbor-task-adapter](harbor-task-adapter.md) | Harbor / DeepSWE task-format adapter | ✅ Shipped | `chimera/eval/benchmarks/harbor.py` |
 | [atif-trajectory-emission](atif-trajectory-emission.md) | ATIF v1.7 trajectory emit / validate / read | ✅ Shipped | `chimera/atif/` |
@@ -44,12 +44,13 @@ Specs delivered in phases track their phases here.
       launch via `chimera code --tui --models a,b,c` or
       `chimera otter --multiplex a,b,c`. Verified live on GLM-5.2 + GLM-4.6
       (concurrent, isolated, ranked by finish).
-- 🟡 **Phase 3 — polish & depth** (detailed in spec §13):
+- [x] **Phase 3 — polish & depth** (detailed in spec §13) — **complete**:
   - [x] 13.1 in-UI cohort comparison view (scoreboard + per-lane diff viewer) — shipped (PR #162)
   - [x] 13.2 resumable per-lane sessions (`--resume <cohort-id>`, `--list-cohorts`) — shipped
   - [x] 13.3 heterogeneous lanes — per-lane preset + posture + **real loop swap** (`model:preset:loop`; loops `plan-execute`/`reflexion`/`tot` via the loop adapter) — shipped
-  - [ ] 13.4 reasoning display · 13.5 multi-line input · 13.6 slash autocomplete
-  - [ ] 13.7 per-lane sidebar · 13.8 richer split/unified diff forms
+  - [x] 13.4 reasoning display (`thinking_chunk` event path + collapsed-by-default rendering, Ctrl+E) — shipped, live-verified on GLM-5.2 thinking
+  - [x] 13.5 multi-line input (`PromptArea`: Enter submits, Ctrl+J newline, history recall) · 13.6 slash autocomplete (hint line + Tab) — shipped
+  - [x] 13.7 per-lane sidebar (tool-call timeline, Ctrl+T, narrow auto-hide) · 13.8 richer diffs (per-file nav n/p + split/unified s) — shipped
 
 The load-bearing Phase-2 open decision — **workspace isolation** (§6.2) — was
 resolved to *git worktree per lane, with a directory-copy fallback for non-git
