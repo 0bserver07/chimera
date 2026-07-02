@@ -1,5 +1,51 @@
 # Changelog
 
+## Unreleased — the TUI multiplexer: race N agents on one task
+
+The `interactive-frontends` spec shipped in full (all 3 phases). Chimera's
+comparison mission is now a live terminal interface: N agent lanes — different
+models, presets, or genuinely different reasoning loops — race one task in
+isolated git worktrees, side by side.
+
+### Added
+
+- **Single-agent TUI** (`chimera code --tui`, `chimera/tui/app.py`): streaming
+  transcript with tool-call rendering, status line, slash commands, cancel,
+  type-while-running steering.
+- **The multiplexer** (`chimera code --tui --models a,b,c` /
+  `chimera otter --multiplex a,b,c`, `chimera/tui/multiplex.py`): N concurrent
+  lanes with per-lane **workspace isolation** (a git worktree per lane, copy
+  fallback), broadcast vs targeted input, live per-lane telemetry (cost, tokens,
+  steps, time), a cohort summary with first-to-finish, lane caps, and a
+  persisted comparison artifact (`~/.chimera/cohorts/<id>/` — manifest, ranked
+  summary, per-lane transcripts + diffs; `--export` zips it).
+- **In-UI comparison view** (`Ctrl+R` / `/results`): ranked scoreboard over a
+  per-lane diff viewer — per-file navigation (`n`/`p`) and a side-by-side split
+  view (`s`); lane diffs exclude the agent's own `.chimera/` bookkeeping.
+- **Resumable cohorts** (`--resume <cohort-id>`, `--list-cohorts`): lanes are
+  reconstructed from the recorded base commit with their saved diff re-applied
+  and a faithful conversation-history replay (tool calls preserved), then the
+  race continues.
+- **Heterogeneous lanes** (`model[:preset[:loop]]`): per-lane preset, loop
+  posture (`plan`, `tdd`), or a **genuinely different reasoning loop**
+  (`plan-execute`, `reflexion`, `tot`) via the new loop adapter
+  (`chimera/assembly/loop_adapter.py`), which bridges strategy loops'
+  `iter_steps()` into the TUI's event stream on a worker thread.
+- **Reasoning display**: extended-thinking deltas now flow end-to-end
+  (provider mapper → `thinking_chunk` LoopEvents → dim, collapsed-by-default
+  blocks; `Ctrl+E` toggles). Verified live — GLM-5.2 via z.ai surfaces real
+  thinking with `enable_thinking=True`.
+- **Markdown transcripts**: assistant prose renders as rich Markdown (headers,
+  bold, syntax-highlighted code fences); tool output, user echo, and reasoning
+  stay literal.
+- **Prompt upgrades**: multi-line input (`Enter` submits, `Ctrl+J` newline,
+  history recall), slash autocomplete with a hint line and smart `Tab`
+  (complete a command, else cycle lane focus), per-lane tool-call sidebar
+  (`Ctrl+T`).
+- **Docs**: `concepts/coding-agents-map.md` on the site — the "4 knobs"
+  orientation page (CLIs · presets · models · the multiplexer, and where each
+  surface persists).
+
 ## 0.8.1 — 2026-06-30 — `chimera code` becomes a real daily driver
 
 The assembly/`CodingAgent` stack behind `chimera code` is now a usable

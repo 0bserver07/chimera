@@ -8,7 +8,7 @@ Compose coding agents from modular primitives. Synthesize codebases from specifi
 - **Build:** hatchling + uv
 - **License:** MIT
 - **Setup:** `uv sync --extra dev --extra anthropic`
-- **Tests:** `uv run pytest` (8331 passing + 96 skipped)
+- **Tests:** `uv run pytest` (8534 passing + 97 skipped locally, excluding the live-infra files `tests/integration/test_env_docker_integration.py`, `tests/env/test_modal_sandbox.py`, `tests/env/test_ssh_live.py`; one `tests/function_synthesis/test_validation_split.py` test is env-sensitive locally but green in CI)
 - **Lint:** `uv run ruff check chimera/`
 - **Types:** `uv run mypy chimera/`
 - **Docs:** Astro/Starlight in `site/`. Local: `cd site && pnpm install && pnpm dev`. Deploys to <https://0bserver07.github.io/chimera/> via `.github/workflows/ci.yml`.
@@ -175,6 +175,20 @@ Layer 1: Environment     Local, Docker, Git, Remote, Cloud, PersistentShell
 - `chimera/lsp/` — LSP client, diagnostics, completion, rename
 - `chimera/auth/` — API key, OAuth device/browser flows (real stdlib HTTP impl), credential store (file-based, 0o600 perms)
 - `chimera/rpc/` — JSON-RPC server (stdin/stdout), RpcHandler (prompt/steer/cancel/get_state/compact), command/response/event types
+
+### Assembly (`chimera/assembly/`)
+- `coding_agent.py` — CodingAgent, the assembled daily-driver stack behind `chimera code` (presets, conversation memory, loop postures via `LOOP_POSTURES`)
+- `driver.py` — AgentDriver: the one control surface a REPL/TUI drives (send/steer/cancel/clear/load_history + model/tools/cost/history)
+- `loop_adapter.py` — run a strategy loop (plan-execute/reflexion/tot) as a LoopEvent stream (worker-thread bridge, bounded provider)
+- `presets.py` / `system_prompts.py` / `tool_sets.py` — AssemblyConfig PRESETS (coding_agent, codex, minimal, explore), prompts, tool factories
+
+### TUI (`chimera/tui/`)
+Interactive frontends over AgentDriver (spec: `docs/specs/interactive-frontends.md`, all 3 phases shipped):
+- `app.py` — single-agent full-screen TUI (`chimera code --tui`)
+- `multiplex.py` — the multiplexer: N lanes race one task (`--tui --models a[:preset[:loop]],b,…` / `chimera otter --multiplex`), broadcast/targeted routing, resume
+- `lane.py` / `cohort.py` — Lane (driver+workspace+telemetry+tool_log), Cohort (manifest, persistence to `~/.chimera/cohorts/`, export, list/load for `--resume`)
+- `workspace.py` — per-lane isolation (git worktree per lane, copy fallback; `apply_diff` for resume)
+- `render.py` / `results.py` / `prompt.py` / `routing.py` / `history_io.py` — shared transcript rendering (markdown assistant prose, collapsed reasoning), comparison screen (scoreboard + per-file/split diffs), multi-line prompt + slash autocomplete, pure input routing, faithful history codec
 
 ### Codename Agent CLIs (`chimera/{mink,otter,ferret,weasel,shrew,stoat,badger}/`)
 - 7 replicated coding-agent CLIs: `chimera mink|otter|ferret|weasel|shrew|stoat|badger` (aliases: tui, multi, sandbox, mini, tiny, shell, strict)
