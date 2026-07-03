@@ -157,6 +157,19 @@ class AnthropicProvider(Provider):
         if base_url or os.environ.get("ANTHROPIC_BASE_URL"):
             client_kwargs["base_url"] = base_url or os.environ.get("ANTHROPIC_BASE_URL")
 
+        # The Anthropic SDK refuses a *non-streaming* ``messages.create`` whose
+        # ``max_tokens`` could take >10 min — its guard fires for
+        # ``max_tokens > ~21k`` (3600 * max_tokens / 128000 > 600), and
+        # GLM/Kimi/Qwen default to 32k output here. The guard is skipped when
+        # the client carries an explicit (non-default) timeout, so set one:
+        # the non-streaming eval path (Harness / bench-matrix) then works for
+        # these large-output models instead of raising. Callers may override
+        # via ``**kw`` -> client_kwargs. See
+        # ``anthropic/_base_client.py::_calculate_nonstreaming_timeout``.
+        import httpx
+
+        client_kwargs.setdefault("timeout", httpx.Timeout(900.0, connect=10.0))
+
         if is_oauth:
             _saved_env = os.environ.pop("ANTHROPIC_API_KEY", None)
             try:

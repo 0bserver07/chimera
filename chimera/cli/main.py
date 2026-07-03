@@ -128,6 +128,10 @@ def build_parser() -> argparse.ArgumentParser:
     from chimera.cli.bench_compare import add_bench_compare_parser
     add_bench_compare_parser(subparsers)
 
+    # ---- bench-matrix subcommand ----
+    from chimera.cli.bench_matrix import add_bench_matrix_parser
+    add_bench_matrix_parser(subparsers)
+
     # ---- code subcommand ----
     code_parser = subparsers.add_parser(
         "code",
@@ -704,22 +708,53 @@ def _add_synthesize_args(parser: argparse.ArgumentParser) -> None:
 create_parser = build_parser
 
 
+# Canonical benchmark name -> "module:ClassName". Multiple keys may point at the
+# same adapter (hyphenated + squashed aliases). Every adapter under
+# chimera/eval/benchmarks/ with a runnable Benchmark subclass is registered here
+# so `chimera bench <name>` can reach it; see docs/reference/capability-matrix.md.
 _BENCHMARKS: dict[str, str] = {
+    "aider-polyglot": "chimera.eval.benchmarks.aider_polyglot:AiderPolyglot",
+    "aiderpolyglot": "chimera.eval.benchmarks.aider_polyglot:AiderPolyglot",
+    "aimo": "chimera.eval.benchmarks.aimo:AIMOBenchmark",
+    "bigcodebench": "chimera.eval.benchmarks.bigcodebench:BigCodeBench",
+    "cline-bench": "chimera.eval.benchmarks.cline_bench:ClineBench",
+    "clinebench": "chimera.eval.benchmarks.cline_bench:ClineBench",
+    "context-bench": "chimera.eval.benchmarks.context_bench:ContextBench",
+    "contextbench": "chimera.eval.benchmarks.context_bench:ContextBench",
+    "custom": "chimera.eval.benchmarks.custom:CustomBenchmark",
+    "dpai-arena": "chimera.eval.benchmarks.dpai_arena:DPAIArena",
+    "dpaiarena": "chimera.eval.benchmarks.dpai_arena:DPAIArena",
+    "feature-bench": "chimera.eval.benchmarks.feature_bench:FeatureBench",
+    "featurebench": "chimera.eval.benchmarks.feature_bench:FeatureBench",
     "harbor": "chimera.eval.benchmarks.harbor:HarborBenchmark",
     "human-eval": "chimera.eval.benchmarks.human_eval:HumanEval",
     "humaneval": "chimera.eval.benchmarks.human_eval:HumanEval",
+    "humaneval-plus": "chimera.eval.benchmarks.humaneval_plus:HumanEvalPlus",
+    "humanevalplus": "chimera.eval.benchmarks.humaneval_plus:HumanEvalPlus",
     "humaneval-x": "chimera.eval.benchmarks.humaneval_x:HumanEvalX",
     "humanevalx": "chimera.eval.benchmarks.humaneval_x:HumanEvalX",
+    "lcb": "chimera.eval.benchmarks.livecodebench:LiveCodeBench",
+    "livecodebench": "chimera.eval.benchmarks.livecodebench:LiveCodeBench",
+    "math-500": "chimera.eval.benchmarks.math500:MATH500Benchmark",
+    "math500": "chimera.eval.benchmarks.math500:MATH500Benchmark",
+    "mbpp": "chimera.eval.benchmarks.mbpp:MBPP",
     "multi-swe-bench": "chimera.eval.benchmarks.multi_swe_bench:MultiSWEBench",
     "multiswebench": "chimera.eval.benchmarks.multi_swe_bench:MultiSWEBench",
     "nocha": "chimera.eval.benchmarks.nocha:NoCha",
     "programbench": "chimera.eval.benchmarks.programbench:ProgramBench",
     "swe-bench": "chimera.eval.benchmarks.swe_bench:SWEBench",
     "swebench": "chimera.eval.benchmarks.swe_bench:SWEBench",
+    "swe-bench-verified": "chimera.eval.benchmarks.swe_bench_verified:SWEBenchVerified",
+    "swebench-verified": "chimera.eval.benchmarks.swe_bench_verified:SWEBenchVerified",
     "swe-lancer": "chimera.eval.benchmarks.swe_lancer:SWELancer",
     "swelancer": "chimera.eval.benchmarks.swe_lancer:SWELancer",
-    "aimo": "chimera.eval.benchmarks.aimo:AIMOBenchmark",
-    "custom": "chimera.eval.benchmarks.custom:CustomBenchmark",
+    "swe-polybench": "chimera.eval.benchmarks.swe_polybench:SWEPolyBench",
+    "swepolybench": "chimera.eval.benchmarks.swe_polybench:SWEPolyBench",
+    "swt-bench": "chimera.eval.benchmarks.swt_bench:SWTBench",
+    "swtbench": "chimera.eval.benchmarks.swt_bench:SWTBench",
+    "tau-bench": "chimera.eval.benchmarks.tau_bench:TauBench",
+    "taubench": "chimera.eval.benchmarks.tau_bench:TauBench",
+    "webarena": "chimera.eval.benchmarks.webarena:WebArena",
 }
 
 
@@ -729,19 +764,33 @@ def _load_benchmark(
     limit: int | None = None,
     tasks_dir: str | None = None,
 ) -> Any:
-    """Instantiate a benchmark by name."""
+    """Instantiate a benchmark by name.
+
+    Adapters name their dataset constructor argument differently
+    (``dataset_path``, ``problems_path``, or ``dataset_dir``) and some take no
+    ``limit``. Rather than assume one signature, inspect the constructor and
+    only pass arguments it actually declares, so every registered adapter loads
+    regardless of its individual signature.
+    """
     if name not in _BENCHMARKS:
         raise ValueError(f"Unknown benchmark: {name}. Available: {', '.join(_BENCHMARKS)}")
     module_path, class_name = _BENCHMARKS[name].rsplit(":", 1)
     import importlib
+    import inspect
     module = importlib.import_module(module_path)
     cls = getattr(module, class_name)
     if name == "custom":
         return cls(tasks_dir=tasks_dir or dataset)
+    params = inspect.signature(cls.__init__).parameters
     kwargs: dict[str, Any] = {}
     if dataset:
-        kwargs["dataset_path"] = dataset
-    if limit:
+        # Adapters name their dataset argument differently; use the first the
+        # class actually declares.
+        for dataset_arg in ("dataset_path", "problems_path", "dataset_dir"):
+            if dataset_arg in params:
+                kwargs[dataset_arg] = dataset
+                break
+    if limit and "limit" in params:
         kwargs["limit"] = limit
     return cls(**kwargs)
 
@@ -1304,6 +1353,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     elif args.command == "bench-compare":
         from chimera.cli.bench_compare import run_bench_compare
         return run_bench_compare(args)
+    elif args.command == "bench-matrix":
+        from chimera.cli.bench_matrix import run_bench_matrix
+        return run_bench_matrix(args)
     elif args.command == "code":
         from chimera.cli.code import run_code
         return run_code(args)
