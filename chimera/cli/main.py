@@ -128,6 +128,10 @@ def build_parser() -> argparse.ArgumentParser:
     from chimera.cli.bench_compare import add_bench_compare_parser
     add_bench_compare_parser(subparsers)
 
+    # ---- bench-matrix subcommand ----
+    from chimera.cli.bench_matrix import add_bench_matrix_parser
+    add_bench_matrix_parser(subparsers)
+
     # ---- code subcommand ----
     code_parser = subparsers.add_parser(
         "code",
@@ -1349,6 +1353,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     elif args.command == "bench-compare":
         from chimera.cli.bench_compare import run_bench_compare
         return run_bench_compare(args)
+    elif args.command == "bench-matrix":
+        from chimera.cli.bench_matrix import run_bench_matrix
+        return run_bench_matrix(args)
     elif args.command == "code":
         from chimera.cli.code import run_code
         return run_code(args)

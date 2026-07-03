@@ -8,7 +8,27 @@ See ``docs/specs/agent-benchmark-matrix.md`` and
 
 from __future__ import annotations
 
+from chimera.eval.runners.acp import ACPRunner
 from chimera.eval.runners.base import AgentRunner, AgentRunResult
+from chimera.eval.runners.cli_template import CliTemplateRunner
 from chimera.eval.runners.in_process import InProcessRunner
+from chimera.eval.runners.native_harness import NativeHarnessRunner
+from chimera.eval.runners.registry import (
+    AgentSpec,
+    default_agent_specs,
+    load_registry,
+    resolve,
+)
 
-__all__ = ["AgentRunner", "AgentRunResult", "InProcessRunner"]
+__all__ = [
+    "ACPRunner",
+    "AgentRunner",
+    "AgentRunResult",
+    "AgentSpec",
+    "CliTemplateRunner",
+    "InProcessRunner",
+    "NativeHarnessRunner",
+    "default_agent_specs",
+    "load_registry",
+    "resolve",
+]
