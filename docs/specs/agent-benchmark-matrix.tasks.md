@@ -13,6 +13,24 @@ spec→implement · **[W]** wiring · **[I]** integration · **[N]** net-new bui
 
 ---
 
+## Build status — 2026-07-03 (team build + live verification)
+
+All runner + matrix **code** is built, tested, and **live-verified on `glm-5.2[1m]`**
+(via the z.ai endpoint): `chimera bench-matrix --agents react --benchmarks human-eval
+--model glm-5.2[1m]` ran end-to-end and scored **100% (1/1)**. Shipped: the
+signature-aware loader, 25-benchmark wiring, `AgentRunner`+`InProcessRunner`, the
+`AgentSpec` registry, the `chimera bench-matrix` CLI, the ACP / CLI-template /
+native-harness runners, and the replica-vs-real fidelity harness — plus a required
+provider fix (`fix(anthropic)`: an explicit client timeout so the SDK's
+non-streaming ">10 min" guard no longer blocks glm/kimi's 32k-output eval calls).
+
+**Still deferred (needs live external infra, not code):** running the external
+native-harness fleet (mini-swe-agent/Agentless/…), the official SWE-bench grader,
+published multi-cell matrices, and live replica-vs-real fidelity runs. These are
+the ⬜ items below marked "Acceptance" / Phase 2–3 live steps.
+
+---
+
 ## Phase 0 — foundation (internal agents × full bench registry)
 
 - ✅ **[W] Signature-aware `_load_benchmark`** — inspect each ctor; map the
