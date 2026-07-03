@@ -13,7 +13,7 @@ extension guide. If you want "how many agents are there," read the matrix. If yo
 want "what is a replica style, and how do I add one," read this.
 
 Everything below was read out of the source; where a count could be read two ways
-(e.g. "25 registered" vs "28 adapters"), the two scopes are spelled out so nothing
+(e.g. "26 registered" vs "29 adapters"), the two scopes are spelled out so nothing
 is overstated.
 
 ---
@@ -220,19 +220,19 @@ The other axis is task sources + graders. Every benchmark is a `Benchmark`
 subclass (`name()` / `tasks()` / `evaluate()`) behind the one `Harness`.
 
 **Count, precisely:** the shared CLI registry `_BENCHMARKS`
-(`chimera/cli/main.py`) registers **25 distinct** benchmarks (42 keys once
+(`chimera/cli/main.py`) registers **26 distinct** benchmarks (44 keys once
 hyphen/no-hyphen aliases are counted). These are the ones `chimera bench` and
 `chimera bench-matrix` can reach. The [capability matrix](./capability-matrix.md)
-reports **28 adapters** repo-wide — the extra 3 are the "shrew-side" benches
+reports **29 adapters** repo-wide — the extra 3 are the "shrew-side" benches
 (GAIA, Terminal-Bench, HarborBench) surfaced through `chimera shrew bench`, not
 the shared `_BENCHMARKS` registry. Both numbers are correct for their scope; the
-matrix CLIs operate over the **25**.
+matrix CLIs operate over the **26**.
 
-The 25 registered, by family (this breakdown sums to 25):
+The 26 registered, by family (this breakdown sums to 26):
 
 | Family | Count | Members |
 |---|---:|---|
-| SWE / repo-fix | 10 | `swe-bench` · `swe-bench-verified` · `multi-swe-bench` · `swe-polybench` · `swe-lancer` · `swt-bench` · `feature-bench` · `cline-bench` · `dpai-arena` · `harbor` |
+| SWE / repo-fix | 11 | `swe-bench` · `senior-swe-bench` · `swe-bench-verified` · `multi-swe-bench` · `swe-polybench` · `swe-lancer` · `swt-bench` · `feature-bench` · `cline-bench` · `dpai-arena` · `harbor` |
 | Code-gen | 8 | `human-eval` · `humaneval-plus` · `humaneval-x` · `mbpp` · `bigcodebench` · `livecodebench` · `programbench` · `aider-polyglot` |
 | Math | 2 | `aimo` · `math-500` |
 | Agentic / web | 2 | `tau-bench` · `webarena` |
@@ -243,7 +243,7 @@ The 25 registered, by family (this breakdown sums to 25):
 
 Three different senses of "ready" — keep them distinct:
 
-- **Wired** — reachable and instantiable through `_load_benchmark`. **All 25**
+- **Wired** — reachable and instantiable through `_load_benchmark`. **All 26**
   are wired. `_load_benchmark` is signature-aware: it inspects each constructor
   and passes the dataset argument under whatever name that adapter declares
   (`dataset_path` / `problems_path` / `dataset_dir`) and only passes `limit` when

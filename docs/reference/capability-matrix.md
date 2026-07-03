@@ -55,7 +55,7 @@ kimi-cli (≈`kimi` preset) · little-coder · opencode · pi · swe-agent ✅
 
 ## Benchmark axis
 
-**28** benchmark adapters behind one `Harness`, fully enumerated in
+**29** benchmark adapters behind one `Harness`, fully enumerated in
 [benchmarks/README](../benchmarks/README.md). Summary by family:
 
 | Family | Count | Examples |
@@ -81,7 +81,7 @@ This is the honest current state (verified in `chimera/cli/main.py`,
 
 | Surface | Agents | Benches reachable | Status |
 |---|---|---|---|
-| `chimera bench` | `--agent react\|code` | **25 registered** (all built adapters — see the tasks backlog for the full list) | ✅ wired |
+| `chimera bench` | `--agent react\|code` | **26 registered** (all built adapters, incl. senior-swe-bench — see the tasks backlog) | ✅ wired |
 | `chimera bench-compare` | internal loop postures | any 1 registered bench | ✅ wired |
 | `chimera otter bench` | otter | HumanEval, MBPP, τ-bench | ✅ wired |
 | `chimera shrew bench` | shrew | aider-polyglot, GAIA, harbor, terminal-bench | ✅ wired |
