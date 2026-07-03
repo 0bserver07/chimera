@@ -746,6 +746,8 @@ _BENCHMARKS: dict[str, str] = {
     "multiswebench": "chimera.eval.benchmarks.multi_swe_bench:MultiSWEBench",
     "nocha": "chimera.eval.benchmarks.nocha:NoCha",
     "programbench": "chimera.eval.benchmarks.programbench:ProgramBench",
+    "senior-swe-bench": "chimera.eval.benchmarks.senior_swe_bench:SeniorSWEBench",
+    "senior-swebench": "chimera.eval.benchmarks.senior_swe_bench:SeniorSWEBench",
     "swe-bench": "chimera.eval.benchmarks.swe_bench:SWEBench",
     "swebench": "chimera.eval.benchmarks.swe_bench:SWEBench",
     "swe-bench-verified": "chimera.eval.benchmarks.swe_bench_verified:SWEBenchVerified",
