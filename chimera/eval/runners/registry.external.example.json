@@ -1,0 +1,35 @@
+[
+  {
+    "id": "opencode",
+    "kind": "acp",
+    "command": ["opencode", "acp"],
+    "sandbox": "docker"
+  },
+  {
+    "id": "codex-cli",
+    "kind": "cli-template",
+    "cmd": "codex exec --prompt-file {prompt_file} --cd {repo}",
+    "sandbox": "docker",
+    "options": {"patch_from": "git-diff"}
+  },
+  {
+    "id": "aider",
+    "kind": "cli-template",
+    "cmd": "aider --yes --message-file {prompt_file} {repo}",
+    "sandbox": "docker"
+  },
+  {
+    "id": "mini-swe-agent",
+    "kind": "native-harness",
+    "harness_cmd": "python -m minisweagent.run --subset {subset} --output {out_dir}",
+    "predictions_glob": "{out_dir}/preds.jsonl",
+    "sandbox": "docker"
+  },
+  {
+    "id": "agentless",
+    "kind": "native-harness",
+    "harness_cmd": "python agentless/run.py --output {out_dir}",
+    "predictions_glob": "{out_dir}/all_preds.jsonl",
+    "sandbox": "docker"
+  }
+]
