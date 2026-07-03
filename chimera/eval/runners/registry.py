@@ -219,15 +219,83 @@ def kimi_preset_agent(provider: Any) -> Any:
     return _build_preset_agent(provider, "kimi")
 
 
+def minimal_preset_agent(provider: Any) -> Any:
+    """Factory: the assembly ``minimal`` preset as an eval agent."""
+    return _build_preset_agent(provider, "minimal")
+
+
+def explore_preset_agent(provider: Any) -> Any:
+    """Factory: the assembly ``explore`` (read-only) preset as an eval agent."""
+    return _build_preset_agent(provider, "explore")
+
+
+def swebench_preset_agent(provider: Any) -> Any:
+    """Factory: the assembly ``swebench`` preset as an eval agent."""
+    return _build_preset_agent(provider, "swebench")
+
+
+# --------------------------------------------------------------------------- #
+# Built-in replica-style factory helpers.
+#
+# Each composes a runnable ``chimera.core.agent.Agent`` from a named
+# :class:`~chimera.agents.presets.agent_styles.AgentPreset` — the in-tree
+# replicas of well-known coding agents (SWE-Agent / Aider / Cline archetypes).
+# ``AgentPreset._compose`` is the preset's documented in-tree build hatch: it
+# wires the replica's tools, loop, and system prompt into a live Agent that
+# already satisfies the ``run(prompt, env) -> AgentResult`` factory contract,
+# exactly like the loop helpers above. The Codex archetype is deliberately not
+# re-exposed here — the assembly ``codex`` preset already occupies that id.
+# --------------------------------------------------------------------------- #
+def _build_style_agent(provider: Any, preset_name: str) -> Any:
+    """Compose a runnable Agent from a named :class:`AgentPreset` replica.
+
+    Args:
+        provider: LLM provider handed to the composed Agent.
+        preset_name: Attribute name on
+            :class:`~chimera.agents.presets.agent_styles.AgentPreset`
+            (e.g. ``"SWE_AGENT"``).
+
+    Returns:
+        A :class:`~chimera.core.agent.Agent` wired with the replica's tools,
+        loop, and system prompt.
+    """
+    from chimera.agents.presets.agent_styles import AgentPreset
+
+    preset = getattr(AgentPreset, preset_name)
+    return preset._compose(provider)
+
+
+def swe_agent_style_agent(provider: Any) -> Any:
+    """Factory: the SWE-Agent-style replica (retry loop, minimal tools)."""
+    return _build_style_agent(provider, "SWE_AGENT")
+
+
+def aider_style_agent(provider: Any) -> Any:
+    """Factory: the Aider-style replica (lint-feedback loop, git-aware tools)."""
+    return _build_style_agent(provider, "AIDER")
+
+
+def cline_style_agent(provider: Any) -> Any:
+    """Factory: the Cline-style replica (plan/act dual-mode loop, full tools)."""
+    return _build_style_agent(provider, "CLINE")
+
+
 def default_agent_specs() -> list[AgentSpec]:
     """Return the representative built-in roster (all ``in-process``).
 
-    Four loop postures (``react`` / ``plan-execute`` / ``reflexion`` /
-    ``tree-of-thought``) reusing the bench-compare loop map, plus two assembly
-    presets (``codex``, ``kimi``). This roster is deliberately *representative*,
-    not exhaustive — the spec's full internal axis (7 codenames + 6 presets +
-    4 replica styles) is enumerated by shipping additional JSON registry files
-    that :func:`load_registry` merges on top of these built-ins.
+    Twelve ids spanning three internal axes:
+
+    - Four **loop postures** (``react`` / ``plan-execute`` / ``reflexion`` /
+      ``tree-of-thought``) reusing the bench-compare loop map.
+    - Five **assembly presets** (``codex``, ``kimi``, ``minimal``, ``explore``,
+      ``swebench``) driven through ``CodingAgentAdapter``.
+    - Three **replica styles** (``swe-agent``, ``aider``, ``cline``) composed
+      from :class:`~chimera.agents.presets.agent_styles.AgentPreset`.
+
+    The roster stays deliberately *representative*, not exhaustive — the spec's
+    full internal axis (the 7 codename CLIs and any further presets/styles) is
+    still extended by shipping additional JSON registry files that
+    :func:`load_registry` merges on top of these built-ins.
 
     Returns:
         A fresh list of :class:`AgentSpec` (safe for the caller to mutate).
@@ -244,6 +312,12 @@ def default_agent_specs() -> list[AgentSpec]:
         ),
         AgentSpec(id="codex", kind="in-process", factory=f"{base}:codex_preset_agent"),
         AgentSpec(id="kimi", kind="in-process", factory=f"{base}:kimi_preset_agent"),
+        AgentSpec(id="minimal", kind="in-process", factory=f"{base}:minimal_preset_agent"),
+        AgentSpec(id="explore", kind="in-process", factory=f"{base}:explore_preset_agent"),
+        AgentSpec(id="swebench", kind="in-process", factory=f"{base}:swebench_preset_agent"),
+        AgentSpec(id="swe-agent", kind="in-process", factory=f"{base}:swe_agent_style_agent"),
+        AgentSpec(id="aider", kind="in-process", factory=f"{base}:aider_style_agent"),
+        AgentSpec(id="cline", kind="in-process", factory=f"{base}:cline_style_agent"),
     ]
 
 

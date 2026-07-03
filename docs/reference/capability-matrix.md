@@ -86,13 +86,16 @@ This is the honest current state (verified in `chimera/cli/main.py`,
 | `chimera otter bench` | otter | HumanEval, MBPP, τ-bench | ✅ wired |
 | `chimera shrew bench` | shrew | aider-polyglot, GAIA, harbor, terminal-bench | ✅ wired |
 | `chimera ferret\|stoat\|badger bench` | — | — | ⚠️ scaffold (exit 2) |
-| `chimera bench matrix` | **full agent registry** (internal + external) | **full bench registry** | 🔵 designed — [agent-benchmark-matrix spec](../specs/agent-benchmark-matrix.md) |
+| `chimera bench-matrix` | agents from the runner registry (internal roster + external via `--registry`) | any registered benches (N×M) | ✅ **shipped** — live-verified on glm-5.2[1m] |
+| `chimera bench-fidelity` | replica vs real (e.g. `codex` vs `codex-cli`) | any registered benches | ✅ **shipped** |
 
-**Takeaway:** the *inventory* is many-to-many; the *wiring* today is a handful
-of fixed pairs. The [agent-benchmark-matrix spec](../specs/agent-benchmark-matrix.md)
-is the plan that turns the inventory into an actual N×M runner (one `AgentRunner`
-protocol + registry + `chimera bench matrix`). Until it ships, treat the last
-row as designed, not built.
+**Takeaway:** the many-to-many runner **shipped**. `chimera bench-matrix` crosses
+any set of registry agents against any set of registered benches under one
+budget/sandbox/grader (the [agent-benchmark-matrix spec](../specs/agent-benchmark-matrix.md)),
+and `chimera bench-fidelity` scores replica-vs-real pairs — both live-verified on
+glm-5.2[1m]. What remains is *breadth, not plumbing*: staging datasets for the
+benches that need them, installing the external agent CLIs behind the registry
+entries, and enforcing per-agent budgets so multi-step loops stay bounded.
 
 ## See also
 
