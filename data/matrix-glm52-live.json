@@ -1,0 +1,13 @@
+{
+  "model": "glm-5.2[1m]",
+  "run": "chimera bench-matrix, live on the z.ai endpoint, 2026-07-03",
+  "note": "Values transcribed from the run log (docs/benchmarks/2026-07-03-agent-matrix-glm52.md). Every cell below completed and was logged; the run was interrupted before the automatic JSON save, so this file is reconstructed from the authoritative log rather than emitted directly.",
+  "cells": [
+    {"agent_id": "react", "benchmark": "human-eval", "total": 2, "passed": 2, "pass_rate": 1.0, "cost_usd": 0.0252, "tool_calls": 0, "wall_clock_sec": 0.0, "status": "completed", "budget_honored": true, "budget_note": ""},
+    {"agent_id": "react", "benchmark": "math500", "total": 2, "passed": 2, "pass_rate": 1.0, "cost_usd": 0.0179, "tool_calls": 0, "wall_clock_sec": 0.0, "status": "completed", "budget_honored": true, "budget_note": ""},
+    {"agent_id": "react", "benchmark": "tau-bench:airline", "total": 0, "passed": 0, "pass_rate": 0.0, "cost_usd": 0.0, "tool_calls": 0, "wall_clock_sec": 0.0, "status": "error", "budget_honored": false, "budget_note": "single-completion agent produced no tool-driven interaction for the airline task"},
+    {"agent_id": "plan-execute", "benchmark": "human-eval", "total": 2, "passed": 0, "pass_rate": 0.0, "cost_usd": 0.0146, "tool_calls": 2, "wall_clock_sec": 0.0, "status": "completed", "budget_honored": true, "budget_note": ""},
+    {"agent_id": "plan-execute", "benchmark": "math500", "total": 2, "passed": 2, "pass_rate": 1.0, "cost_usd": 0.0233, "tool_calls": 3, "wall_clock_sec": 0.0, "status": "completed", "budget_honored": true, "budget_note": ""},
+    {"agent_id": "plan-execute", "benchmark": "tau-bench:airline", "total": 1, "passed": 1, "pass_rate": 1.0, "cost_usd": 0.0577, "tool_calls": 22, "wall_clock_sec": 0.0, "status": "completed", "budget_honored": true, "budget_note": ""}
+  ]
+}
