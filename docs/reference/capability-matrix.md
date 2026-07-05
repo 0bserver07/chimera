@@ -27,7 +27,7 @@ None of them crosses **agents × benchmarks**. This page does.
 | Codename CLIs (postures) | **7** | mink · otter · ferret · weasel · shrew · stoat · badger | `chimera/{codename}/` |
 | Assembly presets | **6** | coding_agent (=claude_code) · codex · minimal · explore · kimi · swebench | `chimera/assembly/presets.py` |
 | Built-in preset agents | **5** | build · explore · general · plan · review | `chimera/agents/presets/*.py` |
-| Replica styles (distinct loops) | **4** | swe_agent (retry) · codex (react) · aider (lint_feedback) · cline (plan_act) | `chimera/agents/presets/agent_styles.py` |
+| Loop styles (distinct loops) | **4** | retry-min (retry) · react-full (react) · lint-loop (lint_feedback) · plan-act (plan_act); former ids swe-agent/codex/aider/cline are back-compat aliases | `chimera/agents/presets/agent_styles.py` |
 | Subagent profiles | **4** | executor · planner · researcher · reviewer | `chimera/agents/presets/subagents/` |
 | Composition patterns | **3** | pipeline · ensemble · supervisor | `chimera/composition/` |
 | Loop postures (prompt) | **2** | plan · tdd | `LOOP_POSTURES` in `chimera/assembly/coding_agent.py` |
@@ -87,7 +87,7 @@ This is the honest current state (verified in `chimera/cli/main.py`,
 | `chimera shrew bench` | shrew | aider-polyglot, GAIA, harbor, terminal-bench | ✅ wired |
 | `chimera ferret\|stoat\|badger bench` | — | — | ⚠️ scaffold (exit 2) |
 | `chimera bench-matrix` | agents from the runner registry (internal roster + external via `--registry`) | any registered benches (N×M) | ✅ **shipped** — live-verified on glm-5.2[1m] |
-| `chimera bench-fidelity` | replica vs real (e.g. `codex` vs `codex-cli`) | any registered benches | ✅ **shipped** |
+| `chimera bench-fidelity` | replica vs real (e.g. `full-tools` vs `codex-cli`) | any registered benches | ✅ **shipped** |
 
 **Takeaway:** the many-to-many runner **shipped**. `chimera bench-matrix` crosses
 any set of registry agents against any set of registered benches under one

@@ -71,8 +71,9 @@ def test_agent_spec_round_trip_external_is_json_safe() -> None:
 
 def test_default_roster_is_representative_in_process() -> None:
     specs = {s.id: s for s in default_agent_specs()}
-    # Mixes loop postures and assembly presets, all in-process.
-    for expected in ("react", "plan-execute", "reflexion", "tree-of-thought", "codex", "kimi"):
+    # Mixes loop postures and assembly presets, all in-process. (full-tools /
+    # action-first are the codex / kimi presets under loop-descriptive ids.)
+    for expected in ("react", "plan-execute", "reflexion", "tree-of-thought", "full-tools", "action-first"):
         assert expected in specs
     assert all(s.kind == "in-process" for s in specs.values())
     assert all(s.factory for s in specs.values())

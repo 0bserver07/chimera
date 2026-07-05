@@ -51,11 +51,11 @@ def _mock_provider(*responses):
 
 
 # -------------------------------------------------------------------
-# SWE_AGENT preset: RetryLoop with minimal tools
+# RETRY_MIN preset: RetryLoop with minimal tools
 # -------------------------------------------------------------------
 
-def test_preset_swe_agent_fixes_bug():
-    """SWE_AGENT preset uses RetryLoop — should retry on failure."""
+def test_preset_retry_min_fixes_bug():
+    """RETRY_MIN preset uses RetryLoop — should retry on failure."""
     with tempfile.TemporaryDirectory() as workdir:
         # Write buggy code + test
         with open(os.path.join(workdir, "calc.py"), "w") as f:
@@ -82,7 +82,7 @@ def test_preset_swe_agent_fixes_bug():
 
         # _compose() is the non-deprecated path equivalent to .build();
         # used here so the test doesn't pin itself to the v0.7.0 removal target.
-        agent = AgentPreset.SWE_AGENT._compose(provider)
+        agent = AgentPreset.RETRY_MIN._compose(provider)
         result = agent.run("Fix the bug in calc.py so test_add passes.", env=env)
 
         assert result.success
@@ -95,11 +95,11 @@ def test_preset_swe_agent_fixes_bug():
 
 
 # -------------------------------------------------------------------
-# AIDER preset: LintFeedbackLoop
+# LINT_LOOP preset: LintFeedbackLoop
 # -------------------------------------------------------------------
 
-def test_preset_aider_lint_feedback():
-    """AIDER preset uses LintFeedbackLoop — should catch lint issues."""
+def test_preset_lint_loop_lint_feedback():
+    """LINT_LOOP preset uses LintFeedbackLoop — should catch lint issues."""
     with tempfile.TemporaryDirectory() as workdir:
         env = chimera.LocalEnvironment(workdir=workdir)
         env.setup()
@@ -120,7 +120,7 @@ def test_preset_aider_lint_feedback():
                 "Done.",
             )
 
-        agent = AgentPreset.AIDER._compose(provider)
+        agent = AgentPreset.LINT_LOOP._compose(provider)
         result = agent.run(
             "Create a utils.py file with a greet(name) function that returns 'Hello {name}'.",
             env=env,
@@ -134,11 +134,11 @@ def test_preset_aider_lint_feedback():
 
 
 # -------------------------------------------------------------------
-# CLINE preset: PlanActLoop (plan then execute)
+# PLAN_ACT preset: PlanActLoop (plan then execute)
 # -------------------------------------------------------------------
 
-def test_preset_cline_plan_then_act():
-    """CLINE preset uses PlanActLoop — should plan first, then execute."""
+def test_preset_plan_act_plan_then_act():
+    """PLAN_ACT preset uses PlanActLoop — should plan first, then execute."""
     with tempfile.TemporaryDirectory() as workdir:
         # Write a file for the agent to read during planning
         with open(os.path.join(workdir, "README.md"), "w") as f:
@@ -157,25 +157,25 @@ def test_preset_cline_plan_then_act():
                 "Created calculator module with tests. All passing.",
             )
 
-        agent = AgentPreset.CLINE._compose(provider)
+        agent = AgentPreset.PLAN_ACT._compose(provider)
         result = agent.run(
             "Create a simple calculator module with add and subtract functions, plus tests.",
             env=env,
         )
 
         assert result.success
-        # CLINE's PlanActLoop should have done 2+ steps (plan + act)
+        # PLAN_ACT's PlanActLoop should have done 2+ steps (plan + act)
         assert result.steps >= 2
 
         env.cleanup()
 
 
 # -------------------------------------------------------------------
-# CODEX preset: full tools, standard ReAct
+# REACT_FULL preset: full tools, standard ReAct
 # -------------------------------------------------------------------
 
-def test_preset_codex_full_task():
-    """CODEX preset uses full AGENT_TOOLS — should handle complex tasks."""
+def test_preset_react_full_full_task():
+    """REACT_FULL preset uses full AGENT_TOOLS — should handle complex tasks."""
     with tempfile.TemporaryDirectory() as workdir:
         env = chimera.LocalEnvironment(workdir=workdir)
         env.setup()
@@ -184,19 +184,19 @@ def test_preset_codex_full_task():
             provider = _real_provider()
         else:
             write_call = ToolCall(id="tc1", name="write_file", arguments={
-                "path": "hello.py", "content": "print('Hello from Codex preset!')\n",
+                "path": "hello.py", "content": "print('Hello from react-full preset!')\n",
             })
             bash_call = ToolCall(id="tc2", name="bash", arguments={
                 "command": "python hello.py",
             })
             provider = _mock_provider(
                 ("Creating and running", [write_call, bash_call]),
-                "Output: Hello from Codex preset!",
+                "Output: Hello from react-full preset!",
             )
 
-        agent = AgentPreset.CODEX._compose(provider)
+        agent = AgentPreset.REACT_FULL._compose(provider)
         result = agent.run(
-            "Create hello.py that prints 'Hello from Codex preset!' and run it.",
+            "Create hello.py that prints 'Hello from react-full preset!' and run it.",
             env=env,
         )
 
@@ -244,28 +244,33 @@ def test_custom_preset():
 def test_all_presets_have_different_loops():
     """Each preset uses a different loop variant."""
     loop_types = {
-        AgentPreset.SWE_AGENT.loop_type,
-        AgentPreset.CODEX.loop_type,
-        AgentPreset.AIDER.loop_type,
-        AgentPreset.CLINE.loop_type,
+        AgentPreset.RETRY_MIN.loop_type,
+        AgentPreset.REACT_FULL.loop_type,
+        AgentPreset.LINT_LOOP.loop_type,
+        AgentPreset.PLAN_ACT.loop_type,
     }
-    # At least 3 distinct loop types (CODEX uses "react" which is default)
+    # At least 3 distinct loop types (REACT_FULL uses "react" which is default)
     assert len(loop_types) >= 3
 
 
 def test_all_presets_buildable():
     """Every preset builds without errors."""
     provider = _mock_provider("ok")
-    for preset in [AgentPreset.SWE_AGENT, AgentPreset.CODEX, AgentPreset.AIDER, AgentPreset.CLINE]:
+    for preset in [
+        AgentPreset.RETRY_MIN,
+        AgentPreset.REACT_FULL,
+        AgentPreset.LINT_LOOP,
+        AgentPreset.PLAN_ACT,
+    ]:
         agent = preset._compose(provider)
         assert agent is not None
         assert len(agent.tools) > 0
         assert agent.prompt is not None
 
 
-def test_swe_agent_has_minimal_tools():
-    """SWE_AGENT should have fewer tools than CODEX."""
+def test_retry_min_has_minimal_tools():
+    """RETRY_MIN should have fewer tools than REACT_FULL."""
     provider = _mock_provider("ok")
-    swe = AgentPreset.SWE_AGENT._compose(provider)
-    codex = AgentPreset.CODEX._compose(provider)
-    assert len(swe.tools) < len(codex.tools)
+    retry_min = AgentPreset.RETRY_MIN._compose(provider)
+    react_full = AgentPreset.REACT_FULL._compose(provider)
+    assert len(retry_min.tools) < len(react_full.tools)

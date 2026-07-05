@@ -81,7 +81,7 @@ tuple in `chimera/eval/runners/registry.py`):
 |---|---|---|---|---|
 | **`in-process`** | A Chimera agent built by an `agent_factory(provider) -> agent` and wrapped in `InProcessRunner`. Runs inside the Python process. | Any internal loop / preset / style. The only kind live-verified end-to-end today. | `factory: "module:callable"` | `react` → `chimera.eval.runners.registry:react_agent` |
 | **`acp`** | An **Agent Client Protocol** subprocess. Chimera spawns it, sends one task, reads the result over JSON-RPC. | An external agent that speaks ACP (e.g. `opencode acp`). | `command: ["opencode", "acp"]` | `opencode` in the external example registry |
-| **`cli-template`** | A templated CLI invocation. Chimera fills placeholders (`{prompt_file}`, `{repo}`, `{patch_out}`) and shells out. | An external CLI that takes a prompt and edits a repo. | `cmd: "codex exec --prompt-file {prompt_file} --cd {repo}"` | `codex-cli`, `aider` |
+| **`cli-template`** | A templated CLI invocation. Chimera fills placeholders (`{prompt_file}`, `{repo}`, `{patch_out}`) and shells out. | An external CLI that takes a prompt and edits a repo. | `cmd: "codex exec --prompt-file {prompt_file} --cd {repo}"` | `codex-cli`, `aider-cli` |
 | **`native-harness`** | Run a framework's *own* SWE-bench harness once, then grade the `predictions.jsonl` it emits — Chimera never re-drives its loop. | A framework that ships its own end-to-end harness and you want leaderboard-comparable numbers. | `harness_cmd` + `predictions_glob` | `mini-swe-agent`, `agentless` |
 
 `resolve(spec, provider)` maps each kind to its runner: `InProcessRunner`,
@@ -111,26 +111,30 @@ layers. Here is what distinguishes each layer:
 | Layer | What it is | Count | In the 12-agent default roster? | Source |
 |---|---|---:|---|---|
 | **Loops** | The reason/act control flow (ReAct, plan-then-execute, reflexion, …). The lowest-level behavior primitive. | 8 | 4 of them (`react`, `plan-execute`, `reflexion`, `tree-of-thought`) | `chimera/core/loops/` + `chimera/core/loop.py` |
-| **Assembly presets** | A full agent *configuration* — which tool set, whether permissions/hooks/compaction/streaming are on, the turn budget. Toggles capability, not reasoning shape. | 6 | 5 of them (`codex`, `kimi`, `minimal`, `explore`, `swebench`) | `chimera/assembly/presets.py` |
-| **Replica styles** | In-tree recreations of well-known coding agents, each pinning a *distinct loop* + tool set + prompt. | 4 | 3 of them (`swe-agent`, `aider`, `cline`) | `chimera/agents/presets/agent_styles.py` |
+| **Assembly presets** | A full agent *configuration* — which tool set, whether permissions/hooks/compaction/streaming are on, the turn budget. Toggles capability, not reasoning shape. | 6 | 5 of them (`full-tools`, `action-first`, `minimal`, `explore`, `swebench`; `full-tools`/`action-first` are the `codex`/`kimi` presets exposed under loop-descriptive ids) | `chimera/assembly/presets.py` |
+| **Loop styles** | In-tree loop-posture styles, each pinning a *distinct loop* + tool set + prompt. Named for the loop, not the external agent whose shape they echo. | 4 | 3 of them (`retry-min`, `lint-loop`, `plan-act`) | `chimera/agents/presets/agent_styles.py` |
 | **Codename CLIs** | 7 shipped daily-driver CLIs, each a *posture* over the assembled stack (`mink`, `otter`, … `badger`). | 7 | Not by default — add via a JSON registry file | `chimera/{codename}/` |
 | **External** | Agents Chimera does *not* own, driven via `acp` / `cli-template` / `native-harness`. | open | Not by default — add via a JSON registry file | `docs/examples/agent-registry.example.json` |
 
 **The 12-agent default roster** = 4 loops + 5 presets + 3 styles:
 
 ```
-react · plan-execute · reflexion · tree-of-thought      (4 loop postures)
-codex · kimi · minimal · explore · swebench             (5 assembly presets)
-swe-agent · aider · cline                               (3 replica styles)
+react · plan-execute · reflexion · tree-of-thought       (4 loop postures)
+full-tools · action-first · minimal · explore · swebench (5 assembly presets)
+retry-min · lint-loop · plan-act                         (3 loop styles)
 ```
+
+The roster ids are loop-descriptive. The former brand-named ids (`swe-agent` /
+`aider` / `cline` / `codex` / `kimi`) still resolve as back-compat aliases —
+`--agents aider` is identical to `--agents lint-loop`.
 
 Two deliberate design choices worth knowing:
 
-- **The `codex` *style* is intentionally omitted** from the roster — the assembly
-  `codex` *preset* already occupies the `codex` id. So the 4 styles contribute
-  only 3 rows. (Keeping both the `codex` internal replica and a `codex-cli`
-  external entry distinct is what makes the replica-vs-real fidelity comparison
-  possible.)
+- **The `react-full` *style* is intentionally omitted** from the roster — the
+  assembly `codex` preset (roster id `full-tools`) already occupies that
+  full-tools/ReAct slot. So the 4 styles contribute only 3 rows. (Keeping both
+  the internal `full-tools` replica and a `codex-cli` external entry distinct is
+  what makes the replica-vs-real fidelity comparison possible.)
 - **The roster is representative, not exhaustive.** The 7 codenames, the 4
   subagent profiles, the composition patterns, and the synthesis strategies (all
   enumerated in the [capability matrix](./capability-matrix.md)) are *not* in the
@@ -159,32 +163,39 @@ machinery does this agent get?"*
 
 `swebench` is the only preset that turns *off* content replacement, compaction,
 and streaming — those are sources of run-to-run variance that a benchmark wants
-gone. Five of the six (`codex`, `kimi`, `minimal`, `explore`, `swebench`) are in
-the default roster; `coding_agent` is the interactive default and is added to a
-matrix by name when you want it.
+gone. Five of the six are in the default roster: `codex`/`kimi` under the
+loop-descriptive roster ids `full-tools`/`action-first`, plus `minimal`,
+`explore`, `swebench`. (The preset *keys* in `presets.py` stay `codex`/`kimi`;
+only the roster ids are renamed.) `coding_agent` is the interactive default and
+is added to a matrix by name when you want it.
 
 ---
 
 ## 5. Styles — a replica with its own loop
 
-A **replica style** (`AgentPreset` in
-`chimera/agents/presets/agent_styles.py`) recreates the
-*architecture* of a well-known coding agent by pinning a **distinct loop**, a
+A **loop style** (`AgentPreset` in
+`chimera/agents/presets/agent_styles.py`) pins a **distinct loop**, a
 specific tool set, and a matching system prompt. This is the layer that makes
-"we replicated agent X" a code-backed claim rather than a prompt tweak — each
-style runs a genuinely different control flow.
+"this control flow is code-backed" a real claim rather than a prompt tweak —
+each style runs a genuinely different loop. The names are **loop-descriptive**;
+the "echoes" column below notes the external agent whose shape each one mirrors
+(for the replica-vs-real fidelity comparison), but that agent is not what the
+style *is*.
 
-| Style | Archetype | Loop | Tools | max_steps |
+| Style | Loop | Echoes (fidelity target) | Tools | max_steps |
 |---|---|---|---|--:|
-| `swe_agent` | SWE-Agent | `retry` (max_retries=3) | minimal: read / edit / bash / search / list_files | 30 |
-| `codex` | Codex | `react` | full `AGENT_TOOLS` | 50 |
-| `aider` | Aider | `lint_feedback` (ruff, max_lint_rounds=2) | git-aware: +git / test / repo_map | 20 |
-| `cline` | Cline | `plan_act` (plan_steps=8) | full `AGENT_TOOLS` | 25 |
+| `retry-min` | `retry` (max_retries=3) | swe-agent-style | minimal: read / edit / bash / search / list_files | 30 |
+| `react-full` | `react` | codex-cli-style | full `AGENT_TOOLS` | 50 |
+| `lint-loop` | `lint_feedback` (ruff, max_lint_rounds=2) | aider-cli-style | git-aware: +git / test / repo_map | 20 |
+| `plan-act` | `plan_act` (plan_steps=8) | cline-style | full `AGENT_TOOLS` | 25 |
 
 The style is `_compose(provider)`'d into a runnable `Agent` that already
 satisfies the `run(prompt, env)` factory contract. In the default roster, the
-`swe_agent`/`aider`/`cline` styles map to ids `swe-agent` / `aider` / `cline`;
-the `codex` style is dropped in favor of the `codex` preset (see §3).
+`retry-min`/`lint-loop`/`plan-act` styles map to ids of the same name; the
+`react-full` style is dropped in favor of the `full-tools` preset (the `codex`
+preset, see §3). The former attribute names (`SWE_AGENT` / `CODEX` / `AIDER` /
+`CLINE`) and roster ids (`swe-agent` / `aider` / `cline`) remain as back-compat
+aliases.
 
 ---
 
@@ -209,8 +220,8 @@ primitive. There are **8** loop implementations (`chimera/core/loops/`, with
 `plan-execute`, `reflexion`, `tree-of-thought`) come from the `_LOOP_PATHS` map,
 reused verbatim from `bench_compare.py` so the roster stays a single source of
 truth. The other 4 are not standalone roster entries but are *used*: `retry`,
-`plan_act`, and `lint_feedback` back the `swe_agent`, `cline`, and `aider` styles
-respectively; `autonomous` is available for direct use.
+`plan_act`, and `lint_feedback` back the `retry-min`, `plan-act`, and `lint-loop`
+styles respectively; `autonomous` is available for direct use.
 
 ---
 
@@ -284,7 +295,7 @@ driving mode:
     "cmd": "codex exec --prompt-file {prompt_file} --cd {repo}",
     "sandbox": "docker", "options": {"patch_from": "git-diff"} },
 
-  { "id": "aider",         "kind": "cli-template",
+  { "id": "aider-cli",     "kind": "cli-template",
     "cmd": "aider --yes --message-file {prompt_file} {repo}", "sandbox": "docker" },
 
   { "id": "mini-swe-agent", "kind": "native-harness",
@@ -301,7 +312,7 @@ Reading each mode off the example:
 
 - **`acp` (`opencode`)** — Chimera spawns `opencode acp`, opens an ACP session,
   sends the task, reads the structured result. Use when the agent speaks ACP.
-- **`cli-template` (`codex-cli`, `aider`)** — Chimera writes the prompt to a
+- **`cli-template` (`codex-cli`, `aider-cli`)** — Chimera writes the prompt to a
   file, substitutes `{prompt_file}` / `{repo}`, runs the command, and collects
   the patch. `options.patch_from: "git-diff"` tells the runner to take the diff
   of `{repo}` after exit (vs. an explicit `{patch_out}` file). Use for any CLI
@@ -380,9 +391,9 @@ Three recipes. Each is additive — you never edit existing agents or benches.
    def my_preset_agent(provider: Any) -> Any:
        return _build_preset_agent(provider, "coding_agent")
 
-   # a new replica style — reuse _build_style_agent (AgentPreset attr name)
+   # a new loop style — reuse _build_style_agent (AgentPreset attr name)
    def my_style_agent(provider: Any) -> Any:
-       return _build_style_agent(provider, "SWE_AGENT")
+       return _build_style_agent(provider, "RETRY_MIN")
    ```
 
 2. **Append an `AgentSpec`** to `default_agent_specs()`:
@@ -446,7 +457,7 @@ chimera bench-matrix \
 
 ```bash
 chimera bench-fidelity \
-  --replica codex \                    # required; internal replica id
+  --replica full-tools \               # required; internal replica id (the codex preset)
   --real codex-cli \                   # required; real external agent id (needs --registry)
   --benchmarks human-eval \            # required
   --registry my-agents.json \          # where the real agent's spec lives

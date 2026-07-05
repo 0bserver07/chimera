@@ -232,7 +232,7 @@ def test_synthesize_end_to_end(workdir):
 # ---------------------------------------------------------------------------
 
 def test_preset_with_wire_monitoring(provider, workdir):
-    """AgentPreset.CODEX with Wire protocol capturing lifecycle events."""
+    """AgentPreset.REACT_FULL with Wire protocol capturing lifecycle events."""
     from chimera.agents.presets.agent_styles import AgentPreset
     from chimera.core.loop_config import LoopConfig
     from chimera.env.local import LocalEnvironment
@@ -248,7 +248,7 @@ def test_preset_with_wire_monitoring(provider, workdir):
     # L4: AgentPreset builds the agent, we inject our LoopConfig.
     # _compose() is the non-deprecated path equivalent to .build();
     # used here so the test doesn't pin itself to the v0.7.0 removal target.
-    preset = AgentPreset.CODEX
+    preset = AgentPreset.REACT_FULL
     agent = preset._compose(provider)
     # Override loop config to add wire
     agent.loop.config = config
