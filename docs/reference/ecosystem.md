@@ -114,7 +114,7 @@ layers. Here is what distinguishes each layer:
 | **Assembly presets** | A full agent *configuration* — which tool set, whether permissions/hooks/compaction/streaming are on, the turn budget. Toggles capability, not reasoning shape. | 6 | 5 of them (`codex`, `kimi`, `minimal`, `explore`, `swebench`) | `chimera/assembly/presets.py` |
 | **Replica styles** | In-tree recreations of well-known coding agents, each pinning a *distinct loop* + tool set + prompt. | 4 | 3 of them (`swe-agent`, `aider`, `cline`) | `chimera/agents/presets/agent_styles.py` |
 | **Codename CLIs** | 7 shipped daily-driver CLIs, each a *posture* over the assembled stack (`mink`, `otter`, … `badger`). | 7 | Not by default — add via a JSON registry file | `chimera/{codename}/` |
-| **External** | Agents Chimera does *not* own, driven via `acp` / `cli-template` / `native-harness`. | open | Not by default — add via a JSON registry file | `registry.external.example.json` |
+| **External** | Agents Chimera does *not* own, driven via `acp` / `cli-template` / `native-harness`. | open | Not by default — add via a JSON registry file | `docs/examples/agent-registry.example.json` |
 
 **The 12-agent default roster** = 4 loops + 5 presets + 3 styles:
 
@@ -249,8 +249,13 @@ Three different senses of "ready" — keep them distinct:
   (`dataset_path` / `problems_path` / `dataset_dir`) and only passes `limit` when
   accepted. So every adapter loads regardless of its individual signature.
 - **Needs a staged dataset** — "wired" ≠ "has a published result." Most adapters
-  deliberately refuse to vendor upstream data and expect a locally-staged
-  `--dataset PATH`. Reachable, but you supply the data. See the
+  deliberately refuse to vendor upstream data (multi-GB payloads, upstream
+  licenses) and expect a locally-staged `--dataset PATH`. For the publicly
+  redistributable ones, **`chimera bench-fetch <name>` (or `--all`) stages the
+  dataset once** into `~/.chimera/datasets/` and `_load_benchmark`
+  auto-discovers it — after fetching, the bench runs with no flag at all
+  (mbpp 427 tasks, humaneval-plus 164, swe-bench Lite 300, live-verified).
+  Gated or license-unclear datasets stay manual. See the
   [benchmarks README](../benchmarks/README.md) for per-bench run status.
 - **Designed / needs-live-infra** — enumerated in the
   [tasks backlog](../specs/agent-benchmark-matrix.tasks.md), *not* a code gap:
@@ -267,7 +272,7 @@ sandbox layer (`chimera/env/`) — enumerated in the capability matrix.
 
 External agents enter through the same registry as internal ones, via one of the
 three external kinds. The worked example lives in
-`chimera/eval/runners/registry.external.example.json` — five entries, one per
+`docs/examples/agent-registry.example.json` — five entries, one per
 driving mode:
 
 ```json

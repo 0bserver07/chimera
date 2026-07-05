@@ -27,7 +27,7 @@ Integration modes referenced below:
 | --- | --- | --- |
 | **Reuse `HarborBenchmark`** | dataset already ships as a Harbor task tree (`task.toml` + `instruction.md` + `tests/` per dir) | `chimera/eval/benchmarks/harbor.py` (already registered as `harbor`) |
 | **New `Benchmark` adapter** | custom JSON/JSONL schema, deterministic grader | subclass `Benchmark` like `swe_bench.py` |
-| **Native-harness runner (A4)** | the bench only grades through its *own* harness (agentic/LLM judge) | `NativeHarnessRunner` (greenfield — see [agent-benchmark-matrix spec](../specs/agent-benchmark-matrix.md)) + `registry.external.example.json` |
+| **Native-harness runner (A4)** | the bench only grades through its *own* harness (agentic/LLM judge) | `NativeHarnessRunner` (greenfield — see [agent-benchmark-matrix spec](../specs/agent-benchmark-matrix.md)) + `docs/examples/agent-registry.example.json` |
 | **Not integrable** | dataset + harness are private | document as methodology reference only |
 
 ---
@@ -128,7 +128,7 @@ Only two deltas need a profile shim (delivered as the scaffold below):
    "tasteful-solve" threshold must be confirmed on a **live run** before any
    number is reported. If it doesn't, the honest fallback is the **native-
    harness runner (A4)**: drive `harbor run …`, parse its results (a
-   `senior-swe-bench` entry in `registry.external.example.json`).
+   `senior-swe-bench` entry in `docs/examples/agent-registry.example.json`).
 
 **Effort:**
 
