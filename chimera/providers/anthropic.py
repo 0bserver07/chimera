@@ -482,6 +482,14 @@ class AnthropicProvider(Provider):
             }
             if self._client.base_url and str(self._client.base_url) != "https://api.anthropic.com":
                 client_kwargs["base_url"] = str(self._client.base_url)
+            # Same explicit timeout as the sync client (see __init__): without
+            # it the SDK's non-streaming ">10 min" guard raises for the 32k
+            # default max_tokens of GLM/Kimi-class models — this async path is
+            # what the assembled CodingAgent stack drives, so the eval harness
+            # hit it even after the sync client was fixed.
+            import httpx
+
+            client_kwargs.setdefault("timeout", httpx.Timeout(900.0, connect=10.0))
             self._async_client = anthropic.AsyncAnthropic(**client_kwargs)  # type: ignore[union-attr]
         return self._async_client
 
