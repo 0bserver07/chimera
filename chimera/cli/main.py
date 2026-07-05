@@ -136,6 +136,20 @@ def build_parser() -> argparse.ArgumentParser:
     from chimera.cli.bench_fidelity import add_bench_fidelity_parser
     add_bench_fidelity_parser(subparsers)
 
+    # ---- bench-fetch subcommand ----
+    fetch_parser = subparsers.add_parser(
+        "bench-fetch",
+        help="Stage benchmark datasets locally so wired benches become runnable",
+    )
+    fetch_parser.add_argument(
+        "names",
+        nargs="*",
+        help="Benchmark names to fetch (see --list)",
+    )
+    fetch_parser.add_argument("--all", action="store_true", help="Fetch every stageable dataset")
+    fetch_parser.add_argument("--list", action="store_true", help="List stageable datasets")
+    fetch_parser.add_argument("--force", action="store_true", help="Re-download even if staged")
+
     # ---- code subcommand ----
     code_parser = subparsers.add_parser(
         "code",
@@ -780,6 +794,14 @@ def _load_benchmark(
     """
     if name not in _BENCHMARKS:
         raise ValueError(f"Unknown benchmark: {name}. Available: {', '.join(_BENCHMARKS)}")
+    if not dataset and name != "custom":
+        # Auto-discover a dataset staged by `chimera bench-fetch <name>` so a
+        # fetched bench runs with no --dataset flag at all.
+        from chimera.eval.datasets import staged_path
+
+        staged = staged_path(name)
+        if staged is not None:
+            dataset = str(staged)
     module_path, class_name = _BENCHMARKS[name].rsplit(":", 1)
     import importlib
     import inspect
@@ -903,6 +925,35 @@ def run_eval(args: argparse.Namespace) -> int:
         print(f"Results written to {args.output}", file=sys.stderr)
 
     return 0 if result.passed == result.total else 1
+
+
+def run_bench_fetch(args: argparse.Namespace) -> int:
+    """Execute the bench-fetch command: stage benchmark datasets locally."""
+    from chimera.eval.datasets import FETCHES, available, fetch, staged_path
+
+    if args.list or (not args.names and not args.all):
+        print("Stageable benchmark datasets (chimera bench-fetch <name> | --all):")
+        for name in available():
+            spec = FETCHES[name]
+            status = "staged" if staged_path(name) else "not staged"
+            print(f"  {name:<16} [{status}]  {spec.note}")
+        print(
+            "\nOther registered benches need a manually staged --dataset "
+            "(size/license constraints) — see docs/reference/ecosystem.md."
+        )
+        return 0
+
+    names = available() if args.all else args.names
+    failures = 0
+    for name in names:
+        try:
+            path = fetch(name, force=args.force)
+        except (ValueError, OSError) as e:
+            print(f"bench-fetch {name}: FAILED — {e}", file=sys.stderr)
+            failures += 1
+            continue
+        print(f"bench-fetch {name}: staged at {path}")
+    return 1 if failures else 0
 
 
 def run_bench(args: argparse.Namespace) -> int:
@@ -1365,6 +1416,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     elif args.command == "bench-fidelity":
         from chimera.cli.bench_fidelity import run_bench_fidelity
         return run_bench_fidelity(args)
+    elif args.command == "bench-fetch":
+        return run_bench_fetch(args)
     elif args.command == "code":
         from chimera.cli.code import run_code
         return run_code(args)

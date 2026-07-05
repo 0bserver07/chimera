@@ -1,7 +1,7 @@
 """External-agent registry example tests for the agent × benchmark matrix.
 
 No LLM, no network, no subprocess: these exercise the shipped
-``chimera/eval/runners/registry.external.example.json`` roster purely through
+``docs/examples/agent-registry.example.json`` roster purely through
 :func:`load_registry` (merge/override) and :func:`resolve` (construct only —
 never ``.run()``, so no external CLI/harness/ACP server is spawned).
 
@@ -29,7 +29,14 @@ from chimera.eval.runners import (
 )
 
 #: The example registry ships next to the registry module inside the package.
-EXAMPLE_JSON = Path(reg_mod.__file__).parent / "registry.external.example.json"
+# The example lives in docs/, not inside the chimera package — external tool
+# names are docs-only interop pointers, never shipped package data.
+EXAMPLE_JSON = (
+    Path(reg_mod.__file__).resolve().parents[3]
+    / "docs"
+    / "examples"
+    / "agent-registry.example.json"
+)
 
 #: The five external agents the example file is required to enumerate.
 EXTERNAL_IDS = ("opencode", "codex-cli", "aider-cli", "mini-swe-agent", "agentless")
