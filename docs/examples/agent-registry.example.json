@@ -31,5 +31,12 @@
     "harness_cmd": "python agentless/run.py --output {out_dir}",
     "predictions_glob": "{out_dir}/all_preds.jsonl",
     "sandbox": "docker"
+  },
+  {
+    "id": "pi-cli",
+    "kind": "cli-template",
+    "cmd": "pi --mode json -p {prompt}",
+    "sandbox": "docker",
+    "options": {"patch_from": "git-diff"}
   }
 ]
