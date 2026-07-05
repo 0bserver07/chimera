@@ -106,3 +106,23 @@ tau-bench · webarena`
 Note: these adapters are *reachable*; most still refuse to vendor upstream
 datasets and expect a locally-staged `--dataset`. "Wired" ≠ "has a published
 result" — see [benchmarks/README](../benchmarks/README.md) for run status.
+
+## Post-audit follow-ups (2026-07-05)
+
+- ⬜ **[N] Env-based grading path for file-artifact agents** — lint-loop (and any
+  editor-loop agent) writes its artifact to the env; answer-graded benches score
+  its final message (lint commentary) as 0%. Grade the env (run tests / harvest
+  files) when the runner signals a file artifact. This is spec open question #1.
+- ⬜ **[W] CodingAgentAdapter final-message extraction** — the assembled presets
+  (coding-agent / full-tools / action-first / swebench) still score 0% on
+  answer-graded benches even with the answer contract; their `_last_assistant_text`
+  harvesting needs its own diagnostic + fix.
+- ✅ **[N] FINAL_ANSWER_CONTRACT** — uniform final-answer prompt suffix in
+  `run_matrix` (default on, controlled). Live-proven: reflexion × HumanEval
+  0% → 100%.
+- ✅ **[S] Grading-honesty docs** — swe-lancer (evaluate raises) + livecodebench
+  (codegeneration only) called out in capability-matrix + ecosystem.
+- ✅ **[S] Adapter test coverage 10 → 0 uncovered** — every benchmark adapter now
+  has a unit test file.
+- ⬜ **[N] Per-agent budget enforcement** — unchanged, still the top blocker for
+  large live grids.

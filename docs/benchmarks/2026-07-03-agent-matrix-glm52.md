@@ -93,3 +93,29 @@ CELL aider x math500: 0% (0/1) completed cost=$0.0118 tools=4
 CELL cline x human-eval: 100% (1/1) cost=$0.0336 tools=6
 CELL cline x math500: 100% (1/1) cost=$0.0150 tools=1
 ```
+
+## 2026-07-05 addendum — six never-run agents + the answer contract
+
+Baseline cells for the six roster agents that had never been live-run
+(1 task/bench, glm-5.2[1m], **pre-contract** raw prompts):
+
+| Agent | HumanEval (1) | MATH-500 (1) |
+|---|---|---|
+| reflexion | 0% | 100% |
+| tree-of-thought | 0% | 100% |
+| full-tools | 0% | 100% |
+| action-first | 0% | 0% |
+| minimal | 0% | 0% |
+| explore | 0% | 100% |
+
+HumanEval 0% across every multi-step agent confirmed the answer-extraction
+pattern, which led to **`FINAL_ANSWER_CONTRACT`** (a uniform prompt suffix,
+default-on in `run_matrix`, identical for every agent → still controlled).
+Live effect: **reflexion × HumanEval 0% → 100% (2/2)**. Two agents it does
+*not* fix, now precisely characterized: **lint-loop** ends on lint commentary
+by architecture — its artifact is the files it writes, so it needs env-based
+grading (spec open question #1); **CodingAgentAdapter presets** (full-tools,
+action-first, …) still 0% — their final-message extraction is a separate
+follow-up. Bonus find from the diagnosis: `read_file` on a directory raised an
+uncaught `IsADirectoryError` that could kill a whole run — fixed to return a
+tool error.
