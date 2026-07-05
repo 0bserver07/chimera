@@ -111,11 +111,15 @@ Baseline cells for the six roster agents that had never been live-run
 HumanEval 0% across every multi-step agent confirmed the answer-extraction
 pattern, which led to **`FINAL_ANSWER_CONTRACT`** (a uniform prompt suffix,
 default-on in `run_matrix`, identical for every agent → still controlled).
-Live effect: **reflexion × HumanEval 0% → 100% (2/2)**. Two agents it does
-*not* fix, now precisely characterized: **lint-loop** ends on lint commentary
-by architecture — its artifact is the files it writes, so it needs env-based
-grading (spec open question #1); **CodingAgentAdapter presets** (full-tools,
-action-first, …) still 0% — their final-message extraction is a separate
-follow-up. Bonus find from the diagnosis: `read_file` on a directory raised an
+Live effect: **reflexion × HumanEval 0% → 100% (2/2)**. Two agents it did
+*not* fix were then root-caused and resolved the same day: **CodingAgentAdapter
+presets** returned a stale pre-tool message instead of the stream's terminal
+answer — extraction fixed, **full-tools × HumanEval 0% → 100% (2/2)** — and
+env-artifact **harvesting** (`harvest_env_artifacts`, default on) now lifts
+file-writing agents (live-proven: harvest OFF 0% → ON 100%). **Correction to
+the earlier lint-loop diagnosis:** instrumented tracing showed lint-loop writes
+*no* files on HumanEval (zero `write_file` calls — it lint-fixates on the empty
+workspace), so its 0% is **agent behavior**, not a grading gap; agent-side fix
+backlogged. Bonus find from the diagnosis: `read_file` on a directory raised an
 uncaught `IsADirectoryError` that could kill a whole run — fixed to return a
 tool error.
