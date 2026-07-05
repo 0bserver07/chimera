@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-import re
 from typing import Any
 
 from chimera.eval.harness import Benchmark
 
-_CODE_FENCE = re.compile(r"```(?:python|py)?\s*\n?(.*?)```", re.DOTALL | re.IGNORECASE)
+# Shared with the other code-grading adapters; kept under the old name for
+# in-module/test back-compat.
+from chimera.eval.benchmarks._code_extract import CODE_FENCE as _CODE_FENCE
 
 
 def _extract_code(output: str) -> str:

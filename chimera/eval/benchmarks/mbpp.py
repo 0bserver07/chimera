@@ -169,6 +169,11 @@ class MBPP(Benchmark):
         if not test_list:
             return False
 
+        # Normalize markdown-fenced answers to bare source (see _code_extract).
+        from chimera.eval.benchmarks._code_extract import extract_code
+
+        agent_output = extract_code(agent_output)
+
         # The original full split uses a single ``test_setup_code`` string;
         # the sanitized split uses ``test_imports`` (list of import lines).
         # Concatenate both — empty strings/lists are no-ops.
