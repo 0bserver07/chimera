@@ -207,6 +207,7 @@ def run_fidelity(
     env_factory: Any = None,
     budget: BudgetSpec | None = None,
     model: str = "",
+    answer_contract: bool = True,
 ) -> FidelityResult:
     """Measure one replica against its real counterpart on one benchmark.
 
@@ -232,6 +233,9 @@ def run_fidelity(
             every attempt in both cells; ``None`` runs unbudgeted.
         model: Model identifier shared by both cells, recorded on the underlying
             matrix report for provenance.
+        answer_contract: Forwarded to :func:`~chimera.eval.matrix.run_matrix` —
+            when ``True`` (default) both agents get the uniform final-answer
+            suffix, keeping the pair comparison controlled.
 
     Returns:
         A :class:`FidelityResult` for the ``(replica, real, benchmark)`` triple.
@@ -242,6 +246,7 @@ def run_fidelity(
         env_factory=env_factory,
         budget=budget,
         model=model,
+        answer_contract=answer_contract,
     )
     bench_name = benchmark.name()
     replica_cell, real_cell = _pick_cells(

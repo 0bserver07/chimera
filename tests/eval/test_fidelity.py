@@ -114,7 +114,7 @@ def _real(**kwargs: Any) -> FakeRunner:
 
 
 def test_run_fidelity_computes_deltas_and_divergence() -> None:
-    result = run_fidelity(_replica(), _real(), FakeBenchmark())
+    result = run_fidelity(_replica(), _real(), FakeBenchmark(), answer_contract=False)
 
     assert isinstance(result, FidelityResult)
     assert result.benchmark == "fidbench"
@@ -146,7 +146,7 @@ def test_run_fidelity_computes_deltas_and_divergence() -> None:
 
 
 def test_summary_and_markdown_include_ids_and_benchmark() -> None:
-    result = run_fidelity(_replica(), _real(), FakeBenchmark())
+    result = run_fidelity(_replica(), _real(), FakeBenchmark(), answer_contract=False)
 
     line = result.summary()
     for token in ("aider-replica", "aider-real", "fidbench"):
@@ -167,7 +167,7 @@ def test_partial_budget_note_surfaces() -> None:
     # layer reads raw["budget_honored"]/["budget_note"] onto the cell.
     real = _real(raw={"budget_honored": False, "budget_note": "only wall-clock+cost honored"})
 
-    result = run_fidelity(_replica(), real, FakeBenchmark())
+    result = run_fidelity(_replica(), real, FakeBenchmark(), answer_contract=False)
 
     assert "budget" in result.notes.lower()
     assert "only wall-clock+cost honored" in result.notes
@@ -185,7 +185,7 @@ def test_errored_cell_is_noted_not_raised() -> None:
         def run(self, task: Any, env: Any = None, budget: Any = None) -> AgentRunResult:
             raise RuntimeError("kaboom")
 
-    result = run_fidelity(BoomRunner(), _real(), FakeBenchmark())
+    result = run_fidelity(BoomRunner(), _real(), FakeBenchmark(), answer_contract=False)
 
     # The failing replica cell surfaces as an error status + note, no raise.
     assert result.replica_status == "error"
@@ -204,7 +204,7 @@ def test_fidelity_table_runs_every_pair() -> None:
         (FakeRunner("codex-replica", _GOLD_2, tool_calls=7), _real()),
     ]
 
-    results = fidelity_table(pairs, FakeBenchmark(), model="glm-5")
+    results = fidelity_table(pairs, FakeBenchmark(), model="glm-5", answer_contract=False)
 
     assert len(results) == 2
     assert [r.replica_id for r in results] == ["aider-replica", "codex-replica"]

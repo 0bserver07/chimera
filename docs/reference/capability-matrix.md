@@ -73,6 +73,13 @@ LLMRubric, FileExists, PatternMatch, TestPass, Schema, Composite) and the
 **sandbox layer** (`chimera/env/`: local · docker · git · remote · cloud ·
 modal · e2b · native · ssh — Chimera's SWE-ReX equivalent).
 
+> **Two honest exceptions** (loading works; grading is limited):
+> **SWE-Lancer** — ingestion + dollar-weighted scoring helpers are real, but
+> `evaluate()` deliberately raises `NotImplementedError` (grading needs the
+> upstream containerized Playwright harness; live integration is a follow-up).
+> **LiveCodeBench** — only the `codegeneration` scenario grades; the other
+> three upstream scenarios raise until their schemas are wired.
+
 ## What is actually wired today
 
 The axes are pluggable; the wired *crossings* are narrower than the inventory.
