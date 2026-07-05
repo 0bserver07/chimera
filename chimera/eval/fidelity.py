@@ -208,6 +208,7 @@ def run_fidelity(
     budget: BudgetSpec | None = None,
     model: str = "",
     answer_contract: bool = True,
+    harvest_env_artifacts: bool = True,
 ) -> FidelityResult:
     """Measure one replica against its real counterpart on one benchmark.
 
@@ -236,6 +237,10 @@ def run_fidelity(
         answer_contract: Forwarded to :func:`~chimera.eval.matrix.run_matrix` —
             when ``True`` (default) both agents get the uniform final-answer
             suffix, keeping the pair comparison controlled.
+        harvest_env_artifacts: Forwarded to
+            :func:`~chimera.eval.matrix.run_matrix` — when ``True`` (default)
+            both agents' on-disk sources are harvested into a fenceless answer,
+            keeping the pair comparison controlled.
 
     Returns:
         A :class:`FidelityResult` for the ``(replica, real, benchmark)`` triple.
@@ -247,6 +252,7 @@ def run_fidelity(
         budget=budget,
         model=model,
         answer_contract=answer_contract,
+        harvest_env_artifacts=harvest_env_artifacts,
     )
     bench_name = benchmark.name()
     replica_cell, real_cell = _pick_cells(
