@@ -108,3 +108,65 @@ def test_empty_when_no_text_anywhere() -> None:
     res = _run(events)
     assert res.output == ""
     assert res.success is True
+
+
+def test_submit_tool_answer_beats_streamed_prose() -> None:
+    # Deterministic finish tool: when the agent calls `submit`, its `answer`
+    # argument wins over any assistant prose (even prose that came later).
+    from chimera.types import ToolCall
+
+    submitted = "def add(a, b):\n    return a + b"
+    events = [
+        LoopEvent(type=LoopEventType.assistant, data="Working on it.", turn=1),
+        LoopEvent(
+            type=LoopEventType.tool_use,
+            data=ToolCall(id="t1", name="submit", arguments={"answer": submitted}),
+            turn=2,
+        ),
+        LoopEvent(type=LoopEventType.assistant, data="Done! Submitted my answer.", turn=2),
+        LoopEvent(type=LoopEventType.result, data=_Result(0.01, 2, []), turn=2),
+    ]
+    res = _run(events)
+    assert res.output == submitted
+    assert res.tool_calls_total == 1
+
+
+def test_last_submit_wins_and_empty_submit_ignored() -> None:
+    from chimera.types import ToolCall
+
+    events = [
+        LoopEvent(
+            type=LoopEventType.tool_use,
+            data=ToolCall(id="t1", name="submit", arguments={"answer": "first"}),
+            turn=1,
+        ),
+        LoopEvent(
+            type=LoopEventType.tool_use,
+            data=ToolCall(id="t2", name="submit", arguments={"answer": "  "}),
+            turn=2,
+        ),
+        LoopEvent(
+            type=LoopEventType.tool_use,
+            data=ToolCall(id="t3", name="submit", arguments={"answer": "final"}),
+            turn=3,
+        ),
+        LoopEvent(type=LoopEventType.result, data=_Result(0.0, 3, []), turn=3),
+    ]
+    res = _run(events)
+    assert res.output == "final"
+
+
+def test_non_submit_tools_do_not_affect_output() -> None:
+    from chimera.types import ToolCall
+
+    events = [
+        LoopEvent(
+            type=LoopEventType.tool_use,
+            data=ToolCall(id="t1", name="write_file", arguments={"path": "x.py"}),
+            turn=1,
+        ),
+        LoopEvent(type=LoopEventType.assistant, data="the answer", turn=1),
+        LoopEvent(type=LoopEventType.result, data=_Result(0.0, 1, []), turn=1),
+    ]
+    res = _run(events)
+    assert res.output == "the answer"

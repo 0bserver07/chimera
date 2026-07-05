@@ -90,6 +90,7 @@ class CodingAgent:
         provider: Any = None,
         permission_callback: Any = None,
         tools_override: list[Any] | None = None,
+        extra_tools: list[Any] | None = None,
         max_turns: Any = _USE_CONFIG_MAX_TURNS,
         enable_nudges: bool = True,
         loop: str | None = None,
@@ -171,6 +172,11 @@ class CodingAgent:
                 command_registry=self._command_registry,
                 workdir=str(self._project_dir),
             )
+
+        # Additive tools (e.g. the eval ``submit`` tool) appended without
+        # disturbing preset tool sets. Default None → zero behavior change.
+        if extra_tools:
+            self.tools = [*self.tools, *extra_tools]
 
         # Agent spawner (for sub-agents and forked skills)
         self._spawner: Any = None

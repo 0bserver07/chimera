@@ -75,7 +75,9 @@ async def aggregate_events(events: AsyncIterator[LoopEvent]) -> AgentResult:
         An :class:`~chimera.types.AgentResult` the Harness can grade.
     """
     from chimera.core.loop_events import LoopEventType
+    from chimera.tools.submit import SUBMIT_TOOL_NAME
 
+    submitted_output = ""  # answer the agent handed to the `submit` tool
     streamed_output = ""  # last non-empty assistant text seen on the stream
     result_output = ""  # last-assistant text recovered from the terminal result
     cost = 0.0
@@ -87,6 +89,14 @@ async def aggregate_events(events: AsyncIterator[LoopEvent]) -> AgentResult:
         etype = event.type
         if etype == LoopEventType.tool_use:
             tool_calls += 1
+            # Deterministic finish-tool path: when the agent calls `submit`,
+            # its `answer` argument IS the final answer — no prose scraping.
+            # Last submit wins if the agent (incorrectly) calls it twice.
+            if getattr(event.data, "name", None) == SUBMIT_TOOL_NAME:
+                args = getattr(event.data, "arguments", None) or {}
+                answer = args.get("answer")
+                if isinstance(answer, str) and answer.strip():
+                    submitted_output = answer
         elif etype == LoopEventType.assistant:
             text = _text_of(event.data)
             if text:
@@ -99,11 +109,12 @@ async def aggregate_events(events: AsyncIterator[LoopEvent]) -> AgentResult:
             steps = int(getattr(res, "turn_count", 0) or 0)
             result_output = _last_assistant_text(getattr(res, "messages", None) or [])
 
-    # Prefer the stream's final assistant text (see the docstring for why the
-    # result event's message list is unreliable). Fall back to the message list
-    # only for loop types that emit a terminal result but no per-turn assistant
-    # events.
-    output = streamed_output or result_output
+    # Precedence: a structured `submit` answer beats everything (it is the
+    # agent's explicit, deterministic final answer); otherwise the stream's
+    # final assistant text (see the docstring for why the result event's
+    # message list is unreliable); the message list is the last resort for
+    # loop types that emit a terminal result but no per-turn assistant events.
+    output = submitted_output or streamed_output or result_output
 
     return AgentResult(
         output=output,
@@ -123,7 +134,19 @@ class CodingAgentAdapter:
         preset: CodingAgent preset (default ``coding_agent``).
         enable_nudges: Keep the action / keep-going nudges on — recommended for
             benchmark runs, per CodingAgent's own guidance.
+        use_submit_tool: Opt-in deterministic finish tool. When ``True``, the
+            agent gets the :class:`~chimera.tools.submit.SubmitTool` plus a
+            one-line instruction, and :func:`aggregate_events` reads the final
+            answer from the submit call's ``answer`` argument instead of
+            scraping prose. Default ``False`` — zero behavior change.
     """
+
+    #: Instruction appended to the task when the submit tool is injected.
+    _SUBMIT_INSTRUCTION = (
+        "\n\nWhen the task is complete, call the `submit` tool exactly once "
+        "with your complete final answer (the full solution, verbatim) as the "
+        "'answer' argument."
+    )
 
     def __init__(
         self,
@@ -131,10 +154,12 @@ class CodingAgentAdapter:
         *,
         preset: str = "coding_agent",
         enable_nudges: bool = True,
+        use_submit_tool: bool = False,
     ) -> None:
         self._provider = provider
         self._preset = preset
         self._enable_nudges = enable_nudges
+        self._use_submit_tool = use_submit_tool
 
     def run(self, task: str, env: Any) -> AgentResult:
         """Run the CodingAgent on *task*, rooted at ``env.workdir``.
@@ -146,11 +171,18 @@ class CodingAgentAdapter:
 
         project_dir = getattr(env, "workdir", None)
         try:
+            extra_tools: list[Any] | None = None
+            if self._use_submit_tool:
+                from chimera.tools.submit import SubmitTool
+
+                extra_tools = [SubmitTool()]
+                task = task + self._SUBMIT_INSTRUCTION
             agent = CodingAgent(
                 provider=self._provider,
                 project_dir=str(project_dir) if project_dir else ".",
                 preset=self._preset,
                 enable_nudges=self._enable_nudges,
+                extra_tools=extra_tools,
             )
             return asyncio.run(aggregate_events(agent.run(task)))
         except Exception as exc:  # noqa: BLE001 - isolate one task's failure
