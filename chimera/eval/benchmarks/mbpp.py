@@ -268,6 +268,23 @@ class MBPP(Benchmark):
         return out
 
 
+class MBPPPlus(MBPP):
+    """MBPP+ (EvalPlus) rows through the MBPP grading path.
+
+    The staged MBPP+ dataset (``chimera bench-fetch mbpp-plus``) is row-for-row
+    compatible with :class:`MBPP`; this subclass only relabels the benchmark so
+    matrix columns and reports never present an MBPP+ run as ``mbpp-sanitized``.
+
+    Grading honesty: ``evaluate()`` (inherited) runs the base ``test_list``
+    asserts only — the EvalPlus expanded ``test`` harness is preserved verbatim
+    in every staged row but not yet executed, so results are **base-strength**,
+    not plus-strength.
+    """
+
+    def name(self) -> str:
+        return "mbpp-plus"
+
+
 # ---------------------------------------------------------------------------
 # CLI entry point
 # ---------------------------------------------------------------------------
