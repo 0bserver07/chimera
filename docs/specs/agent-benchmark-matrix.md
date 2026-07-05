@@ -47,7 +47,7 @@ The internal agent axis is already large before a single external agent is added
 
 - **7 codename postures** (`chimera/{mink,otter,ferret,weasel,shrew,stoat,badger}/`): TUI-first · server/multi-client · sandbox/IDE · minimal-4-mode · small-local-model · shell-toggle · harness-rewrite+parity.
 - **6 assembly presets** (`chimera/assembly/presets.py`): `coding_agent` (alias `claude_code`), `codex`, `minimal`, `explore`, `kimi`, `swebench` (bench-tuned: minimal edits, root-cause, no compaction/streaming). They differ by tool_set × permissions × max_turns.
-- **4 replica styles** (`chimera/agents/presets/agent_styles.py`) — distinct *loops*, not just prompts: `swe_agent` (retry loop, max_retries=3) · `codex` (react) · `aider` (lint_feedback loop, ruff, max_lint_rounds=2) · `cline` (plan_act, plan_steps=8).
+- **4 loop styles** (`chimera/agents/presets/agent_styles.py`) — distinct *loops*, not just prompts: `retry-min` (retry loop, max_retries=3) · `react-full` (react) · `lint-loop` (lint_feedback loop, ruff, max_lint_rounds=2) · `plan-act` (plan_act, plan_steps=8). Names are loop-descriptive; the former brand ids (`swe-agent`/`codex`/`aider`/`cline`) resolve as back-compat aliases.
 - **Orthogonal loop axis**: `LOOP_POSTURES` (`plan`, `tdd`) as prompt postures, plus the strategy loops via `loop_adapter` (plan-execute / reflexion / tot).
 
 So `InProcessRunner` alone yields on the order of *(codenames ∪ presets ∪ styles) × loop-postures* distinct rows — the matrix has plenty to compare before external agents even enter.
@@ -189,16 +189,16 @@ The list is a mix of benchmarks, agent scaffolds, production CLIs, and training/
 
 | Project | Runner | Replica? | GitHub |
 |---|---|---|---|
-| SWE-agent | `NativeHarnessRunner` (A4) | ✅ `swe_agent` style | SWE-agent/SWE-agent |
+| SWE-agent | `NativeHarnessRunner` (A4) | ✅ `retry-min` style | SWE-agent/SWE-agent |
 | mini-SWE-agent | `NativeHarnessRunner` — **first external** | — | SWE-agent/mini-swe-agent |
 | OpenHands (+ software-agent-sdk) | `CliTemplateRunner`/native (A3/A4) | — | OpenHands/OpenHands |
 | Agentless | `NativeHarnessRunner` — **cost baseline (~$0.34/issue)** | — | OpenAutoCoder/Agentless |
 | AutoCodeRover (+ sonar-foundation-agent) | `NativeHarnessRunner` (A4) | — | AutoCodeRoverSG/auto-code-rover |
 | Moatless Tools (MCTS variant) | `NativeHarnessRunner` (A4) | — | aorwall/moatless-tools |
 | Open SWE (LangChain) | `CliTemplateRunner`/native | — | langchain-ai/open-swe |
-| Aider | `CliTemplateRunner` (A3) + harness (A4) | ✅ `aider` style (lint_feedback) | Aider-AI/aider |
-| Codex CLI | `CliTemplateRunner` (A3, `codex exec` — precedent) | ✅ `codex` style + preset | openai/codex |
-| Cline | `CliTemplateRunner` (A3) | ✅ `cline` style (plan_act) | cline/cline |
+| Aider | `CliTemplateRunner` (A3) + harness (A4) | ✅ `lint-loop` style (lint_feedback) | Aider-AI/aider |
+| Codex CLI | `CliTemplateRunner` (A3, `codex exec` — precedent) | ✅ `react-full` style + `full-tools` preset | openai/codex |
+| Cline | `CliTemplateRunner` (A3) | ✅ `plan-act` style (plan_act) | cline/cline |
 | Claude Code | `CliTemplateRunner` (A3) | ≈ `coding_agent`/`claude_code` preset | anthropics/claude-code |
 | Gemini CLI | `CliTemplateRunner` (A3) | — | google-gemini/gemini-cli |
 | Goose (Block) | `CliTemplateRunner`/ACP (A3/A2) | — | block/goose |
@@ -220,7 +220,7 @@ Two external agents already have a driving precedent in `teammate_runner`: **cod
 
 ## Signature experiment: replica vs. real
 
-This is the payoff of the "replicate agents" pillar, and no single-agent project can produce it. For **swe_agent, codex, aider, cline** (and, loosely, `coding_agent` ≈ Claude Code), Chimera holds *both*:
+This is the payoff of the "replicate agents" pillar, and no single-agent project can produce it. For the **retry-min, react-full, lint-loop, plan-act** styles (formerly named after the agents they echo; and, loosely, `coding_agent` ≈ Claude Code), Chimera holds *both*:
 
 - an **internal replica** — a real, code-backed loop (`agent_styles.py`: retry / react / lint_feedback / plan_act; assembly presets `codex`/`kimi`), and
 - the ability to **drive the real external CLI** (Axis A3/A4: `openai/codex`, `Aider-AI/aider`, `cline/cline`, `SWE-agent/SWE-agent`).
@@ -234,7 +234,7 @@ Running the pair `(replica_X, real_X)` on the same benchmark, same model, same b
 - **Phase 0 — protocol + registry + matrix CLI over internal agents.** `AgentRunner`, `AgentRunResult`, `InProcessRunner` (refactor `CodingAgentAdapter` under it), `AgentSpec` loader, `chimera bench matrix` crossing internal agents × the full native bench registry. **Enumerate the internal roster** (7 codenames + 6 presets + 4 styles) as `matrix.yaml` entries — nearly free, and it yields the first real internal-only matrix on day one. Zero external dependencies; ships the keystone.
 - **Phase 1 — ACP + CLI-template runners.** Lift `ACPRunner`/`CliTemplateRunner` out of `teammate_runner`/`ExternalAgentTool`. Prove one external agent (start with `codex` or `opencode` — already driven) on one existing bench (HumanEval or SWE-bench Lite) end-to-end, in `docker`.
 - **Phase 2 — `NativeHarnessRunner` + the SWE-bench agent fleet.** Add registry entries (not framework code) for mini-SWE-agent (recommended start), Agentless (cost baseline), Aider, OpenHands, AutoCodeRover, Moatless, Open SWE. Grade via the official SWE-bench harness for column-consistency. Wiring the real Aider/Cline/Codex/SWE-agent CLIs here **unlocks their replica-vs-real pairs** against the Phase-0 internal styles.
-- **Phase 3 — external benchmark axis + first published matrices.** Fill Axis-B gaps (SWE-bench Pro; SWE-bench Full; Harbor / R2E-Gym / SWE-Gym task sources via [harbor-task-adapter](harbor-task-adapter.md)), then publish (a) a real ~4-agents × ~3-benches matrix on GLM-5 and (b) the **replica-vs-real fidelity table** for `swe_agent`/`codex`/`aider`/`cline` — ATIF trajectories opened in Pier.
+- **Phase 3 — external benchmark axis + first published matrices.** Fill Axis-B gaps (SWE-bench Pro; SWE-bench Full; Harbor / R2E-Gym / SWE-Gym task sources via [harbor-task-adapter](harbor-task-adapter.md)), then publish (a) a real ~4-agents × ~3-benches matrix on GLM-5 and (b) the **replica-vs-real fidelity table** for `retry-min`/`react-full`/`lint-loop`/`plan-act` — ATIF trajectories opened in Pier.
 
 ## Non-goals / honest framing
 
@@ -260,6 +260,6 @@ External benchmark and agent-framework names in this spec (SWE-bench, mini-SWE-a
 - At least 3 internal roster entries (mixing codenames / presets / styles) resolve from `matrix.yaml` and run as distinct rows.
 - `chimera bench matrix` produces a 2×2 grid (2 internal agents × 2 native benches) on GLM-5 with per-cell ATIF trajectories.
 - One external agent (`codex` or `opencode`) resolves from `matrix.yaml` and completes one SWE-bench-Lite task in `docker`, graded identically to the internal agents.
-- One replica-vs-real pair (e.g. the `aider` style vs the real Aider CLI) produces a fidelity Δpass-rate on a fixed bench.
+- One replica-vs-real pair (e.g. the `lint-loop` style vs the real Aider CLI) produces a fidelity Δpass-rate on a fixed bench.
 - `MatrixReport` flags any cell whose budget was honored only partially.
 - `bash scripts/all_trademark_scrub.sh` stays green.

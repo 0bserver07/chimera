@@ -37,6 +37,18 @@ _LOOP_PATHS: dict[str, str] = {
     "tree-of-thought": "chimera.core.loops.tree_of_thought:TreeOfThought",
 }
 
+#: Back-compat roster-id aliases (former brand name -> canonical loop-descriptive
+#: id). :func:`load_registry` maps each alias onto its canonical spec so
+#: ``--agents aider`` (etc.) keeps resolving after the rename. An explicit JSON
+#: entry for an alias id always wins over the alias.
+_ID_ALIASES: dict[str, str] = {
+    "swe-agent": "retry-min",
+    "aider": "lint-loop",
+    "cline": "plan-act",
+    "codex": "full-tools",
+    "kimi": "action-first",
+}
+
 
 @dataclass
 class AgentSpec:
@@ -244,28 +256,30 @@ def swebench_preset_agent(provider: Any) -> Any:
 
 
 # --------------------------------------------------------------------------- #
-# Built-in replica-style factory helpers.
+# Built-in loop-style factory helpers.
 #
 # Each composes a runnable ``chimera.core.agent.Agent`` from a named
 # :class:`~chimera.agents.presets.agent_styles.AgentPreset` — the in-tree
-# replicas of well-known coding agents (SWE-Agent / Aider / Cline archetypes).
+# loop-posture styles (retry-minimal / lint-feedback / plan-act). Their names
+# are loop-descriptive; the former brand-named ids (``swe-agent`` / ``aider`` /
+# ``cline``) survive as back-compat aliases in :func:`load_registry`.
 # ``AgentPreset._compose`` is the preset's documented in-tree build hatch: it
-# wires the replica's tools, loop, and system prompt into a live Agent that
+# wires the style's tools, loop, and system prompt into a live Agent that
 # already satisfies the ``run(prompt, env) -> AgentResult`` factory contract,
-# exactly like the loop helpers above. The Codex archetype is deliberately not
-# re-exposed here — the assembly ``codex`` preset already occupies that id.
+# exactly like the loop helpers above. The react-full style is deliberately not
+# re-exposed here — the assembly ``codex`` preset already occupies that slot.
 # --------------------------------------------------------------------------- #
 def _build_style_agent(provider: Any, preset_name: str) -> Any:
-    """Compose a runnable Agent from a named :class:`AgentPreset` replica.
+    """Compose a runnable Agent from a named :class:`AgentPreset` style.
 
     Args:
         provider: LLM provider handed to the composed Agent.
         preset_name: Attribute name on
             :class:`~chimera.agents.presets.agent_styles.AgentPreset`
-            (e.g. ``"SWE_AGENT"``).
+            (e.g. ``"RETRY_MIN"``).
 
     Returns:
-        A :class:`~chimera.core.agent.Agent` wired with the replica's tools,
+        A :class:`~chimera.core.agent.Agent` wired with the style's tools,
         loop, and system prompt.
     """
     from chimera.agents.presets.agent_styles import AgentPreset
@@ -274,32 +288,39 @@ def _build_style_agent(provider: Any, preset_name: str) -> Any:
     return preset._compose(provider)
 
 
-def swe_agent_style_agent(provider: Any) -> Any:
-    """Factory: the SWE-Agent-style replica (retry loop, minimal tools)."""
-    return _build_style_agent(provider, "SWE_AGENT")
+def retry_min_style_agent(provider: Any) -> Any:
+    """Factory: the retry-minimal style (retry loop, minimal tools)."""
+    return _build_style_agent(provider, "RETRY_MIN")
 
 
-def aider_style_agent(provider: Any) -> Any:
-    """Factory: the Aider-style replica (lint-feedback loop, git-aware tools)."""
-    return _build_style_agent(provider, "AIDER")
+def lint_loop_style_agent(provider: Any) -> Any:
+    """Factory: the lint-feedback style (lint-feedback loop, git-aware tools)."""
+    return _build_style_agent(provider, "LINT_LOOP")
 
 
-def cline_style_agent(provider: Any) -> Any:
-    """Factory: the Cline-style replica (plan/act dual-mode loop, full tools)."""
-    return _build_style_agent(provider, "CLINE")
+def plan_act_style_agent(provider: Any) -> Any:
+    """Factory: the plan-act style (plan/act dual-mode loop, full tools)."""
+    return _build_style_agent(provider, "PLAN_ACT")
 
 
 def default_agent_specs() -> list[AgentSpec]:
     """Return the representative built-in roster (all ``in-process``).
 
-    Twelve ids spanning three internal axes:
+    Thirteen ids spanning three internal axes:
 
     - Four **loop postures** (``react`` / ``plan-execute`` / ``reflexion`` /
       ``tree-of-thought``) reusing the bench-compare loop map.
-    - Five **assembly presets** (``codex``, ``kimi``, ``minimal``, ``explore``,
-      ``swebench``) driven through ``CodingAgentAdapter``.
-    - Three **replica styles** (``swe-agent``, ``aider``, ``cline``) composed
-      from :class:`~chimera.agents.presets.agent_styles.AgentPreset`.
+    - Six **assembly presets** — the ``chimera code`` flagship ``coding-agent``
+      plus ``full-tools``, ``action-first``, ``minimal``, ``explore``, and
+      ``swebench`` — driven through ``CodingAgentAdapter``. (``full-tools`` and
+      ``action-first`` are backed by the assembly ``codex`` / ``kimi`` presets;
+      the roster id is loop-descriptive, the preset key is unchanged.)
+    - Three **loop styles** (``retry-min``, ``lint-loop``, ``plan-act``)
+      composed from :class:`~chimera.agents.presets.agent_styles.AgentPreset`.
+
+    The former brand-named ids (``swe-agent`` / ``aider`` / ``cline`` /
+    ``codex`` / ``kimi``) resolve through :func:`load_registry` as back-compat
+    aliases of their canonical entries above.
 
     The roster stays deliberately *representative*, not exhaustive — the spec's
     full internal axis (the 7 codename CLIs and any further presets/styles) is
@@ -324,14 +345,14 @@ def default_agent_specs() -> list[AgentSpec]:
             kind="in-process",
             factory=f"{base}:coding_agent_preset_agent",
         ),
-        AgentSpec(id="codex", kind="in-process", factory=f"{base}:codex_preset_agent"),
-        AgentSpec(id="kimi", kind="in-process", factory=f"{base}:kimi_preset_agent"),
+        AgentSpec(id="full-tools", kind="in-process", factory=f"{base}:codex_preset_agent"),
+        AgentSpec(id="action-first", kind="in-process", factory=f"{base}:kimi_preset_agent"),
         AgentSpec(id="minimal", kind="in-process", factory=f"{base}:minimal_preset_agent"),
         AgentSpec(id="explore", kind="in-process", factory=f"{base}:explore_preset_agent"),
         AgentSpec(id="swebench", kind="in-process", factory=f"{base}:swebench_preset_agent"),
-        AgentSpec(id="swe-agent", kind="in-process", factory=f"{base}:swe_agent_style_agent"),
-        AgentSpec(id="aider", kind="in-process", factory=f"{base}:aider_style_agent"),
-        AgentSpec(id="cline", kind="in-process", factory=f"{base}:cline_style_agent"),
+        AgentSpec(id="retry-min", kind="in-process", factory=f"{base}:retry_min_style_agent"),
+        AgentSpec(id="lint-loop", kind="in-process", factory=f"{base}:lint_loop_style_agent"),
+        AgentSpec(id="plan-act", kind="in-process", factory=f"{base}:plan_act_style_agent"),
     ]
 
 
@@ -341,6 +362,12 @@ def load_registry(paths: list[str] | None = None) -> dict[str, AgentSpec]:
     Starts from :func:`default_agent_specs`, then merges each JSON file in order
     so later files override earlier ones (and the built-ins) by ``id``. Each
     file must contain a JSON list of :class:`AgentSpec` dicts.
+
+    Finally, the back-compat :data:`_ID_ALIASES` are applied: each former
+    brand-named id (``swe-agent`` / ``aider`` / ``cline`` / ``codex`` /
+    ``kimi``) resolves to the same spec object as its canonical entry, so
+    ``--agents aider`` keeps working after the rename. An alias is only added
+    when that id is not already present (an explicit JSON entry for the id wins).
 
     Args:
         paths: Ordered registry file paths. ``None`` yields the built-ins
@@ -362,6 +389,11 @@ def load_registry(paths: list[str] | None = None) -> dict[str, AgentSpec]:
         for entry in entries:
             spec = AgentSpec.from_dict(entry)
             registry[spec.id] = spec
+    # Back-compat: alias the former brand-named ids onto their canonical specs,
+    # without clobbering any explicit entry a JSON override already supplied.
+    for alias, canonical in _ID_ALIASES.items():
+        if alias not in registry and canonical in registry:
+            registry[alias] = registry[canonical]
     return registry
 
 

@@ -1,7 +1,10 @@
 """Named agent presets that compose tools, loops, and prompts.
 
-Each preset recreates the architecture of a well-known coding agent by
-selecting the right combination of primitives from Chimera's layered stack.
+Each preset pairs a distinct reasoning-loop posture with a matching tool set
+and system prompt, assembled from Chimera's layered primitives. The names are
+loop-descriptive — ``RETRY_MIN`` / ``REACT_FULL`` / ``LINT_LOOP`` /
+``PLAN_ACT`` — rather than named after the external coding agents whose shapes
+they echo.
 
 The canonical user-facing API is
 :meth:`chimera.assembly.coding_agent.CodingAgent.from_preset`. The
@@ -12,9 +15,13 @@ Usage (canonical)::
 
     from chimera.assembly.coding_agent import CodingAgent
 
-    agent = CodingAgent.from_preset("swebench")   # SWE_AGENT analogue
-    agent = CodingAgent.from_preset("codex")      # CODEX analogue
-    agent = CodingAgent.from_preset("coding_agent")  # AIDER / CLINE analogue
+    agent = CodingAgent.from_preset("swebench")   # RETRY_MIN analogue
+    agent = CodingAgent.from_preset("codex")      # REACT_FULL analogue
+    agent = CodingAgent.from_preset("coding_agent")  # LINT_LOOP / PLAN_ACT analogue
+
+Back-compat: the former brand-named attributes (``SWE_AGENT`` / ``CODEX`` /
+``AIDER`` / ``CLINE``) remain as aliases of the canonical presets — see the
+back-compat block at the bottom of this module.
 """
 
 from __future__ import annotations
@@ -29,10 +36,10 @@ if TYPE_CHECKING:
 
 
 class AgentPreset:
-    """Named agent configurations inspired by real coding agents.
+    """Named agent configurations, each pinning a distinct loop posture.
 
     Each preset composes the right tools, loop, context strategy,
-    and prompt to recreate a specific agent's architecture.
+    and prompt to realise a specific reasoning-loop shape.
 
     The user-facing entry point is
     :meth:`chimera.assembly.coding_agent.CodingAgent.from_preset`; the
@@ -52,6 +59,12 @@ class AgentPreset:
     """
 
     # Class-level preset instances are assigned after the class body.
+    # Canonical, loop-descriptive names:
+    RETRY_MIN: AgentPreset
+    REACT_FULL: AgentPreset
+    LINT_LOOP: AgentPreset
+    PLAN_ACT: AgentPreset
+    # Back-compat aliases (assigned at the bottom of this module):
     SWE_AGENT: AgentPreset
     CODEX: AgentPreset
     AIDER: AgentPreset
@@ -172,9 +185,9 @@ class AgentPreset:
 
 # ---- The 4 presets --------------------------------------------------------
 
-AgentPreset.SWE_AGENT = AgentPreset(
-    name="swe_agent",
-    description="SWE-Agent style: minimal tools, retry loop, focused on benchmarks.",
+AgentPreset.RETRY_MIN = AgentPreset(
+    name="retry-min",
+    description="Retry-minimal: minimal tools + retry loop, benchmark-focused.",
     tool_names=["read_file", "edit_file", "bash", "search", "list_files"],
     loop_type="retry",
     loop_kwargs={"max_retries": 3},
@@ -186,9 +199,9 @@ AgentPreset.SWE_AGENT = AgentPreset(
     ),
 )
 
-AgentPreset.CODEX = AgentPreset(
-    name="codex",
-    description="Codex style: full tools, standard loop, memory-aware.",
+AgentPreset.REACT_FULL = AgentPreset(
+    name="react-full",
+    description="React-full: full tools, standard ReAct loop, memory-aware.",
     tool_names=["AGENT_TOOLS"],
     loop_type="react",
     max_steps=50,
@@ -200,9 +213,9 @@ AgentPreset.CODEX = AgentPreset(
     ),
 )
 
-AgentPreset.AIDER = AgentPreset(
-    name="aider",
-    description="Aider style: lint feedback loop, git-aware, edit-focused.",
+AgentPreset.LINT_LOOP = AgentPreset(
+    name="lint-loop",
+    description="Lint-loop: lint-feedback edit loop, git-aware, edit-focused.",
     tool_names=[
         "read_file", "edit_file", "bash", "search",
         "list_files", "git", "test", "repo_map",
@@ -218,9 +231,9 @@ AgentPreset.AIDER = AgentPreset(
     ),
 )
 
-AgentPreset.CLINE = AgentPreset(
-    name="cline",
-    description="Cline style: plan/act dual mode, full tools, IDE-like.",
+AgentPreset.PLAN_ACT = AgentPreset(
+    name="plan-act",
+    description="Plan/act: plan-then-act dual mode, full tools, IDE-like.",
     tool_names=["AGENT_TOOLS"],
     loop_type="plan_act",
     loop_kwargs={"plan_steps": 8},
@@ -232,3 +245,11 @@ AgentPreset.CLINE = AgentPreset(
         "execution."
     ),
 )
+
+
+# Back-compat aliases — the replicas were formerly named after the coding
+# agents they imitate. Canonical names above are loop-descriptive.
+AgentPreset.SWE_AGENT = AgentPreset.RETRY_MIN
+AgentPreset.CODEX = AgentPreset.REACT_FULL
+AgentPreset.AIDER = AgentPreset.LINT_LOOP
+AgentPreset.CLINE = AgentPreset.PLAN_ACT

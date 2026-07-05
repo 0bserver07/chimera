@@ -1,8 +1,9 @@
 """Replica-vs-real fidelity — measure how faithfully a Chimera replica tracks a real agent.
 
 This is the payoff of the "replicate agents" pillar of the mission: for agents
-Chimera mirrors internally (its ``swe_agent`` / ``codex`` / ``aider`` / ``cline``
-styles), Chimera holds **both** a code-backed internal replica *and* the ability
+Chimera mirrors internally (its loop styles ``retry-min`` / ``react-full`` /
+``lint-loop`` / ``plan-act`` — formerly named after the agents they echo),
+Chimera holds **both** a code-backed internal replica *and* the ability
 to drive the real external CLI. Running the pair ``(replica, real)`` on the
 *same* benchmark, *same* model, *same* budget, and *same* sandbox turns "we
 replicated agent X" from a claim into a measured number:
