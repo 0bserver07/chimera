@@ -162,12 +162,21 @@ class AgentSpec:
 # ``factory`` to one of these wrappers keeps :func:`resolve` a dumb importer
 # while still yielding a live, runnable Agent.
 # --------------------------------------------------------------------------- #
-def _build_loop_agent(provider: Any, loop_path: str) -> Any:
+def _build_loop_agent(provider: Any, loop_path: str, loop_config: Any = None) -> Any:
     """Assemble a default-tooled Agent around the loop named by *loop_path*.
+
+    When *loop_config* is supplied, it is passed straight into the loop
+    constructor as ``config=loop_config`` — exactly as
+    ``chimera/cli/bench_compare.py`` does — so a per-task
+    :class:`~chimera.core.budget.BudgetEnforcer` carried on the config trips
+    the loop's cooperative-cancel path at the tool-call budget. ``None``
+    (the default) preserves the legacy unbudgeted posture.
 
     Args:
         provider: LLM provider handed to the Agent.
         loop_path: ``"module:Class"`` reference to a reasoning loop.
+        loop_config: Optional :class:`~chimera.core.loop_config.LoopConfig`
+            injected into the loop (enables per-task budget enforcement).
 
     Returns:
         A :class:`~chimera.core.agent.Agent` wrapping a fresh loop instance.
@@ -177,31 +186,59 @@ def _build_loop_agent(provider: Any, loop_path: str) -> Any:
     from chimera.core.agent import Agent
     from chimera.core.tool_group import DEFAULT_TOOLS
 
-    return Agent(provider=provider, tools=list(DEFAULT_TOOLS), loop=loop_cls())
+    loop = loop_cls(config=loop_config) if loop_config is not None else loop_cls()
+    return Agent(provider=provider, tools=list(DEFAULT_TOOLS), loop=loop)
 
 
-def react_agent(provider: Any) -> Any:
-    """Factory: a ReAct-loop Agent with the default tool set."""
-    return _build_loop_agent(provider, _LOOP_PATHS["react"])
+def react_agent(provider: Any, loop_config: Any = None) -> Any:
+    """Factory: a ReAct-loop Agent with the default tool set.
+
+    Accepts an optional ``loop_config`` so :class:`InProcessRunner` can wire a
+    per-task budget (tool-call enforcement) into the loop; ``None`` runs
+    unbudgeted.
+    """
+    return _build_loop_agent(provider, _LOOP_PATHS["react"], loop_config)
 
 
-def plan_execute_agent(provider: Any) -> Any:
-    """Factory: a Plan-and-Execute Agent with the default tool set."""
-    return _build_loop_agent(provider, _LOOP_PATHS["plan-execute"])
+def plan_execute_agent(provider: Any, loop_config: Any = None) -> Any:
+    """Factory: a Plan-and-Execute Agent with the default tool set.
+
+    Accepts an optional ``loop_config`` for per-task budget enforcement.
+    """
+    return _build_loop_agent(provider, _LOOP_PATHS["plan-execute"], loop_config)
 
 
-def reflexion_agent(provider: Any) -> Any:
-    """Factory: a Reflexion Agent with the default tool set."""
-    return _build_loop_agent(provider, _LOOP_PATHS["reflexion"])
+def reflexion_agent(provider: Any, loop_config: Any = None) -> Any:
+    """Factory: a Reflexion Agent with the default tool set.
+
+    Accepts an optional ``loop_config`` for per-task budget enforcement.
+    """
+    return _build_loop_agent(provider, _LOOP_PATHS["reflexion"], loop_config)
 
 
-def tree_of_thought_agent(provider: Any) -> Any:
-    """Factory: a Tree-of-Thought Agent with the default tool set."""
-    return _build_loop_agent(provider, _LOOP_PATHS["tree-of-thought"])
+def tree_of_thought_agent(provider: Any, loop_config: Any = None) -> Any:
+    """Factory: a Tree-of-Thought Agent with the default tool set.
+
+    Accepts an optional ``loop_config`` for per-task budget enforcement.
+    """
+    return _build_loop_agent(provider, _LOOP_PATHS["tree-of-thought"], loop_config)
 
 
 def _build_preset_agent(provider: Any, preset: str) -> Any:
     """Build a ``CodingAgentAdapter`` for the named assembly preset.
+
+    These preset factories deliberately stay **single-argument** (no
+    ``loop_config``). The adapter drives the assembled
+    :class:`~chimera.assembly.coding_agent.CodingAgent`, whose internal
+    ``AgentLoop`` takes neither a
+    :class:`~chimera.core.loop_config.LoopConfig` nor a
+    :class:`~chimera.core.budget.BudgetEnforcer` — its only budget lever is the
+    constructor ``max_turns`` ceiling, which ``CodingAgentAdapter`` does not
+    currently forward. Rather than fake tool-call enforcement,
+    :class:`~chimera.eval.runners.in_process.InProcessRunner` detects the
+    single-arg signature and honestly flags the cell ``budget_honored=False``.
+    (Threading ``max_turns`` from ``budget.max_llm_calls`` would require
+    exposing it on the adapter — tracked as a follow-up.)
 
     Args:
         provider: LLM provider handed to the adapter.
@@ -271,6 +308,14 @@ def swebench_preset_agent(provider: Any) -> Any:
 # --------------------------------------------------------------------------- #
 def _build_style_agent(provider: Any, preset_name: str) -> Any:
     """Compose a runnable Agent from a named :class:`AgentPreset` style.
+
+    Like the assembly-preset factories, these stay **single-argument**:
+    :meth:`AgentPreset._compose` builds its loop internally with no
+    ``config`` seam, so a per-task
+    :class:`~chimera.core.loop_config.LoopConfig` cannot be injected without
+    editing ``agent_styles.py``. :class:`InProcessRunner` therefore flags
+    budgeted style cells ``budget_honored=False`` rather than pretend to
+    enforce — no fake enforcement.
 
     Args:
         provider: LLM provider handed to the composed Agent.
