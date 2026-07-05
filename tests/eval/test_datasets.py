@@ -97,3 +97,69 @@ def test_load_benchmark_autodiscovers_staged_dataset(
     bench = _load_benchmark("mbpp")
     assert len(bench.tasks()) == 1
     assert bench.tasks()[0]["task_id"] == 7
+
+
+def test_fetch_lcb_transform_streams_and_reduces(
+    staging: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """LCB rows are transformed: public tests decoded, private payload dropped."""
+    rows = [
+        {  # stdin/stdout problem — kept
+            "question_id": "q1",
+            "question_title": "Sum",
+            "question_content": "Add two numbers.",
+            "public_test_cases": json.dumps(
+                [{"input": "1 2\n", "output": "3", "testtype": "stdin"}]
+            ),
+            "private_test_cases": "HUGE-PICKLED-BLOB" * 100,
+            "difficulty": "easy",
+            "contest_date": "2025-01-01T00:00:00",
+            "platform": "codeforces",
+            "starter_code": "",
+        },
+        {  # no decodable public tests — dropped
+            "question_id": "q2",
+            "question_title": "Bad",
+            "public_test_cases": "",
+        },
+    ]
+    payload = "\n".join(json.dumps(r) for r in rows).encode()
+    monkeypatch.setattr(ds, "_urlopen", lambda url, timeout=0: _FakeResponse(payload))
+
+    path = ds.fetch("livecodebench")
+
+    tasks = json.loads(path.read_text())
+    assert len(tasks) == 1
+    task = tasks[0]
+    assert task["id"] == "q1"
+    assert task["test_cases"] == [{"input": "1 2\n", "output": "3", "testtype": "stdin"}]
+    assert "stdin" in task["prompt"] and "Add two numbers." in task["prompt"]
+    assert "private" not in json.dumps(task)  # pickled payload never staged
+    # alias resolves to the same staged file
+    assert ds.staged_path("lcb") == path
+
+
+def test_lcb_staged_file_loads_through_adapter(
+    staging: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    row = {
+        "question_id": "q9",
+        "question_title": "Echo",
+        "question_content": "Echo input.",
+        "public_test_cases": json.dumps([{"input": "hi\n", "output": "hi", "testtype": "stdin"}]),
+        "difficulty": "easy",
+        "contest_date": "2025-02-02T00:00:00",
+        "platform": "atcoder",
+        "starter_code": "",
+    }
+    monkeypatch.setattr(
+        ds, "_urlopen", lambda url, timeout=0: _FakeResponse(json.dumps(row).encode())
+    )
+    ds.fetch("livecodebench")
+
+    from chimera.cli.main import _load_benchmark
+
+    bench = _load_benchmark("livecodebench", limit=1)
+    tasks = bench.tasks()
+    assert len(tasks) == 1
+    assert tasks[0]["test_cases"][0]["output"] == "hi"

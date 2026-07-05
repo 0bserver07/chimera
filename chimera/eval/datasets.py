@@ -28,6 +28,7 @@ import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 __all__ = ["FetchSpec", "FETCHES", "available", "fetch", "staged_path", "staging_dir"]
 
@@ -103,6 +104,23 @@ FETCHES: dict[str, FetchSpec] = {
             "the HF datasets-server API."
         ),
     ),
+    "livecodebench": FetchSpec(
+        bench="livecodebench",
+        out="livecodebench/release_v6-new.json",
+        kind="url-jsonl-transform",
+        source=(
+            "https://huggingface.co/datasets/livecodebench/code_generation_lite/"
+            "resolve/main/test6.jsonl"
+        ),
+        note=(
+            "LiveCodeBench code_generation_lite, NEWEST release slice only "
+            "(test6.jsonl, ~128 MB download -> a few MB staged). Rows are "
+            "transformed to adapter-ready tasks; the pickled private_test_cases "
+            "are dropped, so grading uses PUBLIC test cases only (weaker than "
+            "the official harness). Full v1-v6 union (~4.3 GB) is a manual "
+            "--dataset stage."
+        ),
+    ),
 }
 
 #: Hyphenless registry aliases resolve to the same spec.
@@ -110,6 +128,7 @@ _ALIASES: dict[str, str] = {
     "humanevalplus": "humaneval-plus",
     "swebench": "swe-bench",
     "swe-bench-lite": "swe-bench",
+    "lcb": "livecodebench",
 }
 
 
@@ -140,6 +159,79 @@ def _fetch_url(spec: FetchSpec, dest: Path) -> None:
     """Download a direct-URL dataset to *dest*."""
     with _urlopen(spec.source, timeout=120) as resp:  # noqa: S310 - fixed https URLs
         dest.write_bytes(resp.read())
+
+
+def _transform_lcb_row(row: dict) -> dict | None:
+    """Reduce one raw LiveCodeBench row to an adapter-ready task dict.
+
+    Decodes the ``public_test_cases`` JSON-string into ``test_cases``
+    (the key :class:`~chimera.eval.benchmarks.livecodebench.LiveCodeBench`
+    grades from), builds a stdin/stdout ``prompt``, and drops the pickled
+    ``private_test_cases`` payload (the bulk of the upstream file).
+    Returns ``None`` for rows without decodable public tests.
+    """
+    try:
+        cases = json.loads(row.get("public_test_cases") or "[]")
+    except (TypeError, ValueError):
+        return None
+    if not cases:
+        return None
+    starter = (row.get("starter_code") or "").strip()
+    prompt = (
+        f"{row.get('question_title', '')}\n\n{row.get('question_content', '')}\n\n"
+        + (
+            f"Complete the following starter code:\n```python\n{starter}\n```\n"
+            if starter
+            else "Write a complete Python program that reads from stdin and writes to stdout.\n"
+        )
+        + "Return the full program as your final answer."
+    )
+    return {
+        "id": row.get("question_id") or row.get("question_title", ""),
+        "prompt": prompt,
+        "test_cases": [
+            {
+                "input": c.get("input", ""),
+                "output": c.get("output", ""),
+                "testtype": c.get("testtype", ""),
+            }
+            for c in cases
+        ],
+        "difficulty": row.get("difficulty", ""),
+        "contest_date": row.get("contest_date", ""),
+        "platform": row.get("platform", ""),
+        "starter_code": starter,
+    }
+
+
+#: Per-bench row transforms for ``url-jsonl-transform`` fetches.
+_TRANSFORMS: dict[str, Any] = {
+    "livecodebench": _transform_lcb_row,
+}
+
+
+def _fetch_jsonl_transform(spec: FetchSpec, dest: Path) -> None:
+    """Stream a large JSONL source, transform each row, write a JSON list.
+
+    Rows are processed one line at a time so multi-hundred-MB upstream files
+    never sit in memory; the staged output holds only the transformed tasks.
+    """
+    transform = _TRANSFORMS[spec.bench]
+    first = True
+    with _urlopen(spec.source, timeout=600) as resp, dest.open("w", encoding="utf-8") as out:  # noqa: S310
+        out.write("[\n")
+        for line in resp:
+            line = line.strip()
+            if not line:
+                continue
+            task = transform(json.loads(line))
+            if task is None:
+                continue
+            if not first:
+                out.write(",\n")
+            out.write(json.dumps(task))
+            first = False
+        out.write("\n]\n")
 
 
 def _fetch_hf_rows(spec: FetchSpec, dest: Path) -> None:
@@ -195,6 +287,8 @@ def fetch(name: str, force: bool = False) -> Path:
         _fetch_url(spec, dest)
     elif spec.kind == "hf-rows":
         _fetch_hf_rows(spec, dest)
+    elif spec.kind == "url-jsonl-transform":
+        _fetch_jsonl_transform(spec, dest)
     else:  # pragma: no cover - specs are module-local constants
         raise ValueError(f"unknown fetch kind {spec.kind!r}")
     return dest
