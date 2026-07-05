@@ -124,7 +124,11 @@ class LiveCodeBench(Benchmark):
         for case in test_cases:
             stdin = case.get("input", "")
             expected = (case.get("output", "") or "").strip()
-            result = env.run_command("python solution.py", stdin=stdin)
+            # No Environment implementation takes a ``stdin=`` kwarg; every one
+            # runs commands through a shell, so feed stdin via a file redirect
+            # (portable across Local / Docker / SSH envs).
+            env.write_file("_stdin.txt", stdin)
+            result = env.run_command("python solution.py < _stdin.txt")
             if result.exit_code != 0:
                 return False
             if (result.stdout or "").strip() != expected:

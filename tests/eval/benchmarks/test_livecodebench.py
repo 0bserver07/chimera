@@ -23,18 +23,24 @@ from chimera.eval.benchmarks.livecodebench import DateWindow, LiveCodeBench
 
 
 class _StdioEnv:
-    """Env that echoes a fixed stdout for each ``python solution.py`` run."""
+    """Env that echoes a fixed stdout for each ``python solution.py`` run.
+
+    Mirrors the REAL Environment contract: ``run_command(cmd, ...)`` takes no
+    ``stdin=`` kwarg — the adapter feeds stdin by writing ``_stdin.txt`` and
+    shell-redirecting, so this fake records the last-written stdin file per run.
+    """
 
     def __init__(self, *, exit_code: int = 0, stdout: str = "") -> None:
         self._exit_code = exit_code
         self._stdout = stdout
+        self._files: dict[str, str] = {}
         self.runs: list[str | None] = []
 
     def write_file(self, path: str, content: str) -> None:
-        self._last = content
+        self._files[path] = content
 
-    def run_command(self, cmd: str, stdin: str | None = None):
-        self.runs.append(stdin)
+    def run_command(self, cmd: str, timeout: int | None = None, shell_name: str = "main"):
+        self.runs.append(self._files.get("_stdin.txt"))
         return SimpleNamespace(exit_code=self._exit_code, stdout=self._stdout)
 
 

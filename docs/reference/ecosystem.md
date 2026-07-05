@@ -268,7 +268,8 @@ Three different senses of "ready" — keep them distinct:
   redistributable ones, **`chimera bench-fetch <name>` (or `--all`) stages the
   dataset once** into `~/.chimera/datasets/` and `_load_benchmark`
   auto-discovers it — after fetching, the bench runs with no flag at all
-  (mbpp 427 tasks, humaneval-plus 164, swe-bench Lite 300, live-verified).
+  (mbpp 427 tasks, humaneval-plus 164, swe-bench Lite 300, livecodebench 175
+  — the newest release_v6 slice, public-test grading — all live-verified).
   Gated or license-unclear datasets stay manual. See the
   [benchmarks README](../benchmarks/README.md) for per-bench run status.
 - **Designed / needs-live-infra** — enumerated in the
