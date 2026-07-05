@@ -259,6 +259,9 @@ Three different senses of "ready" — keep them distinct:
   and passes the dataset argument under whatever name that adapter declares
   (`dataset_path` / `problems_path` / `dataset_dir`) and only passes `limit` when
   accepted. So every adapter loads regardless of its individual signature.
+  Two grading caveats within "wired": **swe-lancer** loads but `evaluate()`
+  raises `NotImplementedError` (needs the upstream containerized Playwright
+  harness), and **livecodebench** grades only its `codegeneration` scenario.
 - **Needs a staged dataset** — "wired" ≠ "has a published result." Most adapters
   deliberately refuse to vendor upstream data (multi-GB payloads, upstream
   licenses) and expect a locally-staged `--dataset PATH`. For the publicly

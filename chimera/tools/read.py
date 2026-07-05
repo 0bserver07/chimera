@@ -36,6 +36,11 @@ class ReadFileTool(BaseTool):
                 return ToolResult(output=content)
             except FileNotFoundError:
                 return ToolResult(output="", error=f"File not found: {path}")
+            except (OSError, UnicodeDecodeError) as e:
+                # IsADirectoryError / PermissionError / binary content: a bad
+                # read must surface as a tool error the model can react to,
+                # never an exception that can abort the whole run.
+                return ToolResult(output="", error=f"Cannot read {path}: {e}")
         assert env is not None
         try:
             content = env.read_file(path)
@@ -46,6 +51,8 @@ class ReadFileTool(BaseTool):
             return ToolResult(output=content)
         except FileNotFoundError:
             return ToolResult(output="", error=f"File not found: {path}")
+        except (OSError, UnicodeDecodeError) as e:
+            return ToolResult(output="", error=f"Cannot read {path}: {e}")
 
 
 def _resolve_path(path: str, backend: Any) -> str:

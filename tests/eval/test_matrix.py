@@ -115,3 +115,34 @@ def test_failing_cell_becomes_error_and_does_not_abort_grid() -> None:
     assert "kaboom" in by_agent["boom"]["benchA"].budget_note
     # The healthy runner still ran — one bad cell did not abort the sweep.
     assert by_agent["ok"]["benchA"].pass_rate == 1.0
+
+
+class _PromptCapturingRunner:
+    """Records every prompt it is driven with; always completes."""
+
+    def __init__(self) -> None:
+        self.id = "capture"
+        self.prompts: list[str] = []
+
+    def run(self, task: Any, env: Any = None, budget: Any = None) -> AgentRunResult:
+        self.prompts.append(str(task))
+        return AgentRunResult(answer="x", status="completed")
+
+
+def test_answer_contract_appended_by_default() -> None:
+    from chimera.eval.matrix import FINAL_ANSWER_CONTRACT
+
+    runner = _PromptCapturingRunner()
+    run_matrix([runner], [FakeBenchmark("benchC", "x")])
+
+    assert runner.prompts, "runner was never driven"
+    assert all(p.endswith(FINAL_ANSWER_CONTRACT) for p in runner.prompts)
+    # The original task prompt is preserved in front of the suffix.
+    assert runner.prompts[0].startswith("solve one")
+
+
+def test_answer_contract_off_leaves_prompt_untouched() -> None:
+    runner = _PromptCapturingRunner()
+    run_matrix([runner], [FakeBenchmark("benchC", "x")], answer_contract=False)
+
+    assert runner.prompts == ["solve one", "solve two"]

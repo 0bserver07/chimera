@@ -149,6 +149,20 @@ class MatrixReport:
         return "\n".join(lines)
 
 
+#: Uniform final-answer contract appended to every task prompt (all agents in a
+#: run get the identical suffix, so it stays a controlled variable). Multi-step
+#: loops (plan-execute, lint-feedback, reflexion) tend to end on a summary
+#: ("I've implemented the function...") rather than the artifact itself, and
+#: answer-graded benchmarks then score a correct solution as 0%. The contract
+#: makes the gradeable artifact the final message. Disable with
+#: ``run_matrix(..., answer_contract=False)`` to measure raw prompt behavior.
+FINAL_ANSWER_CONTRACT = (
+    "\n\nIMPORTANT: Your final message is what gets graded. End with the "
+    "complete final solution itself — the full code in one fenced code block, "
+    "or the bare final answer — not a summary of what you did."
+)
+
+
 class _HarnessAgent:
     """Adapt an :class:`AgentRunner` to the Harness ``run(prompt, env)`` contract.
 
@@ -163,11 +177,20 @@ class _HarnessAgent:
         runner: The agent under test.
         budget: Optional :class:`~chimera.core.budget.BudgetSpec` forwarded to
             the runner on every task.
+        answer_contract: When ``True`` (default), append
+            :data:`FINAL_ANSWER_CONTRACT` to every prompt so multi-step agents
+            end on the gradeable artifact rather than a summary.
     """
 
-    def __init__(self, runner: AgentRunner, budget: BudgetSpec | None = None) -> None:
+    def __init__(
+        self,
+        runner: AgentRunner,
+        budget: BudgetSpec | None = None,
+        answer_contract: bool = True,
+    ) -> None:
         self.runner = runner
         self.budget = budget
+        self.answer_contract = answer_contract
         self.last_result: AgentRunResult | None = None
         self.last_wall_clock_sec: float = 0.0
 
@@ -181,6 +204,8 @@ class _HarnessAgent:
         Returns:
             An :class:`~chimera.types.AgentResult` the Harness can grade.
         """
+        if self.answer_contract:
+            prompt = prompt + FINAL_ANSWER_CONTRACT
         start = time.monotonic()
         result = self.runner.run(prompt, env, self.budget)
         self.last_wall_clock_sec = time.monotonic() - start
@@ -223,6 +248,7 @@ def _run_cell(
     env_factory: Any,
     budget: BudgetSpec | None,
     graders: list[Any] | None,
+    answer_contract: bool = True,
 ) -> MatrixCell:
     """Run one (agent, benchmark) pair and reduce it to a :class:`MatrixCell`.
 
@@ -233,7 +259,7 @@ def _run_cell(
     agent_id = getattr(runner, "id", "?")
     bench_name = benchmark.name()
     try:
-        shim = _HarnessAgent(runner, budget=budget)
+        shim = _HarnessAgent(runner, budget=budget, answer_contract=answer_contract)
         harness = Harness(benchmark, shim, env_factory=env_factory, graders=graders)
         result = harness.run()
         last = shim.last_result
@@ -279,6 +305,7 @@ def run_matrix(
     budget: BudgetSpec | None = None,
     graders: list[Any] | None = None,
     model: str = "",
+    answer_contract: bool = True,
 ) -> MatrixReport:
     """Run every agent against every benchmark and collect the grid.
 
@@ -296,6 +323,10 @@ def run_matrix(
             every attempt; ``None`` runs unbudgeted.
         graders: Optional post-hoc graders passed through to each Harness.
         model: Model identifier shared by every cell, recorded on the report.
+        answer_contract: When ``True`` (default), every prompt carries the
+            uniform :data:`FINAL_ANSWER_CONTRACT` suffix so multi-step agents
+            end on the gradeable artifact instead of a summary. Identical
+            across all agents in the run, so it remains a controlled variable.
 
     Returns:
         A :class:`MatrixReport` with one :class:`MatrixCell` per pair. A cell
@@ -305,5 +336,9 @@ def run_matrix(
     cells: list[MatrixCell] = []
     for runner in runners:
         for benchmark in benchmarks:
-            cells.append(_run_cell(runner, benchmark, env_factory, budget, graders))
+            cells.append(
+                _run_cell(
+                    runner, benchmark, env_factory, budget, graders, answer_contract
+                )
+            )
     return MatrixReport(cells=cells, model=model)
