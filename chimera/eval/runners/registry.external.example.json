@@ -13,7 +13,7 @@
     "options": {"patch_from": "git-diff"}
   },
   {
-    "id": "aider",
+    "id": "aider-cli",
     "kind": "cli-template",
     "cmd": "aider --yes --message-file {prompt_file} {repo}",
     "sandbox": "docker"

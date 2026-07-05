@@ -23,6 +23,7 @@ from chimera.eval.runners import (
     AgentSpec,
     CliTemplateRunner,
     NativeHarnessRunner,
+    default_agent_specs,
     load_registry,
     resolve,
 )
@@ -31,7 +32,7 @@ from chimera.eval.runners import (
 EXAMPLE_JSON = Path(reg_mod.__file__).parent / "registry.external.example.json"
 
 #: The five external agents the example file is required to enumerate.
-EXTERNAL_IDS = ("opencode", "codex-cli", "aider", "mini-swe-agent", "agentless")
+EXTERNAL_IDS = ("opencode", "codex-cli", "aider-cli", "mini-swe-agent", "agentless")
 
 
 def test_example_file_exists_and_is_valid_json() -> None:
@@ -74,6 +75,16 @@ def test_load_registry_adds_all_five_on_top_of_builtins() -> None:
     assert registry["codex"].kind == "in-process"
     assert registry["codex-cli"].kind == "cli-template"
 
+    # Collision guard: NO external example id may shadow a built-in — every
+    # replica style must survive the merge so replica-vs-real pairs stay intact
+    # (aider vs aider-cli, codex vs codex-cli, ...).
+    builtin_ids = {spec.id for spec in default_agent_specs()}
+    external_ids = {entry["id"] for entry in json.loads(EXAMPLE_JSON.read_text())}
+    clobbered = builtin_ids & external_ids
+    assert not clobbered, f"external example ids shadow built-ins: {sorted(clobbered)}"
+    assert registry["aider"].kind == "in-process"
+    assert registry["aider-cli"].kind == "cli-template"
+
 
 def test_resolve_cli_template_specs_build_cli_template_runner() -> None:
     """The two cli-template example specs resolve to ``CliTemplateRunner``."""
@@ -86,9 +97,9 @@ def test_resolve_cli_template_specs_build_cli_template_runner() -> None:
     # ``options`` forwards to the constructor: patch_from was set in the JSON.
     assert codex.patch_from == "git-diff"
 
-    aider = resolve(registry["aider"])
+    aider = resolve(registry["aider-cli"])
     assert isinstance(aider, CliTemplateRunner)
-    assert aider.id == "aider"
+    assert aider.id == "aider-cli"
     assert aider.cmd == "aider --yes --message-file {prompt_file} {repo}"
 
 

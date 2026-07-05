@@ -63,3 +63,33 @@ CELL plan-execute x human-eval: 0% (0/2) status=completed cost=$0.0146 tool_call
 CELL plan-execute x math500: 100% (2/2) status=completed cost=$0.0233 tool_calls=3
 CELL plan-execute x tau-bench:airline: 100% (1/1) status=completed cost=$0.0577 tool_calls=22
 ```
+
+## 2026-07-04 addendum — expanded-roster confirmation pass
+
+A follow-up live pass confirmed the roster additions (1 task per bench,
+glm-5.2[1m]; raw cells below). It also caught three real defects, all fixed the
+same day: the assembled-CodingAgent presets errored via the **async** client
+(the SDK non-streaming guard — same bug as the sync path, fixed in
+`AnthropicProvider._aclient`), the `chimera code` flagship preset was missing
+from the roster (added as `coding-agent`, roster now 13), and the external
+example `aider` id clobbered the built-in aider style (renamed `aider-cli` +
+collision-guard test).
+
+| Agent (new in roster) | HumanEval (1) | MATH-500 (1) | Note |
+|---|---|---|---|
+| swe-agent (style) | 100% | 100% | retry loop, 2 tool calls |
+| cline (style) | 100% | 100% | plan_act, 6 tool calls |
+| aider (style) | 0% | 0% | runs + uses tools; final answer fails grading (answer-extraction pattern, like plan-execute on HumanEval) |
+| swebench (preset) | error → **fixed** | error → **fixed** | async-timeout bug; post-fix probe completes |
+| coding-agent (preset, `chimera code`) | — | — | added post-run; live probe completes ('OK', $0.002) |
+
+```text
+CELL swebench x human-eval: 0% (0/1) status=error        (pre-fix)
+CELL swebench x math500: 0% (0/1) status=error           (pre-fix)
+CELL swe-agent x human-eval: 100% (1/1) cost=$0.0128 tools=2
+CELL swe-agent x math500: 100% (1/1) cost=$0.0038 tools=0
+CELL aider x human-eval: 0% (0/1) completed cost=$0.0193 tools=2
+CELL aider x math500: 0% (0/1) completed cost=$0.0118 tools=4
+CELL cline x human-eval: 100% (1/1) cost=$0.0336 tools=6
+CELL cline x math500: 100% (1/1) cost=$0.0150 tools=1
+```

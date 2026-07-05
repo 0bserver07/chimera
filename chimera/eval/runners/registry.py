@@ -209,6 +209,15 @@ def _build_preset_agent(provider: Any, preset: str) -> Any:
     return CodingAgentAdapter(provider, preset=preset)
 
 
+def coding_agent_preset_agent(provider: Any) -> Any:
+    """Factory: the assembly ``coding_agent`` preset as an eval agent.
+
+    This is the ``chimera code`` daily-driver stack itself — the flagship
+    assembled CodingAgent — so the matrix can measure the same agent users run.
+    """
+    return _build_preset_agent(provider, "coding_agent")
+
+
 def codex_preset_agent(provider: Any) -> Any:
     """Factory: the assembly ``codex`` preset as an eval agent."""
     return _build_preset_agent(provider, "codex")
@@ -309,6 +318,11 @@ def default_agent_specs() -> list[AgentSpec]:
             id="tree-of-thought",
             kind="in-process",
             factory=f"{base}:tree_of_thought_agent",
+        ),
+        AgentSpec(
+            id="coding-agent",
+            kind="in-process",
+            factory=f"{base}:coding_agent_preset_agent",
         ),
         AgentSpec(id="codex", kind="in-process", factory=f"{base}:codex_preset_agent"),
         AgentSpec(id="kimi", kind="in-process", factory=f"{base}:kimi_preset_agent"),

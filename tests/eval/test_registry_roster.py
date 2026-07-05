@@ -18,11 +18,19 @@ from chimera.eval.runners.registry import default_agent_specs, resolve
 #: The six ids that predate this roster expansion (must never regress).
 _ORIGINAL_IDS = ("react", "plan-execute", "reflexion", "tree-of-thought", "codex", "kimi")
 
-#: The ids added by the roster expansion: three assembly presets + three replica
-#: styles.
-_ADDED_IDS = ("minimal", "explore", "swebench", "swe-agent", "aider", "cline")
+#: The ids added by the roster expansion: four assembly presets (including the
+#: ``chimera code`` flagship ``coding-agent``) + three replica styles.
+_ADDED_IDS = (
+    "coding-agent",
+    "minimal",
+    "explore",
+    "swebench",
+    "swe-agent",
+    "aider",
+    "cline",
+)
 
-#: The full expected built-in roster (12 ids).
+#: The full expected built-in roster (13 ids).
 _EXPECTED_IDS = _ORIGINAL_IDS + _ADDED_IDS
 
 
@@ -30,9 +38,9 @@ def test_default_roster_is_exactly_the_expected_ids() -> None:
     ids = [spec.id for spec in default_agent_specs()]
     # No duplicate ids leaked into the roster.
     assert len(ids) == len(set(ids)), f"duplicate ids in roster: {ids}"
-    # The roster is precisely the 12 expected ids — nothing missing, nothing extra.
+    # The roster is precisely the 13 expected ids — nothing missing, nothing extra.
     assert set(ids) == set(_EXPECTED_IDS)
-    assert len(ids) == 12
+    assert len(ids) == 13
 
 
 def test_original_six_ids_preserved() -> None:
