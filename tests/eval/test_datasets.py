@@ -163,3 +163,72 @@ def test_lcb_staged_file_loads_through_adapter(
     tasks = bench.tasks()
     assert len(tasks) == 1
     assert tasks[0]["test_cases"][0]["output"] == "hi"
+
+
+# MBPP+ rows carry the base ``test_list`` (what the MBPP adapter grades) plus
+# EvalPlus's expanded ``test`` harness (preserved for a future adapter).
+_MBPP_PLUS_ROW = {
+    "task_id": 2,
+    "code": "def similar_elements(a, b):\n    return tuple(set(a) & set(b))",
+    "prompt": "Write a function to find the shared elements from the given two lists.",
+    "source_file": "Benchmark Questions Verification V2.ipynb",
+    "test_imports": [],
+    "test_list": [
+        "assert set(similar_elements((3, 4, 5, 6), (5, 7, 4, 10))) == set((4, 5))",
+        "assert set(similar_elements((1, 2, 3, 4), (5, 4, 3, 7))) == set((3, 4))",
+        "assert set(similar_elements((11, 12, 14, 13), (17, 15, 14, 13))) == set((13, 14))",
+    ],
+    # The plus harness (real rows are up to ~790 KB); a stand-in here.
+    "test": "import numpy as np\n# ... EvalPlus expanded assertions ...\n",
+}
+
+
+def test_fetch_mbpp_plus_stages_rows_preserving_plus_test(
+    staging: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """MBPP+ stages as JSONL; the plus ``test`` field survives verbatim."""
+
+    def fake_urlopen(url: str, timeout: int = 0) -> _FakeResponse:
+        # Single page: fewer than _HF_PAGE rows terminates pagination.
+        payload = {"rows": [{"row": _MBPP_PLUS_ROW}]}
+        return _FakeResponse(json.dumps(payload).encode())
+
+    monkeypatch.setattr(ds, "_urlopen", fake_urlopen)
+
+    path = ds.fetch("mbpp-plus")
+
+    assert path.name == "test.jsonl" and path.parent.name == "mbpp-plus"
+    lines = path.read_text().splitlines()
+    assert len(lines) == 1
+    row = json.loads(lines[0])
+    # Plus-value preserved in-row for a future plus-strength adapter.
+    assert "test" in row and "EvalPlus" in row["test"]
+    assert row["test_list"] and row["task_id"] == 2
+    # Hyphenless alias resolves to the same staged file.
+    assert ds.staged_path("mbppplus") == path
+
+
+def test_mbpp_plus_staged_file_grades_through_mbpp_adapter(
+    staging: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The staged file is directly loadable by ``MBPP(dataset_path=...)`` and
+    grades canonical ``code`` via ``test_list`` (base-strength)."""
+    monkeypatch.setattr(
+        ds, "_urlopen", lambda url, timeout=0: _FakeResponse(
+            json.dumps({"rows": [{"row": _MBPP_PLUS_ROW}]}).encode()
+        ),
+    )
+    staged = ds.fetch("mbpp-plus")
+
+    from chimera.eval.benchmarks.mbpp import MBPP
+
+    bench = MBPP(dataset_path=str(staged))
+    tasks = bench.tasks()
+    assert len(tasks) == 1
+    task = tasks[0]
+    # The plus harness rides along on the loaded task (unused by grading).
+    assert "EvalPlus" in task["test"]
+
+    # Canonical solution passes all base assertions; a wrong one fails.
+    assert bench.evaluate(task, _MBPP_PLUS_ROW["code"], env=None) is True
+    assert bench.evaluate(task, "def similar_elements(a, b):\n    return ()", env=None) is False

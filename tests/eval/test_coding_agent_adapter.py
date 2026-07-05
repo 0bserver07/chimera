@@ -28,14 +28,28 @@ class _Result:
         self.messages = messages
 
 
-def test_aggregate_counts_tools_cost_steps_and_final_message() -> None:
+def test_aggregate_counts_and_prefers_stream_final_over_stale_result() -> None:
+    # Mirrors the real AgentLoop completion path: the final turn's text is
+    # emitted as the last ``assistant`` event but is NOT appended to the result
+    # event's message list (which keeps only the stale pre-tool preamble plus a
+    # trailing tool message). The adapter must take the answer from the stream,
+    # not from the stale ``res.messages`` — otherwise the graded artifact is lost.
     events = [
         LoopEvent(type=LoopEventType.tool_use, data=None, turn=1),
         LoopEvent(type=LoopEventType.tool_use, data=None, turn=2),
-        LoopEvent(type=LoopEventType.assistant, data="intermediate", turn=2),
+        LoopEvent(type=LoopEventType.assistant, data="Let me write the solution.", turn=1),
+        LoopEvent(type=LoopEventType.assistant, data="```python\nx = 42\n```", turn=2),
         LoopEvent(
             type=LoopEventType.result,
-            data=_Result(0.05, 3, [Message.user("q"), Message.assistant("final")]),
+            data=_Result(
+                0.05,
+                3,
+                [
+                    Message.user("q"),
+                    Message.assistant("Let me write the solution."),
+                    Message.tool("call-1", "wrote file"),
+                ],
+            ),
             turn=3,
         ),
     ]
@@ -44,8 +58,8 @@ def test_aggregate_counts_tools_cost_steps_and_final_message() -> None:
     assert res.tool_calls_total == 2
     assert res.steps == 3
     assert res.cost == 0.05
-    # The result event's last assistant message wins over the streamed one.
-    assert res.output == "final"
+    # The stream's final assistant text wins over the stale result-message preamble.
+    assert res.output == "```python\nx = 42\n```"
     assert res.success is True
     assert res.error is None
 

@@ -756,6 +756,8 @@ _BENCHMARKS: dict[str, str] = {
     "math-500": "chimera.eval.benchmarks.math500:MATH500Benchmark",
     "math500": "chimera.eval.benchmarks.math500:MATH500Benchmark",
     "mbpp": "chimera.eval.benchmarks.mbpp:MBPP",
+    "mbpp-plus": "chimera.eval.benchmarks.mbpp:MBPPPlus",
+    "mbppplus": "chimera.eval.benchmarks.mbpp:MBPPPlus",
     "multi-swe-bench": "chimera.eval.benchmarks.multi_swe_bench:MultiSWEBench",
     "multiswebench": "chimera.eval.benchmarks.multi_swe_bench:MultiSWEBench",
     "nocha": "chimera.eval.benchmarks.nocha:NoCha",

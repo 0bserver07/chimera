@@ -57,9 +57,16 @@ def _last_assistant_text(messages: Any) -> str:
 async def aggregate_events(events: AsyncIterator[LoopEvent]) -> AgentResult:
     """Fold a CodingAgent ``LoopEvent`` stream into a Harness ``AgentResult``.
 
-    Tracks the latest assistant text as the output, counts ``tool_use`` events,
-    and reads final cost / turn-count (and the authoritative final assistant
-    message) from the terminal ``result`` event.
+    Counts ``tool_use`` events, reads final cost / turn-count from the terminal
+    ``result`` event, and — crucially — takes the graded output from the
+    **stream's** last ``assistant`` event rather than the result event's message
+    list. AgentLoop emits an ``assistant`` event for every turn (including the
+    terminal no-tool-call turn that carries the answer), so the last such event
+    is the agent's true final message. The result event's ``messages`` are a
+    weaker source: the loop's completion branch yields that list *without*
+    appending the final assistant turn, so its last assistant entry is a stale
+    pre-tool preamble. Preferring it (the previous behavior) clobbered the real
+    answer and scored correct solutions 0% on answer-graded benchmarks.
 
     Args:
         events: The async iterator returned by ``CodingAgent.run(task)``.
@@ -69,7 +76,8 @@ async def aggregate_events(events: AsyncIterator[LoopEvent]) -> AgentResult:
     """
     from chimera.core.loop_events import LoopEventType
 
-    output = ""
+    streamed_output = ""  # last non-empty assistant text seen on the stream
+    result_output = ""  # last-assistant text recovered from the terminal result
     cost = 0.0
     steps = 0
     tool_calls = 0
@@ -82,16 +90,20 @@ async def aggregate_events(events: AsyncIterator[LoopEvent]) -> AgentResult:
         elif etype == LoopEventType.assistant:
             text = _text_of(event.data)
             if text:
-                output = text
+                streamed_output = text
         elif etype == LoopEventType.error:
             error = str(event.data)
         elif etype == LoopEventType.result:
             res = event.data
             cost = float(getattr(res, "cost_usd", 0.0) or 0.0)
             steps = int(getattr(res, "turn_count", 0) or 0)
-            final = _last_assistant_text(getattr(res, "messages", None) or [])
-            if final:
-                output = final
+            result_output = _last_assistant_text(getattr(res, "messages", None) or [])
+
+    # Prefer the stream's final assistant text (see the docstring for why the
+    # result event's message list is unreliable). Fall back to the message list
+    # only for loop types that emit a terminal result but no per-turn assistant
+    # events.
+    output = streamed_output or result_output
 
     return AgentResult(
         output=output,

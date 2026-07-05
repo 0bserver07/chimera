@@ -94,6 +94,21 @@ FETCHES: dict[str, FetchSpec] = {
         source="evalplus/humanevalplus",
         note="EvalPlus HumanEval+ (Apache-2.0), via the HF datasets-server API.",
     ),
+    "mbpp-plus": FetchSpec(
+        bench="mbpp-plus",
+        out="mbpp-plus/test.jsonl",
+        kind="hf-rows",
+        source="evalplus/mbppplus",
+        note=(
+            "EvalPlus MBPP+ (Apache-2.0), 378 problems, via the HF "
+            "datasets-server API (rows served untruncated). Each row carries "
+            "the base MBPP `test_list` (3-6 asserts) AND EvalPlus's expanded "
+            "`test` harness. The MBPP adapter grades from `test_list` only, so "
+            "grading here is BASE-strength (equivalent to MBPP-sanitized). The "
+            "plus `test` script is staged verbatim in every row for a future "
+            "plus-strength adapter but is NOT executed by the current adapter."
+        ),
+    ),
     "swe-bench": FetchSpec(
         bench="swe-bench",
         out="swe-bench/lite-test.jsonl",
@@ -126,6 +141,7 @@ FETCHES: dict[str, FetchSpec] = {
 #: Hyphenless registry aliases resolve to the same spec.
 _ALIASES: dict[str, str] = {
     "humanevalplus": "humaneval-plus",
+    "mbppplus": "mbpp-plus",
     "swebench": "swe-bench",
     "swe-bench-lite": "swe-bench",
     "lcb": "livecodebench",
@@ -161,7 +177,7 @@ def _fetch_url(spec: FetchSpec, dest: Path) -> None:
         dest.write_bytes(resp.read())
 
 
-def _transform_lcb_row(row: dict) -> dict | None:
+def _transform_lcb_row(row: dict[str, Any]) -> dict[str, Any] | None:
     """Reduce one raw LiveCodeBench row to an adapter-ready task dict.
 
     Decodes the ``public_test_cases`` JSON-string into ``test_cases``

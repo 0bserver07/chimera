@@ -17,6 +17,7 @@ external agents with zero benchmark changes.
 
 from __future__ import annotations
 
+import re
 import time
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
@@ -162,6 +163,89 @@ FINAL_ANSWER_CONTRACT = (
     "or the bare final answer — not a summary of what you did."
 )
 
+#: Matches any Markdown code fence pair (``` ... ```), the artifact shape
+#: ``_extract_code``-style graders look for. When an answer already contains one
+#: the harvest is skipped — the agent put the gradeable artifact in its message.
+_CODE_FENCE = re.compile(r"```.*?```", re.DOTALL)
+
+#: Ceiling on harvested source files. Answer-graded tasks expect a single
+#: artifact; a handful of files is "a few", but many files means it is not an
+#: answer-shaped task (a cloned repo, a scaffold) and guessing would add noise —
+#: so the harvest no-ops instead.
+_MAX_HARVEST_FILES = 3
+
+#: Filenames the *grader* owns, never harvested even if present. The harness
+#: runs the harvest strictly *before* grading against a fresh per-task env, so
+#: these are normally absent at harvest time; the guard is defensive.
+#: Note ``solution.py`` is deliberately NOT excluded: before grading, any
+#: ``solution.py`` on disk was written by the agent and IS the artifact to
+#: grade (the grader overwrites it from the answer afterward), so excluding it
+#: would defeat the harvest for agents that name their file ``solution.py``.
+_GRADER_ARTIFACTS = frozenset({"_stdin.txt"})
+
+
+def _has_code_fence(text: str) -> bool:
+    """Return ``True`` if *text* already contains a Markdown code fence pair."""
+    return bool(_CODE_FENCE.search(text or ""))
+
+
+def _harvest_env_code(env: Environment) -> tuple[str, list[str]]:
+    """Read agent-written ``.py`` source from *env* as fenced code blocks.
+
+    File-artifact agents (e.g. a lint-feedback edit loop) write their solution
+    to disk and end their run on prose ("I've implemented the function"), so an
+    answer-graded benchmark scores a correct solution 0%. This recovers those
+    on-disk sources so an ``_extract_code``-style grader can see them.
+
+    Only fires for a small, answer-shaped set of files: workspace ``.py``
+    sources, excluding dot-paths (``.chimera/*`` scratch, etc.) and
+    :data:`_GRADER_ARTIFACTS`, capped at :data:`_MAX_HARVEST_FILES`. Any listing
+    or read error degrades to "harvested nothing" rather than raising.
+
+    Args:
+        env: The per-task environment the agent wrote into.
+
+    Returns:
+        ``(appendix, names)`` where *appendix* is the harvested sources joined
+        as ```` ```python ```` blocks and *names* the files harvested — or
+        ``("", [])`` when nothing plausible was found.
+    """
+    try:
+        listed = env.list_files()
+    except Exception:  # noqa: BLE001 — harvest is best-effort; never abort a cell
+        return "", []
+
+    candidates: list[str] = []
+    for raw_path in listed:
+        path = raw_path.replace("\\", "/")
+        if not path.endswith(".py"):
+            continue
+        parts = path.split("/")
+        if any(part.startswith(".") for part in parts):
+            continue  # dot-dir/file scratch (.chimera/*, hidden temp files)
+        if parts[-1] in _GRADER_ARTIFACTS:
+            continue
+        candidates.append(path)
+
+    # Too many sources → not an answer-shaped task; harvesting would add noise.
+    if not candidates or len(candidates) > _MAX_HARVEST_FILES:
+        return "", []
+
+    blocks: list[str] = []
+    names: list[str] = []
+    for path in candidates:
+        try:
+            content = env.read_file(path)
+        except Exception:  # noqa: BLE001 — skip an unreadable file, keep the rest
+            continue
+        if content.strip():
+            blocks.append(f"```python\n{content.rstrip()}\n```")
+            names.append(path)
+
+    if not blocks:
+        return "", []
+    return "\n\n".join(blocks), names
+
 
 class _HarnessAgent:
     """Adapt an :class:`AgentRunner` to the Harness ``run(prompt, env)`` contract.
@@ -180,6 +264,11 @@ class _HarnessAgent:
         answer_contract: When ``True`` (default), append
             :data:`FINAL_ANSWER_CONTRACT` to every prompt so multi-step agents
             end on the gradeable artifact rather than a summary.
+        harvest_env_artifacts: When ``True`` (default), if a runner returns an
+            answer with no fenced code block, recover agent-written ``.py``
+            sources from *env* and append them as fenced blocks so file-artifact
+            agents (whose final message is prose, not code) become gradeable.
+            See :func:`_harvest_env_code`.
     """
 
     def __init__(
@@ -187,10 +276,12 @@ class _HarnessAgent:
         runner: AgentRunner,
         budget: BudgetSpec | None = None,
         answer_contract: bool = True,
+        harvest_env_artifacts: bool = True,
     ) -> None:
         self.runner = runner
         self.budget = budget
         self.answer_contract = answer_contract
+        self.harvest_env_artifacts = harvest_env_artifacts
         self.last_result: AgentRunResult | None = None
         self.last_wall_clock_sec: float = 0.0
 
@@ -211,8 +302,23 @@ class _HarnessAgent:
         self.last_wall_clock_sec = time.monotonic() - start
         self.last_result = result
         completed = result.status == "completed"
+
+        # File-artifact rescue: when the answer carries no gradeable code fence,
+        # pull the agent's on-disk sources into it so answer-graded benchmarks
+        # can see work the agent left in the workspace instead of its message.
+        answer = result.answer
+        if (
+            self.harvest_env_artifacts
+            and env is not None
+            and not _has_code_fence(answer)
+        ):
+            appendix, names = _harvest_env_code(env)
+            if appendix:
+                answer = f"{answer}\n\n{appendix}" if answer.strip() else appendix
+                result.raw["harvested_files"] = names
+
         return AgentResult(
-            output=result.answer,
+            output=answer,
             steps=result.llm_calls,
             tool_calls_total=result.tool_calls,
             cost=result.cost_usd,
@@ -249,6 +355,7 @@ def _run_cell(
     budget: BudgetSpec | None,
     graders: list[Any] | None,
     answer_contract: bool = True,
+    harvest_env_artifacts: bool = True,
 ) -> MatrixCell:
     """Run one (agent, benchmark) pair and reduce it to a :class:`MatrixCell`.
 
@@ -259,7 +366,12 @@ def _run_cell(
     agent_id = getattr(runner, "id", "?")
     bench_name = benchmark.name()
     try:
-        shim = _HarnessAgent(runner, budget=budget, answer_contract=answer_contract)
+        shim = _HarnessAgent(
+            runner,
+            budget=budget,
+            answer_contract=answer_contract,
+            harvest_env_artifacts=harvest_env_artifacts,
+        )
         harness = Harness(benchmark, shim, env_factory=env_factory, graders=graders)
         result = harness.run()
         last = shim.last_result
@@ -306,6 +418,7 @@ def run_matrix(
     graders: list[Any] | None = None,
     model: str = "",
     answer_contract: bool = True,
+    harvest_env_artifacts: bool = True,
 ) -> MatrixReport:
     """Run every agent against every benchmark and collect the grid.
 
@@ -327,6 +440,11 @@ def run_matrix(
             uniform :data:`FINAL_ANSWER_CONTRACT` suffix so multi-step agents
             end on the gradeable artifact instead of a summary. Identical
             across all agents in the run, so it remains a controlled variable.
+        harvest_env_artifacts: When ``True`` (default), an answer with no fenced
+            code block is augmented with the agent's on-disk ``.py`` sources so
+            file-artifact agents become gradeable on answer-graded benchmarks.
+            Applied uniformly across every cell, so it stays a controlled
+            variable. See :func:`_harvest_env_code`.
 
     Returns:
         A :class:`MatrixReport` with one :class:`MatrixCell` per pair. A cell
@@ -338,7 +456,13 @@ def run_matrix(
         for benchmark in benchmarks:
             cells.append(
                 _run_cell(
-                    runner, benchmark, env_factory, budget, graders, answer_contract
+                    runner,
+                    benchmark,
+                    env_factory,
+                    budget,
+                    graders,
+                    answer_contract,
+                    harvest_env_artifacts,
                 )
             )
     return MatrixReport(cells=cells, model=model)

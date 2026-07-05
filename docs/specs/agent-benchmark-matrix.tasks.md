@@ -109,14 +109,19 @@ result" — see [benchmarks/README](../benchmarks/README.md) for run status.
 
 ## Post-audit follow-ups (2026-07-05)
 
-- ⬜ **[N] Env-based grading path for file-artifact agents** — lint-loop (and any
-  editor-loop agent) writes its artifact to the env; answer-graded benches score
-  its final message (lint commentary) as 0%. Grade the env (run tests / harvest
-  files) when the runner signals a file artifact. This is spec open question #1.
-- ⬜ **[W] CodingAgentAdapter final-message extraction** — the assembled presets
-  (coding-agent / full-tools / action-first / swebench) still score 0% on
-  answer-graded benches even with the answer contract; their `_last_assistant_text`
-  harvesting needs its own diagnostic + fix.
+- ✅ **[N] Env-artifact harvesting** (`harvest_env_artifacts`, default on in
+  `run_matrix`) — fenceless answers get agent-written `.py` files appended as
+  fenced blocks before grading; `raw["harvested_files"]` records it. Live-proven:
+  harvest OFF 0% → ON 100% (full-tools, contract off). Spec open question #1.
+- ✅ **[W] CodingAgentAdapter final-message extraction** — root cause: the
+  adapter preferred a stale pre-tool message over the stream's terminal answer;
+  stream is now authoritative. Live: full-tools × HumanEval 0% → 100%.
+- ⬜ **[N] lint-loop write path (agent-side)** — corrected finding: on HumanEval
+  lint-loop writes NO files (lint-fixates on the empty workspace), so its 0% is
+  agent behavior. Needs a write tool / prompt in `agent_styles.py`, not harness work.
+- ⬜ **[W] Preset budget parity** — expose `max_turns` (from `budget.max_llm_calls`)
+  on `CodingAgentAdapter` so assembled presets move from cost-only caps toward
+  fuller budget honoring.
 - ✅ **[N] FINAL_ANSWER_CONTRACT** — uniform final-answer prompt suffix in
   `run_matrix` (default on, controlled). Live-proven: reflexion × HumanEval
   0% → 100%.
