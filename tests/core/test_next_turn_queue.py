@@ -23,7 +23,7 @@ def test_next_turn_survives_clear_run_state() -> None:
 
 
 def test_loop_delivers_next_turn_at_run_start() -> None:
-    from chimera.core.agent import Agent
+    from chimera.core.context import Context
     from chimera.core.loop import ReAct
     from chimera.core.loop_config import LoopConfig
     from chimera.providers.faux import FauxProvider
@@ -31,17 +31,15 @@ def test_loop_delivers_next_turn_at_run_start() -> None:
     q = MessageQueues()
     q.next_turn(Message.user("SECRET-NEXT-TURN-MARKER"))
     provider = FauxProvider(script=[{"text": "done"}])
-    agent = Agent(
-        provider=provider,
-        tools=[],
-        loop=ReAct(max_steps=2, config=LoopConfig(message_queues=q)),
-    )
+    loop = ReAct(max_steps=2, config=LoopConfig(message_queues=q))
+    context = Context(system="test")
+    context.add(Message.user("main task"))
 
-    res = agent.run("main task", None)
+    res = loop.run(provider, [], context, None)
 
     assert res.success is True
-    assert q.has_next_turn is False  # delivered
-    # the injected message reached the model's context
+    assert q.has_next_turn is False  # delivered exactly once, at run start
+    # the injected message landed in the model-visible context
     assert any(
-        "SECRET-NEXT-TURN-MARKER" in (m.content or "") for m in provider.last_messages
-    ) or provider.call_count >= 1  # fallback if provider doesn't record messages
+        "SECRET-NEXT-TURN-MARKER" in (m.content or "") for m in context.to_messages()
+    )
