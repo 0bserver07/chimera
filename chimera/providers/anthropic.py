@@ -8,7 +8,7 @@ import threading
 from collections.abc import AsyncIterator, Iterator
 from typing import TYPE_CHECKING, Any
 
-from chimera.providers.base import Provider, Response, StreamEvent, ToolSchema
+from chimera.providers.base import CACHE_LEVELS, Provider, Response, StreamEvent, ToolSchema
 from chimera.types import Message, ToolCall
 
 if TYPE_CHECKING:
@@ -119,6 +119,7 @@ class AnthropicProvider(Provider):
         model: str,
         api_key: str | None = None,
         base_url: str | None = None,
+        cache: str = "none",
         enable_cache: bool = False,
         enable_thinking: bool = False,
         thinking_budget: int = 10_000,
@@ -127,6 +128,18 @@ class AnthropicProvider(Provider):
         if anthropic is None:
             raise ImportError("pip install chimera-run[anthropic]")
         self._model, self._context_override = _parse_model_suffix(model)
+        # Prompt-caching knob (see Provider docstring for the convention).
+        # ``enable_cache`` is the deprecated predecessor flag: it only ever
+        # cached the *static* system prompt + last tool definition. It now
+        # aliases ``cache="short"`` — which additionally caches the rolling
+        # last-message prefix, the real lever for agentic loops that resend
+        # the full context each turn. An explicit ``cache`` wins, so
+        # ``cache="long", enable_cache=True`` stays "long".
+        if cache not in CACHE_LEVELS:
+            raise ValueError(f"cache must be one of {CACHE_LEVELS!r}, got {cache!r}")
+        if enable_cache and cache == "none":
+            cache = "short"
+        self._cache = cache
         self._enable_cache = enable_cache
         self._enable_thinking = enable_thinking
         self._thinking_budget = thinking_budget
@@ -247,25 +260,78 @@ class AnthropicProvider(Provider):
         else:
             kwargs["temperature"] = temperature
 
+        # Prompt caching — resolve one cache_control marker for the whole
+        # request (uniform TTL, so no 5m/1h ordering constraints to worry
+        # about) and attach it to the stable prefix (system + last tool) and
+        # the rolling suffix (last message). ``None`` == caching disabled.
+        cache_control = self._cache_control_block()
+
         # System message — with optional prompt caching
         if system_msg:
-            if self._enable_cache:
+            if cache_control is not None:
                 kwargs["system"] = [
-                    {"type": "text", "text": system_msg, "cache_control": {"type": "ephemeral"}},
+                    {"type": "text", "text": system_msg, "cache_control": cache_control},
                 ]
             else:
                 kwargs["system"] = system_msg
 
         # Tools — with optional prompt caching on last tool definition
         if tools:
-            if self._enable_cache and tools:
+            if cache_control is not None:
                 cached_tools = [*tools]
-                cached_tools[-1] = {**cached_tools[-1], "cache_control": {"type": "ephemeral"}}
+                cached_tools[-1] = {**cached_tools[-1], "cache_control": cache_control}
                 kwargs["tools"] = cached_tools
             else:
                 kwargs["tools"] = tools
 
+        # Last message — the rolling breakpoint. Marking the final content
+        # block means each turn reuses the previous turn's cached prefix
+        # (system + tools + all prior messages) and only bills the new tail.
+        if cache_control is not None:
+            self._apply_cache_control_to_last_message(api_messages, cache_control)
+
         return kwargs
+
+    def _cache_control_block(self) -> dict[str, Any] | None:
+        """Return the ``cache_control`` marker for the active cache setting.
+
+        ``None`` means caching is disabled. ``"short"`` → a 5-minute ephemeral
+        marker; ``"long"`` → the 1-hour TTL form. Reads ``self._cache`` but
+        falls back to the deprecated ``self._enable_cache`` bool when ``_cache``
+        is absent, so instances built via ``__new__`` (test fixtures) or older
+        callers that only set ``_enable_cache`` still behave correctly.
+        """
+        cache = getattr(self, "_cache", None)
+        if cache is None:
+            cache = "short" if getattr(self, "_enable_cache", False) else "none"
+        if cache == "short":
+            return {"type": "ephemeral"}
+        if cache == "long":
+            return {"type": "ephemeral", "ttl": "1h"}
+        return None
+
+    @staticmethod
+    def _apply_cache_control_to_last_message(
+        api_messages: list[dict[str, Any]],
+        cache_control: dict[str, Any],
+    ) -> None:
+        """Attach *cache_control* to the final content block of the last message.
+
+        Normalizes string content to a single cached text block; for list
+        content (tool results, assistant tool-use turns) it copies and marks
+        the last block so a caller-owned dict is never mutated in place. A
+        no-op when there are no messages or the last message has empty content.
+        """
+        if not api_messages:
+            return
+        last = api_messages[-1]
+        content = last.get("content")
+        if isinstance(content, str):
+            last["content"] = [
+                {"type": "text", "text": content, "cache_control": cache_control},
+            ]
+        elif isinstance(content, list) and content:
+            content[-1] = {**content[-1], "cache_control": cache_control}
 
     @staticmethod
     def _parse_response(response: Any) -> Response:

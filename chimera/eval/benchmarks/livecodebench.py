@@ -120,7 +120,10 @@ class LiveCodeBench(Benchmark):
         if not test_cases:
             return False
 
-        env.write_file("solution.py", agent_output)
+        # Normalize markdown-fenced answers to bare source (see _code_extract).
+        from chimera.eval.benchmarks._code_extract import extract_code
+
+        env.write_file("solution.py", extract_code(agent_output))
         for case in test_cases:
             stdin = case.get("input", "")
             expected = (case.get("output", "") or "").strip()

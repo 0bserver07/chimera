@@ -111,6 +111,11 @@ class HumanEvalPlus(Benchmark):
         Returns:
             ``True`` if the solution passes the selected test suite.
         """
+        # Normalize markdown-fenced answers to bare source (see _code_extract).
+        from chimera.eval.benchmarks._code_extract import extract_code
+
+        agent_output = extract_code(agent_output)
+
         if self._use_evalplus_runner and self._has_evalplus():
             return self._evaluate_with_evalplus(task, agent_output)
 

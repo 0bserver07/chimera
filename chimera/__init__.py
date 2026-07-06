@@ -78,6 +78,7 @@ _LAZY_ATTRS: dict[str, str] = {
     "CacheStats": "chimera.providers.cached",
     "calculate_cost": "chimera.providers.cost",
     "estimate_cost": "chimera.providers.cost",
+    "get_model_pricing": "chimera.providers.cost",
     "register_model_cost": "chimera.providers.cost",
     "CostLimitExceeded": "chimera.providers.cost_tracker",
     "CostTracker": "chimera.providers.cost_tracker",
