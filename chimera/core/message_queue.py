@@ -70,19 +70,25 @@ from dataclasses import dataclass, field  # noqa: E402
 
 @dataclass
 class MessageQueues:
-    """Thread-safe steering and follow-up message queues.
+    """Thread-safe steering, follow-up, and next-turn message queues.
 
-    Provides two separate queues:
+    Provides three separate queues:
 
     - **steering** — injected mid-turn to redirect the running agent.
     - **follow_up** — queued for after the current turn completes.
+    - **next_turn** — like follow-up, but **survives cancellation**: steering
+      and follow-up are conversational state for the *current* run and are
+      cleared with it, while next-turn messages are delivered at the start of
+      whatever run comes next (even after an abort). Use it for "when you get
+      a chance, also…" instructions that must not die with a cancelled turn.
 
-    Both queues are thread-safe; any thread can call :meth:`steer` or
-    :meth:`follow_up` while the loop is running.
+    All queues are thread-safe; any thread can call :meth:`steer`,
+    :meth:`follow_up`, or :meth:`next_turn` while the loop is running.
     """
 
     _steering: deque[Message] = field(default_factory=deque)
     _follow_up: deque[Message] = field(default_factory=deque)
+    _next_turn: deque[Message] = field(default_factory=deque)
     _lock: threading.Lock = field(default_factory=threading.Lock)
 
     def steer(self, message: Message) -> None:
@@ -109,6 +115,28 @@ class MessageQueues:
             self._follow_up.clear()
             return msgs
 
+    def next_turn(self, message: Message) -> None:
+        """Enqueue a next-turn message (survives cancellation). Thread-safe."""
+        with self._lock:
+            self._next_turn.append(message)
+
+    def drain_next_turn(self) -> list[Message]:
+        """Remove and return all next-turn messages. Thread-safe."""
+        with self._lock:
+            msgs = list(self._next_turn)
+            self._next_turn.clear()
+            return msgs
+
+    def clear_run_state(self) -> None:
+        """Drop steering + follow-up (a cancelled run's state) — keep next-turn.
+
+        Call on abort: the two run-scoped queues die with the run, while
+        next-turn messages persist for the next run by design.
+        """
+        with self._lock:
+            self._steering.clear()
+            self._follow_up.clear()
+
     @property
     def has_steering(self) -> bool:
         """Return ``True`` if there are steering messages pending."""
@@ -120,6 +148,12 @@ class MessageQueues:
         """Return ``True`` if there are follow-up messages pending."""
         with self._lock:
             return len(self._follow_up) > 0
+
+    @property
+    def has_next_turn(self) -> bool:
+        """Return ``True`` if there are next-turn messages pending."""
+        with self._lock:
+            return len(self._next_turn) > 0
 
 
 class SteeringMessageQueue:

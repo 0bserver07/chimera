@@ -156,6 +156,15 @@ class ReAct:
             from chimera.events.types import AgentStartEvent
             self.config.event_bus.publish(AgentStartEvent(max_steps=self.max_steps))
 
+        # -- Deliver next-turn messages: queued for "whatever run comes next",
+        # they survive a cancelled run (unlike steering/follow-up) and are
+        # injected once, at the start of this run.
+        if self.config and self.config.message_queues:
+            drain_next = getattr(self.config.message_queues, "drain_next_turn", None)
+            if callable(drain_next):
+                for msg in drain_next():
+                    context.add(msg)
+
         # -- Lifecycle hooks: SessionStart + UserPromptSubmit --
         from chimera.hooks.events import HookEvent as _HE
         _fire_loop_hook(self.config, _HE.SESSION_START)
