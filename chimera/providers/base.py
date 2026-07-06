@@ -45,8 +45,36 @@ class StreamEvent:
 ToolSchema = dict[str, Any]
 
 
+#: Valid values for the provider-agnostic ``cache`` knob (see :class:`Provider`).
+CACHE_LEVELS = ("none", "short", "long")
+
+
 class Provider(ABC):
-    """LLM backend. Any class implementing complete() works."""
+    """LLM backend. Any class implementing complete() works.
+
+    Prompt caching (``cache`` convention)
+    -------------------------------------
+    Providers whose backend supports prompt caching honor a ctor-level
+    ``cache`` string with three values (see :data:`CACHE_LEVELS`):
+
+    * ``"none"`` — no caching. **The default; zero behavior change.**
+    * ``"short"`` — 5-minute ephemeral cache of the reusable prompt prefix.
+    * ``"long"`` — 1-hour cache where the backend supports an extended TTL,
+      otherwise equivalent to ``"short"``.
+
+    The intent is the standard agentic-loop pattern: mark the stable prefix
+    (system prompt / tool definitions) and the last message so each turn
+    reuses the previous turn's prefix instead of re-billing the whole
+    context. Agentic loops resend the full context every turn, so a cached
+    prefix is a large input-cost lever.
+
+    This is a documented *convention*, not an abstract-method contract: the
+    :class:`Provider` ABC declares no ``__init__``, so each concrete provider
+    accepts ``cache`` in its own constructor and applies it when building the
+    request. Providers whose backend has no cache concept ignore it. A
+    provider that ignores ``cache`` remains correct (it simply pays full
+    price), exactly like the cooperative ``cancel_event`` convention below.
+    """
 
     @abstractmethod
     def complete(
