@@ -108,6 +108,82 @@ PRICING: dict[str, tuple[float, float]] = {
 
 _pricing_lock = threading.Lock()
 
+# --- Generated-catalog fallback -------------------------------------------
+# The hand-maintained PRICING table above is the source of truth for the
+# models Chimera actively bills — its z.ai-vs-ollama billing nuances can't be
+# auto-derived and must win. For every other model we fall back to the
+# generated models.dev catalog (``chimera/providers/model_catalog.py``,
+# refreshed by ``scripts/generate_model_catalog.py``). The catalog is loaded
+# lazily and cached, so the common path — a hand-dict hit — never pays its
+# import cost.
+_catalog_lock = threading.Lock()
+_catalog: dict[str, dict[str, float | int | str | None]] | None = None
+_catalog_keys: list[str] | None = None
+
+
+def _ensure_catalog() -> tuple[dict[str, dict[str, float | int | str | None]], list[str]]:
+    """Load and cache the generated catalog (keys sorted longest-first)."""
+    global _catalog, _catalog_keys
+    if _catalog is None or _catalog_keys is None:
+        with _catalog_lock:
+            if _catalog is None or _catalog_keys is None:
+                from chimera.providers.model_catalog import MODEL_CATALOG
+
+                _catalog = MODEL_CATALOG
+                _catalog_keys = sorted(MODEL_CATALOG, key=len, reverse=True)
+    return _catalog, _catalog_keys
+
+
+def _catalog_pricing(model: str) -> tuple[float, float] | None:
+    """Resolve *model* against the generated catalog via longest-prefix match.
+
+    Mirrors :func:`calculate_cost`'s prefix semantics so a dated/suffixed id
+    (e.g. ``gpt-4-turbo-2024-04-09``) resolves through its base entry
+    (``gpt-4-turbo``). A missing/omitted output rate is treated as ``0.0``
+    (e.g. embedding models that bill input only).
+
+    Returns:
+        The ``(input, output)`` dollars-per-million pair, or ``None`` when no
+        catalog key prefixes *model*.
+    """
+    catalog, keys = _ensure_catalog()
+    for key in keys:
+        if model.startswith(key):
+            record = catalog[key]
+            input_price = record.get("input")
+            if isinstance(input_price, (int, float)) and not isinstance(input_price, bool):
+                output_price = record.get("output")
+                out = (
+                    float(output_price)
+                    if isinstance(output_price, (int, float))
+                    and not isinstance(output_price, bool)
+                    else 0.0
+                )
+                return float(input_price), out
+    return None
+
+
+def get_model_pricing(model: str) -> tuple[float, float] | None:
+    """Resolve ``(input_per_mtok, output_per_mtok)`` for *model*, or ``None``.
+
+    The hand-maintained :data:`PRICING` table is consulted first (longest
+    prefix wins), so explicit overrides — including the z.ai-vs-ollama billing
+    nuances documented there — always take precedence. Only when no hand entry
+    matches does the generated models.dev catalog provide a fallback rate.
+
+    Args:
+        model: Model identifier, e.g. ``"claude-sonnet-4-5-20250929"``.
+
+    Returns:
+        The ``(input, output)`` dollars-per-million-tokens pair, or ``None``
+        when neither the hand table nor the generated catalog knows *model*.
+    """
+    # Match longest prefix first (gpt-4o-mini before gpt-4o).
+    for prefix in sorted(PRICING, key=len, reverse=True):
+        if model.startswith(prefix):
+            return PRICING[prefix]
+    return _catalog_pricing(model)
+
 
 def calculate_cost(model: str, usage: dict[str, int]) -> float:
     """Calculate the dollar cost of an API call.
@@ -117,16 +193,17 @@ def calculate_cost(model: str, usage: dict[str, int]) -> float:
         usage: Dict with "input_tokens" and "output_tokens" keys.
 
     Returns:
-        Cost in USD. Returns 0.0 for unknown models.
+        Cost in USD. Pricing resolves through :func:`get_model_pricing` (hand
+        table first, then the generated models.dev catalog). Returns 0.0 for
+        models neither source knows.
     """
     input_tokens = usage.get("input_tokens", 0)
     output_tokens = usage.get("output_tokens", 0)
-    # Match longest prefix first (gpt-4o-mini before gpt-4o)
-    for prefix in sorted(PRICING, key=len, reverse=True):
-        if model.startswith(prefix):
-            input_price, output_price = PRICING[prefix]
-            return (input_tokens * input_price + output_tokens * output_price) / 1_000_000
-    return 0.0
+    pricing = get_model_pricing(model)
+    if pricing is None:
+        return 0.0
+    input_price, output_price = pricing
+    return (input_tokens * input_price + output_tokens * output_price) / 1_000_000
 
 
 def register_model_cost(
