@@ -281,6 +281,11 @@ def _infer_provider(model: str) -> str:
     #    This fixes the Ollama-Anthropic-compat case where "qwen3.5:cloud" or
     #    "kimi-k2.6:cloud" should hit http://localhost:11434 via the anthropic
     #    provider, not Ollama's native /api/chat endpoint.
+    # The deterministic test provider must never be hijacked by env overrides
+    # (ANTHROPIC_BASE_URL is routinely set) — resolve it before everything.
+    if model_lower.startswith("faux"):
+        return "faux"
+
     if anthropic_env_set and not model_lower.startswith(_not_anthropic_prefixes):
         return "anthropic"
 
