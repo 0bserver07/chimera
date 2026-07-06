@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+from dataclasses import dataclass, field
 from typing import Any
 
 from chimera.providers.base import Provider, Response, ToolSchema
@@ -14,11 +15,62 @@ except ImportError:
     httpx = None  # type: ignore[assignment]
 
 
+@dataclass(frozen=True)
+class CompatFlags:
+    """Quirk parameterization for OpenAI-compatible backends.
+
+    One wire protocol serves many backends, but they disagree on small
+    request/response details. Rather than fork the provider per backend,
+    the differences live in this flags table — auto-detected from the model
+    id by :func:`detect_compat_flags`, overridable via the provider ctor.
+
+    Attributes:
+        max_tokens_field: Request field naming the output cap. Newer OpenAI
+            reasoning models require ``max_completion_tokens``; most compat
+            backends only accept ``max_tokens``.
+        supports_temperature: Some reasoning models reject ``temperature``
+            outright; when ``False`` it is omitted from the payload.
+        extra_payload: Backend-specific request params merged into every
+            payload (e.g. a reasoning-effort knob).
+    """
+
+    max_tokens_field: str = "max_tokens"
+    supports_temperature: bool = True
+    extra_payload: dict[str, Any] = field(default_factory=dict)
+
+
+#: Model-id prefixes that require the ``max_completion_tokens`` field and
+#: reject ``temperature`` (OpenAI reasoning-model conventions).
+_REASONING_PREFIXES = ("o1", "o3", "o4", "gpt-5")
+
+
+def detect_compat_flags(model: str) -> CompatFlags:
+    """Best-effort :class:`CompatFlags` for *model* by id convention.
+
+    Args:
+        model: Upstream model id (provider prefixes like ``openai/`` are
+            tolerated).
+
+    Returns:
+        Flags matching known conventions; the permissive default otherwise.
+    """
+    bare = model.lower().split("/")[-1]
+    if bare.startswith(_REASONING_PREFIXES):
+        return CompatFlags(max_tokens_field="max_completion_tokens", supports_temperature=False)
+    return CompatFlags()
+
+
 class OpenAICompatibleProvider(Provider):
     """Generic OpenAI-compatible provider.
 
     Works with: OpenRouter, Together, Fireworks, Groq, vLLM, LiteLLM,
     Anthropic Coding API (via OpenAI compatibility), any /v1/chat/completions endpoint.
+
+    Backend quirks are parameterized by :class:`CompatFlags` (auto-detected
+    from the model id, overridable via ``flags=``) instead of per-backend
+    subclasses. On a 400 that names the max-tokens field, the request is
+    retried once with the alternate field and the corrected flags stick for
+    the session.
     """
 
     def __init__(
@@ -29,6 +81,7 @@ class OpenAICompatibleProvider(Provider):
         headers: dict[str, str] | None = None,
         context_length: int = 128_000,
         extra_headers: dict[str, str] | None = None,
+        flags: CompatFlags | None = None,
     ) -> None:
         """Initialise the provider.
 
@@ -46,6 +99,8 @@ class OpenAICompatibleProvider(Provider):
                 ``HTTP-Referer`` / ``X-Title``, e.g.). Merged after
                 *headers* so an explicit *extra_headers* entry wins on
                 key collision.
+            flags: Backend quirk parameterization. ``None`` auto-detects
+                from the model id via :func:`detect_compat_flags`.
         """
         if httpx is None:
             raise ImportError("pip install httpx")
@@ -59,6 +114,7 @@ class OpenAICompatibleProvider(Provider):
             **(extra_headers or {}),
         }
         self._context_length = context_length
+        self._flags = flags if flags is not None else detect_compat_flags(model)
 
     def complete(
         self,
@@ -74,16 +130,38 @@ class OpenAICompatibleProvider(Provider):
         payload: dict[str, Any] = {
             "model": self._model,
             "messages": api_messages,
-            "temperature": temperature,
         }
+        if self._flags.supports_temperature:
+            payload["temperature"] = temperature
         if max_tokens:
-            payload["max_tokens"] = max_tokens
+            payload[self._flags.max_tokens_field] = max_tokens
+        if self._flags.extra_payload:
+            payload.update(self._flags.extra_payload)
         if tools:
             payload["tools"] = self._convert_tools(tools)
 
         endpoint = f"{self._base_url}/chat/completions"
         assert httpx is not None  # checked in __init__
         resp = httpx.post(endpoint, json=payload, headers=self._headers, timeout=300)
+        if resp.status_code == 400 and max_tokens:
+            # Self-correct a wrong max-tokens field name once: backends that
+            # want the other field say so in the error body. The corrected
+            # flags stick for the rest of the session.
+            body = resp.text or ""
+            other = (
+                "max_completion_tokens"
+                if self._flags.max_tokens_field == "max_tokens"
+                else "max_tokens"
+            )
+            if other in body or self._flags.max_tokens_field in body:
+                payload.pop(self._flags.max_tokens_field, None)
+                payload[other] = max_tokens
+                self._flags = CompatFlags(
+                    max_tokens_field=other,
+                    supports_temperature=self._flags.supports_temperature,
+                    extra_payload=self._flags.extra_payload,
+                )
+                resp = httpx.post(endpoint, json=payload, headers=self._headers, timeout=300)
         resp.raise_for_status()
         data = resp.json()
 
@@ -102,13 +180,20 @@ class OpenAICompatibleProvider(Provider):
             ))
 
         usage = data.get("usage", {})
+        usage_out: dict[str, int] = {
+            "input_tokens": usage.get("prompt_tokens", 0),
+            "output_tokens": usage.get("completion_tokens", 0),
+        }
+        # Cache-hit visibility where the backend reports it (OpenAI-style
+        # prompt_tokens_details.cached_tokens) — additive key, absent otherwise.
+        details = usage.get("prompt_tokens_details") or {}
+        cached = details.get("cached_tokens")
+        if isinstance(cached, int) and cached > 0:
+            usage_out["cache_read_tokens"] = cached
         return Response(
             content=content,
             tool_calls=tool_calls,
-            usage={
-                "input_tokens": usage.get("prompt_tokens", 0),
-                "output_tokens": usage.get("completion_tokens", 0),
-            },
+            usage=usage_out,
         )
 
     def _convert_messages(self, messages: list[Message]) -> list[dict[str, Any]]:
