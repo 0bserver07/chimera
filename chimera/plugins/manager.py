@@ -1,7 +1,9 @@
 """Plugin manager for discovering, loading, and unloading plugins."""
 from __future__ import annotations
 
+import importlib
 import importlib.metadata
+import sys
 from typing import TYPE_CHECKING, Any
 
 from chimera.plugins.base import BasePlugin, ComponentRegistry
@@ -110,6 +112,83 @@ class PluginManager:
         plugin = self._plugins.pop(name)
         self._registries.pop(name, None)
         plugin.deactivate()
+
+    def reload(self, name: str) -> BasePlugin:
+        """Hot-reload a loaded plugin, picking up source changes.
+
+        Deactivates the current instance, re-imports its defining module (so
+        edits to the plugin's code take effect without restarting the process),
+        then re-instantiates and re-activates it with a fresh
+        :class:`ComponentRegistry`. Registration side effects the plugin
+        performs in :meth:`~BasePlugin.activate` are re-run against the new
+        registry, so reloaded tools/commands/hooks replace the old ones.
+
+        A plain :meth:`unload` + :meth:`load` would *not* pick up code changes:
+        Python caches the module in :data:`sys.modules`, so re-importing
+        returns the stale class. This method calls :func:`importlib.reload` on
+        the plugin's module first.
+
+        Args:
+            name: The plugin name to reload (its :attr:`BasePlugin.name`).
+
+        Returns:
+            The freshly re-instantiated plugin.
+
+        Raises:
+            KeyError: If no plugin with this name is loaded.
+            RuntimeError: If the plugin's module cannot be reloaded or the
+                plugin class is no longer present after reload.
+        """
+        if name not in self._plugins:
+            raise KeyError(f"Plugin '{name}' is not loaded")
+        old = self._plugins[name]
+        module_name = type(old).__module__
+        class_name = type(old).__name__
+
+        module = sys.modules.get(module_name)
+        if module is None:
+            raise RuntimeError(
+                f"Cannot reload plugin '{name}': module '{module_name}' "
+                "is not imported"
+            )
+
+        # Deactivate + drop the old instance before swapping in fresh code.
+        # Capture the spec first: a failed importlib.reload clobbers
+        # module.__spec__ to None while searching, so the fallback must use the
+        # spec we saved here, not re-read it off the module afterwards.
+        original_spec = getattr(module, "__spec__", None)
+        self.unload(name)
+        try:
+            reloaded = importlib.reload(module)
+        except (ModuleNotFoundError, ImportError):
+            # importlib.reload re-finds the module via sys.path finders, which
+            # fails for plugins loaded from an arbitrary file (a file-location
+            # spec whose directory is not importable — the dir-loader case).
+            # Re-execute the module through its own loader instead, which
+            # re-reads __file__ and so still picks up the source change.
+            if original_spec is None or original_spec.loader is None:
+                raise RuntimeError(
+                    f"Cannot reload module '{module_name}' for plugin "
+                    f"'{name}': no import spec/loader available"
+                ) from None
+            module.__spec__ = original_spec  # restore what reload nulled
+            original_spec.loader.exec_module(module)
+            reloaded = module
+        except Exception as exc:  # noqa: BLE001 — surface as a clear reload failure
+            raise RuntimeError(
+                f"Failed to reload module '{module_name}' for plugin "
+                f"'{name}': {exc}"
+            ) from exc
+
+        new_cls = getattr(reloaded, class_name, None)
+        if new_cls is None:
+            raise RuntimeError(
+                f"Plugin class '{class_name}' no longer exists in "
+                f"'{module_name}' after reload"
+            )
+        new_plugin: BasePlugin = new_cls()
+        self.load_plugin(new_plugin)
+        return new_plugin
 
     @property
     def tools(self) -> list[BaseTool]:
