@@ -5,8 +5,8 @@ hooks without duplicating executor/matcher plumbing.
 
 Wired events (fired from call sites):
 - AgentLoop: SESSION_START, SESSION_END, STOP, STOP_FAILURE,
-  PRE_TOOL_USE, POST_TOOL_USE, POST_TOOL_USE_FAILURE,
-  NOTIFICATION, PERMISSION_DENIED
+  PRE_TURN, POST_TURN, PRE_TOOL_USE, POST_TOOL_USE,
+  POST_TOOL_USE_FAILURE, NOTIFICATION, PERMISSION_DENIED
 - AgentSpawner: SUBAGENT_START, SUBAGENT_STOP, TEAMMATE_IDLE
 - CompactionIntegration: PRE_COMPACT, POST_COMPACT
 - TaskManager: TASK_CREATED, TASK_COMPLETED
@@ -23,13 +23,34 @@ from __future__ import annotations
 
 import asyncio
 import threading
-from typing import Any
+import uuid
+from typing import Any, Callable
 
 from chimera.hooks.events import HookEvent
 from chimera.hooks.executor import HookExecutor
-from chimera.hooks.hook_types import HookInput, HookMatcher, HookOutput
+from chimera.hooks.hook_types import (
+    FunctionHook,
+    HookInput,
+    HookMatcher,
+    HookOutput,
+)
 
-__all__ = ["HookEmitter", "get_global_emitter", "set_global_emitter"]
+__all__ = [
+    "HookEmitter",
+    "TURN_LIFECYCLE_EVENTS",
+    "get_global_emitter",
+    "set_global_emitter",
+]
+
+#: The per-turn lifecycle points the agent loop fires around each model
+#: call: :data:`HookEvent.PRE_TURN` immediately before the request and
+#: :data:`HookEvent.POST_TURN` immediately after the response. Exposed so a
+#: caller can subscribe to both turn boundaries in one loop, e.g.
+#: ``for ev in TURN_LIFECYCLE_EVENTS: emitter.on(ev, cb)``.
+TURN_LIFECYCLE_EVENTS: tuple[HookEvent, ...] = (
+    HookEvent.PRE_TURN,
+    HookEvent.POST_TURN,
+)
 
 
 class HookEmitter:
@@ -92,6 +113,88 @@ class HookEmitter:
         thread.start()
         thread.join()
         return result_holder.get("out", HookOutput())
+
+    def on(
+        self,
+        event: HookEvent | str,
+        callback: Callable[..., Any],
+        *,
+        matcher: str | None = None,
+        timeout: int = 5,
+    ) -> str:
+        """Subscribe *callback* to *event*; return a subscription id.
+
+        This is the ergonomic, in-process registration surface for the
+        hook lifecycle. The callback fires whenever :meth:`emit` (or
+        :meth:`emit_sync`) is called for *event*, and receives the full
+        :class:`HookInput` for that emission — so a subscriber can read
+        ``tool_name``, ``tool_input``, ``tool_output`` and friends directly.
+
+        Works for every hook point, including the per-turn boundaries in
+        :data:`TURN_LIFECYCLE_EVENTS` (:data:`HookEvent.PRE_TURN` /
+        :data:`HookEvent.POST_TURN`) and the tool-call pair
+        (:data:`HookEvent.PRE_TOOL_USE` / :data:`HookEvent.POST_TOOL_USE`).
+
+        The callback may be synchronous or ``async``. It may return a
+        :class:`HookOutput` to influence the merged result (e.g. return
+        ``HookOutput(continue_execution=False)`` from a ``PreToolUse``
+        subscription to veto the tool call); any other return value is a
+        no-op. Exceptions raised by the callback are swallowed by the
+        executor so a bad subscriber never breaks the loop.
+
+        If the emitter has no executor yet, a default :class:`HookExecutor`
+        is created lazily so ``HookEmitter().on(...)`` works out of the box.
+
+        Args:
+            event: The :class:`HookEvent` (or its ``HookEvent.value`` string)
+                to subscribe to.
+            callback: The function to invoke, called as ``callback(hook_input)``.
+            matcher: Optional fnmatch pattern constraining which ``tool_name``
+                values fire the callback. ``None`` (default) matches all.
+            timeout: Per-callback timeout in seconds.
+
+        Returns:
+            A subscription id; pass it to :meth:`off` to unsubscribe.
+        """
+        if self._executor is None:
+            self._executor = HookExecutor()
+
+        event_val = event.value if isinstance(event, HookEvent) else str(event)
+        subscription_id = uuid.uuid4().hex
+        hook = FunctionHook(
+            callback=callback,
+            id=subscription_id,
+            timeout=timeout,
+            receives_input=True,
+        )
+        self._matchers.append(
+            HookMatcher(
+                hooks=[hook],
+                matcher=matcher,
+                source="session",
+                events=[event_val],
+            )
+        )
+        return subscription_id
+
+    def off(self, subscription_id: str) -> bool:
+        """Remove a subscription registered via :meth:`on`.
+
+        Args:
+            subscription_id: The id returned by :meth:`on`.
+
+        Returns:
+            ``True`` if a matching subscription was found and removed,
+            ``False`` otherwise.
+        """
+        for hm in list(self._matchers):
+            if any(
+                isinstance(h, FunctionHook) and h.id == subscription_id
+                for h in hm.hooks
+            ):
+                self._matchers.remove(hm)
+                return True
+        return False
 
     @property
     def active(self) -> bool:

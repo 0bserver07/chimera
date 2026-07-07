@@ -10,6 +10,8 @@ class HookEvent(Enum):
     PRE_TOOL_USE = "PreToolUse"
     POST_TOOL_USE = "PostToolUse"
     POST_TOOL_USE_FAILURE = "PostToolUseFailure"
+    PRE_TURN = "PreTurn"
+    POST_TURN = "PostTurn"
     PERMISSION_REQUEST = "PermissionRequest"
     PERMISSION_DENIED = "PermissionDenied"
     USER_PROMPT_SUBMIT = "UserPromptSubmit"

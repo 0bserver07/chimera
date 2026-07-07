@@ -109,13 +109,30 @@ class PromptHook:
 
 @dataclass
 class FunctionHook:
-    """A hook that calls a Python function."""
+    """A hook that calls a Python function.
+
+    Attributes:
+        callback: The callable to invoke. Its calling convention is
+            selected by ``receives_input``.
+        type: Type discriminator; always ``"function"``.
+        id: Optional stable identifier, used to remove the hook later
+            (e.g. the subscription id returned by :meth:`HookEmitter.on`).
+        timeout: Per-hook timeout in seconds (``0`` clamps to a tiny value).
+        error_message: Human-readable label surfaced in timeout diagnostics.
+        receives_input: Selects the callback signature. When ``False``
+            (the default, preserving legacy behavior) the callback is
+            invoked as ``callback(messages, abort_signal)``. When ``True``
+            (as set by :meth:`HookEmitter.on`) it is invoked with the single
+            :class:`HookInput` argument so ergonomic subscribers can read
+            the full event payload (event, tool name, tool input, ...).
+    """
 
     callback: Callable[..., Any]
     type: str = field(default="function", init=False)
     id: str | None = None
     timeout: int = 5
     error_message: str = "Hook check failed"
+    receives_input: bool = False
 
 
 @dataclass

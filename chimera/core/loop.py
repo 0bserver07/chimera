@@ -228,6 +228,9 @@ class ReAct:
 
             context = mw_chain.run_before_model(context, tools)
 
+            # -- Lifecycle hook: PreTurn (before the model call) --
+            _fire_loop_hook(self.config, _HE.PRE_TURN)
+
             if self.config and self.config.event_bus:
                 from chimera.events.types import ModelRequestEvent
                 self.config.event_bus.publish(ModelRequestEvent(
@@ -257,6 +260,9 @@ class ReAct:
                 )
 
             response = mw_chain.run_after_model(response, context)
+
+            # -- Lifecycle hook: PostTurn (after the model responds) --
+            _fire_loop_hook(self.config, _HE.POST_TURN, tool_output=response.content)
 
             if self.config and self.config.event_bus:
                 from chimera.events.types import ModelResponseEvent
@@ -645,8 +651,16 @@ class ReAct:
 
             steps += 1
 
+            # -- Lifecycle hook: PreTurn (before the model call) --
+            await _fire_loop_hook_async(self.config, _HE.PRE_TURN)
+
             response = await provider.async_complete(
                 context.to_messages(), tools=schemas if schemas else None,
+            )
+
+            # -- Lifecycle hook: PostTurn (after the model responds) --
+            await _fire_loop_hook_async(
+                self.config, _HE.POST_TURN, tool_output=response.content,
             )
 
             step_cost = calculate_cost(provider.model_name, response.usage)

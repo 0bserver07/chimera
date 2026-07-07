@@ -7,6 +7,8 @@ EXPECTED_EVENTS = [
     "PRE_TOOL_USE",
     "POST_TOOL_USE",
     "POST_TOOL_USE_FAILURE",
+    "PRE_TURN",
+    "POST_TURN",
     "PERMISSION_REQUEST",
     "PERMISSION_DENIED",
     "USER_PROMPT_SUBMIT",
@@ -34,9 +36,13 @@ EXPECTED_EVENTS = [
 ]
 
 
-def test_all_27_events_exist():
-    """HookEvent enum contains exactly 27 members."""
-    assert len(HookEvent) == 27
+def test_all_events_exist():
+    """HookEvent enum contains exactly 29 members.
+
+    Bumped from 27 → 29 when the per-turn lifecycle points PRE_TURN and
+    POST_TURN were added to complete the in-process hook lifecycle.
+    """
+    assert len(HookEvent) == 29
 
 
 def test_each_event_name():

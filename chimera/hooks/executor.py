@@ -330,15 +330,38 @@ class HookExecutor:
         input_data: HookInput,
         abort: AbortSignal | None,
     ) -> HookOutput:
-        """Call a Python callback with timeout."""
+        """Call a Python callback with timeout.
+
+        Two calling conventions are supported, selected by
+        ``hook.receives_input``:
+
+        * Legacy (``False``, the default): the callback is invoked as
+          ``callback(messages, abort_signal)`` where ``messages`` is
+          ``input_data.messages or []`` and ``abort_signal`` is ``None``
+          (abort is managed externally).
+        * Ergonomic (``True``, used by :meth:`HookEmitter.on`): the callback
+          is invoked as ``callback(input_data)`` so it can read the full
+          :class:`HookInput` payload (event, tool name/input/output, ...).
+
+        The callback may be sync or ``async`` in either convention. A
+        returned :class:`HookOutput` is propagated (so a subscriber can, for
+        example, veto a ``PreToolUse`` by returning
+        ``HookOutput(continue_execution=False)``); any other return value
+        yields a default :class:`HookOutput`.
+        """
         try:
-            messages = input_data.messages or []
-            abort_signal_arg = None  # abort is managed externally; pass None
+            call_args: tuple[Any, ...]
+            if hook.receives_input:
+                call_args = (input_data,)
+            else:
+                # abort is managed externally; pass None
+                call_args = (input_data.messages or [], None)
+
             if inspect.iscoroutinefunction(hook.callback):
-                coro = hook.callback(messages, abort_signal_arg)
+                coro = hook.callback(*call_args)
             else:
                 coro = asyncio.get_event_loop().run_in_executor(
-                    None, hook.callback, messages, abort_signal_arg,
+                    None, hook.callback, *call_args,
                 )
 
             timeout = hook.timeout if hook.timeout > 0 else 0.001
