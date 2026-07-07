@@ -136,12 +136,13 @@ def test_run_dispatches_agents_stub() -> None:
     assert rc == 2
 
 
-def test_run_dispatches_bench_stub() -> None:
-    """``stoat bench`` returns 2 (scaffold) without crashing."""
+def test_run_dispatches_bench_lists_suites(capsys) -> None:
+    """``stoat bench`` (no suite) lists registered benchmarks via the harness."""
     parser = _build_parser()
     args = parser.parse_args(["bench"])
     rc = stoat_cli.run(args)
-    assert rc == 2
+    assert rc == 0
+    assert "stoat bench" in capsys.readouterr().err
 
 
 def test_run_dispatches_sessions_list_to_handler(tmp_path, monkeypatch) -> None:

@@ -191,12 +191,14 @@ def test_run_agents_returns_two() -> None:
     assert rc == 2
 
 
-def test_run_bench_returns_two() -> None:
+def test_run_bench_lists_suites(capsys) -> None:
+    """``badger bench`` (no suite) lists benchmarks via the canonical harness."""
     args = argparse.Namespace(
-        subcommand="bench", sub_action="humaneval", sub_target=None,
+        subcommand="bench", sub_action="list", sub_target=None,
     )
     rc = badger_cli.run(args)
-    assert rc == 2
+    assert rc == 0
+    assert "badger bench" in capsys.readouterr().err
 
 
 def test_run_print_missing_prompt_rc_two() -> None:

@@ -325,10 +325,19 @@ def test_run_dispatches_agents_subcommand(capsys) -> None:
 
 
 def test_run_dispatches_bench_subcommand(capsys) -> None:
-    rc = ferret_cli.run(_ns(subcommand="bench", sub_action="humaneval"))
-    assert rc == 2
+    # `bench` (no suite / list) now delegates to the canonical harness and
+    # lists the registered suites instead of returning a scaffold code.
+    rc = ferret_cli.run(_ns(subcommand="bench", sub_action="list"))
+    assert rc == 0
     captured = capsys.readouterr()
     assert "ferret bench" in captured.err
+    assert "registered suites" in captured.err
+
+
+def test_run_bench_unknown_suite_returns_two(capsys) -> None:
+    rc = ferret_cli.run(_ns(subcommand="bench", sub_action="not-a-real-suite"))
+    assert rc == 2
+    assert "unknown suite" in capsys.readouterr().err
 
 
 def test_run_with_no_args_emits_usage_hint(capsys) -> None:
