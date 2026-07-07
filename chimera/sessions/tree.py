@@ -5,6 +5,7 @@ import json
 import threading
 import time
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -152,6 +153,63 @@ class SessionTree:
                     f"[Session compacted. Summary: {entry.summary}]"
                 ))
         return messages
+
+    def summarize_branch(
+        self,
+        leaf_id: str | None,
+        summarizer: Callable[[list[Message]], str],
+    ) -> str:
+        """Summarize a branch's messages and store the result as a compaction.
+
+        Collects every message on the branch ending at ``leaf_id`` (via
+        :meth:`get_messages`), hands them to the injected ``summarizer``
+        callable, and persists the returned text through the existing
+        compaction/summary path (:meth:`add_compaction`). The summary entry is
+        attached as a child of the summarized branch's leaf, which then becomes
+        the active leaf — matching the semantics of an ordinary compaction.
+
+        The ``summarizer`` is any ``Callable[[list[Message]], str]``: this
+        method never imports or assumes a provider, so it stays usable with a
+        real LLM, a heuristic, or a fake summarizer in tests.
+
+        Args:
+            leaf_id: Leaf of the branch to summarize. ``None`` uses the active
+                leaf (the most recently appended entry).
+            summarizer: Callable turning the branch's messages into a summary
+                string. It is invoked with an empty list when the branch has no
+                messages (see Note).
+
+        Returns:
+            The id of the newly stored compaction entry. It always resolves via
+            :meth:`get_branch` and the internal index.
+
+        Raises:
+            ValueError: If ``leaf_id`` is a non-``None`` id that is not present
+                in the tree (prevents attaching a summary to a dangling parent).
+
+        Note:
+            An empty branch (no messages — an empty tree, or a branch that ends
+            at a header/label with no messages) is handled gracefully rather
+            than raising: the summarizer is called with ``[]`` and its result is
+            still stored and returned. ``tokens_before`` is recorded as ``0``
+            (the core has no tokenizer) and ``first_kept_id`` as ``""`` (a
+            full-branch summary keeps nothing).
+        """
+        if leaf_id is not None and leaf_id not in self._by_id:
+            raise ValueError(f"Entry {leaf_id} not found")
+        leaf = leaf_id if leaf_id is not None else self._active_leaf
+        messages = self.get_messages(leaf)
+        summary = summarizer(messages)
+        # Parent the summary on the summarized branch's leaf so the returned id
+        # resolves within that branch (add_compaction parents on the active
+        # leaf). Set before appending, after the summarizer runs, so a raising
+        # summarizer leaves the active leaf untouched.
+        self._active_leaf = leaf
+        return self.add_compaction(
+            summary=summary,
+            first_kept_id="",
+            tokens_before=0,
+        )
 
     def fork(self, from_entry_id: str) -> str:
         if from_entry_id not in self._by_id:
