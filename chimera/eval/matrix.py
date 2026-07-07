@@ -22,6 +22,7 @@ import time
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from chimera.eval.error_taxonomy import FailureCategory, classify_failure
 from chimera.eval.harness import Harness
 from chimera.types import AgentResult
 
@@ -69,6 +70,7 @@ class MatrixCell:
     status: str
     budget_honored: bool = True
     budget_note: str = ""
+    category: FailureCategory = FailureCategory.UNKNOWN
 
 
 @dataclass
@@ -393,6 +395,7 @@ def _run_cell(
             status=status,
             budget_honored=honored,
             budget_note=note,
+            category=classify_failure(status, note),
         )
     except Exception as exc:  # noqa: BLE001 — one failing cell must not abort the grid
         return MatrixCell(
@@ -407,6 +410,7 @@ def _run_cell(
             status="error",
             budget_honored=False,
             budget_note=f"{type(exc).__name__}: {exc}",
+            category=classify_failure("error", f"{type(exc).__name__}: {exc}"),
         )
 
 
