@@ -134,29 +134,43 @@ result" — see [benchmarks/README](../benchmarks/README.md) for run status.
 
 ---
 
-## THE CURRENT GAP LIST (2026-07-06) — what remains, ranked
+## THE CURRENT GAP LIST (2026-07-06) — executable, ranked
 
-Everything above this line is reconciled against master `8d2a17b` (full grid +
-provider P0 wave). What actually remains:
+Reconciled against master `8d2a17b` (full grid + provider P0 wave). Effort tags
+[S]/[M]/[L]. Cost bases are **extrapolated from the committed grid** —
+`data/matrix-full-glm52.json`: 91 cells = $0.78 (~$0.0086/cell at n=1); per-row
+costs there ground each estimate. Every ⬜ is a real, checkable step.
 
-1. ⬜ **Depth runs** — the grid is n=1/cell (instrument proof). n=25+ on the
-   contrast-rich columns (τ-bench, LiveCodeBench, MBPP+) turns it into
-   publishable comparisons. One `bench-matrix --limit 25` each now.
-2. ⬜ **External rows live** — the `*-cli` registry entries are construct-only
-   until their tools are installed; first installed tool lights up the
-   replica-vs-real fidelity table (`bench-fidelity`). Includes the Phase-1
-   acceptance (one external agent through one SWE-bench Lite task in docker).
-3. ⬜ **P1/P2 steal-backlog** (sized in
-   [pi-gap-analysis](../research/pi-gap-analysis.md) §3/§6): in-process hook
-   API on the loop [M] · UI/extension registration surface [L] · hot-reload
-   [M] · orchestrator-style daemon over `--mode rpc` [M–L] · session-tree
-   branch summarization [M] · error/overflow taxonomies [S] · provider+OAuth
-   as extension [M]. (Shipped from that backlog already: submit tool, faux
-   provider, caching, catalog, compat-flags, next-turn queue.)
-4. ⬜ **Live-infra tier** — docker repo-envs to make the SWE column meaningful ·
-   official-grader integration for leaderboard-comparable numbers ·
-   lint-loop's agent-side write path · preset `max_turns` budget parity ·
-   per-cell ATIF emission · `bench-compare` +4 loops · codename bench stubs.
-5. ⬜ **Release discipline** — everything here sits on master unreleased;
-   batches into the next 0.9.x patch when the user calls it (their versioning
-   policy: patch-bumps only, batch and settle, no rushed ships).
+### Track 1 — Depth runs (turn the instrument into comparisons) — cheapest headline
+- [ ] **T1.1 [S] τ-bench depth, n=25.** `chimera bench-matrix --agents react,plan-execute,plan-act,tree-of-thought --benchmarks tau-bench --limit 25 --model glm-5.2[1m] --max-tool-calls 20 --max-cost 0.15`. *Accept:* per-agent pass% at n≥25, `budget_exhausted` counted, JSON saved. *Cost basis:* ~4 agents × 25 ≈ 100 runs; tau rows ran $0.02–0.09 ⇒ ~$2–4.
+- [ ] **T1.2 [S] LiveCodeBench depth, n=25** (react vs reflexion vs tree-of-thought — the codegen contrast). *Accept:* same. *Cost:* ~$1–2.
+- [ ] **T1.3 [S] MBPP+ depth, n=25**, full 13-agent roster. *Accept:* same. *Cost:* ~$3–5.
+- [ ] **T1.4 [S] Publish** `docs/benchmarks/2026-07-NN-depth-glm52.md` — real spread + variance, not uniform 100s; commit data JSONs `-f`.
+
+### Track 2 — External rows live (first replica-vs-real fidelity number)
+- [ ] **T2.1 [M] Install one external CLI** from `docs/examples/agent-registry.example.json`; document the install in the entry.
+- [ ] **T2.2 [M] Run `chimera bench-fidelity`** pairing its replica style vs the real CLI on one bench. *Accept:* a fidelity delta printed + saved.
+- [ ] **T2.3 [L] Phase-1 acceptance:** one external agent through **one SWE-bench Lite task in docker** end-to-end. *Accept:* graded predictions.jsonl for 1 task.
+- [ ] **T2.4 [S] Publish** the first fidelity pair write-up.
+
+### Track 3 — P1/P2 steal-backlog (from [pi-gap-analysis](../research/pi-gap-analysis.md) §3/§6)
+- [ ] **T3.1 [M] In-process hook API on the loop** — pre/post tool + turn callbacks (the highest-leverage extension seam).
+- [ ] **T3.2 [L] UI / extension registration surface** — third-party panels/commands.
+- [ ] **T3.3 [M] Hot-reload** of agents/plugins without restart.
+- [ ] **T3.4 [M–L] Orchestrator-style daemon** over `--mode rpc` (long-lived multi-session server).
+- [ ] **T3.5 [M] Session-tree branch summarization** — compact stale branches.
+- [ ] **T3.6 [S] Error / overflow taxonomies** — typed failure categories surfaced in results.
+- [ ] **T3.7 [M] Provider + OAuth as an extension point** — register auth flows out-of-tree.
+- [x] ~~Shipped from this backlog already:~~ submit tool · faux provider · prompt-caching · model catalog · compat-flags · next-turn queue.
+
+### Track 4 — Live-infra tier (needs docker/keys, not just code)
+- [ ] **T4.1 [L] Docker repo-envs** — per-task containers so the SWE column is meaningful (unblocks T2.3).
+- [ ] **T4.2 [M] Official-grader integration** — leaderboard-comparable numbers.
+- [ ] **T4.3 [S] lint-loop agent-side write path** — the one honest 0/7; make it emit files on codegen.
+- [ ] **T4.4 [S] Preset `max_turns` budget parity** — thread `budget.max_llm_calls` into assembly presets.
+- [ ] **T4.5 [M] Per-cell ATIF emission** — trajectories per matrix cell (the grid ran without them).
+- [ ] **T4.6 [S] `bench-compare` +4 loops** — retry / plan_act / lint_feedback / one more.
+- [ ] **T4.7 [S] Codename `bench` subcommands** — ferret/stoat/badger delegate to the canonical harness.
+
+### Track 5 — Release discipline
+- [ ] **T5.1 [S] Batch → next 0.9.x patch** when the user calls it (policy: patch-bumps only, batch and settle, no rushed ships). Gate + scrub + tag + publish + uvx-verify.
