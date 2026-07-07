@@ -176,13 +176,22 @@ def run_bench_matrix(args: argparse.Namespace) -> int:
         # without it the sandbox falls back to in-memory and cells will not
         # reflect real cloud execution, so fail loudly here instead.
         import os
+        from pathlib import Path
 
         from chimera.env.modal_sandbox import ModalSandboxEnvironment
 
-        if not (os.environ.get("MODAL_TOKEN_ID") or os.environ.get("MODAL_TOKEN_SECRET")):
+        # Modal auth is either env vars OR the CLI config written by
+        # `modal setup` / `modal token new` (~/.modal.toml) — the common case.
+        modal_authed = bool(
+            os.environ.get("MODAL_TOKEN_ID")
+            or os.environ.get("MODAL_TOKEN_SECRET")
+            or (Path.home() / ".modal.toml").exists()
+        )
+        if not modal_authed:
             print(
-                "chimera bench-matrix --env modal: no Modal credentials found. "
-                "Run `modal token new` or set MODAL_TOKEN_ID / MODAL_TOKEN_SECRET.",
+                "chimera bench-matrix --env modal: no Modal auth found. "
+                "Run `modal setup` (writes ~/.modal.toml) or set "
+                "MODAL_TOKEN_ID / MODAL_TOKEN_SECRET.",
                 file=sys.stderr,
             )
             return 2
@@ -191,9 +200,10 @@ def run_bench_matrix(args: argparse.Namespace) -> int:
         image = args.modal_image
 
         def _modal_env() -> ModalSandboxEnvironment:
-            env = ModalSandboxEnvironment(image=image, gpu=gpu)
-            env.setup()
-            return env
+            # The Harness calls env.setup() itself per task, so do NOT set up
+            # here — a second setup() would spawn a duplicate sandbox and leak
+            # the first.
+            return ModalSandboxEnvironment(image=image, gpu=gpu)
 
         env_factory = _modal_env
         _where = f"GPU={gpu}" if gpu else "CPU-only"

@@ -73,14 +73,17 @@ def test_bench_matrix_parser_accepts_modal_flags() -> None:
     assert args.modal_image == "python:3.12"
 
 
-def test_env_modal_without_creds_exits_2(monkeypatch) -> None:
+def test_env_modal_without_creds_exits_2(monkeypatch, tmp_path) -> None:
     """--env modal with no Modal auth fails loudly (rc 2), never silently local."""
     import argparse
+    from pathlib import Path
 
     from chimera.cli.bench_matrix import run_bench_matrix
 
     monkeypatch.delenv("MODAL_TOKEN_ID", raising=False)
     monkeypatch.delenv("MODAL_TOKEN_SECRET", raising=False)
+    # Point HOME at an empty dir so the real ~/.modal.toml isn't detected.
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
     args = argparse.Namespace(
         agents="react", benchmarks="human-eval", model="glm-5.2", limit=1,
         dataset=None, registry=None, max_tool_calls=5, max_llm_calls=5,

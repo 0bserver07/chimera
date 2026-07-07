@@ -197,7 +197,15 @@ class ModalSandboxEnvironment(Environment):
                     "modal package is installed but exposes neither "
                     "modal.App nor modal.Stub; please upgrade modal."
                 )
-            self._app = app_cls(self._app_name)
+            # Modern Modal (>=1.x) requires an *initialized* app for
+            # ``Sandbox.create`` — a bare ``modal.App(name)`` object is lazy and
+            # is rejected with "App has not been initialized yet".
+            # ``App.lookup(name, create_if_missing=True)`` returns a live app.
+            lookup = getattr(app_cls, "lookup", None)
+            if lookup is not None:
+                self._app = lookup(self._app_name, create_if_missing=True)
+            else:  # legacy SDK — the bare constructor is the only surface
+                self._app = app_cls(self._app_name)
 
         # Prefer the modern ``modal.Sandbox.create`` constructor when
         # exposed by the installed SDK; otherwise fall back to the
