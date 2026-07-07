@@ -158,13 +158,19 @@ costs there ground each estimate. Every ⬜ is a real, checkable step.
   found pre/post-tool already fired; added pre/post-turn + `emitter.on()/off()`
   (callbacks get full HookInput, can veto). 22 tests.
 - [ ] **T3.2 [L] UI / extension registration surface** — third-party panels/commands.
-- [ ] **T3.3 [M] Hot-reload** of agents/plugins without restart.
+- [x] **T3.3 [M] Hot-reload** of agents/plugins without restart — DONE (`0f4316c`).
+  `PluginManager.reload()` re-imports the module (importlib.reload for sys.path
+  plugins; loader re-exec fallback for file/dir-loaded) + re-activates; proven
+  v1→v2 source pickup.
 - [ ] **T3.4 [M–L] Orchestrator-style daemon** over `--mode rpc` (long-lived multi-session server).
 - [x] **T3.5 [M] Session-tree branch summarization** — DONE (`7a612a9`).
   `summarize_branch(leaf_id, summarizer)` — provider-agnostic, empty-branch safe.
 - [x] **T3.6 [S] Error / overflow taxonomies** — DONE (`f299ca1`). `FailureCategory`
   (8 members) + `classify_failure`; `MatrixCell.category` on both return paths.
-- [ ] **T3.7 [M] Provider + OAuth as an extension point** — register auth flows out-of-tree.
+- [x] **T3.7 [M] Provider + OAuth as an extension point** — DONE/verified-existing
+  (`10afbe0`). Scan found it already built (`register_provider` + `AuthManager.register(AuthProvider)`
+  + `create_provider` consults `get_token`→registered `login()`); added the composition
+  test proving out-of-tree provider+auth resolve together. No new machinery needed.
 - [x] ~~Shipped from this backlog already:~~ submit tool · faux provider · prompt-caching · model catalog · compat-flags · next-turn queue.
 
 ### Track 4 — Live-infra tier (needs docker/keys, not just code)
