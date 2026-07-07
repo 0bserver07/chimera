@@ -1163,18 +1163,15 @@ def _dispatch_agents(args: argparse.Namespace) -> int:
 
 
 def _dispatch_bench(args: argparse.Namespace) -> int:
-    """Stub for ``chimera ferret bench <suite>``.
+    """``chimera ferret bench <suite>`` — delegate to the canonical harness.
 
-    A future agent owns the benchmark suite wiring (mirrors otter's
-    ``bench`` surface). Returning 2 keeps the scaffold contract honest.
+    Frontends do not reimplement evaluation; this hands off to the one
+    ``bench-matrix`` runner (identical graders/budgets/registry). ``bench`` with
+    no suite lists the registered benchmarks.
     """
-    suite = getattr(args, "sub_action", None)
-    print(
-        f"ferret bench: suite={suite!r} (scaffold; see "
-        "research/ferret/SPEC.md).",
-        file=sys.stderr,
-    )
-    return 2
+    from chimera.cli.codename_bench import dispatch_codename_bench
+
+    return dispatch_codename_bench(args, "ferret")
 
 
 def _default_bridge_inbound_handler(message: Any) -> None:

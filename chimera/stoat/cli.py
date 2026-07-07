@@ -651,18 +651,14 @@ def _dispatch_agents(args: argparse.Namespace) -> int:
 
 
 def _dispatch_bench(args: argparse.Namespace) -> int:
-    """Stub for ``chimera stoat bench <suite>``.
+    """``chimera stoat bench <suite>`` — delegate to the canonical harness.
 
-    Stoat mirrors the bench surface from ferret / shrew (humaneval +
-    tau-bench). Implementation lands in a follow-up release; the
-    placeholder keeps the CLI surface visible.
+    Frontends do not reimplement evaluation; this hands off to the one
+    ``bench-matrix`` runner. ``bench`` with no suite lists the benchmarks.
     """
-    suite = getattr(args, "sub_action", None)
-    print(
-        f"stoat bench: suite={suite!r} (scaffold; see docs/stoat/parity-matrix.md).",
-        file=sys.stderr,
-    )
-    return 2
+    from chimera.cli.codename_bench import dispatch_codename_bench
+
+    return dispatch_codename_bench(args, "stoat")
 
 
 _SUBCOMMAND_DISPATCH: dict[str, Any] = {
