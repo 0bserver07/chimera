@@ -174,3 +174,60 @@ costs there ground each estimate. Every ⬜ is a real, checkable step.
 
 ### Track 5 — Release discipline
 - [ ] **T5.1 [S] Batch → next 0.9.x patch** when the user calls it (policy: patch-bumps only, batch and settle, no rushed ships). Gate + scrub + tag + publish + uvx-verify.
+
+---
+
+## DESIGN-FIRST TEAM WAVE (2026-07-06) — scan-informed specs
+
+A codebase scan reshaped these from "build X" to "extend X" — four seams were
+already partially present. Team of 3 builders on disjoint owned files; lead
+(this session) owns shared-file wiring (`loop.py`, `matrix.py`, `main.py`),
+the small Track-4 code items, and all gates. Constraints for every teammate:
+real tests (no mocks-only), no brand/competitor names in code or docs, gate
+your own files (`ruff` + targeted `pytest`) before reporting, and hand the lead
+any shared-file change as a unified diff — do **not** edit shared files.
+
+### Builder A — `error-taxonomy` (T3.6) [S]
+- **Exists:** `matrix.py` cells carry a bare status string
+  (`ok|budget_exhausted|error|timeout`) + a free-text error message.
+- **Build (NEW file `chimera/eval/error_taxonomy.py`):** `FailureCategory` enum
+  (budget_exhausted, tool_error, parse_error, empty_output, provider_error,
+  timeout, grader_error, unknown) + `classify_failure(status, error_msg) ->
+  FailureCategory` (substring/rule based, deterministic, documented). Tests:
+  `tests/eval/test_error_taxonomy.py`.
+- **Lead-applies:** the ~3-line `matrix.py` wiring to attach `.category` to a
+  cell — hand it to the lead as a diff.
+- **Accept:** classifier covers every status value + the common error strings;
+  tests green; ruff clean.
+
+### Builder B — `branch-summary` (T3.5) [M]
+- **Exists:** `chimera/sessions/tree.py` already has an entry `summary` field,
+  `add_compaction(summary, first_kept_id)`, `get_branch`, `get_messages`.
+- **Build (extend `tree.py`):** `summarize_branch(leaf_id, summarizer)` — walk
+  the branch via `get_messages`, call the injected `summarizer(messages)->str`
+  callable (provider-agnostic; no hard provider dep), store the result through
+  the existing compaction/summary path, return the summary id. Tests:
+  `tests/sessions/test_branch_summary.py` with a fake summarizer.
+- **Accept:** stale branch compacts to a stored summary; existing tree tests
+  still pass; owns only `tree.py` + the new test.
+
+### Builder C — `hook-points` (T3.1) [M]
+- **Exists:** a real `chimera/hooks/` module (events/emitter/executor/loader +
+  concrete hooks) firing at SESSION_START etc. via `_fire_loop_hook`.
+- **Build:** audit `hooks/hook_types.py` + `events.py` for MISSING lifecycle
+  points — specifically **pre/post tool-call** and **pre/post turn** — add the
+  missing event types + a clean public `on(event, callback)` registration
+  helper on the emitter. Tests: `tests/hooks/test_hook_points.py` proving a
+  registered callback fires for each new point (drive the emitter directly).
+- **Lead-applies:** the `loop.py`/`tool_executor.py` fire-site patch — hand it
+  to the lead as a diff (those are shared files).
+- **Accept:** new points registerable + fire in a unit test; no shared-file
+  edits by the builder; ruff clean.
+
+### Lead items (this session, parallel to builders)
+- T4.3 lint-loop write path · T4.4 preset `max_turns` ← `budget.max_llm_calls`
+  parity · T4.6 `bench-compare` +4 loops · T4.7 codename `bench` stubs ·
+  apply the three builder diffs · full-suite gate · merge.
+- Deferred from this wave (fuzzier, needs its own design): T3.2 UI registration
+  [L], T3.3 hot-reload, T3.4 orchestrator daemon [L], T3.7 provider+OAuth
+  extension point.
