@@ -155,11 +155,26 @@ class CodingAgentAdapter:
         preset: str = "coding_agent",
         enable_nudges: bool = True,
         use_submit_tool: bool = False,
+        max_turns: int | None = None,
     ) -> None:
         self._provider = provider
         self._preset = preset
         self._enable_nudges = enable_nudges
         self._use_submit_tool = use_submit_tool
+        self._max_turns = max_turns
+
+    def set_max_turns(self, max_turns: int | None) -> None:
+        """Set the loop's turn ceiling (``None`` restores the preset default).
+
+        The assembled :class:`~chimera.assembly.coding_agent.CodingAgent` loop
+        takes no :class:`~chimera.core.loop_config.LoopConfig`, so its only
+        budget lever is this constructor ceiling. The budgeted matrix path
+        (:class:`~chimera.eval.runners.in_process.InProcessRunner`) calls this
+        to align the ceiling with ``budget.max_llm_calls`` — turn parity for
+        the single-argument preset factories that cannot receive a full
+        enforcer.
+        """
+        self._max_turns = max_turns
 
     def run(self, task: str, env: Any) -> AgentResult:
         """Run the CodingAgent on *task*, rooted at ``env.workdir``.
@@ -177,13 +192,19 @@ class CodingAgentAdapter:
 
                 extra_tools = [SubmitTool()]
                 task = task + self._SUBMIT_INSTRUCTION
-            agent = CodingAgent(
+            agent_kwargs: dict[str, Any] = dict(
                 provider=self._provider,
                 project_dir=str(project_dir) if project_dir else ".",
                 preset=self._preset,
                 enable_nudges=self._enable_nudges,
                 extra_tools=extra_tools,
             )
+            # Only forward max_turns when set, so the preset's own ceiling
+            # stays the default (CodingAgent uses a sentinel to tell "unset"
+            # from an explicit None).
+            if self._max_turns is not None:
+                agent_kwargs["max_turns"] = self._max_turns
+            agent = CodingAgent(**agent_kwargs)
             return asyncio.run(aggregate_events(agent.run(task)))
         except Exception as exc:  # noqa: BLE001 - isolate one task's failure
             return AgentResult(

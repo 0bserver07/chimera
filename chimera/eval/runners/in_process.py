@@ -194,6 +194,18 @@ class InProcessRunner:
         agent, honored = self._build_budgeted(budgeted_provider, loop_config)
         note = "" if honored else "factory does not accept loop_config"
 
+        # Turn-parity for the single-argument preset/style factories: they take
+        # no LoopConfig (so no tool-call enforcement), but the assembled loop's
+        # own ``max_turns`` ceiling is a real lever. Align it with the budget's
+        # LLM-call cap so a partial-budget agent still stops near the intended
+        # size instead of running the preset's default (up to 100) turns.
+        if not honored and budget.max_llm_calls and hasattr(agent, "set_max_turns"):
+            agent.set_max_turns(budget.max_llm_calls)
+            note = (
+                f"max_turns aligned to budget.max_llm_calls={budget.max_llm_calls}; "
+                "tool-call budget not enforced (factory takes no loop_config)"
+            )
+
         enforcer.start()
         native: Any = None
         run_error: Exception | None = None

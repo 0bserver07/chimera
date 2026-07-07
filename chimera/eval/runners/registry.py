@@ -233,12 +233,14 @@ def _build_preset_agent(provider: Any, preset: str) -> Any:
     ``AgentLoop`` takes neither a
     :class:`~chimera.core.loop_config.LoopConfig` nor a
     :class:`~chimera.core.budget.BudgetEnforcer` — its only budget lever is the
-    constructor ``max_turns`` ceiling, which ``CodingAgentAdapter`` does not
-    currently forward. Rather than fake tool-call enforcement,
+    constructor ``max_turns`` ceiling. Rather than fake tool-call enforcement,
     :class:`~chimera.eval.runners.in_process.InProcessRunner` detects the
     single-arg signature and honestly flags the cell ``budget_honored=False``.
-    (Threading ``max_turns`` from ``budget.max_llm_calls`` would require
-    exposing it on the adapter — tracked as a follow-up.)
+    It does, however, thread ``budget.max_llm_calls`` into the adapter's
+    ``max_turns`` ceiling (via :meth:`CodingAgentAdapter.set_max_turns`) so a
+    partial-budget preset run still stops near the intended size instead of the
+    preset default — turn parity without pretending the tool-call cap is
+    enforced.
 
     Args:
         provider: LLM provider handed to the adapter.
