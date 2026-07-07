@@ -166,11 +166,25 @@ costs there ground each estimate. Every ⬜ is a real, checkable step.
 ### Track 4 — Live-infra tier (needs docker/keys, not just code)
 - [ ] **T4.1 [L] Docker repo-envs** — per-task containers so the SWE column is meaningful (unblocks T2.3).
 - [ ] **T4.2 [M] Official-grader integration** — leaderboard-comparable numbers.
-- [ ] **T4.3 [S] lint-loop agent-side write path** — the one honest 0/7; make it emit files on codegen.
-- [ ] **T4.4 [S] Preset `max_turns` budget parity** — thread `budget.max_llm_calls` into assembly presets.
+- [~] **T4.3 [S→M] lint-loop write path** — PARTIAL. Fixed a real derailment BUG
+  (`LintFeedbackLoop` keyed lint-error detection on output-emptiness, so ruff's
+  successful "All checks passed! / No Python files found" was fed back as a bogus
+  fix task → model wrote lint commentary, not code; now keyed on exit code —
+  verified: correct fenced output now produced) + added the missing `write_file`
+  tool to the style. BUT answer-graded score still 0% at n=3 live; residual is a
+  grading/harvest interaction on the real tasks, not the derailment or the tool.
+  Reclassified [M]: next = inspect the matrix grade path for prose/tool_calls=0
+  output vs `react` (which passes the same task). (`9c19e7a`)
+- [x] **T4.4 [S] Preset `max_turns` budget parity** — DONE (`78e9334`).
+  `CodingAgentAdapter.set_max_turns()` + InProcessRunner aligns it to
+  `budget.max_llm_calls` on the partial path; honesty note updated.
 - [ ] **T4.5 [M] Per-cell ATIF emission** — trajectories per matrix cell (the grid ran without them).
-- [ ] **T4.6 [S] `bench-compare` +4 loops** — retry / plan_act / lint_feedback / one more.
-- [ ] **T4.7 [S] Codename `bench` subcommands** — ferret/stoat/badger delegate to the canonical harness.
+- [x] **T4.6 [S] `bench-compare` +4 loops** — DONE (`2f55023`). Roster 4→8
+  (retry/plan-act/lint-feedback/autonomous); signature-tolerant factory; all 8
+  build+run on faux.
+- [x] **T4.7 [S] Codename `bench` subcommands** — DONE (`7eefa90`). Shared
+  `dispatch_codename_bench()` → canonical bench-matrix; ferret/stoat/badger wired;
+  live `ferret bench list` verified.
 
 ### Track 5 — Release discipline
 - [ ] **T5.1 [S] Batch → next 0.9.x patch** when the user calls it (policy: patch-bumps only, batch and settle, no rushed ships). Gate + scrub + tag + publish + uvx-verify.
