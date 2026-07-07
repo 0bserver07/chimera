@@ -46,20 +46,20 @@ the ⬜ items below marked "Acceptance" / Phase 2–3 live steps.
   (ComparativeEval's contract), maps native `AgentResult` → `AgentRunResult`.
   Unit-tested without an LLM. → `chimera/eval/runners/in_process.py`,
   `tests/eval/runners/test_in_process.py`.
-- ⬜ **[S/N] `AgentSpec` + `matrix.yaml` registry loader** (project > user >
+- ✅ **[S/N] `AgentSpec` + registry loader** (JSON, not YAML — zero-dep) — (project > user >
   builtin) — enumerate the internal roster (7 codenames + 6 presets + 4 styles +
   4 subagents) as runner specs; resolve `--agents` names. *(task #6)*
-- ⬜ **[S/N] `chimera bench matrix` CLI + `MatrixReport`** — N agents × M benches
+- ✅ **[S/N] `chimera bench-matrix` CLI + `MatrixReport`** — — N agents × M benches
   under one BudgetSpec / sandbox / grader; one ATIF trajectory per cell.
   Generalizes `ComparativeEval` (1 bench × N loops) to 2D. *(task #7)*
-- ⬜ **[N] Acceptance:** first internal-only 2×2 matrix on GLM-5 with per-cell
-  ATIF.
+- ✅ **[N] Acceptance (exceeded):** THE FULL GRID — 13 agents × 7 benches, 91 live
+  cells on glm-5.2[1m] (`docs/benchmarks/2026-07-06-full-grid-glm52.md`).
+  ⬜ per-cell ATIF emission is still owed (grid ran without trajectories).
 
 ## Phase 1 — external agents (ACP + CLI), no new benches
 
-- ⬜ **[W] `ACPRunner`** — lift from `chimera/acp/client.py`. *(task #8)*
-- ⬜ **[W] `CliTemplateRunner`** — lift the `teammate_runner` template pattern
-  (`{prompt_file}`/`{repo}`/`{patch_out}`). *(task #8)*
+- ✅ **[W] `ACPRunner`** — `chimera/eval/runners/acp.py` (construct-verified).
+- ✅ **[W] `CliTemplateRunner`** — `chimera/eval/runners/cli_template.py`.
 - ⬜ **[I] Acceptance:** codex (cli) or opencode (acp) completes one SWE-bench
   Lite task in docker, graded identically to internal agents.
 - ⬜ **[W] 4 more loops into `bench-compare`** — retry, plan_act, lint_feedback,
@@ -68,14 +68,13 @@ the ⬜ items below marked "Acceptance" / Phase 2–3 live steps.
 
 ## Phase 2 — native-harness fleet
 
-- ⬜ **[N] `NativeHarnessRunner`** — run a framework's own SWE-bench harness →
-  collect `predictions.jsonl`. *(task #9)*
+- ✅ **[N] `NativeHarnessRunner`** — `chimera/eval/runners/native_harness.py`
+  (unit-tested; live fleet runs still gated on installed tools).
 - ⬜ **[N] Official SWE-bench harness grader** — controlled grader per column.
   *(task #9)*
 - ⬜ **[I] Registry entries (docs, not framework code):** mini-swe-agent (first),
   agentless (cost baseline), aider, openhands, autocoderover, moatless, open-swe.
-- ⬜ **[N] Budget-parity honesty flags** — per-cell flag when only wall-clock/cost
-  were honored (never a silent "controlled" claim). *(task #10)*
+- ✅ **[N] Budget-parity honesty flags** — `MatrixCell.budget_honored/_note`.
 
 ## Phase 3 — external bench axis + published matrices
 
@@ -129,5 +128,35 @@ result" — see [benchmarks/README](../benchmarks/README.md) for run status.
   (codegeneration only) called out in capability-matrix + ecosystem.
 - ✅ **[S] Adapter test coverage 10 → 0 uncovered** — every benchmark adapter now
   has a unit test file.
-- ⬜ **[N] Per-agent budget enforcement** — unchanged, still the top blocker for
-  large live grids.
+- ✅ **[N] Per-agent budget enforcement** — BudgetEnforcer through LoopConfig at the
+  tool-executor choke point; live-proven `budget_exhausted` cells in the grid.
+
+
+---
+
+## THE CURRENT GAP LIST (2026-07-06) — what remains, ranked
+
+Everything above this line is reconciled against master `8d2a17b` (full grid +
+provider P0 wave). What actually remains:
+
+1. ⬜ **Depth runs** — the grid is n=1/cell (instrument proof). n=25+ on the
+   contrast-rich columns (τ-bench, LiveCodeBench, MBPP+) turns it into
+   publishable comparisons. One `bench-matrix --limit 25` each now.
+2. ⬜ **External rows live** — the `*-cli` registry entries are construct-only
+   until their tools are installed; first installed tool lights up the
+   replica-vs-real fidelity table (`bench-fidelity`). Includes the Phase-1
+   acceptance (one external agent through one SWE-bench Lite task in docker).
+3. ⬜ **P1/P2 steal-backlog** (sized in
+   [pi-gap-analysis](../research/pi-gap-analysis.md) §3/§6): in-process hook
+   API on the loop [M] · UI/extension registration surface [L] · hot-reload
+   [M] · orchestrator-style daemon over `--mode rpc` [M–L] · session-tree
+   branch summarization [M] · error/overflow taxonomies [S] · provider+OAuth
+   as extension [M]. (Shipped from that backlog already: submit tool, faux
+   provider, caching, catalog, compat-flags, next-turn queue.)
+4. ⬜ **Live-infra tier** — docker repo-envs to make the SWE column meaningful ·
+   official-grader integration for leaderboard-comparable numbers ·
+   lint-loop's agent-side write path · preset `max_turns` budget parity ·
+   per-cell ATIF emission · `bench-compare` +4 loops · codename bench stubs.
+5. ⬜ **Release discipline** — everything here sits on master unreleased;
+   batches into the next 0.9.x patch when the user calls it (their versioning
+   policy: patch-bumps only, batch and settle, no rushed ships).
