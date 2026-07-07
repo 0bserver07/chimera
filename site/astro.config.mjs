@@ -320,6 +320,9 @@ export default defineConfig({
 					label: 'Releases',
 					collapsed: true,
 					items: [
+						{ label: '0.9.0 — TUI multiplexer', link: '/releases/0.9.0/' },
+						{ label: '0.8.1 — chimera code daily driver', link: '/releases/0.8.1/' },
+						{ label: '0.8.0 — Comparative-methodology release', link: '/releases/0.8.0/' },
 						{ label: '0.7.0 — PyPI release + deprecation cuts', link: '/releases/0.7.0/' },
 						{ label: '0.6.0 — P0 gap closure + benchmarks', link: '/releases/0.6.0/' },
 						{ label: '0.5.0 — Five-Strong Family', link: '/releases/0.5.0/' },
