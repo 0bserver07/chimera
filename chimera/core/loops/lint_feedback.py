@@ -136,6 +136,15 @@ class LintFeedbackLoop:
                 cwd=str(workdir),
                 timeout=30,
             )
+            # Exit code is the authoritative success signal, NOT output
+            # emptiness. Ruff exits 0 when there are no violations even though
+            # it may still print "All checks passed!" and, on an empty
+            # workspace, a "No Python files found" warning — treating that
+            # non-empty-but-successful output as lint errors would feed the
+            # warning back to the model as a bogus fix task and derail it into
+            # lint commentary instead of writing the solution.
+            if proc.returncode == 0:
+                return ""
             return proc.stdout + proc.stderr
         except (FileNotFoundError, subprocess.TimeoutExpired):
             return ""  # linter not available or timed out, skip

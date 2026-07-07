@@ -217,17 +217,20 @@ AgentPreset.LINT_LOOP = AgentPreset(
     name="lint-loop",
     description="Lint-loop: lint-feedback edit loop, git-aware, edit-focused.",
     tool_names=[
-        "read_file", "edit_file", "bash", "search",
+        "read_file", "write_file", "edit_file", "bash", "search",
         "list_files", "git", "test", "repo_map",
     ],
     loop_type="lint_feedback",
     loop_kwargs={"linter": "ruff", "max_lint_rounds": 2},
     max_steps=20,
     system_prompt=(
-        "You are a pair-programming agent. You help edit code files to accomplish "
-        "tasks. Read the code first, make targeted edits, and verify with tests. "
-        "Use the repo_map to understand the codebase structure. "
-        "After making changes, the linter will check your work automatically."
+        "You are a pair-programming agent. You write and edit code files to "
+        "accomplish tasks. Read the code first when it exists, make targeted "
+        "edits, and verify with tests. Use the repo_map to understand the "
+        "codebase structure. If the task is to write new code from scratch and no "
+        "file exists yet, create it with write_file first, then refine it — never "
+        "wait for pre-existing files. Always leave the complete solution as a file "
+        "on disk; the linter then checks your work automatically."
     ),
 )
 
