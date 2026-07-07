@@ -114,6 +114,7 @@ class ModalSandboxEnvironment(Environment):
         test_cmd: str = "python -m pytest",
         cpu: float | None = None,
         memory: int | None = None,
+        gpu: str | None = None,
         timeout: int = 300,
         app_name: str | None = None,
         keep_alive: bool = False,
@@ -124,6 +125,10 @@ class ModalSandboxEnvironment(Environment):
         self._test_cmd = test_cmd
         self._cpu = cpu
         self._memory = memory
+        # GPU spec passed straight to ``modal.Sandbox.create(gpu=...)`` —
+        # e.g. ``"H100"``, ``"A100"``, ``"T4"``, or ``"A100:2"`` for multi-GPU.
+        # ``None`` (the default) provisions a CPU-only sandbox.
+        self._gpu = gpu
         self._timeout = timeout
         self._app_name = app_name or f"chimera-{uuid.uuid4().hex[:8]}"
         self._keep_alive = keep_alive
@@ -210,6 +215,8 @@ class ModalSandboxEnvironment(Environment):
                 kwargs["cpu"] = self._cpu
             if self._memory is not None:
                 kwargs["memory"] = self._memory
+            if self._gpu is not None:
+                kwargs["gpu"] = self._gpu
             self._sandbox = spawn(**kwargs)
         else:
             # Legacy SDK path. ``app.spawn_sandbox`` takes the image as

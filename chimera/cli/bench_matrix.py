@@ -77,9 +77,21 @@ def add_bench_matrix_parser(
     p.add_argument(
         "--env",
         dest="env_kind",
-        choices=("local", "none"),
+        choices=("local", "none", "modal"),
         default="local",
-        help="Per-task environment: fresh temp-dir LocalEnvironment (default) or none",
+        help="Per-task environment: 'local' fresh temp-dir (default), 'none', "
+        "or 'modal' — run every task in a fresh Modal cloud sandbox",
+    )
+    p.add_argument(
+        "--modal-gpu",
+        default=None,
+        help="Modal GPU for --env modal (e.g. H100, A100, T4, 'A100:2'). "
+        "Omit for a CPU-only sandbox.",
+    )
+    p.add_argument(
+        "--modal-image",
+        default="python:3.11-slim",
+        help="Container image for --env modal sandboxes (default python:3.11-slim)",
     )
 
 
@@ -158,6 +170,34 @@ def run_bench_matrix(args: argparse.Namespace) -> int:
             return LocalEnvironment(workdir=tempfile.mkdtemp(prefix="chimera-matrix-"))
 
         env_factory = _local_env
+    elif args.env_kind == "modal":
+        # Every task runs in its own fresh Modal cloud sandbox — optionally on
+        # a GPU. Needs Modal auth (`modal token new`, or MODAL_TOKEN_ID/SECRET);
+        # without it the sandbox falls back to in-memory and cells will not
+        # reflect real cloud execution, so fail loudly here instead.
+        import os
+
+        from chimera.env.modal_sandbox import ModalSandboxEnvironment
+
+        if not (os.environ.get("MODAL_TOKEN_ID") or os.environ.get("MODAL_TOKEN_SECRET")):
+            print(
+                "chimera bench-matrix --env modal: no Modal credentials found. "
+                "Run `modal token new` or set MODAL_TOKEN_ID / MODAL_TOKEN_SECRET.",
+                file=sys.stderr,
+            )
+            return 2
+
+        gpu = args.modal_gpu
+        image = args.modal_image
+
+        def _modal_env() -> ModalSandboxEnvironment:
+            env = ModalSandboxEnvironment(image=image, gpu=gpu)
+            env.setup()
+            return env
+
+        env_factory = _modal_env
+        _where = f"GPU={gpu}" if gpu else "CPU-only"
+        print(f"Per-task environment: Modal sandbox ({image}, {_where})", file=sys.stderr)
 
     print(
         f"Matrix: {len(runners)} agent(s) x {len(benchmarks)} benchmark(s) "
