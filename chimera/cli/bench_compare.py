@@ -24,12 +24,20 @@ import json
 import sys
 from typing import Any
 
-#: Loop-type registry: CLI name -> "module:Class".
+#: Loop-type registry: CLI name -> "module:Class". The first four take a
+#: ``max_steps`` ceiling; the rest carry their own step knobs (retries, plan/act
+#: budgets, lint rounds) and are built config-only — :func:`_build_factories`
+#: detects which by trying ``max_steps=`` and falling back. Every loop still
+#: receives the shared ``loop_config`` so per-task budget enforcement applies.
 LOOP_TYPES: dict[str, str] = {
     "react": "chimera.core.loop:ReAct",
     "plan-execute": "chimera.core.loops.plan_execute:PlanAndExecute",
     "reflexion": "chimera.core.loops.reflexion:Reflexion",
     "tree-of-thought": "chimera.core.loops.tree_of_thought:TreeOfThought",
+    "retry": "chimera.core.loops.retry:RetryLoop",
+    "plan-act": "chimera.core.loops.plan_act:PlanActLoop",
+    "lint-feedback": "chimera.core.loops.lint_feedback:LintFeedbackLoop",
+    "autonomous": "chimera.core.loops.autonomous:AutonomousLoop",
 }
 
 
@@ -104,7 +112,14 @@ def _build_factories(agent_names: list[str], max_steps: int) -> dict[str, Any]:
             from chimera.core.agent import Agent
             from chimera.core.tool_group import DEFAULT_TOOLS
 
-            loop = _cls(max_steps=max_steps, config=loop_config)
+            # ReAct-family loops take a max_steps ceiling; the retry/plan-act/
+            # lint-feedback/autonomous loops carry their own step knobs and
+            # reject max_steps — fall back to config-only, which still injects
+            # the budget enforcer.
+            try:
+                loop = _cls(max_steps=max_steps, config=loop_config)
+            except TypeError:
+                loop = _cls(config=loop_config)
             return Agent(provider=provider, tools=list(DEFAULT_TOOLS), loop=loop)
 
         factories[name] = factory
