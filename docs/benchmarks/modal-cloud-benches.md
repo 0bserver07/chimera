@@ -83,6 +83,22 @@ out concurrently on Modal** (`data/modal-grid-20260707-201224.json`):
   slowest single cell (~350s) — this is the fix for the single-machine
   depth-run timeouts.
 
+### Flagship scorecard — `coding-agent` on Modal (glm-5.2[1m])
+
+The flagship run across all five staged benchmarks, all executing on Modal:
+
+| Benchmark | Result | n |
+|---|---|---|
+| human-eval-plus | **10/10 (100%)** | 10 |
+| livecodebench | **9/10 (90%)** | 10 |
+| math500 | 4/5 (80%) | 5 |
+| mbpp | 6/10 (60%) | 10 |
+| mbpp-plus | 5/10 (50%) | 10 |
+
+All real, all graded on Modal. (math500 initially errored because the Modal
+image was built without the `datasets` package — a one-line image fix, not a
+bench gap; it loads fine locally. Fixed in `14c32b9`.)
+
 ## What runs
 
 - **Benchmarks** (staged, runnable): mbpp · humaneval-plus · mbpp-plus ·

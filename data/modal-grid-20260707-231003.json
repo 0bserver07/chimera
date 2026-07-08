@@ -1,0 +1,75 @@
+{
+  "model": "glm-5.2[1m]",
+  "cells": [
+    {
+      "agent_id": "coding-agent",
+      "benchmark": "mbpp-sanitized",
+      "total": 10,
+      "passed": 6,
+      "pass_rate": 0.6,
+      "cost_usd": 0.059401999999999996,
+      "tool_calls": 2,
+      "wall_clock_sec": 18.728168544,
+      "status": "completed",
+      "budget_honored": false,
+      "budget_note": "max_turns aligned to budget.max_llm_calls=15; tool-call budget not enforced (factory takes no loop_config)",
+      "category": "unknown"
+    },
+    {
+      "agent_id": "coding-agent",
+      "benchmark": "human-eval-plus",
+      "total": 10,
+      "passed": 10,
+      "pass_rate": 1.0,
+      "cost_usd": 0.04207,
+      "tool_calls": 4,
+      "wall_clock_sec": 26.813016857999997,
+      "status": "completed",
+      "budget_honored": false,
+      "budget_note": "max_turns aligned to budget.max_llm_calls=15; tool-call budget not enforced (factory takes no loop_config)",
+      "category": "unknown"
+    },
+    {
+      "agent_id": "coding-agent",
+      "benchmark": "mbpp-plus",
+      "total": 10,
+      "passed": 5,
+      "pass_rate": 0.5,
+      "cost_usd": 0.042256,
+      "tool_calls": 0,
+      "wall_clock_sec": 2.7854595940000024,
+      "status": "error",
+      "budget_honored": false,
+      "budget_note": "max_turns aligned to budget.max_llm_calls=15; tool-call budget not enforced (factory takes no loop_config)",
+      "category": "unknown"
+    },
+    {
+      "agent_id": "coding-agent",
+      "benchmark": "livecodebench-codegeneration",
+      "total": 10,
+      "passed": 9,
+      "pass_rate": 0.9,
+      "cost_usd": 0.263662,
+      "tool_calls": 0,
+      "wall_clock_sec": 434.54187856700014,
+      "status": "error",
+      "budget_honored": false,
+      "budget_note": "max_turns aligned to budget.max_llm_calls=15; tool-call budget not enforced (factory takes no loop_config)",
+      "category": "unknown"
+    },
+    {
+      "agent_id": "coding-agent",
+      "benchmark": "math500",
+      "total": 0,
+      "passed": 0,
+      "pass_rate": 0.0,
+      "cost_usd": 0.0,
+      "tool_calls": 0,
+      "wall_clock_sec": 0.0,
+      "status": "error",
+      "budget_honored": false,
+      "budget_note": "RuntimeError: MATH500Benchmark requires either problems_path= or the `datasets` package installed (pip install datasets).",
+      "category": "unknown"
+    }
+  ]
+}
