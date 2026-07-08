@@ -158,14 +158,18 @@ def grid(
     )
 
     # return_exceptions: one bad cell surfaces as an error, never sinks the grid.
-    results = list(fn.starmap(cells, return_exceptions=True))
+    # wrap_returned_exceptions=False → raw exceptions (Modal's own, e.g.
+    # FunctionTimeoutError from a preempted+restarted long cell) so the type is
+    # legible, not an empty-message wrapper.
+    results = list(fn.starmap(cells, return_exceptions=True, wrap_returned_exceptions=False))
 
     combined: list[dict] = []
     for (a, b, *_), res in zip(cells, results):
-        if isinstance(res, Exception):
+        if isinstance(res, BaseException):
             combined.append(
                 {"agent_id": a, "benchmark": b, "passed": 0, "total": 0,
-                 "pass_rate": 0.0, "status": "error", "error": str(res)[:200]}
+                 "pass_rate": 0.0, "status": "error",
+                 "error": f"{type(res).__name__}: {str(res)[:150]}"}
             )
         else:
             combined.extend(res.get("cells", []))
