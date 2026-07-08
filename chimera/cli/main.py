@@ -136,6 +136,10 @@ def build_parser() -> argparse.ArgumentParser:
     from chimera.cli.bench_fidelity import add_bench_fidelity_parser
     add_bench_fidelity_parser(subparsers)
 
+    # ---- bench-modal subcommand ----
+    from chimera.cli.bench_modal import add_bench_modal_parser
+    add_bench_modal_parser(subparsers)
+
     # ---- bench-fetch subcommand ----
     fetch_parser = subparsers.add_parser(
         "bench-fetch",
@@ -1415,6 +1419,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     elif args.command == "bench-matrix":
         from chimera.cli.bench_matrix import run_bench_matrix
         return run_bench_matrix(args)
+    elif args.command == "bench-modal":
+        from chimera.cli.bench_modal import run_bench_modal
+        return run_bench_modal(args)
     elif args.command == "bench-fidelity":
         from chimera.cli.bench_fidelity import run_bench_fidelity
         return run_bench_fidelity(args)
