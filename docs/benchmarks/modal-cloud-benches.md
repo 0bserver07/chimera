@@ -59,12 +59,29 @@ Each cell runs in its own container; a failed cell surfaces as an `error`
 without sinking the grid; results collect into an agents×benches table and
 `data/modal-grid-<ts>.json`.
 
-### First fan-out result
+### First fan-out result (glm-5.2[1m], n=5, 2026-07-07)
 
-<!-- FILLED IN FROM data/modal-grid-<ts>.json WHEN THE PROOF RUN LANDS -->
-_Proof run in progress: flagship + three loop architectures × {mbpp,
-livecodebench} at n=5, fanned out concurrently on Modal. Table lands here with
-the data file._
+Flagship + three loop architectures × {mbpp, livecodebench}, **8 cells fanned
+out concurrently on Modal** (`data/modal-grid-20260707-201224.json`):
+
+| Agent | LiveCodeBench | MBPP |
+|---|---|---|
+| **coding-agent** (flagship) | **5/5 (100%)** | **5/5 (100%)** |
+| react | 4/5 (80%) | 5/5 (100%) |
+| reflexion | 4/5 (80%) | 5/5 (100%) |
+| tree-of-thought | 3/5 (60%) | 4/5 (80%) |
+
+**8 cells, 0 errors, $0.83.** Two things this shows:
+
+- **The flagship earns "premiere."** `coding-agent` is the *only* agent to go
+  100% on both — and the gap is on the harder column (LiveCodeBench), exactly
+  where the 24-tool assembled stack should pull ahead of a bare loop. At n=5
+  this is a real signal, not the n=1 tie.
+- **Parallel beats serial, and scales.** Wall-clock **611s** vs **782s
+  sum-of-cells** even at 8 cells; the difference is fixed cold-start + image
+  overhead. At the full 91-cell grid, serial ≈ hours while parallel stays ≈ the
+  slowest single cell (~350s) — this is the fix for the single-machine
+  depth-run timeouts.
 
 ## What runs
 
