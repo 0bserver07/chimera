@@ -122,3 +122,77 @@ def main(
             f"${c.get('cost_usd', 0):.4f}  status={c.get('status')}"
         )
     print(json.dumps(result, indent=2))
+
+
+@app.local_entrypoint()
+def grid(
+    agents: str = "coding-agent,react,reflexion,tree-of-thought",
+    benches: str = "mbpp,livecodebench",
+    limit: int = 5,
+    model: str = "glm-5.2[1m]",
+    max_tool_calls: int = 15,
+    max_cost: float = 0.15,
+    gpu: str = "",
+) -> None:
+    """Fan an agents×benches GRID out as CONCURRENT Modal functions.
+
+    Every cell runs in its own Modal container in parallel (``.starmap``), so
+    wall-clock ≈ the slowest single cell — not the serial sum. This is the fix
+    for the local depth-run timeouts.
+    """
+    import os
+    from datetime import datetime
+
+    agent_list = [a.strip() for a in agents.split(",") if a.strip()]
+    bench_list = [b.strip() for b in benches.split(",") if b.strip()]
+    cells = [
+        (a, b, limit, model, max_tool_calls, max_cost)
+        for a in agent_list
+        for b in bench_list
+    ]
+    fn = run_cell_gpu if gpu else run_cell_cpu
+    where = f"GPU={gpu}" if gpu else "CPU"
+    print(
+        f"[chimera-bench grid] {len(agent_list)} agents x {len(bench_list)} benches "
+        f"= {len(cells)} cells, PARALLEL on Modal ({where})..."
+    )
+
+    # return_exceptions: one bad cell surfaces as an error, never sinks the grid.
+    results = list(fn.starmap(cells, return_exceptions=True))
+
+    combined: list[dict] = []
+    for (a, b, *_), res in zip(cells, results):
+        if isinstance(res, Exception):
+            combined.append(
+                {"agent_id": a, "benchmark": b, "passed": 0, "total": 0,
+                 "pass_rate": 0.0, "status": "error", "error": str(res)[:200]}
+            )
+        else:
+            combined.extend(res.get("cells", []))
+
+    # Pass-rate table: agents (rows) × benches (cols).
+    benches_seen = sorted({c["benchmark"] for c in combined})
+    by_cell = {(c["agent_id"], c["benchmark"]): c for c in combined}
+    col_w = max((len(b) for b in benches_seen), default=6)
+    print("\n" + " " * 18 + "".join(f"{b:>{col_w + 2}}" for b in benches_seen))
+    for a in agent_list:
+        row = f"{a:<18}"
+        for b in benches_seen:
+            c = by_cell.get((a, b)) or next(
+                (x for x in combined if x["agent_id"] == a and x["benchmark"].startswith(b)),
+                None,
+            )
+            cellstr = f"{c['passed']}/{c['total']}" if c and c.get("total") else (
+                "err" if c and c["status"] == "error" else "-")
+            row += f"{cellstr:>{col_w + 2}}"
+        print(row)
+
+    total_cost = sum(float(c.get("cost_usd", 0) or 0) for c in combined)
+    errs = sum(1 for c in combined if c.get("status") == "error")
+    print(f"\ncells: {len(combined)} | errors: {errs} | total cost: ${total_cost:.4f}")
+
+    os.makedirs("data", exist_ok=True)
+    out = f"data/modal-grid-{datetime.now().strftime('%Y%m%d-%H%M%S')}.json"
+    with open(out, "w") as fh:
+        json.dump({"model": model, "cells": combined}, fh, indent=2)
+    print(f"saved -> {out}")

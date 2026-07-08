@@ -14,8 +14,8 @@ scheduler fans cells out across containers, each isolated.
 
 - [x] **Slice 1** — `bench-matrix --env modal` (per-task Modal sandbox + `--modal-gpu`). Shipped `865227e`. Live: react×mbpp 100%, Tesla T4 confirmed.
 - [x] **Slice 2** — `scripts/modal_bench_app.py`: one cell runs 100% on Modal (orchestration + inference via `chimera-glm` secret + execution). Shipped `5e4f55c`. Live: react×mbpp n=2 = 2/2.
-- [ ] **Slice 3 (THIS SPEC)** — parallel fan-out: `run_cell_*.starmap(...)` over a cell list; collect → matrix table + JSON.
-- [ ] Proof run: flagship + 3 loops × {mbpp, livecodebench} on Modal, concurrent.
+- [x] **Slice 3 (THIS SPEC)** — parallel fan-out: `grid` entrypoint in `scripts/modal_bench_app.py` uses `fn.starmap(cells, return_exceptions=True)`; collects → agents×benches table + `data/modal-grid-<ts>.json`. Committed.
+- [~] Proof run: flagship + 3 loops × {mbpp, livecodebench} (8 cells) concurrent on Modal — RUNNING (must run in background; the grid exceeds the 10-min foreground cap).
 - [ ] (later) `chimera bench-modal` first-class CLI; GPU model-serving via `ModalProvider`.
 
 ## What already exists (don't rebuild)
