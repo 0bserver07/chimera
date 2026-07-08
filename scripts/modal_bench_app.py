@@ -80,7 +80,7 @@ def _run_one(
 @app.function(
     image=image,
     secrets=[modal.Secret.from_name("chimera-glm")],
-    timeout=1800,
+    timeout=3600,
 )
 def run_cell_cpu(
     agent: str, bench: str, limit: int, model: str, max_tool_calls: int, max_cost: float
@@ -91,7 +91,7 @@ def run_cell_cpu(
 @app.function(
     image=image,
     secrets=[modal.Secret.from_name("chimera-glm")],
-    timeout=1800,
+    timeout=3600,
     gpu="T4",
 )
 def run_cell_gpu(
