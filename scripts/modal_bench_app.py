@@ -32,7 +32,7 @@ _DATASETS = Path.home() / ".chimera" / "datasets"
 # HOME=/root so the benches' ~/.chimera/datasets lookup resolves to the copy.
 image = (
     modal.Image.debian_slim(python_version="3.11")
-    .pip_install("anthropic", "httpx")
+    .pip_install("anthropic", "httpx", "datasets")
     .env({"PYTHONPATH": "/pkg", "HOME": "/root"})
     .add_local_dir(str(_CHIMERA_PKG), "/pkg/chimera", copy=True)
     .add_local_dir(str(_DATASETS), "/root/.chimera/datasets", copy=True)
