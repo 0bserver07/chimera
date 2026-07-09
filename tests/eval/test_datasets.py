@@ -378,3 +378,216 @@ def test_fetch_aimo_stages_coerces_answer_and_grades(
     # The coerced ground truth grades a matching agent answer, rejects a miss.
     assert bench.evaluate(tasks[0], "... so ANSWER: 116", env=None) is True
     assert bench.evaluate(tasks[0], "... so ANSWER: 999", env=None) is False
+
+
+# --------------------------------------------------------------------------
+# SWE-family staging (issue: widen the SWE benchmark family)
+# --------------------------------------------------------------------------
+
+# The official SWE/SWT/SWE-bench-Verified datasets store FAIL_TO_PASS /
+# PASS_TO_PASS as JSON-encoded *strings*; a faithful adapter must decode them.
+_SWE_VERIFIED_ROW = {
+    "repo": "astropy/astropy",
+    "instance_id": "astropy__astropy-12907",
+    "base_commit": "d16bfe05a744909de4b27f5875fe0d4ed41ce607",
+    "patch": "diff --git a/astropy/x.py b/astropy/x.py\n",
+    "test_patch": "diff --git a/astropy/tests/test_x.py b/astropy/tests/test_x.py\n",
+    "problem_statement": "separability_matrix is wrong for nested models",
+    "hints_text": "",
+    "version": "4.3",
+    "FAIL_TO_PASS": '["astropy/tests/test_x.py::test_a", "astropy/tests/test_x.py::test_b"]',
+    "PASS_TO_PASS": '["astropy/tests/test_x.py::test_c"]',
+    "environment_setup_commit": "298ccb478e6bf092953bca67a3d29dc6c35f6752",
+    "difficulty": "15 min - 1 hour",
+}
+
+
+def test_fetch_swe_bench_verified_stages_and_carries_f2p_p2p(
+    staging: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Verified stages via hf-rows; the adapter decodes F2P/P2P to lists.
+
+    The gold subset's whole value is faithful FAIL_TO_PASS / PASS_TO_PASS
+    grading, so the loaded task MUST carry both as non-empty lists (not the raw
+    JSON strings the dataset ships).
+    """
+    monkeypatch.setattr(ds, "_urlopen", _single_page(_SWE_VERIFIED_ROW))
+
+    staged = ds.fetch("swe-bench-verified")
+    assert staged.name == "verified-test.jsonl"
+    assert staged.parent.name == "swe-bench-verified"
+
+    from chimera.cli.main import _load_benchmark
+
+    bench = _load_benchmark("swe-bench-verified")
+    tasks = bench.tasks()
+    assert len(tasks) == 1
+    task = tasks[0]
+    assert task["id"] == "astropy__astropy-12907"
+    # JSON-string columns are decoded to lists of node ids.
+    assert task["fail_to_pass"] == [
+        "astropy/tests/test_x.py::test_a",
+        "astropy/tests/test_x.py::test_b",
+    ]
+    assert task["pass_to_pass"] == ["astropy/tests/test_x.py::test_c"]
+    # Hyphenless alias resolves to the same staged file.
+    assert ds.staged_path("swebench-verified") == staged
+
+
+def test_fetch_swt_bench_drops_bm25_text_and_decodes_f2p(
+    staging: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """SWT-Bench stages via hf-rows; the bulky bm25 ``text`` column is dropped
+    at stage time and F2P/P2P JSON strings are decoded by the adapter."""
+    row = {
+        "instance_id": "django__django-15202",
+        "text": "BM25 RETRIEVAL CONTEXT " * 5000,  # the ~94%-of-row bloat
+        "repo": "django/django",
+        "base_commit": "4fd3044ca0135da903a70dfb66992293f529ecf1",
+        "problem_statement": "URLField.clean crashes on some inputs",
+        "hints_text": "",
+        "patch": "diff --git a/django/forms/fields.py b/django/forms/fields.py\n",
+        "test_patch": "diff --git a/tests/test_urlfield.py b/tests/test_urlfield.py\n",
+        "version": "4.1",
+        "FAIL_TO_PASS": '["test_urlfield_clean_invalid (forms_tests.field_tests.test_urlfield.URLFieldTest)"]',
+        "PASS_TO_PASS": '["test_urlfield_clean (forms_tests.field_tests.test_urlfield.URLFieldTest)"]',
+    }
+    monkeypatch.setattr(ds, "_urlopen", _single_page(row))
+
+    staged = ds.fetch("swt-bench")
+    assert staged.name == "lite-test.jsonl" and staged.parent.name == "swt-bench"
+
+    # The bm25 text field never lands on disk (kept the file ~SWE-bench-sized).
+    staged_row = json.loads(staged.read_text().splitlines()[0])
+    assert "text" not in staged_row
+    assert staged_row["instance_id"] == "django__django-15202"
+
+    from chimera.cli.main import _load_benchmark
+
+    bench = _load_benchmark("swt-bench")
+    tasks = bench.tasks()
+    assert len(tasks) == 1
+    task = tasks[0]
+    # JSON-string columns are decoded to lists (adapter field-mapping fix).
+    assert task["FAIL_TO_PASS"] == [
+        "test_urlfield_clean_invalid (forms_tests.field_tests.test_urlfield.URLFieldTest)"
+    ]
+    assert task["PASS_TO_PASS"] == [
+        "test_urlfield_clean (forms_tests.field_tests.test_urlfield.URLFieldTest)"
+    ]
+    assert ds.staged_path("swtbench") == staged
+
+
+def test_fetch_multi_swe_bench_transform_reduces_and_stamps_python(
+    staging: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Multi-SWE-bench python streams via url-jsonl-transform: heavy execution
+    dicts are dropped, ``language=python`` is stamped, and it loads."""
+    rows = [
+        {  # a real python row carries big result dicts we do not need
+            "repo": "astropy",
+            "instance_id": "astropy__astropy-12907",
+            "base_commit": "d16bfe05a744909de4b27f5875fe0d4ed41ce607",
+            "patch": "diff --git a/astropy/x.py b/astropy/x.py\n",
+            "test_patch": "diff --git a/astropy/tests/test_x.py b/astropy/tests/test_x.py\n",
+            "problem_statement": "nested separability is wrong",
+            "hints_text": "",
+            "version": 4.3,  # upstream stores this as a float
+            "run_result": {"passed_count": 13, "failed_count": 2, "x": "y" * 5000},
+            "p2p_tests": {"a::t": {"run": "PASS"}},
+            "fix_patch_result": {"passed_count": 15},
+            "resolved_issues": [{"number": 0, "body": "z" * 5000}],
+        },
+        {  # a row without an instance id is dropped by the transform
+            "repo": "foo",
+            "problem_statement": "no id",
+        },
+    ]
+    payload = "\n".join(json.dumps(r) for r in rows).encode()
+    monkeypatch.setattr(ds, "_urlopen", lambda url, timeout=0: _FakeResponse(payload))
+
+    staged = ds.fetch("multi-swe-bench")
+    assert staged.name == "python-test.json"
+    assert staged.parent.name == "multi-swe-bench"
+
+    reduced = json.loads(staged.read_text())
+    assert len(reduced) == 1  # the id-less row was dropped
+    row0 = reduced[0]
+    assert row0["language"] == "python"  # stamped from the source path
+    assert row0["version"] == "4.3"  # float coerced to str
+    # Heavy execution-result payloads never staged.
+    assert "run_result" not in row0 and "resolved_issues" not in row0
+    assert "private" not in json.dumps(row0)
+
+    from chimera.cli.main import _load_benchmark
+
+    bench = _load_benchmark("multi-swe-bench")
+    tasks = bench.tasks()
+    assert len(tasks) == 1
+    assert tasks[0]["language"] == "python"
+    assert tasks[0]["test_patch"]
+    assert ds.staged_path("multiswebench") == staged
+
+
+def test_fetch_swe_polybench_stages_and_maps_upstream_fields(
+    staging: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """SWE-PolyBench stages via hf-rows; the adapter reads the upstream HF
+    column names (``task_category``, ``modified_nodes``) not the older JSON ones."""
+    row = {
+        "repo": "google/gson",
+        "instance_id": "google__gson-2337",
+        "base_commit": "0adcdc80d5ef3a40086a8abd6e2f55164a7c2597",
+        "patch": "diff --git a/gson/x.java b/gson/x.java\n",
+        "test_patch": "diff --git a/gson/test.java b/gson/test.java\n",
+        "problem_statement": "JsonReader fails on C-style comments",
+        "hints_text": "",
+        "language": "Java",  # upstream is capitalized
+        "task_category": "Bug Fix",  # upstream column name + label style
+        "modified_nodes": '["gson/src/JsonReader.java->program->class:JsonReader"]',
+        "test_command": "mvn -q test",
+    }
+    monkeypatch.setattr(ds, "_urlopen", _single_page(row))
+
+    staged = ds.fetch("swe-polybench")
+    assert staged.name == "test.jsonl" and staged.parent.name == "swe-polybench"
+
+    from chimera.cli.main import _load_benchmark
+
+    bench = _load_benchmark("swe-polybench")
+    tasks = bench.tasks()
+    assert len(tasks) == 1
+    task = tasks[0]
+    assert task["id"] == "google__gson-2337"
+    assert task["language"] == "java"  # lowercased
+    assert task["task_type"] == "bug_fix"  # "Bug Fix" -> snake_case
+    # modified_nodes (JSON string) -> cst_nodes list.
+    assert task["cst_nodes"] == [
+        "gson/src/JsonReader.java->program->class:JsonReader"
+    ]
+    assert ds.staged_path("swepolybench") == staged
+
+
+def test_new_swe_family_benches_are_available(staging: Path) -> None:
+    """The four newly staged SWE-family benches show up in ``available()``."""
+    names = ds.available()
+    for name in (
+        "swe-bench-verified",
+        "swt-bench",
+        "multi-swe-bench",
+        "swe-polybench",
+    ):
+        assert name in names
+
+
+def test_swe_lancer_is_not_fetchable(staging: Path) -> None:
+    """SWE-Lancer is intentionally NOT stageable — no cleanly public HF dataset.
+
+    (Its adapter's ``evaluate`` also raises NotImplementedError by design, so
+    staging would only let it LOAD, not grade.) Requesting a fetch is a loud
+    error listing the fetchable names, not a silent miss.
+    """
+    assert "swe-lancer" not in ds.FETCHES
+    assert ds.staged_path("swe-lancer") is None
+    with pytest.raises(ValueError, match="Fetchable:"):
+        ds.fetch("swe-lancer")

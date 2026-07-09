@@ -29,6 +29,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from chimera.eval.benchmarks.swe_bench import _as_test_list
 from chimera.eval.harness import Benchmark
 
 
@@ -151,8 +152,14 @@ class SWTBench(Benchmark):
                 hints_text=item.get("hints_text", ""),
                 test_patch=item.get("test_patch", ""),
                 patch=item.get("patch", ""),
-                fail_to_pass=item.get("FAIL_TO_PASS", item.get("fail_to_pass", [])) or [],
-                pass_to_pass=item.get("PASS_TO_PASS", item.get("pass_to_pass", [])) or [],
+                # Official SWT/SWE-bench datasets store these columns as
+                # JSON-encoded strings; normalize to a list of node ids.
+                fail_to_pass=_as_test_list(
+                    item.get("FAIL_TO_PASS", item.get("fail_to_pass"))
+                ),
+                pass_to_pass=_as_test_list(
+                    item.get("PASS_TO_PASS", item.get("pass_to_pass"))
+                ),
             ))
 
         if self._limit:

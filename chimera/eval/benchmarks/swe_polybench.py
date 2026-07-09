@@ -32,6 +32,36 @@ LANGUAGE_TEST_COMMANDS: dict[str, str] = {
 }
 
 
+def _as_str_list(value: Any) -> list[str]:
+    """Normalize a list-valued field to a list of strings.
+
+    The upstream HF dataset stores ``modified_nodes`` (and similar columns) as
+    a *JSON-encoded string* (e.g. ``'["a", "b"]'``); other dumps hand over a
+    native list. Both — plus the empty/absent case — resolve here.
+    """
+    if value is None:
+        return []
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return []
+        try:
+            value = json.loads(text)
+        except json.JSONDecodeError:
+            return [text]
+    if isinstance(value, (list, tuple)):
+        return [str(item) for item in value if str(item).strip()]
+    text = str(value).strip()
+    return [text] if text else []
+
+
+def _normalize_task_type(value: Any) -> str:
+    """Canonicalize an upstream task label to snake_case (``"Bug Fix"`` ->
+    ``"bug_fix"``). Falls back to ``"bug_fix"`` for blank/missing values."""
+    text = str(value or "").strip().lower().replace(" ", "_")
+    return text or "bug_fix"
+
+
 @dataclass
 class SWEPolyBenchInstance:
     """A single SWE-PolyBench task instance.
@@ -165,11 +195,19 @@ class SWEPolyBench(Benchmark):
                         item.get("description", item.get("prompt", "")),
                     ),
                     language=language,
-                    task_type=item.get("task_type", "bug_fix"),
+                    # Upstream HF column is ``task_category`` ("Bug Fix" etc.);
+                    # older JSON dumps used ``task_type``.
+                    task_type=_normalize_task_type(
+                        item.get("task_category", item.get("task_type"))
+                    ),
                     test_patch=item.get("test_patch", ""),
                     patch=item.get("patch", ""),
-                    modified_files=list(item.get("modified_files", []) or []),
-                    cst_nodes=list(item.get("cst_nodes", []) or []),
+                    modified_files=_as_str_list(item.get("modified_files")),
+                    # Upstream HF column is ``modified_nodes`` (a JSON string);
+                    # older dumps used ``cst_nodes``.
+                    cst_nodes=_as_str_list(
+                        item.get("modified_nodes", item.get("cst_nodes"))
+                    ),
                     hints_text=item.get("hints_text", ""),
                 )
             )

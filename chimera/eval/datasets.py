@@ -9,12 +9,19 @@ redistributable: ``chimera bench-fetch <name>`` downloads them once into
 ``_load_benchmark`` auto-discovers staged files so a fetched bench runs with
 no ``--dataset`` flag at all.
 
-Two fetch kinds:
+Three fetch kinds:
 
 * ``url`` — a single direct file download.
 * ``hf-rows`` — page through the Hugging Face datasets-server ``/rows`` API
   (100 rows per request) and write one JSON object per line, which is exactly
-  the JSONL every adapter here accepts.
+  the JSONL every adapter here accepts. When a per-bench transform is
+  registered in :data:`_TRANSFORMS`, each row is reduced/projected before it is
+  written (used to drop bulky columns an adapter never reads, e.g. SWT-Bench's
+  bm25 retrieval ``text``).
+* ``url-jsonl-transform`` — stream a large JSONL source one line at a time,
+  apply the bench's :data:`_TRANSFORMS` row transform, and write a JSON list of
+  the reduced tasks (used for multi-hundred-MB upstream files whose useful
+  payload is a small fraction of each row).
 
 Benches whose datasets are gated (authenticated download or unclear license)
 are intentionally absent — staging those stays a manual, documented step.
@@ -119,6 +126,63 @@ FETCHES: dict[str, FetchSpec] = {
             "the HF datasets-server API."
         ),
     ),
+    "swe-bench-verified": FetchSpec(
+        bench="swe-bench-verified",
+        out="swe-bench-verified/verified-test.jsonl",
+        kind="hf-rows",
+        source="princeton-nlp/SWE-bench_Verified",
+        note=(
+            "SWE-bench Verified test split — 500 human-validated instances "
+            "(the gold subset), via the HF datasets-server API. Rows carry the "
+            "FAIL_TO_PASS / PASS_TO_PASS columns (JSON-encoded strings) the "
+            "faithful grader needs; the adapter normalizes them to lists on "
+            "load."
+        ),
+    ),
+    "swt-bench": FetchSpec(
+        bench="swt-bench",
+        out="swt-bench/lite-test.jsonl",
+        kind="hf-rows",
+        source="eth-sri/SWT-bench_Lite_bm25_27k_zsb",
+        note=(
+            "SWT-Bench Lite test split — 276 test-generation instances over "
+            "real GitHub issues, via the HF datasets-server API. The bulky "
+            "bm25 retrieval `text` field (~94% of each row) is dropped at "
+            "stage time; the SWE-bench-shaped fields (patch, test_patch, "
+            "FAIL_TO_PASS, PASS_TO_PASS) are kept. Verified / full splits are "
+            "a manual --dataset."
+        ),
+    ),
+    "multi-swe-bench": FetchSpec(
+        bench="multi-swe-bench",
+        out="multi-swe-bench/python-test.json",
+        kind="url-jsonl-transform",
+        source=(
+            "https://huggingface.co/datasets/ByteDance-Seed/Multi-SWE-bench/"
+            "resolve/main/python/multi_swe_bench_python.jsonl"
+        ),
+        note=(
+            "Multi-SWE-bench PYTHON split only (the upstream repo ships one "
+            "JSONL per language; ~31 MB download -> a few MB staged). Rows are "
+            "reduced to adapter-ready fields (heavy execution-result dicts "
+            "dropped) and stamped language=python. Other languages "
+            "(java/go/js/ts/rust/...) are a manual --dataset from "
+            "resolve/main/<lang>/multi_swe_bench_<lang>.jsonl."
+        ),
+    ),
+    "swe-polybench": FetchSpec(
+        bench="swe-polybench",
+        out="swe-polybench/test.jsonl",
+        kind="hf-rows",
+        source="AmazonScience/SWE-PolyBench",
+        note=(
+            "SWE-PolyBench test split — 2,110 polyglot (python/java/js/ts) "
+            "repository-level instances, via the HF datasets-server API. Rows "
+            "carry task_category, modified_nodes, F2P/P2P and a per-language "
+            "test_command; staged verbatim (~100 MB — the P2P regression-test "
+            "lists dominate, kept for future faithful F2P/P2P grading)."
+        ),
+    ),
     "livecodebench": FetchSpec(
         bench="livecodebench",
         out="livecodebench/release_v6-new.json",
@@ -207,6 +271,10 @@ _ALIASES: dict[str, str] = {
     "mbppplus": "mbpp-plus",
     "swebench": "swe-bench",
     "swe-bench-lite": "swe-bench",
+    "swebench-verified": "swe-bench-verified",
+    "swtbench": "swt-bench",
+    "multiswebench": "multi-swe-bench",
+    "swepolybench": "swe-polybench",
     "lcb": "livecodebench",
     "humaneval": "human-eval",
     "humanevalx": "humaneval-x",
@@ -285,9 +353,54 @@ def _transform_lcb_row(row: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
-#: Per-bench row transforms for ``url-jsonl-transform`` fetches.
+def _transform_swt_row(row: dict[str, Any]) -> dict[str, Any] | None:
+    """Drop SWT-Bench's bulky bm25 retrieval ``text`` column.
+
+    The upstream ``eth-sri/SWT-bench_*_bm25_*`` rows carry a ~116 KB bm25
+    retrieval ``text`` field (≈94% of each row) that the SWT-Bench adapter
+    never reads — it grades from ``patch`` / ``test_patch`` / ``FAIL_TO_PASS``
+    / ``PASS_TO_PASS``. Everything except ``text`` is kept verbatim so the
+    staged file stays SWE-bench-shaped and small. Rows without an instance id
+    are dropped.
+    """
+    if not (row.get("instance_id") or row.get("id")):
+        return None
+    return {k: v for k, v in row.items() if k != "text"}
+
+
+def _transform_multi_swe_row(row: dict[str, Any]) -> dict[str, Any] | None:
+    """Reduce a Multi-SWE-bench python row to adapter-ready fields.
+
+    The upstream ``python/multi_swe_bench_python.jsonl`` rows carry heavy
+    execution-result dicts (``run_result``, ``*_tests``, ``fix_patch_result``,
+    ``resolved_issues`` ...) the :class:`MultiSWEBench` adapter never reads.
+    Keep only the SWE-bench-shaped fields and stamp ``language=python`` — the
+    language is implied by the source file path, not carried as a row field.
+    Rows without an instance id are dropped.
+    """
+    instance_id = row.get("instance_id") or row.get("id") or ""
+    if not instance_id:
+        return None
+    return {
+        "instance_id": instance_id,
+        "repo": row.get("repo", ""),
+        "base_commit": row.get("base_commit", ""),
+        "problem_statement": row.get("problem_statement", ""),
+        "hints_text": row.get("hints_text", ""),
+        "patch": row.get("patch") or row.get("fix_patch", ""),
+        "test_patch": row.get("test_patch", ""),
+        "version": str(row.get("version", "")),
+        "language": "python",
+    }
+
+
+#: Per-bench row transforms. Consulted by both ``url-jsonl-transform`` fetches
+#: and ``hf-rows`` fetches: a transform returns a reduced row dict, or ``None``
+#: to drop the row. Benches with no entry stage their rows verbatim.
 _TRANSFORMS: dict[str, Any] = {
     "livecodebench": _transform_lcb_row,
+    "swt-bench": _transform_swt_row,
+    "multi-swe-bench": _transform_multi_swe_row,
 }
 
 
@@ -316,7 +429,14 @@ def _fetch_jsonl_transform(spec: FetchSpec, dest: Path) -> None:
 
 
 def _fetch_hf_rows(spec: FetchSpec, dest: Path) -> None:
-    """Page through the datasets-server rows API, writing JSONL to *dest*."""
+    """Page through the datasets-server rows API, writing JSONL to *dest*.
+
+    When a row transform is registered for the bench in :data:`_TRANSFORMS`,
+    each row is reduced/projected before it is written (and dropped when the
+    transform returns ``None``); pagination still keys off the raw page size so
+    dropped rows never short-circuit it.
+    """
+    transform = _TRANSFORMS.get(spec.bench)
     offset = 0
     with dest.open("w", encoding="utf-8") as out:
         while True:
@@ -334,7 +454,12 @@ def _fetch_hf_rows(spec: FetchSpec, dest: Path) -> None:
                 payload = json.loads(resp.read().decode("utf-8"))
             rows = payload.get("rows", [])
             for entry in rows:
-                out.write(json.dumps(entry.get("row", {})) + "\n")
+                row = entry.get("row", {})
+                if transform is not None:
+                    row = transform(row)
+                    if row is None:
+                        continue
+                out.write(json.dumps(row) + "\n")
             if len(rows) < _HF_PAGE:
                 break
             offset += _HF_PAGE
