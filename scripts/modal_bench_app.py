@@ -88,7 +88,11 @@ def _run_one(
 @app.function(
     image=image,
     secrets=[modal.Secret.from_name("chimera-glm")],
-    timeout=3600,
+    # Sized from measured per-task time (playbook 13 rule 4): the flagship runs
+    # ~46.5s/task, so a full mbpp column (427 tasks) needs ~5.5h; 12h covers
+    # every full-dataset column with headroom. Per-task budget caps still bound
+    # the spend — the timeout bounds only the wall clock.
+    timeout=43200,
     max_containers=_MAX_CONCURRENCY,
 )
 def run_cell_cpu(
