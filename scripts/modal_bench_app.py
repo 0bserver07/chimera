@@ -40,6 +40,14 @@ image = (
 
 app = modal.App("chimera-bench")
 
+# Cap how many cells run at once. Modal can fan out to hundreds of containers,
+# but every cell drives the SAME single model account (the chimera-glm secret) —
+# so unbounded fan-out is dozens of concurrent LLM streams against one account's
+# rate limit, which collapses into mass errors. Keep this at the account's safe
+# concurrency (a handful), NOT Modal's max. Raise it only if the account's rate
+# limit genuinely allows more.
+_MAX_CONCURRENCY = 4
+
 
 def _run_one(
     agent: str, bench: str, limit: int, model: str, max_tool_calls: int, max_cost: float
@@ -81,6 +89,7 @@ def _run_one(
     image=image,
     secrets=[modal.Secret.from_name("chimera-glm")],
     timeout=3600,
+    max_containers=_MAX_CONCURRENCY,
 )
 def run_cell_cpu(
     agent: str, bench: str, limit: int, model: str, max_tool_calls: int, max_cost: float
@@ -93,6 +102,7 @@ def run_cell_cpu(
     secrets=[modal.Secret.from_name("chimera-glm")],
     timeout=3600,
     gpu="T4",
+    max_containers=_MAX_CONCURRENCY,
 )
 def run_cell_gpu(
     agent: str, bench: str, limit: int, model: str, max_tool_calls: int, max_cost: float
