@@ -142,6 +142,40 @@ class TestBudgetedProvider:
         provider.complete([Message.user("again")])
         assert enforcer.exhausted
 
+    def test_async_complete_records_cost_and_trips(self) -> None:
+        # The async gap: assembled agents drive async_complete; without the
+        # wrapper max_cost never tripped. 1M input tokens prices well over $0.01.
+        import asyncio
+
+        enforcer = BudgetEnforcer(BudgetSpec(max_cost_usd=0.01))
+        provider = BudgetedProvider(_EchoProvider(), enforcer)
+        asyncio.run(provider.async_complete([Message.user("hi")]))
+        assert enforcer.tally.llm_calls == 1
+        assert enforcer.tally.cost_usd > 0.01
+        assert enforcer.exhausted  # cost cap now trips on the async path
+
+    def test_async_stream_records_one_call(self) -> None:
+        import asyncio
+
+        enforcer = BudgetEnforcer(BudgetSpec(max_llm_calls=1))
+        provider = BudgetedProvider(_EchoProvider(), enforcer)
+
+        async def _drain() -> None:
+            async for _ev in provider.async_stream([Message.user("hi")]):
+                pass
+
+        asyncio.run(_drain())
+        assert enforcer.tally.llm_calls == 1
+        assert enforcer.exhausted
+
+    def test_sync_stream_records_cost_from_done_event(self) -> None:
+        enforcer = BudgetEnforcer(BudgetSpec(max_llm_calls=1))
+        provider = BudgetedProvider(_EchoProvider(), enforcer)
+        for _ev in provider.stream([Message.user("hi")]):
+            pass
+        assert enforcer.tally.llm_calls == 1
+        assert enforcer.tally.cost_usd > 0  # done event carried usage
+
     def test_delegates_properties(self) -> None:
         provider = BudgetedProvider(_EchoProvider(), BudgetEnforcer(BudgetSpec()))
         assert provider.model_name == "glm-5"

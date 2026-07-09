@@ -186,19 +186,61 @@ class BudgetedProvider:
         self._inner = inner
         self._enforcer = enforcer
 
+    def _cost_of(self, usage: Any) -> float:
+        """Price a usage dict, defaulting to 0.0 on any failure."""
+        if not usage:
+            return 0.0
+        try:
+            from chimera.providers.cost import calculate_cost
+
+            return calculate_cost(self.model_name, usage)
+        except Exception:
+            return 0.0
+
     def complete(self, messages: Any, **kwargs: Any) -> Any:
         response = self._inner.complete(messages, **kwargs)
-        cost = 0.0
-        usage = getattr(response, "usage", None)
-        if usage:
-            try:
-                from chimera.providers.cost import calculate_cost
-
-                cost = calculate_cost(self.model_name, usage)
-            except Exception:
-                cost = 0.0
-        self._enforcer.record_llm_call(cost=cost)
+        self._enforcer.record_llm_call(cost=self._cost_of(getattr(response, "usage", None)))
         return response
+
+    async def async_complete(self, messages: Any, **kwargs: Any) -> Any:
+        """Async non-streaming call — record cost so the budget can trip.
+
+        The assembled ``AgentLoop`` (``chimera code`` and its presets) drives
+        the provider through the async surface; without this wrapper those
+        calls fell through ``__getattr__`` unrecorded, so ``max_cost`` /
+        ``max_llm_calls`` never tripped for assembled agents.
+        """
+        response = await self._inner.async_complete(messages, **kwargs)
+        self._enforcer.record_llm_call(cost=self._cost_of(getattr(response, "usage", None)))
+        return response
+
+    def stream(self, messages: Any, **kwargs: Any) -> Any:
+        recorded = False
+        for event in self._inner.stream(messages, **kwargs):
+            usage = getattr(event, "usage", None)
+            if usage and not recorded:
+                self._enforcer.record_llm_call(cost=self._cost_of(usage))
+                recorded = True
+            yield event
+        if not recorded:  # a stream with no usage event still is one call
+            self._enforcer.record_llm_call(cost=0.0)
+
+    async def async_stream(self, messages: Any, **kwargs: Any) -> Any:
+        """Async streaming call — record cost off the usage-bearing event.
+
+        ``StreamEvent.usage`` is set on the terminal ``done`` event, so cost is
+        recorded once, near stream end — the call that tips the budget is
+        allowed to finish, then the enforcer trips on the next check.
+        """
+        recorded = False
+        async for event in self._inner.async_stream(messages, **kwargs):
+            usage = getattr(event, "usage", None)
+            if usage and not recorded:
+                self._enforcer.record_llm_call(cost=self._cost_of(usage))
+                recorded = True
+            yield event
+        if not recorded:
+            self._enforcer.record_llm_call(cost=0.0)
 
     @property
     def model_name(self) -> str:
