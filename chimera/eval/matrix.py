@@ -49,9 +49,12 @@ class MatrixCell:
             normalized budget unit for agents routed through
             ``tool_executor``).
         wall_clock_sec: Wall-clock seconds of the cell's last attempt.
-        status: Terminal status of the last attempt (``completed`` |
-            ``budget_exhausted`` | ``error`` | ``timeout``), or ``error`` when
-            the whole cell failed to run.
+        status: Aggregate status across ALL of the cell's task attempts
+            (see :func:`_derive_cell_status`): ``completed`` |
+            ``budget_exhausted`` | ``timeout`` | ``error`` (every attempt
+            errored, or the whole cell failed to run) | ``partial_error``
+            (a mix — some attempts errored, the passed count is from the
+            attempts that ran).
         budget_honored: ``False`` when the runner could only honor part of the
             budget (e.g. wall-clock/cost but not tool-calls) — keeps the
             "controlled" claim honest per the spec.
@@ -286,6 +289,11 @@ class _HarnessAgent:
         self.harvest_env_artifacts = harvest_env_artifacts
         self.last_result: AgentRunResult | None = None
         self.last_wall_clock_sec: float = 0.0
+        #: Status of EVERY task attempt in this cell, in order. The cell's
+        #: aggregate status derives from all of them (see
+        #: :func:`_derive_cell_status`) — using only the last attempt mislabeled
+        #: a cell "error" when its final task errored after real passes.
+        self.statuses: list[str] = []
 
     def run(self, prompt: str, env: Environment | None = None) -> AgentResult:
         """Run the wrapped runner and map its result onto an ``AgentResult``.
@@ -303,6 +311,7 @@ class _HarnessAgent:
         result = self.runner.run(prompt, env, self.budget)
         self.last_wall_clock_sec = time.monotonic() - start
         self.last_result = result
+        self.statuses.append(result.status)
         completed = result.status == "completed"
 
         # File-artifact rescue: when the answer carries no gradeable code fence,
@@ -350,6 +359,33 @@ def _budget_flags(result: AgentRunResult | None) -> tuple[bool, str]:
     return True, ""
 
 
+def _derive_cell_status(statuses: list[str]) -> str:
+    """Reduce per-task statuses to one honest cell status.
+
+    Rules:
+        - no attempts / all identical → that status (``completed`` default);
+        - a mix that includes ``error`` → ``partial_error`` — the passed count
+          is real, but not every task ran cleanly (previously the cell just
+          took the LAST task's status, so one trailing error mislabeled a cell
+          full of genuine passes as ``error``, and a trailing success masked
+          earlier errors as ``completed``);
+        - an error-free mix → the most limit-bound status present
+          (``timeout`` over ``budget_exhausted``) so budget/deadline pressure
+          stays visible in the grid.
+    """
+    if not statuses:
+        return "completed"
+    unique = set(statuses)
+    if len(unique) == 1:
+        return statuses[0]
+    if "error" in unique:
+        return "partial_error"
+    for severe in ("timeout", "budget_exhausted"):
+        if severe in unique:
+            return severe
+    return "completed"
+
+
 def _run_cell(
     runner: AgentRunner,
     benchmark: Benchmark,
@@ -377,7 +413,7 @@ def _run_cell(
         harness = Harness(benchmark, shim, env_factory=env_factory, graders=graders)
         result = harness.run()
         last = shim.last_result
-        status = last.status if last is not None else "completed"
+        status = _derive_cell_status(shim.statuses)
         tool_calls = last.tool_calls if last is not None else 0
         wall_clock = 0.0
         if last is not None:
