@@ -74,6 +74,10 @@ class MatrixCell:
     budget_honored: bool = True
     budget_note: str = ""
     category: FailureCategory = FailureCategory.UNKNOWN
+    #: Per-task terminal-status tally, e.g. ``{"completed": 480, "error": 20}``.
+    #: On a ``partial_error`` cell this is what separates real failures from
+    #: infra errors — without it a full-column pass rate is only a lower bound.
+    status_counts: dict[str, int] = field(default_factory=dict)
 
 
 @dataclass
@@ -414,6 +418,9 @@ def _run_cell(
         result = harness.run()
         last = shim.last_result
         status = _derive_cell_status(shim.statuses)
+        from collections import Counter
+
+        status_counts = dict(Counter(shim.statuses))
         tool_calls = last.tool_calls if last is not None else 0
         wall_clock = 0.0
         if last is not None:
@@ -432,6 +439,7 @@ def _run_cell(
             budget_honored=honored,
             budget_note=note,
             category=classify_failure(status, note),
+            status_counts=status_counts,
         )
     except Exception as exc:  # noqa: BLE001 — one failing cell must not abort the grid
         return MatrixCell(

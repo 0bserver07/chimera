@@ -81,3 +81,8 @@ def test_derive_helper_edge_cases() -> None:
     assert _derive_cell_status([]) == "completed"
     assert _derive_cell_status(["timeout", "budget_exhausted"]) == "timeout"
     assert _derive_cell_status(["completed", "error", "budget_exhausted"]) == "partial_error"
+
+
+def test_status_counts_tally_on_cell() -> None:
+    cell = _cell(["completed", "completed", "error"])
+    assert cell.status_counts == {"completed": 2, "error": 1}

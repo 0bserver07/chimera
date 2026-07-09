@@ -301,7 +301,9 @@ def collect(run_id: str) -> None:
     """Collect a detached run's cells from the Volume into data/ + a table."""
     import io
 
-    results_volume.reload()
+    # NOTE: no reload() — that API is container-only ("can only be called from
+    # within a running function"); a local entrypoint's listdir/read_file hit
+    # the Volume service directly and always see committed state.
     combined: list[dict] = []
     expected: list[str] = []
     for entry in results_volume.listdir(f"/{run_id}"):
