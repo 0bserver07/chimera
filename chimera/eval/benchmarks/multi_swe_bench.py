@@ -24,13 +24,20 @@ References:
 from __future__ import annotations
 
 import json
+import shlex
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from chimera.eval.benchmarks.runners import RUNNERS, LanguageRunner, get_runner
 from chimera.eval.benchmarks.runners.base import RunnerResult, SkipReason
+from chimera.eval.benchmarks.swe_bench import (
+    DEFAULT_PYTEST_CMD,
+    DEFAULT_TEST_CHUNK_SIZE,
+    _as_test_list,
+    _chunk_test_ids,
+)
 from chimera.eval.harness import Benchmark
 
 #: Languages supported by the bundled runners.
@@ -48,6 +55,27 @@ def _normalize_language(language: str | None) -> str:
     return aliases.get(norm, norm)
 
 
+def _named_test_list(value: Any) -> list[str]:
+    """Normalize a MultiSWE-bench FAIL_TO_PASS / PASS_TO_PASS field to node ids.
+
+    Upstream MultiSWE-bench keeps the resolved-test information under a
+    *mapping* of test name to its execution record (``f2p_tests`` /
+    ``p2p_tests``); other dumps use the SWE-bench JSON-string-list encoding. A
+    mapping resolves to its keys (the test node ids); everything else defers to
+    :func:`~chimera.eval.benchmarks.swe_bench._as_test_list` (JSON string,
+    native list, bare id, or empty).
+
+    Args:
+        value: The raw field value.
+
+    Returns:
+        A list of test node ids (empty when *value* is absent / blank).
+    """
+    if isinstance(value, dict):
+        return [str(k) for k in value if str(k).strip()]
+    return _as_test_list(value)
+
+
 @dataclass
 class MultiSWEBenchInstance:
     """A single MultiSWE-bench task instance.
@@ -63,6 +91,14 @@ class MultiSWEBenchInstance:
         patch: Gold patch (reference only).
         hints_text: Optional hints from the upstream dataset.
         version: Optional version label kept for parity with upstream JSON.
+        fail_to_pass: Pytest node ids that must pass once the fix is applied.
+            Populated for Python instances only (their ids are genuine pytest
+            node ids); empty for Java / Go / JS / TS / Rust, which grade via
+            the language runner. Absent from the currently staged Python subset
+            (the staging transform drops the upstream ``*_tests`` records), so
+            this is empty there too and grading falls back to the runner.
+        pass_to_pass: Pytest node ids that must still pass after the fix (the
+            regression guard). Python only, as for :attr:`fail_to_pass`.
     """
 
     instance_id: str
@@ -74,6 +110,8 @@ class MultiSWEBenchInstance:
     patch: str = ""
     hints_text: str = ""
     version: str = ""
+    fail_to_pass: list[str] = field(default_factory=list)
+    pass_to_pass: list[str] = field(default_factory=list)
 
     def to_task(self) -> dict[str, Any]:
         return {
@@ -86,6 +124,8 @@ class MultiSWEBenchInstance:
             "test_patch": self.test_patch,
             "hints": self.hints_text,
             "version": self.version,
+            "fail_to_pass": list(self.fail_to_pass),
+            "pass_to_pass": list(self.pass_to_pass),
         }
 
 
@@ -181,6 +221,33 @@ class MultiSWEBench(Benchmark):
                 continue
             if self._language and language != self._language:
                 continue
+            # Faithful FAIL_TO_PASS / PASS_TO_PASS grading applies only where the
+            # named tests are genuine pytest node ids — i.e. Python. Other
+            # languages' resolved tests use their own runner conventions and
+            # grade via the language runner, so we do not surface them here (that
+            # would fake ids pytest cannot run). Accept the SWE-bench column
+            # names and the upstream ``f2p_tests`` / ``p2p_tests`` mappings.
+            is_python = language == "python"
+            fail_to_pass = (
+                _named_test_list(
+                    item.get(
+                        "FAIL_TO_PASS",
+                        item.get("fail_to_pass", item.get("f2p_tests")),
+                    )
+                )
+                if is_python
+                else []
+            )
+            pass_to_pass = (
+                _named_test_list(
+                    item.get(
+                        "PASS_TO_PASS",
+                        item.get("pass_to_pass", item.get("p2p_tests")),
+                    )
+                )
+                if is_python
+                else []
+            )
             self._instances.append(
                 MultiSWEBenchInstance(
                     instance_id=item.get("instance_id", item.get("id", "")),
@@ -195,6 +262,8 @@ class MultiSWEBench(Benchmark):
                     patch=item.get("patch", ""),
                     hints_text=item.get("hints_text", ""),
                     version=item.get("version", ""),
+                    fail_to_pass=fail_to_pass,
+                    pass_to_pass=pass_to_pass,
                 )
             )
 
@@ -216,15 +285,23 @@ class MultiSWEBench(Benchmark):
     def evaluate(
         self, task: dict[str, Any], agent_output: str, env: Any = None
     ) -> bool:
-        """Grade a task by running its language's native test command.
+        """Grade a task, preferring faithful FAIL_TO_PASS / PASS_TO_PASS tests.
 
         The flow:
 
-        1. Look up the language runner for ``task["language"]``.
-        2. If the runner is missing or the toolchain is not installed, record
-           the skip reason and return ``False``.
-        3. Otherwise, apply the test patch (if any) and run the test command
-           via ``env.run_command``. ``True`` iff the command exits ``0``.
+        1. **Faithful path** — when a Python task carries ``fail_to_pass`` /
+           ``pass_to_pass`` node ids and ``env`` can run commands, run exactly
+           those tests (see :meth:`_grade_named_tests`): pass iff every one
+           passes after the fix + ``test_patch`` are applied. This is the
+           official resolve contract and takes precedence over the blanket run.
+        2. **Runner path** (default / back-compat) — look up the language
+           runner for ``task["language"]``. If the runner is missing or the
+           toolchain is not installed, record the skip reason and return
+           ``False``. Otherwise apply the test patch (if any) and run the
+           blanket test command via ``env.run_command``; ``True`` iff it exits
+           ``0``. The staged Python subset carries no named tests (the staging
+           transform drops the upstream ``*_tests`` records), so it takes this
+           path today.
 
         When ``env`` is ``None`` (e.g. unit tests without a real sandbox),
         the runner short-circuits to a skip with reason
@@ -238,9 +315,27 @@ class MultiSWEBench(Benchmark):
                 ``run_command``, or ``None``.
 
         Returns:
-            ``True`` if the language test command passes in ``env``.
+            ``True`` if the graded tests pass in ``env``.
         """
         language = _normalize_language(task.get("language"))
+
+        # Faithful named-test grading for Python instances that carry the lists.
+        fail_to_pass = _named_test_list(
+            task.get("fail_to_pass", task.get("FAIL_TO_PASS"))
+        )
+        pass_to_pass = _named_test_list(
+            task.get("pass_to_pass", task.get("PASS_TO_PASS"))
+        )
+        if (
+            language == "python"
+            and (fail_to_pass or pass_to_pass)
+            and env is not None
+            and hasattr(env, "run_command")
+        ):
+            return self._grade_named_tests(
+                task, language, env, fail_to_pass, pass_to_pass
+            )
+
         runner = get_runner(language)
         if runner is None:
             self._record_skip(task, language, SkipReason.EXECUTION_ERROR)
@@ -255,6 +350,63 @@ class MultiSWEBench(Benchmark):
             )
             return False
         return result.passed
+
+    def _grade_named_tests(
+        self,
+        task: dict[str, Any],
+        language: str,
+        env: Any,
+        fail_to_pass: list[str],
+        pass_to_pass: list[str],
+    ) -> bool:
+        """Run a Python instance's FAIL_TO_PASS / PASS_TO_PASS tests explicitly.
+
+        Reuses the Python :class:`LanguageRunner` for the two preconditions the
+        blanket path already enforces — toolchain availability and test-patch
+        application — recording the same skip reasons for parity, then runs the
+        named node ids (chunked to respect ``ARG_MAX``) instead of the blanket
+        ``pytest`` command. The instance resolves iff every FAIL_TO_PASS and
+        every PASS_TO_PASS test passes; a pytest chunk's non-zero exit fails it.
+
+        Args:
+            task: Task dict (for skip-record diagnostics).
+            language: Canonical language (``"python"``).
+            env: Execution environment exposing ``run_command``.
+            fail_to_pass: Node ids that must pass once the fix is applied.
+            pass_to_pass: Node ids that must still pass (regression guard).
+
+        Returns:
+            ``True`` iff every named test passes.
+        """
+        runner = get_runner(language)
+        if runner is not None and not runner.is_toolchain_available(env):
+            self._record_skip(task, language, SkipReason.TOOLCHAIN_MISSING)
+            return False
+
+        test_patch = task.get("test_patch", "")
+        if (
+            test_patch
+            and runner is not None
+            and not runner.apply_test_patch(env, test_patch)
+        ):
+            self._record_skip(task, language, SkipReason.PATCH_FAILED)
+            return False
+
+        for group in (fail_to_pass, pass_to_pass):
+            for chunk in _chunk_test_ids(group, DEFAULT_TEST_CHUNK_SIZE):
+                quoted = " ".join(shlex.quote(t) for t in chunk)
+                command = f"{DEFAULT_PYTEST_CMD} {quoted}"
+                try:
+                    result = env.run_command(command)
+                except Exception:
+                    self._record_skip(task, language, SkipReason.EXECUTION_ERROR)
+                    return False
+                success = getattr(result, "success", None)
+                exit_code = getattr(result, "exit_code", None)
+                passed = bool(success) if success is not None else (exit_code == 0)
+                if not passed:
+                    return False
+        return True
 
     # ------------------------------------------------------------------
     # Diagnostics & helpers
