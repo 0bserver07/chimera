@@ -123,7 +123,14 @@ class LiveCodeBench(Benchmark):
         # Normalize markdown-fenced answers to bare source (see _code_extract).
         from chimera.eval.benchmarks._code_extract import extract_code
 
-        env.write_file("solution.py", extract_code(agent_output))
+        solution = extract_code(agent_output)
+        if not solution.strip():
+            # An errored or empty agent run has no program to execute. An empty
+            # ``solution.py`` exits 0 and — for a test case whose expected
+            # output is empty — its empty stdout would spuriously match, so an
+            # empty solution must never grade as a pass (measurement integrity).
+            return False
+        env.write_file("solution.py", solution)
         for case in test_cases:
             stdin = case.get("input", "")
             expected = (case.get("output", "") or "").strip()

@@ -167,3 +167,70 @@ def test_parse_evalplus_result() -> None:
     assert parse("HumanEval/0 fail pass", "HumanEval/0") is False
     assert parse("summary: all tests passed", "HumanEval/9") is True
     assert parse("nothing relevant here", "HumanEval/9") is False
+
+
+# ---------------------------------------------------- measurement integrity
+
+
+def _check_style_task(**over: object) -> dict:
+    """A task whose ``test`` only DEFINES ``check(candidate)`` — the real
+    EvalPlus dataset shape — never calling it inline. Executing it against a
+    solution alone therefore runs no assertion unless the adapter appends the
+    ``check(entry_point)`` invocation.
+    """
+    base: dict = {
+        "task_id": "HumanEval/0",
+        "prompt": "def add(a, b):",
+        "entry_point": "add",
+        "test": "def check(candidate):\n    assert candidate(1, 2) == 3\n",
+    }
+    base.update(over)
+    return base
+
+
+def test_evaluate_empty_output_fails() -> None:
+    """An errored/empty agent run must never grade as a pass."""
+    bench = HumanEvalPlus(version="base", use_evalplus_runner=False)
+    assert bench.evaluate(_task(), "", None) is False
+
+
+def test_evaluate_whitespace_output_fails() -> None:
+    bench = HumanEvalPlus(version="base", use_evalplus_runner=False)
+    assert bench.evaluate(_task(), "   \n\t  ", None) is False
+
+
+def test_evaluate_fenced_but_empty_body_fails() -> None:
+    """A markdown fence that extracts to nothing is still an empty solution."""
+    bench = HumanEvalPlus(version="base", use_evalplus_runner=False)
+    assert bench.evaluate(_task(), "```python\n\n```", None) is False
+
+
+def test_check_style_empty_output_fails() -> None:
+    """The real EvalPlus ``test`` only defines ``check``; an empty solution
+    must not slip through by defining-but-never-calling the checker."""
+    bench = HumanEvalPlus(version="base", use_evalplus_runner=False)
+    assert bench.evaluate(_check_style_task(), "", None) is False
+
+
+def test_check_style_invokes_checker() -> None:
+    """``check(entry_point)`` is now appended, so a wrong solution fails and a
+    correct one passes even when the ``test`` field only DEFINES the checker.
+    Without this the whole human-eval-plus column read a false 100%."""
+    bench = HumanEvalPlus(version="base", use_evalplus_runner=False)
+    task = _check_style_task()
+    assert bench.evaluate(task, "def add(a, b):\n    return a - b", None) is False
+    assert bench.evaluate(task, "def add(a, b):\n    return a + b", None) is True
+
+
+def test_empty_output_short_circuits_before_evalplus_runner(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The empty-output guard fires BEFORE shelling out to the evalplus CLI."""
+    bench = HumanEvalPlus(version="plus", use_evalplus_runner=True)
+    monkeypatch.setattr(bench, "_has_evalplus", lambda: True)
+
+    def _boom(*_a: object, **_k: object) -> bool:
+        raise AssertionError("must not shell out to evalplus for empty output")
+
+    monkeypatch.setattr(bench, "_evaluate_with_evalplus", _boom)
+    assert bench.evaluate(_task(), "", None) is False

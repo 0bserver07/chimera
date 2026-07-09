@@ -186,7 +186,21 @@ class Harness:
                 if env:
                     env.setup()
                 agent_result = self.agent.run(task.get("prompt", ""), env)
-                passed = self.benchmark.evaluate(task, agent_result.output, env)
+                # Measurement-integrity guard (belt-and-suspenders): when the
+                # agent run itself failed (e.g. terminal status "error" /
+                # "budget_exhausted") *and* left no answer, there is nothing
+                # legitimate to grade — skip evaluate() so a lenient benchmark
+                # evaluator cannot turn an errored, empty run into a pass. Only
+                # an *empty* answer from a *failed* run is short-circuited, so
+                # runners whose result predates the ``success`` field, and
+                # benchmarks that grade on-disk/env state with an intentionally
+                # empty answer, are unaffected.
+                run_output = getattr(agent_result, "output", "") or ""
+                run_succeeded = getattr(agent_result, "success", True)
+                if not run_succeeded and not run_output.strip():
+                    passed = False
+                else:
+                    passed = self.benchmark.evaluate(task, agent_result.output, env)
                 # Run additional graders if configured
                 if passed and self.graders:
                     for grader in self.graders:

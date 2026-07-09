@@ -173,6 +173,11 @@ class MBPP(Benchmark):
         from chimera.eval.benchmarks._code_extract import extract_code
 
         agent_output = extract_code(agent_output)
+        if not agent_output.strip():
+            # An errored or empty agent run has no candidate function to test;
+            # an empty solution must never grade as a pass (measurement
+            # integrity), so fail fast before splicing in the assertions.
+            return False
 
         # The original full split uses a single ``test_setup_code`` string;
         # the sanitized split uses ``test_imports`` (list of import lines).

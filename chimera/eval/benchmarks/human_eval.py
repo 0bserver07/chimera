@@ -68,6 +68,12 @@ class HumanEval(Benchmark):
         # chat reply usually wraps the solution in Markdown fences with prose,
         # which is not executable Python on its own.
         code = _extract_code(agent_output)
+        if not code.strip():
+            # An errored or empty agent run leaves no solution to grade.
+            # Executing ``"" + test`` can spuriously succeed when the test only
+            # *defines* a checker without calling it, so an empty solution must
+            # never grade as a pass (measurement integrity).
+            return False
         full_code = f"{code}\n\n{test_code}"
         # HumanEval's `test` field only DEFINES ``check(candidate)``; without an
         # explicit call against the entry point no assertion ever runs, which

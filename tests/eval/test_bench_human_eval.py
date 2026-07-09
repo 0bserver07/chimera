@@ -122,6 +122,18 @@ class TestHumanEval:
         result = bench.evaluate(task, "def add(a, b): return a + b", None)
         assert result is False
 
+    def test_evaluate_empty_output_fails(self):
+        # An errored/empty agent run must never grade as a pass, even when the
+        # `test` field only DEFINES check(candidate) without calling it inline.
+        bench = HumanEval()
+        task = {
+            "id": "HumanEval/0",
+            "entry_point": "add",
+            "test": "def check(candidate):\n    assert candidate(1, 2) == 3\n",
+        }
+        assert bench.evaluate(task, "", None) is False
+        assert bench.evaluate(task, "   \n\t ", None) is False
+
     def test_empty_dataset(self):
         bench = HumanEval()
         assert bench.tasks() == []

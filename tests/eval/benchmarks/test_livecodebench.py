@@ -169,3 +169,20 @@ def test_evaluate_codegen_fails_on_nonzero_exit() -> None:
     task = {"public_test_cases": [{"input": "", "output": "42"}]}
     env = _StdioEnv(exit_code=1, stdout="42")
     assert LiveCodeBench().evaluate(task, "raise SystemExit(1)", env) is False
+
+
+def test_evaluate_empty_output_fails() -> None:
+    """An errored/empty agent run has no program to execute — never a pass."""
+    task = {"test_cases": [{"input": "", "output": "42"}]}
+    env = _StdioEnv(exit_code=0, stdout="")
+    assert LiveCodeBench().evaluate(task, "", env) is False
+
+
+def test_evaluate_empty_output_fails_even_when_expected_empty() -> None:
+    """The dangerous case: an empty expected output means an empty program's
+    empty stdout would spuriously MATCH without the guard."""
+    task = {"test_cases": [{"input": "", "output": ""}]}
+    env = _StdioEnv(exit_code=0, stdout="")
+    assert LiveCodeBench().evaluate(task, "   \n  ", env) is False
+    # Guard fires before writing/executing anything.
+    assert env.runs == []

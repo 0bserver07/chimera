@@ -196,6 +196,29 @@ def test_evaluate_env_nonzero_exit_is_failure() -> None:
     assert bench.evaluate(record, record["code"], env) is False
 
 
+def test_evaluate_empty_output_fails() -> None:
+    """An errored/empty agent run has no candidate function — never a pass."""
+    bench = MBPP()
+    record = MBPP._normalize(_sanitized_record())
+    assert bench.evaluate(record, "", None) is False
+
+
+def test_evaluate_whitespace_output_fails() -> None:
+    bench = MBPP()
+    record = MBPP._normalize(_sanitized_record())
+    assert bench.evaluate(record, "   \n\t ", None) is False
+
+
+def test_evaluate_empty_output_never_touches_env() -> None:
+    """Empty output short-circuits before writing/executing solution.py."""
+    bench = MBPP()
+    record = MBPP._normalize(_sanitized_record())
+    env = MagicMock()
+    assert bench.evaluate(record, "", env) is False
+    env.write_file.assert_not_called()
+    env.run_command.assert_not_called()
+
+
 # ---------------------------------------------------------------------------
 # default_dataset_path / dataset_available
 # ---------------------------------------------------------------------------

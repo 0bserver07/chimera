@@ -115,6 +115,13 @@ class HumanEvalPlus(Benchmark):
         from chimera.eval.benchmarks._code_extract import extract_code
 
         agent_output = extract_code(agent_output)
+        if not agent_output.strip():
+            # An errored or empty agent run leaves nothing to grade. The
+            # EvalPlus ``test`` field only *defines* ``check(candidate)``;
+            # executing it against an empty solution defines the checker but
+            # never calls it, so a bare ``exec`` would spuriously pass. Fail
+            # fast before shelling out or splicing (measurement integrity).
+            return False
 
         if self._use_evalplus_runner and self._has_evalplus():
             return self._evaluate_with_evalplus(task, agent_output)
@@ -126,6 +133,13 @@ class HumanEvalPlus(Benchmark):
             return False
 
         full_code = f"{agent_output}\n\n{test_code}"
+        # The EvalPlus ``test`` harness only DEFINES ``check(candidate)``; with
+        # no explicit call against the entry point, no assertion ever runs and
+        # *any* output (even a wrong one) would grade as a pass. Append the call
+        # when the dataset uses that convention — mirroring HumanEval.evaluate().
+        entry_point = task.get("entry_point", "")
+        if entry_point and "def check" in test_code:
+            full_code += f"\n\ncheck({entry_point})\n"
         if env is not None:
             env.write_file("solution.py", full_code)
             result = env.run_command("python solution.py")
