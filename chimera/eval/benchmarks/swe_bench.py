@@ -1,17 +1,269 @@
-"""SWE-bench benchmark implementation."""
+"""SWE-bench benchmark implementation.
+
+Beyond the loader/evaluator, this module carries the plumbing that lets each
+SWE-bench instance run in *its own* per-instance Docker image on a Modal cloud
+sandbox — the container the upstream harness bakes the repository, its
+dependencies, and its test fixtures into, so grading is reproducible.
+
+Three pieces cooperate:
+
+* :func:`swe_instance_image` — pure resolver from a task dict to the image
+  identifier. It honors an explicit ``image`` / ``docker_image`` field when the
+  dataset carries one, and otherwise computes the official convention
+  ``<namespace>/sweb.eval.<arch>.<instance_id>:<tag>`` (lowercased, with the
+  ``__`` run in an instance id rewritten to ``_1776_`` because Docker
+  repository names disallow it) — e.g. ``django__django-12325`` resolves to
+  ``swebench/sweb.eval.x86_64.django_1776_django-12325:latest``.
+* :func:`swe_modal_env_factory` — task ``->`` an unstarted
+  :class:`~chimera.env.modal_sandbox.ModalSandboxEnvironment` on that image,
+  mirroring :func:`chimera.eval.benchmarks.harbor.docker_env_factory`.
+* :class:`SweModalEnvFactory` — a zero-argument callable that bridges the
+  per-task image into the :class:`~chimera.eval.harness.Harness`.
+
+**The Harness limitation this works around.** ``Harness.run`` creates one env
+per task via ``env = self.env_factory()`` — a *zero-argument* call. The API has
+no seam to hand the current task to the factory, so a per-task image cannot flow
+through a plain factory. Rather than change that central contract,
+:class:`SweModalEnvFactory` walks the same task list the Harness iterates, in
+lockstep (see its docstring for the ordering contract and the one case it does
+not cover: ``Harness(resume=True)``).
+"""
 from __future__ import annotations
 
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from chimera.eval.harness import Benchmark
+
+if TYPE_CHECKING:
+    from chimera.env.modal_sandbox import ModalSandboxEnvironment
+
+
+#: Docker Hub organisation that hosts the official SWE-bench evaluation images.
+DEFAULT_SWE_IMAGE_NAMESPACE = "swebench"
+#: Default CPU architecture segment of the image key. The published images are
+#: ``linux/amd64`` (``x86_64``); Apple-silicon hosts need emulation but Modal
+#: runs them natively.
+DEFAULT_SWE_IMAGE_ARCH = "x86_64"
+#: Default image tag.
+DEFAULT_SWE_IMAGE_TAG = "latest"
+#: Working directory the official images check the repository out at, so
+#: ``git apply`` + test commands during grading run against the real tree.
+DEFAULT_SWE_WORKDIR = "/testbed"
+
+# Docker repository names forbid a bare ``__`` run, so the upstream harness
+# rewrites it to ``_1776_`` when forming the *remote* (namespaced) image name.
+_INSTANCE_ID_DUNDER = "__"
+_INSTANCE_ID_DUNDER_SAFE = "_1776_"
+
+
+def swe_instance_image(
+    task: dict[str, Any],
+    *,
+    namespace: str = DEFAULT_SWE_IMAGE_NAMESPACE,
+    arch: str = DEFAULT_SWE_IMAGE_ARCH,
+    tag: str = DEFAULT_SWE_IMAGE_TAG,
+) -> str:
+    """Resolve the per-instance Docker image identifier for a SWE task.
+
+    Resolution order:
+
+    1. An explicit ``image`` or ``docker_image`` field on *task* wins verbatim
+       (datasets that pin their own images, or a plumbing-test override).
+    2. Otherwise the official convention is computed from the instance id
+       (``instance_id`` or ``id``): ``sweb.eval.<arch>.<instance_id>:<tag>``
+       lowercased. When *namespace* is non-empty the namespace is prefixed and
+       the ``__`` run in the instance id is rewritten to ``_1776_`` (the remote
+       image name); an empty *namespace* returns the bare local key unchanged.
+
+    Args:
+        task: A task dict from :meth:`SWEBench.tasks` (or any mapping carrying
+            ``instance_id`` / ``id`` and optionally ``image`` / ``docker_image``).
+        namespace: Registry namespace for the remote image. Empty string yields
+            the local (un-namespaced, un-rewritten) key.
+        arch: Architecture segment (``x86_64`` or ``arm64``).
+        tag: Image tag.
+
+    Returns:
+        The image identifier, e.g.
+        ``swebench/sweb.eval.x86_64.django_1776_django-12325:latest``.
+
+    Raises:
+        ValueError: When no explicit image is present and the task carries
+            neither ``instance_id`` nor ``id`` to compute one from.
+    """
+    explicit = task.get("image") or task.get("docker_image")
+    if explicit:
+        return str(explicit)
+
+    instance_id = task.get("instance_id") or task.get("id")
+    if not instance_id:
+        raise ValueError(
+            "swe_instance_image: task has no explicit image and no "
+            "'instance_id'/'id' to compute one from"
+        )
+
+    key = f"sweb.eval.{arch}.{str(instance_id).lower()}:{tag}"
+    if not namespace:
+        return key
+    return f"{namespace}/{key}".replace(
+        _INSTANCE_ID_DUNDER, _INSTANCE_ID_DUNDER_SAFE
+    )
+
+
+def swe_modal_env_factory(
+    task: dict[str, Any],
+    *,
+    gpu: str | None = None,
+    image: str | None = None,
+    workdir: str = DEFAULT_SWE_WORKDIR,
+    test_cmd: str = "python -m pytest",
+    timeout: int = 1800,
+    namespace: str = DEFAULT_SWE_IMAGE_NAMESPACE,
+    arch: str = DEFAULT_SWE_IMAGE_ARCH,
+    tag: str = DEFAULT_SWE_IMAGE_TAG,
+) -> "ModalSandboxEnvironment":
+    """Provision an (unstarted) Modal sandbox on a SWE task's instance image.
+
+    Mirrors :func:`chimera.eval.benchmarks.harbor.docker_env_factory`: the
+    caller owns the lifecycle (call ``setup()`` before use, ``cleanup()`` after
+    — the :class:`~chimera.eval.harness.Harness` does both). The image defaults
+    to the task's per-instance image via :func:`swe_instance_image`; pass
+    *image* to force a fixed image for all tasks (handy for a small plumbing
+    image in tests).
+
+    Args:
+        task: Task dict resolved by :func:`swe_instance_image`.
+        gpu: Optional Modal GPU spec (e.g. ``"T4"``, ``"A100:2"``); ``None``
+            provisions a CPU-only sandbox.
+        image: Optional fixed image override; when ``None`` (default) the
+            per-instance image is resolved from *task*.
+        workdir: Sandbox working directory. Defaults to :data:`DEFAULT_SWE_WORKDIR`
+            (``/testbed``) where the official images place the repository.
+        test_cmd: Default test command for ``env.run_tests()``.
+        timeout: Per-command timeout (seconds).
+        namespace: Registry namespace forwarded to :func:`swe_instance_image`.
+        arch: Architecture segment forwarded to :func:`swe_instance_image`.
+        tag: Image tag forwarded to :func:`swe_instance_image`.
+
+    Returns:
+        An unstarted :class:`~chimera.env.modal_sandbox.ModalSandboxEnvironment`.
+    """
+    from chimera.env.modal_sandbox import ModalSandboxEnvironment
+
+    resolved = image or swe_instance_image(
+        task, namespace=namespace, arch=arch, tag=tag
+    )
+    return ModalSandboxEnvironment(
+        image=resolved,
+        gpu=gpu,
+        workdir=workdir,
+        test_cmd=test_cmd,
+        timeout=timeout,
+    )
+
+
+class SweModalEnvFactory:
+    """Zero-argument env factory that runs each SWE task in its instance image.
+
+    ``Harness.run`` builds one env per task with ``env = self.env_factory()`` —
+    a zero-argument call with no seam to pass the task (see the module
+    docstring). This adapter closes that gap by walking the *same* task list the
+    Harness iterates, in lockstep: the k-th call returns a
+    :class:`~chimera.env.modal_sandbox.ModalSandboxEnvironment` on the k-th
+    task's per-instance image. Indexing is modulo the task count, so the
+    repeated full passes of a ``bench-matrix`` run (one pass per agent row) line
+    up automatically without a manual reset between rows.
+
+    Images are resolved eagerly at construction, so a task missing its instance
+    id fails fast here rather than mid-run.
+
+    **Ordering contract.** Correctness relies on the Harness consuming tasks in
+    order, one env per task, and running each row to completion — which is true
+    for :func:`~chimera.eval.matrix.run_matrix` / ``bench-matrix``. It is *not*
+    compatible with ``Harness(resume=True)``, which skips already-graded tasks
+    and would desync the cursor; for a resumed run, rebuild the factory over the
+    remaining (un-graded) tasks.
+
+    Args:
+        tasks: The task list the Harness will iterate (e.g.
+            ``benchmark.tasks()``). Must be non-empty.
+        gpu: Optional Modal GPU spec applied to every task's sandbox.
+        image: Optional fixed image override applied to every task (skips
+            per-instance resolution).
+        workdir: Sandbox working directory (default ``/testbed``).
+        test_cmd: Default test command for ``env.run_tests()``.
+        timeout: Per-command timeout (seconds).
+        namespace: Registry namespace forwarded to :func:`swe_instance_image`.
+        arch: Architecture segment forwarded to :func:`swe_instance_image`.
+        tag: Image tag forwarded to :func:`swe_instance_image`.
+
+    Raises:
+        ValueError: When *tasks* is empty, or a task cannot resolve an image.
+    """
+
+    def __init__(
+        self,
+        tasks: list[dict[str, Any]],
+        *,
+        gpu: str | None = None,
+        image: str | None = None,
+        workdir: str = DEFAULT_SWE_WORKDIR,
+        test_cmd: str = "python -m pytest",
+        timeout: int = 1800,
+        namespace: str = DEFAULT_SWE_IMAGE_NAMESPACE,
+        arch: str = DEFAULT_SWE_IMAGE_ARCH,
+        tag: str = DEFAULT_SWE_IMAGE_TAG,
+    ) -> None:
+        self._tasks = list(tasks)
+        if not self._tasks:
+            raise ValueError("SweModalEnvFactory requires a non-empty task list")
+        self._gpu = gpu
+        self._workdir = workdir
+        self._test_cmd = test_cmd
+        self._timeout = timeout
+        self._cursor = 0
+        # Resolve eagerly so a bad instance id surfaces at construction.
+        self._images = [
+            image or swe_instance_image(t, namespace=namespace, arch=arch, tag=tag)
+            for t in self._tasks
+        ]
+
+    def __call__(self) -> "ModalSandboxEnvironment":
+        """Return the sandbox for the next task in lockstep order."""
+        from chimera.env.modal_sandbox import ModalSandboxEnvironment
+
+        idx = self._cursor % len(self._images)
+        self._cursor += 1
+        return ModalSandboxEnvironment(
+            image=self._images[idx],
+            gpu=self._gpu,
+            workdir=self._workdir,
+            test_cmd=self._test_cmd,
+            timeout=self._timeout,
+        )
+
+    @property
+    def images(self) -> list[str]:
+        """The resolved per-task image identifiers, in task order."""
+        return list(self._images)
+
+    def reset(self) -> None:
+        """Reset the lockstep cursor to the first task."""
+        self._cursor = 0
 
 
 @dataclass
 class SWEBenchInstance:
-    """A single SWE-bench task instance."""
+    """A single SWE-bench task instance.
+
+    Attributes:
+        image: Optional explicit per-instance Docker image. When set it wins
+            over the computed convention in :func:`swe_instance_image`; when
+            empty the image is derived from ``instance_id``.
+    """
     instance_id: str
     repo: str
     base_commit: str
@@ -19,16 +271,19 @@ class SWEBenchInstance:
     hints_text: str = ""
     test_patch: str = ""
     patch: str = ""  # gold patch for reference
+    image: str = ""  # explicit per-instance image; empty => derive from id
 
     def to_task(self) -> dict[str, Any]:
         return {
             "id": self.instance_id,
+            "instance_id": self.instance_id,
             "prompt": self.problem_statement,
             "description": self.problem_statement,
             "repo": self.repo,
             "base_commit": self.base_commit,
             "hints": self.hints_text,
             "test_patch": self.test_patch,
+            "docker_image": self.image,
         }
 
 
@@ -92,6 +347,12 @@ class SWEBench(Benchmark):
                 hints_text=item.get("hints_text", ""),
                 test_patch=item.get("test_patch", ""),
                 patch=item.get("patch", ""),
+                image=(
+                    item.get("docker_image")
+                    or item.get("image")
+                    or item.get("image_name")
+                    or ""
+                ),
             ))
 
         if self._limit:
@@ -145,3 +406,16 @@ class SWEBench(Benchmark):
     def add_instance(self, instance: SWEBenchInstance) -> None:
         """Add an instance programmatically (useful for testing)."""
         self._instances.append(instance)
+
+
+__all__ = [
+    "SWEBench",
+    "SWEBenchInstance",
+    "SweModalEnvFactory",
+    "swe_instance_image",
+    "swe_modal_env_factory",
+    "DEFAULT_SWE_IMAGE_NAMESPACE",
+    "DEFAULT_SWE_IMAGE_ARCH",
+    "DEFAULT_SWE_IMAGE_TAG",
+    "DEFAULT_SWE_WORKDIR",
+]

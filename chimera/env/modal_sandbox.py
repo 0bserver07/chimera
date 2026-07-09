@@ -80,12 +80,20 @@ class ModalSandboxEnvironment(Environment):
     tests. This mirrors :class:`chimera.env.docker.DockerEnvironment`'s
     no-container fallback.
 
+    Per-instance images: because *image* is a plain constructor argument, a
+    caller can vary it per task. A SWE-bench run passes each instance its own
+    evaluation image (e.g. ``swebench/sweb.eval.x86_64.<instance>:latest``) —
+    see :func:`chimera.eval.benchmarks.swe_bench.swe_modal_env_factory`. Those
+    official images are ``linux/amd64`` (Modal runs them natively) and check the
+    repository out at ``/testbed``, so pair them with ``workdir="/testbed"``.
+
     Args:
         image: Container image identifier passed to
             ``modal.Image.from_registry``. Defaults to
-            ``python:3.11-slim``.
+            ``python:3.11-slim``. Any public image works, including a per-task
+            SWE-bench evaluation image.
         workdir: Working directory inside the sandbox. Defaults to
-            ``/workspace``.
+            ``/workspace`` (use ``/testbed`` for SWE-bench eval images).
         test_cmd: Test command for :meth:`run_tests`.
         cpu: Optional CPU request (cores) forwarded to Modal.
         memory: Optional memory request (MiB) forwarded to Modal.
@@ -153,6 +161,17 @@ class ModalSandboxEnvironment(Environment):
     def app_name(self) -> str:
         """Return the logical Modal app name used for this environment."""
         return self._app_name
+
+    @property
+    def image(self) -> str:
+        """Return the container image identifier this sandbox will run.
+
+        For a SWE-bench-style run this is the task's per-instance evaluation
+        image, resolved by the caller and passed to the constructor. Exposed
+        for introspection and tests so callers can assert the resolved image
+        without reaching into private state.
+        """
+        return self._image
 
     @property
     def is_live(self) -> bool:

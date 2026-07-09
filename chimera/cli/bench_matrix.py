@@ -77,21 +77,25 @@ def add_bench_matrix_parser(
     p.add_argument(
         "--env",
         dest="env_kind",
-        choices=("local", "none", "modal"),
+        choices=("local", "none", "modal", "swe-modal"),
         default="local",
         help="Per-task environment: 'local' fresh temp-dir (default), 'none', "
-        "or 'modal' — run every task in a fresh Modal cloud sandbox",
+        "'modal' — every task in a fresh Modal cloud sandbox — or 'swe-modal' — "
+        "run each SWE-bench instance in ITS per-instance evaluation image on Modal",
     )
     p.add_argument(
         "--modal-gpu",
         default=None,
-        help="Modal GPU for --env modal (e.g. H100, A100, T4, 'A100:2'). "
+        help="Modal GPU for --env modal/swe-modal (e.g. H100, A100, T4, 'A100:2'). "
         "Omit for a CPU-only sandbox.",
     )
     p.add_argument(
         "--modal-image",
-        default="python:3.11-slim",
-        help="Container image for --env modal sandboxes (default python:3.11-slim)",
+        default=None,
+        help="Container image override for --env modal/swe-modal. For 'modal' an "
+        "unset value defaults to python:3.11-slim; for 'swe-modal' an unset value "
+        "means each task uses its own per-instance SWE image — set this to force a "
+        "fixed image (e.g. a small image for a plumbing smoke test).",
     )
 
 
@@ -170,18 +174,15 @@ def run_bench_matrix(args: argparse.Namespace) -> int:
             return LocalEnvironment(workdir=tempfile.mkdtemp(prefix="chimera-matrix-"))
 
         env_factory = _local_env
-    elif args.env_kind == "modal":
-        # Every task runs in its own fresh Modal cloud sandbox — optionally on
-        # a GPU. Needs Modal auth (`modal token new`, or MODAL_TOKEN_ID/SECRET);
-        # without it the sandbox falls back to in-memory and cells will not
-        # reflect real cloud execution, so fail loudly here instead.
+    elif args.env_kind in ("modal", "swe-modal"):
+        # Both run tasks on Modal cloud sandboxes and need Modal auth — env vars
+        # OR the CLI config written by `modal setup` / `modal token new`
+        # (~/.modal.toml, the common case). Without it the sandbox silently
+        # falls back to in-memory and cells would not reflect real cloud
+        # execution, so fail loudly here instead.
         import os
         from pathlib import Path
 
-        from chimera.env.modal_sandbox import ModalSandboxEnvironment
-
-        # Modal auth is either env vars OR the CLI config written by
-        # `modal setup` / `modal token new` (~/.modal.toml) — the common case.
         modal_authed = bool(
             os.environ.get("MODAL_TOKEN_ID")
             or os.environ.get("MODAL_TOKEN_SECRET")
@@ -189,25 +190,60 @@ def run_bench_matrix(args: argparse.Namespace) -> int:
         )
         if not modal_authed:
             print(
-                "chimera bench-matrix --env modal: no Modal auth found. "
-                "Run `modal setup` (writes ~/.modal.toml) or set "
+                f"chimera bench-matrix --env {args.env_kind}: no Modal auth "
+                "found. Run `modal setup` (writes ~/.modal.toml) or set "
                 "MODAL_TOKEN_ID / MODAL_TOKEN_SECRET.",
                 file=sys.stderr,
             )
             return 2
 
         gpu = args.modal_gpu
-        image = args.modal_image
 
-        def _modal_env() -> ModalSandboxEnvironment:
-            # The Harness calls env.setup() itself per task, so do NOT set up
-            # here — a second setup() would spawn a duplicate sandbox and leak
-            # the first.
-            return ModalSandboxEnvironment(image=image, gpu=gpu)
+        if args.env_kind == "modal":
+            from chimera.env.modal_sandbox import ModalSandboxEnvironment
 
-        env_factory = _modal_env
-        _where = f"GPU={gpu}" if gpu else "CPU-only"
-        print(f"Per-task environment: Modal sandbox ({image}, {_where})", file=sys.stderr)
+            image = args.modal_image or "python:3.11-slim"
+
+            def _modal_env() -> ModalSandboxEnvironment:
+                # Harness calls env.setup() per task; do NOT set up here or a
+                # duplicate sandbox leaks.
+                return ModalSandboxEnvironment(image=image, gpu=gpu)
+
+            env_factory = _modal_env
+            _where = f"GPU={gpu}" if gpu else "CPU-only"
+            print(
+                f"Per-task environment: Modal sandbox ({image}, {_where})",
+                file=sys.stderr,
+            )
+        else:  # swe-modal — each SWE instance in ITS per-instance image
+            from chimera.eval.benchmarks.swe_bench import SweModalEnvFactory
+
+            # run_matrix shares ONE env_factory across all benchmark columns,
+            # and a SweModalEnvFactory is bound to one benchmark's task list, so
+            # swe-modal takes a single (SWE-family) benchmark per invocation.
+            if len(benchmarks) != 1:
+                print(
+                    "chimera bench-matrix --env swe-modal expects exactly one "
+                    f"benchmark (got {len(benchmarks)}); the per-instance image "
+                    "factory is bound to one benchmark's task list.",
+                    file=sys.stderr,
+                )
+                return 2
+
+            # Unset --modal-image => per-instance images; set => fixed override.
+            env_factory = SweModalEnvFactory(
+                benchmarks[0].tasks(), gpu=gpu, image=args.modal_image
+            )
+            _where = f"GPU={gpu}" if gpu else "CPU-only"
+            _imgnote = (
+                f"fixed image {args.modal_image}"
+                if args.modal_image
+                else "per-instance images"
+            )
+            print(
+                f"Per-task environment: SWE-bench on Modal ({_imgnote}, {_where})",
+                file=sys.stderr,
+            )
 
     print(
         f"Matrix: {len(runners)} agent(s) x {len(benchmarks)} benchmark(s) "
