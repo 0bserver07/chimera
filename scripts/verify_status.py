@@ -51,9 +51,13 @@ def benches() -> None:
     distinct = len(runnable) - (
         1 if any(n == "lcb" for n, _ in runnable) and any(n == "livecodebench" for n, _ in runnable) else 0
     )
+    # Baseline as of the 2026-07-09 staging wave: 11 distinct / ~3,678 tasks
+    # (humaneval-plus, livecodebench, math500, mbpp, mbpp-plus, swe-bench,
+    # tau-bench, human-eval, bigcodebench, humaneval-x, aimo). Dropping below
+    # means a stager/loader regressed.
     check(
         "benches",
-        distinct >= 7 and total >= 1900,
+        distinct >= 11 and total >= 3600,
         f"{distinct} distinct runnable ({total} tasks): "
         + ", ".join(f"{n}={c}" for n, c in runnable if n != "lcb"),
     )

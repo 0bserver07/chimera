@@ -232,3 +232,149 @@ def test_mbpp_plus_staged_file_grades_through_mbpp_adapter(
     # Canonical solution passes all base assertions; a wrong one fails.
     assert bench.evaluate(task, _MBPP_PLUS_ROW["code"], env=None) is True
     assert bench.evaluate(task, "def similar_elements(a, b):\n    return ()", env=None) is False
+
+
+def _single_page(row: dict[str, Any]) -> Any:
+    """A one-row datasets-server page (terminates hf-rows pagination)."""
+    return lambda url, timeout=0: _FakeResponse(
+        json.dumps({"rows": [{"row": row}]}).encode()
+    )
+
+
+def test_fetch_human_eval_base_stages_and_grades(
+    staging: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """HumanEval base stages as JSONL and grades the canonical solution.
+
+    The base bench previously loaded 0 tasks (its adapter only read a JSON
+    list); the staged HuggingFace dump is JSON-lines, so this proves the
+    JSONL load path end to end.
+    """
+    row = {
+        "task_id": "HumanEval/0",
+        "prompt": "def add(a, b):\n",
+        "canonical_solution": "    return a + b\n",
+        "test": "def check(candidate):\n    assert candidate(1, 2) == 3\n",
+        "entry_point": "add",
+    }
+    monkeypatch.setattr(ds, "_urlopen", _single_page(row))
+
+    staged = ds.fetch("human-eval")
+    assert staged.name == "test.jsonl" and staged.parent.name == "human-eval"
+
+    from chimera.cli.main import _load_benchmark
+
+    bench = _load_benchmark("human-eval")
+    tasks = bench.tasks()
+    assert len(tasks) == 1
+    assert tasks[0]["entry_point"] == "add"
+    # The staged `test` only DEFINES check(); grading appends check(entry_point).
+    assert bench.evaluate(tasks[0], "def add(a, b):\n    return a + b\n", env=None) is True
+    assert bench.evaluate(tasks[0], "def add(a, b):\n    return a - b\n", env=None) is False
+    # Hyphenless alias resolves to the same staged file.
+    assert ds.staged_path("humaneval") == staged
+
+
+def test_fetch_bigcodebench_stages_and_grades(
+    staging: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """BigCodeBench stages via hf-rows; the instruct prompt drives the agent."""
+    row = {
+        "task_id": "BigCodeBench/0",
+        "complete_prompt": "def task_func():\n    # complete me\n",
+        "instruct_prompt": "Write task_func that returns 3.",
+        "code_prompt": "def task_func():\n",
+        "test": (
+            "import unittest\n"
+            "class TestCases(unittest.TestCase):\n"
+            "    def test_x(self):\n"
+            "        self.assertEqual(task_func(), 3)\n"
+        ),
+        "entry_point": "task_func",
+        "libs": "[]",
+    }
+    monkeypatch.setattr(ds, "_urlopen", _single_page(row))
+
+    staged = ds.fetch("bigcodebench")
+    assert staged.name == "v0.1.4.jsonl" and staged.parent.name == "bigcodebench"
+
+    from chimera.cli.main import _load_benchmark
+
+    bench = _load_benchmark("bigcodebench")
+    tasks = bench.tasks()
+    assert len(tasks) == 1
+    # Default split is instruct -> the instruct prompt is the agent prompt.
+    assert tasks[0]["prompt"] == "Write task_func that returns 3."
+    assert bench.evaluate(tasks[0], "def task_func():\n    return 3\n", env=None) is True
+    assert bench.evaluate(tasks[0], "def task_func():\n    return 4\n", env=None) is False
+
+
+def test_fetch_humaneval_x_stages_python_split(
+    staging: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """HumanEval-X stages the raw repo JSONL (url kind); rows default to python.
+
+    The upstream rows carry no ``language`` field (language is implied by the
+    file path), so the adapter must default them to python for the wired
+    execution path.
+    """
+    rows = [
+        {
+            "task_id": "Python/0",
+            "prompt": "def add(a, b):\n",
+            "declaration": "def add(a, b):\n",
+            "canonical_solution": "    return a + b\n",
+            "test": "def check(add):\n    assert add(1, 2) == 3\ncheck(add)\n",
+        }
+    ]
+    payload = "\n".join(json.dumps(r) for r in rows).encode()
+    monkeypatch.setattr(ds, "_urlopen", lambda url, timeout=0: _FakeResponse(payload))
+
+    staged = ds.fetch("humaneval-x")
+    assert staged.name == "python.jsonl" and staged.parent.name == "humaneval-x"
+
+    from chimera.cli.main import _load_benchmark
+
+    bench = _load_benchmark("humaneval-x")
+    tasks = bench.tasks()
+    assert len(tasks) == 1
+    assert tasks[0]["id"] == "Python/0"
+    assert tasks[0]["language"] == "python"
+    # Hyphenless alias resolves to the same staged file.
+    assert ds.staged_path("humanevalx") == staged
+
+
+def test_fetch_aimo_stages_coerces_answer_and_grades(
+    staging: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """AIMO stages via hf-rows; string/float answers are coerced to ints.
+
+    Public rows store the answer as ``"116"`` or ``"142.0"``; the grader
+    extracts ``abs(int(...))`` from agent output, so an un-coerced string
+    ground truth would fail every task.
+    """
+    rows = [
+        {"id": "0", "problem": "AIME-style problem", "answer": "116"},
+        {"id": "1", "problem": "AMC-style problem", "answer": "142.0"},
+    ]
+    monkeypatch.setattr(
+        ds,
+        "_urlopen",
+        lambda url, timeout=0: _FakeResponse(
+            json.dumps({"rows": [{"row": r} for r in rows]}).encode()
+        ),
+    )
+
+    staged = ds.fetch("aimo")
+    assert staged.name == "aime.jsonl" and staged.parent.name == "aimo"
+
+    from chimera.cli.main import _load_benchmark
+
+    bench = _load_benchmark("aimo")
+    tasks = bench.tasks()
+    assert len(tasks) == 2
+    assert tasks[0]["answer"] == 116 and isinstance(tasks[0]["answer"], int)
+    assert tasks[1]["answer"] == 142 and isinstance(tasks[1]["answer"], int)
+    # The coerced ground truth grades a matching agent answer, rejects a miss.
+    assert bench.evaluate(tasks[0], "... so ANSWER: 116", env=None) is True
+    assert bench.evaluate(tasks[0], "... so ANSWER: 999", env=None) is False

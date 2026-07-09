@@ -78,3 +78,32 @@ class TestAIMOBenchmark:
         path.write_text("[]")
         bench = AIMOBenchmark(problems_path=str(path))
         assert bench.tasks() == []
+
+    def test_loads_from_jsonl_file(self, tmp_path):
+        # A staged validation set is JSON-lines, not a JSON list.
+        rows = [
+            {"id": "0", "problem": "p0", "answer": 5},
+            {"id": "1", "problem": "p1", "answer": 6},
+        ]
+        path = tmp_path / "aime.jsonl"
+        path.write_text("\n".join(json.dumps(r) for r in rows) + "\n")
+        bench = AIMOBenchmark(problems_path=str(path))
+        tasks = bench.tasks()
+        assert len(tasks) == 2
+        assert tasks[0]["id"] == "0" and tasks[1]["answer"] == 6
+
+    def test_coerces_string_and_float_answers(self, tmp_path):
+        # Public rows store answers as strings ("116") or float-strings
+        # ("142.0"); the grader compares against abs(int(...)).
+        rows = [
+            {"id": "0", "problem": "p0", "answer": "116"},
+            {"id": "1", "problem": "p1", "answer": "142.0"},
+        ]
+        path = tmp_path / "aime.jsonl"
+        path.write_text("\n".join(json.dumps(r) for r in rows) + "\n")
+        bench = AIMOBenchmark(problems_path=str(path))
+        tasks = bench.tasks()
+        assert tasks[0]["answer"] == 116 and isinstance(tasks[0]["answer"], int)
+        assert tasks[1]["answer"] == 142 and isinstance(tasks[1]["answer"], int)
+        assert bench.evaluate(tasks[0], "ANSWER: 116", None) is True
+        assert bench.evaluate(tasks[1], "ANSWER: 142", None) is True

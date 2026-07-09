@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Any
 
 from chimera.eval.harness import Benchmark
@@ -7,6 +9,35 @@ from chimera.eval.harness import Benchmark
 # Shared with the other code-grading adapters; kept under the old name for
 # in-module/test back-compat.
 from chimera.eval.benchmarks._code_extract import CODE_FENCE as _CODE_FENCE
+
+
+def _parse_jsonl(text: str) -> list[dict[str, Any]]:
+    """Parse each non-empty line of *text* as one JSON object."""
+    return [json.loads(line) for line in text.splitlines() if line.strip()]
+
+
+def _read_task_records(path: Path) -> list[dict[str, Any]]:
+    """Read tasks from a JSON list/dict **or** a JSON-lines file.
+
+    A dataset staged by ``chimera bench-fetch human-eval`` is JSON-lines —
+    one task object per line — while a hand-authored dataset is usually a
+    JSON list (or a ``{"tasks": [...]}`` wrapper). The JSON-lines shape is
+    taken from the ``.jsonl`` suffix, or as a fallback when a whole-file
+    ``json.loads`` fails, so both stage through the same path.
+    """
+    text = path.read_text()
+    if path.suffix == ".jsonl":
+        return _parse_jsonl(text)
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        return _parse_jsonl(text)
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict):
+        records = data.get("tasks", [])
+        return records if isinstance(records, list) else []
+    return []
 
 
 def _extract_code(output: str) -> str:
@@ -97,11 +128,7 @@ class HumanEval(Benchmark):
 
     def _load_tasks(self) -> list[dict[str, Any]]:
         if self._dataset_path:
-            import json
-            from pathlib import Path
-
-            data = json.loads(Path(self._dataset_path).read_text())
-            tasks = data if isinstance(data, list) else data.get("tasks", [])
+            tasks = _read_task_records(Path(self._dataset_path))
         else:
             tasks = []
         if self._limit:

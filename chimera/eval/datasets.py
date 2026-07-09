@@ -136,6 +136,69 @@ FETCHES: dict[str, FetchSpec] = {
             "--dataset stage."
         ),
     ),
+    "human-eval": FetchSpec(
+        bench="human-eval",
+        out="human-eval/test.jsonl",
+        kind="hf-rows",
+        source="openai/openai_humaneval",
+        config="openai_humaneval",
+        split="test",
+        note=(
+            "OpenAI HumanEval base (MIT), 164 problems, via the HF "
+            "datasets-server API. Each row carries the function-signature "
+            "`prompt`, a `test` harness defining check(<entry_point>), and "
+            "`entry_point`. The plus variant is staged separately as "
+            "`humaneval-plus`."
+        ),
+    ),
+    "bigcodebench": FetchSpec(
+        bench="bigcodebench",
+        out="bigcodebench/v0.1.4.jsonl",
+        kind="hf-rows",
+        source="bigcode/bigcodebench",
+        config="default",
+        split="v0.1.4",
+        note=(
+            "BigCodeBench v0.1.4 (Apache-2.0), 1,140 practical Python tasks "
+            "exercising library calls, via the HF datasets-server API (12 "
+            "pages of 100). Each row carries both complete/instruct prompts "
+            "and a unittest `test`; the adapter defaults to the instruct "
+            "split. Other release splits (v0.1.0_hf..v0.1.3) are a manual "
+            "--dataset stage."
+        ),
+    ),
+    "humaneval-x": FetchSpec(
+        bench="humaneval-x",
+        out="humaneval-x/python.jsonl",
+        kind="url",
+        source=(
+            "https://huggingface.co/datasets/THUDM/humaneval-x/resolve/main/"
+            "data/python/data/humaneval.jsonl"
+        ),
+        note=(
+            "HumanEval-X Python split (Apache-2.0), 164 problems, fetched as "
+            "direct JSONL from the dataset repo (this script-based dataset has "
+            "no datasets-server parquet). Only the adapter's Python execution "
+            "path is wired; the other four languages are a scaffold. Stage a "
+            "different language from data/<lang>/data/humaneval.jsonl via a "
+            "manual --dataset."
+        ),
+    ),
+    "aimo": FetchSpec(
+        bench="aimo",
+        out="aimo/aime.jsonl",
+        kind="hf-rows",
+        source="AI-MO/aimo-validation-aime",
+        config="default",
+        split="train",
+        note=(
+            "AIMO validation AIME set (Apache-2.0), 90 olympiad problems with "
+            "integer answers, via the HF datasets-server API — a public proxy "
+            "for the private AIMO competition set. The AMC proxy "
+            "(AI-MO/aimo-validation-amc, 83 problems) is equally stageable via "
+            "a manual --dataset."
+        ),
+    ),
 }
 
 #: Hyphenless registry aliases resolve to the same spec.
@@ -145,6 +208,8 @@ _ALIASES: dict[str, str] = {
     "swebench": "swe-bench",
     "swe-bench-lite": "swe-bench",
     "lcb": "livecodebench",
+    "humaneval": "human-eval",
+    "humanevalx": "humaneval-x",
 }
 
 

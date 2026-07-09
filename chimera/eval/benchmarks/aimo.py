@@ -47,6 +47,52 @@ def extract_answer(text: str) -> int | None:
     return None
 
 
+def _parse_jsonl(text: str) -> list[dict[str, Any]]:
+    """Parse each non-empty line of *text* as one JSON object."""
+    return [json.loads(line) for line in text.splitlines() if line.strip()]
+
+
+def _read_problem_records(path: Path) -> list[dict[str, Any]]:
+    """Read problems from a JSON list/dict **or** a JSON-lines file.
+
+    A set staged by ``chimera bench-fetch aimo`` is JSON-lines (one problem
+    per line); a hand-authored set is usually a JSON list or a
+    ``{"problems": [...]}`` wrapper. The JSON-lines shape is taken from the
+    ``.jsonl`` suffix, or as a fallback when a whole-file ``json.loads``
+    fails, so both stage through the same path.
+    """
+    text = path.read_text()
+    if path.suffix == ".jsonl":
+        return _parse_jsonl(text)
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        return _parse_jsonl(text)
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict):
+        records = data.get("problems", [])
+        return records if isinstance(records, list) else []
+    return []
+
+
+def _coerce_answer(value: Any) -> Any:
+    """Coerce a ground-truth answer to a non-negative int for grading.
+
+    Public AIMO validation rows carry the answer as a string (``"116"``) or a
+    float-like string (``"142.0"``); :func:`extract_answer` yields
+    ``abs(int(...))`` from the agent output, so the ground truth must be the
+    same int type for a correct answer to compare equal. Non-numeric answers
+    pass through unchanged.
+    """
+    if isinstance(value, int):  # bool is an int subclass; harmless to pass through
+        return value
+    try:
+        return abs(int(round(float(value))))
+    except (TypeError, ValueError):
+        return value
+
+
 class AIMOBenchmark(Benchmark):
     """AIMO Progress Prize 3 benchmark.
 
@@ -82,8 +128,7 @@ class AIMOBenchmark(Benchmark):
 
     def _load_tasks(self) -> list[dict[str, Any]]:
         if self._problems_path:
-            data = json.loads(Path(self._problems_path).read_text())
-            problems = data if isinstance(data, list) else data.get("problems", [])
+            problems = _read_problem_records(Path(self._problems_path))
         else:
             problems = []
 
@@ -92,7 +137,7 @@ class AIMOBenchmark(Benchmark):
             tasks.append({
                 "id": p["id"],
                 "prompt": self._format_prompt(p["problem"]),
-                "answer": p["answer"],
+                "answer": _coerce_answer(p["answer"]),
             })
 
         if self._limit:

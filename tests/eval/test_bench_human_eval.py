@@ -57,6 +57,24 @@ class TestHumanEval:
         assert len(loaded) == 2
         assert loaded[0]["id"] == "HumanEval/0"
 
+    def test_loads_from_jsonl_file(self):
+        # A staged HuggingFace dump is JSON-lines, not a JSON list.
+        rows = [
+            {"task_id": "HumanEval/0", "prompt": "def a():", "test": "assert True"},
+            {"task_id": "HumanEval/1", "prompt": "def b():", "test": "assert True"},
+        ]
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".jsonl", delete=False
+        ) as f:
+            f.write("\n".join(json.dumps(r) for r in rows) + "\n")
+            f.flush()
+            bench = HumanEval(dataset_path=f.name)
+            loaded = bench.tasks()
+
+        assert len(loaded) == 2
+        assert loaded[0]["task_id"] == "HumanEval/0"
+        assert loaded[1]["prompt"] == "def b():"
+
     def test_evaluate_with_test_code_and_env(self):
         bench = HumanEval()
         task = {
