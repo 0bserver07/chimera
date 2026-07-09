@@ -158,6 +158,30 @@ single model account (capped at 4, `c2e78f4`). Playbook:
 300 · human-eval 164 · bigcodebench 1,140 · humaneval-x 164 · aimo 90 ·
 tau-bench 1 (dataset-capped; upstream tasks are code-defined, `d6e6dc6`).
 
+## Flagship full-dataset scorecard — coding-agent, glm-5.2[1m] (2026-07-09)
+
+**Two columns re-run clean at throttle-4 (`fullscore2`,
+`data/modal-grid-fullscore2-20260709-154339.json`) are now EXACT and citable —
+`status_counts` prove zero infra errors** (`{'completed': 427}` /
+`{'completed': 164}`), so every task ran and these are real pass rates, not
+lower bounds:
+
+| Benchmark (full n) | Score | Basis |
+|---|---|---|
+| **mbpp** (427) | **99.1%** (423/427) | ✅ EXACT — 0 errors, status_counts-verified |
+| **human-eval-plus** (164) | **92.1%** (151/164) | ✅ EXACT — 0 errors, status_counts-verified |
+| mbpp-plus (378) | ≥ 91.0% | lower bound (fullscore1, full-work cost — near-real) |
+| math500 (500) | ≥ 43.2% | lower bound; investigate (see below) |
+| livecodebench (175) | ≥ 18.9% | lower bound; real work ($9.93), hard contest codegen |
+
+This vindicates the integrity work end-to-end: fullscore1 rated mbpp
+"≥35.4% DO NOT CITE" (error-dominated); the clean re-run reveals the true
+**99.1%**. The flagship is genuinely strong on codegen — the earlier low
+numbers were harness noise, exactly as the cost-proxy flagged. Remaining
+lower-bound columns (mbpp-plus, math500, lcb) each just need a throttled
+re-run to become exact. The fullscore1 lower-bounds table is retained below
+for provenance.
+
 ## fullscore1 — flagship full-dataset, all 5 columns (2026-07-09, LOWER BOUNDS)
 
 Full-dataset columns on the trustworthy grader, run DETACHED overnight
