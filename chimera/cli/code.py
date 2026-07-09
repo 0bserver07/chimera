@@ -935,6 +935,18 @@ def run_code(args: Any) -> int:
         except Exception as exc:  # noqa: BLE001 - never crash the REPL
             print(f"[post_session_init] hook failed: {exc}", file=sys.stderr)
 
+    # Surface plugin-contributed UI commands into the shared slash-command
+    # registry so a third-party plugin's `/command` works at the prompt without
+    # editing core. No-op when no plugin registered a UICommand.
+    try:
+        from chimera.plugins.ui import install_into_repl
+
+        _installed = install_into_repl()
+        if _installed:
+            print("plugin commands: " + ", ".join(f"/{n}" for n in _installed))
+    except Exception as exc:  # noqa: BLE001 - never crash the REPL
+        print(f"[plugin-ui] command install failed: {exc}", file=sys.stderr)
+
     _setup_readline()
 
     print(f"chimera code v{__version__} | model: {provider.model_name} | /help for commands")
