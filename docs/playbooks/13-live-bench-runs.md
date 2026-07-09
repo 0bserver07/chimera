@@ -27,6 +27,13 @@ freestyle live runs.
 6. **Numbers come from files, not memory.** Every published table cites its
    `data/*.json`. If the file doesn't exist, the number doesn't exist.
 
+7. **Hours-long runs MUST be detached + server-persisted.** A plain
+   `modal run` keeps cells alive only while the local client is connected — a
+   sleeping laptop terminated a 2h full-dataset run ("local client
+   disconnected", all cells lost). Use `modal run --detach
+   ...::grid_detached --run-id <id>`; cells persist to the
+   `chimera-bench-results` Volume; fetch with `::collect --run-id <id>`.
+
 ## The sequence for any live run
 
 ```

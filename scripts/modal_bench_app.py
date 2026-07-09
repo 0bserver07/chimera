@@ -48,6 +48,16 @@ app = modal.App("chimera-bench")
 # limit genuinely allows more.
 _MAX_CONCURRENCY = 4
 
+# Durable results (playbook 13, learned the hard way): a plain `modal run`
+# keeps cells alive only while the LOCAL client stays connected — a laptop
+# sleeping mid-run had Modal terminate every in-flight cell ("local client
+# disconnected"), losing a 2h full-dataset run. Cells therefore persist their
+# own result JSON to this Volume the moment they finish; `::grid_detached`
+# (fired with `modal run --detach`) spawns cells and exits, and `::collect`
+# reads the Volume later. Completed work survives any client death.
+results_volume = modal.Volume.from_name("chimera-bench-results", create_if_missing=True)
+_RESULTS_DIR = "/results"
+
 
 def _run_one(
     agent: str, bench: str, limit: int, model: str, max_tool_calls: int, max_cost: float
@@ -112,6 +122,45 @@ def run_cell_gpu(
     agent: str, bench: str, limit: int, model: str, max_tool_calls: int, max_cost: float
 ) -> dict:
     return _run_one(agent, bench, limit, model, max_tool_calls, max_cost)
+
+
+@app.function(
+    image=image,
+    secrets=[modal.Secret.from_name("chimera-glm")],
+    timeout=43200,
+    max_containers=_MAX_CONCURRENCY,
+    volumes={_RESULTS_DIR: results_volume},
+)
+def run_cell_durable(
+    run_id: str,
+    agent: str,
+    bench: str,
+    limit: int,
+    model: str,
+    max_tool_calls: int,
+    max_cost: float,
+) -> str:
+    """Run a cell and persist its result to the Volume — survives client death.
+
+    Writes ``/results/<run_id>/<agent>__<bench>.json`` (a cell error is written
+    too, as ``{"error": ...}``) and commits the Volume, so a detached run's
+    completed cells are durable even if the spawning client is long gone.
+    Returns the volume-relative path.
+    """
+    import json as _json
+    import os as _os
+
+    out_dir = f"{_RESULTS_DIR}/{run_id}"
+    _os.makedirs(out_dir, exist_ok=True)
+    path = f"{out_dir}/{agent}__{bench}.json"
+    try:
+        result = _run_one(agent, bench, limit, model, max_tool_calls, max_cost)
+    except Exception as exc:  # noqa: BLE001 — persist the failure, don't lose it
+        result = {"agent": agent, "bench": bench, "error": f"{type(exc).__name__}: {exc}"}
+    with open(path, "w") as fh:
+        _json.dump(result, fh)
+    results_volume.commit()
+    return path.removeprefix(_RESULTS_DIR + "/")
 
 
 @app.local_entrypoint()
@@ -213,4 +262,76 @@ def grid(
     out = f"data/modal-grid-{datetime.now().strftime('%Y%m%d-%H%M%S')}.json"
     with open(out, "w") as fh:
         json.dump({"model": model, "cells": combined}, fh, indent=2)
+    print(f"saved -> {out}")
+
+
+@app.local_entrypoint()
+def grid_detached(
+    run_id: str,
+    agents: str = "coding-agent",
+    benches: str = "mbpp",
+    limit: int = 500,
+    model: str = "glm-5.2[1m]",
+    max_tool_calls: int = 15,
+    max_cost: float = 0.15,
+) -> None:
+    """Spawn a grid DETACHED — cells outlive this client and persist to a Volume.
+
+    Fire with ``modal run --detach scripts/modal_bench_app.py::grid_detached
+    --run-id <id> ...``: this spawns every cell (still throttled by
+    ``max_containers``) and exits immediately. Each cell writes its result to
+    the ``chimera-bench-results`` Volume under ``<run_id>/``. Fetch later with
+    ``::collect --run-id <id>`` — a sleeping laptop can no longer kill the run.
+    """
+    agent_list = [a.strip() for a in agents.split(",") if a.strip()]
+    bench_list = [b.strip() for b in benches.split(",") if b.strip()]
+    cells = [(a, b) for a in agent_list for b in bench_list]
+    print(
+        f"[grid_detached run_id={run_id}] spawning {len(cells)} cells "
+        f"(throttle {_MAX_CONCURRENCY}); safe to disconnect after this exits."
+    )
+    for a, b in cells:
+        call = run_cell_durable.spawn(run_id, a, b, limit, model, max_tool_calls, max_cost)
+        print(f"  spawned {a} x {b} -> {call.object_id}")
+    print(f"collect with: modal run scripts/modal_bench_app.py::collect --run-id {run_id}")
+
+
+@app.local_entrypoint()
+def collect(run_id: str) -> None:
+    """Collect a detached run's cells from the Volume into data/ + a table."""
+    import io
+
+    results_volume.reload()
+    combined: list[dict] = []
+    expected: list[str] = []
+    for entry in results_volume.listdir(f"/{run_id}"):
+        name = entry.path.split("/")[-1]
+        expected.append(name)
+        buf = io.BytesIO()
+        for chunk in results_volume.read_file(f"{run_id}/{name}"):
+            buf.write(chunk)
+        payload = json.loads(buf.getvalue())
+        if "cells" in payload:
+            combined.extend(payload["cells"])
+        else:  # persisted cell-level error
+            combined.append(
+                {"agent_id": payload.get("agent", "?"), "benchmark": payload.get("bench", "?"),
+                 "passed": 0, "total": 0, "pass_rate": 0.0, "status": "error",
+                 "error": payload.get("error", "")}
+            )
+    if not combined:
+        print(f"[collect {run_id}] no cells on the volume yet — still running?")
+        return
+    print(f"[collect {run_id}] {len(expected)} cell files:")
+    for c in combined:
+        n = f"{c['passed']}/{c['total']}" if c.get("total") else c.get("status", "?")
+        print(f"  {c['agent_id']:<16} {c['benchmark'].split(':')[0]:<28} {n:>8}  "
+              f"${float(c.get('cost_usd', 0) or 0):.3f}  {c.get('status','')}")
+    from datetime import datetime
+
+    import os as _os
+    _os.makedirs("data", exist_ok=True)
+    out = f"data/modal-grid-{run_id}-{datetime.now().strftime('%Y%m%d-%H%M%S')}.json"
+    with open(out, "w") as fh:
+        json.dump({"run_id": run_id, "cells": combined}, fh, indent=2)
     print(f"saved -> {out}")
