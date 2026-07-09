@@ -54,10 +54,28 @@ def _last_assistant_text(messages: Any) -> str:
     return ""
 
 
-async def aggregate_events(events: AsyncIterator[LoopEvent]) -> AgentResult:
+def _accumulate_usage(total: dict[str, int], usage: Any) -> None:
+    """Add a per-turn ``usage`` dict's token counts into *total* in place.
+
+    Only the counters :func:`~chimera.providers.cost.calculate_cost` reads
+    (``input_tokens`` / ``output_tokens``) are summed; anything else is ignored.
+    Non-dict / missing payloads (e.g. a plain-string assistant event in a test)
+    are skipped so the caller never has to guard the shape.
+    """
+    if not isinstance(usage, dict):
+        return
+    for key in ("input_tokens", "output_tokens"):
+        val = usage.get(key)
+        if isinstance(val, int) and not isinstance(val, bool):
+            total[key] = total.get(key, 0) + val
+
+
+async def aggregate_events(
+    events: AsyncIterator[LoopEvent], model: str | None = None,
+) -> AgentResult:
     """Fold a CodingAgent ``LoopEvent`` stream into a Harness ``AgentResult``.
 
-    Counts ``tool_use`` events, reads final cost / turn-count from the terminal
+    Counts ``tool_use`` events, reads final turn-count from the terminal
     ``result`` event, and — crucially — takes the graded output from the
     **stream's** last ``assistant`` event rather than the result event's message
     list. AgentLoop emits an ``assistant`` event for every turn (including the
@@ -68,46 +86,90 @@ async def aggregate_events(events: AsyncIterator[LoopEvent]) -> AgentResult:
     pre-tool preamble. Preferring it (the previous behavior) clobbered the real
     answer and scored correct solutions 0% on answer-graded benchmarks.
 
+    **Cost survives the error path.** Cost is taken from the terminal ``result``
+    event when one arrives, but that event fires only on a *clean* exit
+    (completion / loop-detected / abort / max-turns). An unrecoverable provider
+    error mid-run raises straight through the loop, emitting no ``result`` — so
+    sourcing cost solely from it reported ``$0.00`` for runs that had already
+    made real, billable calls. To close that gap this also sums each turn's
+    token usage off the per-turn ``assistant`` events and, when no ``result``
+    arrives, recovers cost via :func:`~chimera.providers.cost.calculate_cost`
+    (requires *model*). The raising iterator is caught so those counts are not
+    lost with the exception.
+
     Args:
         events: The async iterator returned by ``CodingAgent.run(task)``.
+        model: Model id used to price the summed per-turn usage on the
+            no-``result``-event (error) path. ``None`` disables that fallback —
+            the terminal result event, when present, remains authoritative.
 
     Returns:
         An :class:`~chimera.types.AgentResult` the Harness can grade.
     """
     from chimera.core.loop_events import LoopEventType
+    from chimera.providers.cost import calculate_cost
     from chimera.tools.submit import SUBMIT_TOOL_NAME
 
     submitted_output = ""  # answer the agent handed to the `submit` tool
     streamed_output = ""  # last non-empty assistant text seen on the stream
     result_output = ""  # last-assistant text recovered from the terminal result
-    cost = 0.0
+    result_cost: float | None = None  # cost off the terminal `result` event
+    streamed_usage: dict[str, int] = {}  # per-turn usage summed off `assistant`
     steps = 0
+    turns_seen = 0
     tool_calls = 0
     error: str | None = None
 
-    async for event in events:
-        etype = event.type
-        if etype == LoopEventType.tool_use:
-            tool_calls += 1
-            # Deterministic finish-tool path: when the agent calls `submit`,
-            # its `answer` argument IS the final answer — no prose scraping.
-            # Last submit wins if the agent (incorrectly) calls it twice.
-            if getattr(event.data, "name", None) == SUBMIT_TOOL_NAME:
-                args = getattr(event.data, "arguments", None) or {}
-                answer = args.get("answer")
-                if isinstance(answer, str) and answer.strip():
-                    submitted_output = answer
-        elif etype == LoopEventType.assistant:
-            text = _text_of(event.data)
-            if text:
-                streamed_output = text
-        elif etype == LoopEventType.error:
-            error = str(event.data)
-        elif etype == LoopEventType.result:
-            res = event.data
-            cost = float(getattr(res, "cost_usd", 0.0) or 0.0)
-            steps = int(getattr(res, "turn_count", 0) or 0)
-            result_output = _last_assistant_text(getattr(res, "messages", None) or [])
+    try:
+        async for event in events:
+            etype = event.type
+            if etype == LoopEventType.tool_use:
+                tool_calls += 1
+                # Deterministic finish-tool path: when the agent calls `submit`,
+                # its `answer` argument IS the final answer — no prose scraping.
+                # Last submit wins if the agent (incorrectly) calls it twice.
+                if getattr(event.data, "name", None) == SUBMIT_TOOL_NAME:
+                    args = getattr(event.data, "arguments", None) or {}
+                    answer = args.get("answer")
+                    if isinstance(answer, str) and answer.strip():
+                        submitted_output = answer
+            elif etype == LoopEventType.assistant:
+                turns_seen += 1
+                text = _text_of(event.data)
+                if text:
+                    streamed_output = text
+                # Every assistant event carries that turn's provider Response,
+                # whose `usage` is the only cost record that outlives an error.
+                _accumulate_usage(streamed_usage, getattr(event.data, "usage", None))
+            elif etype == LoopEventType.error:
+                error = str(event.data)
+            elif etype == LoopEventType.result:
+                res = event.data
+                result_cost = float(getattr(res, "cost_usd", 0.0) or 0.0)
+                steps = int(getattr(res, "turn_count", 0) or 0)
+                result_output = _last_assistant_text(getattr(res, "messages", None) or [])
+    except Exception as exc:  # noqa: BLE001 — a mid-run loop failure must not void cost
+        # The loop raised before emitting a terminal `result` (e.g. an
+        # unrecoverable provider error). Record it and fall through: the cost of
+        # the calls that DID complete is recovered from `streamed_usage` below,
+        # instead of being discarded with the exception.
+        if error is None:
+            error = f"{type(exc).__name__}: {exc}"
+
+    # Cost precedence: the terminal `result` event's tally is authoritative when
+    # present; otherwise (the loop raised, or emitted no result) recover it from
+    # the summed per-turn usage so billable calls are never counted as free.
+    if result_cost is not None:
+        cost = result_cost
+    elif model and streamed_usage:
+        cost = calculate_cost(model, streamed_usage)
+    else:
+        cost = 0.0
+
+    # A raising loop emits no `result`, so fall back to the number of assistant
+    # turns observed rather than reporting 0 steps against a non-zero cost.
+    if not steps:
+        steps = turns_seen
 
     # Precedence: a structured `submit` answer beats everything (it is the
     # agent's explicit, deterministic final answer); otherwise the stream's
@@ -205,7 +267,8 @@ class CodingAgentAdapter:
             if self._max_turns is not None:
                 agent_kwargs["max_turns"] = self._max_turns
             agent = CodingAgent(**agent_kwargs)
-            return asyncio.run(aggregate_events(agent.run(task)))
+            model = getattr(self._provider, "model_name", None)
+            return asyncio.run(aggregate_events(agent.run(task), model=model))
         except Exception as exc:  # noqa: BLE001 - isolate one task's failure
             return AgentResult(
                 output="",

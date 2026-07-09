@@ -81,6 +81,101 @@ def test_aggregate_records_error() -> None:
     assert "kaboom" in (res.error or "")
 
 
+def test_aggregate_recovers_cost_when_stream_raises_before_result() -> None:
+    # The regression: an unrecoverable provider error mid-run raises straight
+    # through AgentLoop, so it never emits the terminal `result` event that used
+    # to be cost's only source — and the assembled-agent path reported $0.00 for
+    # runs that had already made real, billable LLM calls. Cost must instead be
+    # recovered from the per-turn `assistant` usage the loop *did* stream.
+    from chimera.providers.base import Response
+    from chimera.providers.cost import calculate_cost
+
+    async def _raising_stream() -> Any:
+        yield LoopEvent(
+            type=LoopEventType.assistant,
+            data=Response("let me look", [], {"input_tokens": 1000, "output_tokens": 100}),
+            turn=1,
+        )
+        yield LoopEvent(type=LoopEventType.tool_use, data=None, turn=1)
+        yield LoopEvent(
+            type=LoopEventType.assistant,
+            data=Response("almost there", [], {"input_tokens": 500, "output_tokens": 50}),
+            turn=2,
+        )
+        raise RuntimeError("simulated provider error")
+
+    res = asyncio.run(aggregate_events(_raising_stream(), model="glm-5.2"))
+    expected = calculate_cost("glm-5.2", {"input_tokens": 1500, "output_tokens": 150})
+    assert expected > 0.0  # guard: the model is priced, so this is a real check
+    assert res.cost == expected  # summed turn-1 + turn-2 usage, not zero
+    assert res.success is False
+    assert "simulated provider error" in (res.error or "")
+    assert res.tool_calls_total == 1
+    assert res.steps == 2  # two assistant turns observed before the raise
+
+
+def test_aggregate_prefers_result_cost_and_does_not_double_count() -> None:
+    # When a terminal `result` event arrives it stays authoritative: its cost is
+    # used verbatim and the summed per-turn usage is NOT added on top.
+    from chimera.providers.base import Response
+
+    async def _stream_with_result() -> Any:
+        yield LoopEvent(
+            type=LoopEventType.assistant,
+            data=Response("x", [], {"input_tokens": 1000, "output_tokens": 100}),
+            turn=1,
+        )
+        yield LoopEvent(type=LoopEventType.result, data=_Result(0.05, 1, []), turn=1)
+
+    res = asyncio.run(aggregate_events(_stream_with_result(), model="glm-5.2"))
+    assert res.cost == 0.05
+
+
+def test_adapter_reports_cost_when_provider_errors_midrun(tmp_path: Any) -> None:
+    # End-to-end faux-provider proof: the non-streaming `swebench` preset lets a
+    # mid-run provider error propagate (no `result` event), so this drives the
+    # exact production path — CodingAgent -> AgentLoop -> aggregate_events — and
+    # confirms the turn-1 call's real cost survives to the returned AgentResult.
+    from types import SimpleNamespace
+
+    from chimera.providers.base import Provider, Response
+    from chimera.types import ToolCall
+
+    class _FaultyProvider(Provider):
+        """Succeeds once (billable), then raises like a rate-limited API."""
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def complete(self, messages: Any, tools: Any = None, **kwargs: Any) -> Response:
+            self.calls += 1
+            if self.calls == 1:
+                return Response(
+                    "looking into it",
+                    [ToolCall(id="c1", name="nonexistent_tool", arguments={})],
+                    {"input_tokens": 1000, "output_tokens": 100},
+                )
+            raise RuntimeError("simulated rate limit")
+
+        @property
+        def context_window(self) -> int:
+            return 128_000
+
+        @property
+        def supports_tool_use(self) -> bool:
+            return True
+
+        @property
+        def model_name(self) -> str:
+            return "glm-5.2"
+
+    adapter = CodingAgentAdapter(_FaultyProvider(), preset="swebench")
+    res = adapter.run("solve: return 42", SimpleNamespace(workdir=str(tmp_path)))
+    assert isinstance(res, AgentResult)
+    assert res.success is False  # the run did error out
+    assert res.cost > 0.0  # ...but the turn-1 call's real cost is still reported
+
+
 def test_last_assistant_text_picks_last_assistant() -> None:
     msgs = [
         Message.assistant("first"),
