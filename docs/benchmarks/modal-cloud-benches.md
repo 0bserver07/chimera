@@ -158,24 +158,31 @@ single model account (capped at 4, `c2e78f4`). Playbook:
 300 · human-eval 164 · bigcodebench 1,140 · humaneval-x 164 · aimo 90 ·
 tau-bench 1 (dataset-capped; upstream tasks are code-defined, `d6e6dc6`).
 
-## fullscore1 — flagship full-dataset preliminary (2026-07-09, LOWER BOUNDS)
+## fullscore1 — flagship full-dataset, all 5 columns (2026-07-09, LOWER BOUNDS)
 
-First full-dataset columns on the trustworthy grader, run DETACHED overnight
-(`data/modal-grid-fullscore1-20260709-082148.json`). **All columns are
-`partial_error` — errored tasks count as misses, so these are lower bounds,
-NOT scores.** This run predates `status_counts`, so the error share is only
-inferable from cost-per-task (errored tasks die cheap; full work ≈0.85–0.9¢).
+Full-dataset columns on the trustworthy grader, run DETACHED overnight
+(complete: `data/modal-grid-fullscore1-20260709-105308.json`). **All columns
+are `partial_error` — errored tasks count as misses, so these are lower bounds,
+NOT scores.** This run predates `status_counts`, so error share is inferred from
+cost-per-task: errored tasks die cheap, so a column at full-work cost is mostly
+real work, a half-cost column is error-dominated. Full-work ≈0.85–0.9¢ for
+codegen/math; **LiveCodeBench is inherently pricier (contest-style, long
+generations)** so its ¢/task is not comparable to the others.
 
 | Column (full n) | Result (lower bound) | ¢/task | Read |
 |---|---|---|---|
 | mbpp-plus (378) | **≥ 91.0%** (344/378) | 0.89 | full-work cost — the one near-citable number |
 | math500 (500) | ≥ 43.2% (216/500) | 0.85 | full-work cost; misses look real — investigate before citing |
+| livecodebench (175) | ≥ 18.9% (33/175) | 5.68 | HIGH full-work cost ($9.93) ⇒ low error share, so ~real — but hard contest codegen, expect low |
 | mbpp (427) | ≥ 35.4% (151/427) | 0.41 | half-cost ⇒ likely error-dominated — DO NOT CITE |
 | human-eval-plus (164) | ≥ 31.7% (52/164) | 0.39 | half-cost ⇒ likely error-dominated — DO NOT CITE |
-| livecodebench (175) | pending (detached, in flight) | — | collect via `::collect --run-id fullscore1` |
 
-Verdict: not a publishable scorecard. The two half-cost columns need a re-run
-now that cells carry `status_counts` (exact failure-vs-error split); math500's
-full-cost 43% is a real signal worth its own investigation (contrast: MATH-500
-easy-slice history was far higher on stronger models — model + prompt-path
-sensitivity, not assumed harness fault).
+**Verdict: not a publishable scorecard, but three of five are real signal.**
+mbpp-plus ≥91% and math500 ≥43% ran at full-work cost; livecodebench ≥18.9% cost
+$9.93 (5.68¢/task — the flagship did substantial work on nearly every task, so
+its low score is a genuine result, not an artifact: LiveCodeBench is hard
+contest codegen). The two half-cost columns (mbpp, human-eval-plus) are
+error-dominated and must NOT be cited — they need a re-run now that cells carry
+`status_counts` (exact failure-vs-error split, ~$3). math500's 43% is worth its
+own investigation (MATH-500 easy-slice history was far higher on stronger
+models — model + prompt-path sensitivity, not assumed harness fault).

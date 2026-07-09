@@ -1,0 +1,75 @@
+{
+  "run_id": "fullscore1",
+  "cells": [
+    {
+      "agent_id": "coding-agent",
+      "benchmark": "livecodebench-codegeneration",
+      "total": 175,
+      "passed": 33,
+      "pass_rate": 0.18857142857142858,
+      "cost_usd": 9.933318000000002,
+      "tool_calls": 4,
+      "wall_clock_sec": 94.36471271199844,
+      "status": "partial_error",
+      "budget_honored": false,
+      "budget_note": "max_turns aligned to budget.max_llm_calls=15; tool-call budget not enforced (factory takes no loop_config)",
+      "category": "unknown"
+    },
+    {
+      "agent_id": "coding-agent",
+      "benchmark": "math500",
+      "total": 500,
+      "passed": 216,
+      "pass_rate": 0.432,
+      "cost_usd": 4.273974,
+      "tool_calls": 2,
+      "wall_clock_sec": 20.679528810000193,
+      "status": "partial_error",
+      "budget_honored": false,
+      "budget_note": "max_turns aligned to budget.max_llm_calls=15; tool-call budget not enforced (factory takes no loop_config)",
+      "category": "unknown"
+    },
+    {
+      "agent_id": "coding-agent",
+      "benchmark": "mbpp-plus",
+      "total": 378,
+      "passed": 344,
+      "pass_rate": 0.91005291005291,
+      "cost_usd": 3.360220000000001,
+      "tool_calls": 3,
+      "wall_clock_sec": 15.571209513998838,
+      "status": "partial_error",
+      "budget_honored": false,
+      "budget_note": "max_turns aligned to budget.max_llm_calls=15; tool-call budget not enforced (factory takes no loop_config)",
+      "category": "unknown"
+    },
+    {
+      "agent_id": "coding-agent",
+      "benchmark": "mbpp-sanitized",
+      "total": 427,
+      "passed": 151,
+      "pass_rate": 0.35362997658079626,
+      "cost_usd": 1.7415519999999989,
+      "tool_calls": 0,
+      "wall_clock_sec": 2.639720422999744,
+      "status": "partial_error",
+      "budget_honored": false,
+      "budget_note": "max_turns aligned to budget.max_llm_calls=15; tool-call budget not enforced (factory takes no loop_config)",
+      "category": "unknown"
+    },
+    {
+      "agent_id": "coding-agent",
+      "benchmark": "human-eval-plus",
+      "total": 164,
+      "passed": 52,
+      "pass_rate": 0.3170731707317073,
+      "cost_usd": 0.6414280000000002,
+      "tool_calls": 0,
+      "wall_clock_sec": 2.6461082260002513,
+      "status": "partial_error",
+      "budget_honored": false,
+      "budget_note": "max_turns aligned to budget.max_llm_calls=15; tool-call budget not enforced (factory takes no loop_config)",
+      "category": "unknown"
+    }
+  ]
+}
