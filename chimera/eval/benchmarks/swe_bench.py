@@ -595,7 +595,10 @@ class SWEBench(Benchmark):
                 # tests (pytest absent without conda activation; the output
                 # counters parse 0/0/0) reads as a pass. Absence of failure is
                 # not success — require at least one test to have actually run.
-                if test_result.total == 0:
+                # ``getattr``: only a result that REPORTS zero-run counters is
+                # vacuous; duck-typed results without counters fall through to
+                # their ``all_passed`` verdict.
+                if getattr(test_result, "total", None) == 0:
                     return False
                 return bool(test_result.all_passed)
             except Exception:
