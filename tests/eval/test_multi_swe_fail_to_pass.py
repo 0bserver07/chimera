@@ -343,30 +343,26 @@ _STAGED = (
 
 @pytest.mark.skipif(not _STAGED.exists(), reason="staged MultiSWE-bench absent")
 class TestStagedDatasetReality:
-    """The staged Python subset carries no named tests (honest gap).
+    """The staged Python subset now carries named tests (faithful grading).
 
-    ``_transform_multi_swe_row`` drops the upstream ``*_tests`` execution
-    records during staging, so these rows have no FAIL_TO_PASS / PASS_TO_PASS
-    to surface — they grade via the Python runner's blanket command. If a
-    future re-stage keeps those records, the loader above will surface them and
-    faithful grading fires automatically.
+    ``_transform_multi_swe_row`` keeps the upstream FAIL_TO_PASS / PASS_TO_PASS
+    (JSON-string lists of real pytest node ids), so these rows surface them and
+    ``evaluate`` takes the named-node-id path, not the blanket runner. (Before
+    2026-07-09 the transform dropped them — the honest gap this closes.)
     """
 
-    def test_staged_rows_have_no_named_tests(self) -> None:
+    def test_staged_rows_carry_named_tests(self) -> None:
         bench = MultiSWEBench(dataset_path=str(_STAGED), limit=10)
         assert bench.tasks(), "expected staged Python tasks"
         for inst in bench.instances:
-            assert inst.fail_to_pass == []
-            assert inst.pass_to_pass == []
+            assert inst.fail_to_pass, "F2P should now be populated post re-stage"
+            assert all("::" in nid for nid in inst.fail_to_pass)  # real node ids
 
-    def test_staged_task_routes_to_runner_not_pytest_named(self) -> None:
-        # With no named tests, evaluate takes the runner path (blanket pytest),
-        # never the named-node-id path.
+    def test_staged_task_routes_to_named_grading(self) -> None:
+        # With named tests present, evaluate runs the specific node ids via
+        # "python -m pytest", not the runner's blanket "pytest ...".
         bench = MultiSWEBench(dataset_path=str(_STAGED), limit=1)
         task = bench.tasks()[0]
         env = FakeEnv()
         bench.evaluate(task, "done", env)
-        # The blanket runner command is a bare "pytest ..." (no explicit node
-        # ids appended by our named-tests grader, which uses "python -m pytest").
-        assert any(c.startswith("pytest") for c in env.commands)
-        assert not any(c.startswith("python -m pytest") for c in env.commands)
+        assert any(c.startswith("python -m pytest") for c in env.commands)

@@ -389,6 +389,13 @@ def _transform_multi_swe_row(row: dict[str, Any]) -> dict[str, Any] | None:
         "hints_text": row.get("hints_text", ""),
         "patch": row.get("patch") or row.get("fix_patch", ""),
         "test_patch": row.get("test_patch", ""),
+        # Keep the named test lists (JSON-string lists of real pytest node ids,
+        # e.g. "path::test[param]") so MultiSWEBench grades faithfully via
+        # FAIL_TO_PASS/PASS_TO_PASS instead of the blanket runner. The heavy
+        # *_tests execution-record DICTS (run_result, f2p_tests, …) stay
+        # dropped — the adapter reads these string lists, not the dicts.
+        "FAIL_TO_PASS": row.get("FAIL_TO_PASS", ""),
+        "PASS_TO_PASS": row.get("PASS_TO_PASS", ""),
         "version": str(row.get("version", "")),
         "language": "python",
     }
