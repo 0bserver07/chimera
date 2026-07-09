@@ -89,15 +89,22 @@ The flagship run across all five staged benchmarks, all executing on Modal:
 
 | Benchmark | Result | n |
 |---|---|---|
-| human-eval-plus | **10/10 (100%)** | 10 |
+| human-eval-plus | ~~10/10~~ **INVALIDATED** → re-measured **5/5 (100%)** at n=5 | 10 → 5 |
 | livecodebench | **9/10 (90%)** | 10 |
 | math500 | 4/5 (80%) | 5 |
 | mbpp | 6/10 (60%) | 10 |
 | mbpp-plus | 5/10 (50%) | 10 |
 
-All real, all graded on Modal. (math500 initially errored because the Modal
-image was built without the `datasets` package — a one-line image fix, not a
-bench gap; it loads fine locally. Fixed in `14c32b9`.)
+**Integrity correction (`0275ec3`):** every human-eval-plus number graded
+before that commit is **invalid** — the grader's `test` field only *defines*
+`check(candidate)` and the adapter never appended the call, so `exec()` merely
+defined a function and returned clean: **any output passed, including wrong
+ones**. The 10/10 above was measured under that broken grader. Fixed (empty →
+False, wrong → False, canonical → True, `check(entry_point)` now invoked) and
+re-measured on Modal post-fix: the flagship scored **5/5 at n=5** on the honest
+grader (`data/modal-grid-20260708-232643.json`). The other columns used
+different graders and are unaffected. (math500 initially errored because the
+Modal image lacked the datasets — a one-line image fix, `14c32b9`.)
 
 ## What runs
 
