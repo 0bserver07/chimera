@@ -122,3 +122,38 @@ Modal image lacked the datasets — a one-line image fix, `14c32b9`.)
   `modal secret create chimera-glm ANTHROPIC_API_KEY=… ANTHROPIC_BASE_URL=… ANTHROPIC_MODEL=…`
 
 Spec + implementation checkpoints: `docs/specs/modal-bench-fanout.md`.
+
+## SWE-bench on Modal — per-instance images + faithful grading (2026-07-09)
+
+- **`--env swe-modal`** (`8d57ea8`): each SWE-bench instance runs in ITS official
+  evaluation image (`swebench/sweb.eval.x86_64.<instance_id>`) on Modal — no
+  local docker. Live-proven: the image pulls, boots, and the instance's
+  test-patch applies inside `/testbed` ($0.023, 55s;
+  `data/swe-modal-smoke.json`).
+- **Faithful grading** (`ad8842d`): `evaluate()` now runs the instance's named
+  `FAIL_TO_PASS` + `PASS_TO_PASS` tests (pytest node ids, chunked, exit-code
+  authoritative) — the official resolve criterion — with conda auto-activation
+  keyed on the official image marker. The legacy blanket fallback remains for
+  rows without test lists.
+- **Vacuous-pass guard** (same commits): the live smoke exposed that a pytest
+  run executing ZERO tests graded as a pass (`all_passed` = no failures).
+  A result reporting zero-run counters now grades False — absence of failure
+  is not success.
+
+## Measurement-integrity hardening (2026-07-08/09)
+
+The wide grids caught three real harness bugs, each now fixed + regression-
+tested + enforced by `scripts/verify_status.py` (8 checks, offline, <90s):
+errored/empty runs graded as passes (incl. a HumanEval+ checker that was never
+invoked — all pre-`0275ec3` HumanEval+ numbers are invalid, see the corrected
+scorecard above); cells labeled by their LAST task's status (`partial_error`
+now reports mixes honestly, `a44a687`); and unthrottled fan-out flooding the
+single model account (capped at 4, `c2e78f4`). Playbook:
+`docs/playbooks/13-live-bench-runs.md`.
+
+## Runnable set (2026-07-09)
+
+11 distinct benchmarks / 3,678 tasks stage + load flag-free: humaneval-plus
+164 · livecodebench 175 · math500 500 · mbpp 427 · mbpp-plus 378 · swe-bench
+300 · human-eval 164 · bigcodebench 1,140 · humaneval-x 164 · aimo 90 ·
+tau-bench 1 (dataset-capped; upstream tasks are code-defined, `d6e6dc6`).

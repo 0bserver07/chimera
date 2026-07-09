@@ -255,3 +255,26 @@ any shared-file change as a unified diff — do **not** edit shared files.
 - Deferred from this wave (fuzzier, needs its own design): T3.2 UI registration
   [L], T3.3 hot-reload, T3.4 orchestrator daemon [L], T3.7 provider+OAuth
   extension point.
+
+
+---
+
+## RECONCILIATION 2026-07-09 (post integrity-war + staging wave)
+
+- [x] **Grading integrity** — errored/empty runs can't pass (`0275ec3`); HumanEval+
+  checker now invoked; pre-fix HumanEval+ numbers formally invalidated in the
+  scorecard doc (`2709df1`).
+- [x] **Cell-status aggregation** — `partial_error` for mixed cells (`a44a687`).
+- [x] **Concurrency discipline** — grid capped at 4 (`c2e78f4`); playbook 13 +
+  `scripts/verify_status.py` (8-check harness, `c1e4992`) enforce it.
+- [x] **T4.2-equivalent for SWE: faithful grading** — FAIL_TO_PASS/PASS_TO_PASS,
+  exit-code authoritative, conda auto-activation, vacuity guard (`ad8842d`+`9e33ef1`).
+- [x] **swe-modal live infra proof** — per-instance image boots on Modal, patch
+  applies (`data/swe-modal-smoke.json`).
+- [x] **Staging wave** — runnable 7→11 benches / 3,678 tasks (`d6e6dc6`);
+  tau-bench = code-defined upstream, not stageable (honest skip).
+- [ ] **Full-dataset post-fix scorecard** — flagship × 5 full columns RUNNING on
+  Modal (1,644 execs); publish after the integrity scan.
+- [ ] Still open: T3.4 orchestrator daemon [L] · Track 2 external-CLI fidelity
+  (needs installs) · async BudgetedProvider cost gap · T4.5 ATIF emission ·
+  remaining data-gated benches (webarena, swe-lancer, multi-swe, …) · T5 release.
