@@ -170,7 +170,7 @@ these are real pass rates, not the fullscore1 lower bounds:
 | **mbpp** (427) | **99.1%** (423/427) | ✅ EXACT — 0 errors (`{'completed':427}`) |
 | **human-eval-plus** (164) | **92.1%** (151/164) | ✅ EXACT — 0 errors (`{'completed':164}`) |
 | **math500** (500) | **77.6%** (388/500) | ~EXACT — 496 clean + 4 budget_exhausted (≤0.8% margin) |
-| livecodebench (175) | pending | re-running clean (`fullscore3`); fullscore1 ≥18.9% |
+| livecodebench (175) | ≥ 18.9% (33/175) | lower bound — the clean n=175 re-run needs ~14.5h (175 slow contest-codegen tasks) but the cell timeout is 12h, so it can't complete. A smaller-n run (e.g. n=50, ~4h) would yield an exact number; expected low regardless. |
 
 **This vindicates the integrity work spectacularly.** Every column fullscore1
 rated as garbage was harness noise, not agent weakness — the clean re-runs
