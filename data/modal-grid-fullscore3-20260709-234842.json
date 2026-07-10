@@ -1,0 +1,40 @@
+{
+  "run_id": "fullscore3",
+  "cells": [
+    {
+      "agent_id": "coding-agent",
+      "benchmark": "math500",
+      "total": 500,
+      "passed": 388,
+      "pass_rate": 0.776,
+      "cost_usd": 5.913768,
+      "tool_calls": 1,
+      "wall_clock_sec": 27.714866992999305,
+      "status": "budget_exhausted",
+      "budget_honored": false,
+      "budget_note": "max_turns aligned to budget.max_llm_calls=15; tool-call budget not enforced (factory takes no loop_config)",
+      "category": "budget_exhausted",
+      "status_counts": {
+        "completed": 496,
+        "budget_exhausted": 4
+      }
+    },
+    {
+      "agent_id": "coding-agent",
+      "benchmark": "mbpp-plus",
+      "total": 378,
+      "passed": 377,
+      "pass_rate": 0.9973544973544973,
+      "cost_usd": 2.376221999999998,
+      "tool_calls": 3,
+      "wall_clock_sec": 13.519091893999757,
+      "status": "completed",
+      "budget_honored": false,
+      "budget_note": "max_turns aligned to budget.max_llm_calls=15; tool-call budget not enforced (factory takes no loop_config)",
+      "category": "unknown",
+      "status_counts": {
+        "completed": 378
+      }
+    }
+  ]
+}

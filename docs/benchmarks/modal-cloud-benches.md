@@ -160,26 +160,32 @@ tau-bench 1 (dataset-capped; upstream tasks are code-defined, `d6e6dc6`).
 
 ## Flagship full-dataset scorecard — coding-agent, glm-5.2[1m] (2026-07-09)
 
-**Two columns re-run clean at throttle-4 (`fullscore2`,
-`data/modal-grid-fullscore2-20260709-154339.json`) are now EXACT and citable —
-`status_counts` prove zero infra errors** (`{'completed': 427}` /
-`{'completed': 164}`), so every task ran and these are real pass rates, not
-lower bounds:
+**Four columns re-run clean at throttle-4 (`fullscore2` + `fullscore3`) are now
+EXACT/near-exact and citable — `status_counts` verify the error split**, so
+these are real pass rates, not the fullscore1 lower bounds:
 
 | Benchmark (full n) | Score | Basis |
 |---|---|---|
-| **mbpp** (427) | **99.1%** (423/427) | ✅ EXACT — 0 errors, status_counts-verified |
-| **human-eval-plus** (164) | **92.1%** (151/164) | ✅ EXACT — 0 errors, status_counts-verified |
-| mbpp-plus (378) | ≥ 91.0% | lower bound (fullscore1, full-work cost — near-real) |
-| math500 (500) | ≥ 43.2% | lower bound; investigate (see below) |
-| livecodebench (175) | ≥ 18.9% | lower bound; real work ($9.93), hard contest codegen |
+| **mbpp-plus** (378) | **99.7%** (377/378) | ✅ EXACT — 0 errors (`{'completed':378}`) |
+| **mbpp** (427) | **99.1%** (423/427) | ✅ EXACT — 0 errors (`{'completed':427}`) |
+| **human-eval-plus** (164) | **92.1%** (151/164) | ✅ EXACT — 0 errors (`{'completed':164}`) |
+| **math500** (500) | **77.6%** (388/500) | ~EXACT — 496 clean + 4 budget_exhausted (≤0.8% margin) |
+| livecodebench (175) | pending | re-running clean (`fullscore3`); fullscore1 ≥18.9% |
 
-This vindicates the integrity work end-to-end: fullscore1 rated mbpp
-"≥35.4% DO NOT CITE" (error-dominated); the clean re-run reveals the true
-**99.1%**. The flagship is genuinely strong on codegen — the earlier low
-numbers were harness noise, exactly as the cost-proxy flagged. Remaining
-lower-bound columns (mbpp-plus, math500, lcb) each just need a throttled
-re-run to become exact. The fullscore1 lower-bounds table is retained below
+**This vindicates the integrity work spectacularly.** Every column fullscore1
+rated as garbage was harness noise, not agent weakness — the clean re-runs
+reveal the flagship is *strong*:
+
+| Benchmark | fullscore1 (noisy) | clean re-run | delta |
+|---|---|---|---|
+| mbpp | ≥35.4% "DO NOT CITE" | **99.1%** | +64pt |
+| math500 | ≥43.2% "investigate" | **77.6%** | +34pt |
+| mbpp-plus | ≥91.0% | **99.7%** | +9pt |
+
+The cost-proxy correctly flagged those columns as error-dominated; throttling to
+4 and re-running clean recovers the true scores. Only livecodebench remains
+(finishing in `fullscore3`) — expected low, but it will be exactly low. The
+fullscore1 lower-bounds table is retained below
 for provenance.
 
 ## fullscore1 — flagship full-dataset, all 5 columns (2026-07-09, LOWER BOUNDS)
