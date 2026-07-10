@@ -25,6 +25,7 @@ except ImportError as exc:  # pragma: no cover
     ) from exc
 
 from chimera.core.loop_events import LoopEventType
+from chimera.tui.logview import TranscriptLog
 from chimera.tui.render import assistant_renderable
 
 if TYPE_CHECKING:
@@ -70,7 +71,9 @@ class ChimeraTUI(App):
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
         yield Static(self._status_text(), id="status")
-        yield RichLog(id="transcript", wrap=True, markup=False, highlight=False)
+        # TranscriptLog = RichLog + follow-mode (sticky tail with an escape
+        # hatch) — a plain RichLog force-scrolls on every streamed event.
+        yield TranscriptLog(id="transcript", wrap=True, markup=False, highlight=False)
         yield Static("", id="hint")
         yield PromptArea(placeholder="Ask, or /help …", commands=self.SLASH_COMMANDS, id="prompt")
         yield Footer()
@@ -87,6 +90,10 @@ class ChimeraTUI(App):
     # -- helpers --------------------------------------------------------
     def _tlog(self, renderable: Any) -> None:
         self.query_one("#transcript", RichLog).write(renderable)
+
+    def _jump_tail(self) -> None:
+        # The user's own input always re-pins the tail (terminal convention).
+        self.query_one("#transcript", TranscriptLog).jump_to_tail()
 
     def _fmt_ctx(self) -> str:
         c = self._agent.context_window
@@ -116,8 +123,10 @@ class ChimeraTUI(App):
             # Mid-run: steer the running turn instead of starting a new one.
             self._agent.steer(text)
             self._tlog(Text.assemble(("↳ steer: ", "magenta"), (text, "magenta")))
+            self._jump_tail()
             return
         self._tlog(Text.assemble(("› ", "bold cyan"), (text, "bold")))
+        self._jump_tail()
         self._run_turn(text)
 
     @on(TextArea.Changed, "#prompt")

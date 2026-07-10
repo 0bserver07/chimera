@@ -125,3 +125,33 @@ async def test_show_results_noops_before_any_run():
         app.action_show_results()          # nothing has run yet
         await pilot.pause()
         assert not isinstance(app.screen, ResultsScreen)  # no overlay pushed
+
+
+@pytest.mark.asyncio
+async def test_diff_lands_scrolled_to_top_on_lane_switch():
+    """A rebuilt diff view must land at the TOP (auto_scroll left the old
+    view at the bottom after every lane/file/split switch)."""
+    from textual.app import App
+    from textual.widgets import RichLog
+
+    big = "diff --git a/x b/x\n" + "".join(f"+line {i}\n" for i in range(120))
+    a = _lane("A", "glm-5.2", diff_text=big)
+    b = _lane("B", "glm-4.6", diff_text=big)
+    _finish(a, 0.001, 2, order=1)
+    _finish(b, 0.002, 3, order=2)
+    co = Cohort([a, b], task="fix")
+
+    class _Host(App):
+        def on_mount(self) -> None:
+            self.push_screen(ResultsScreen(co))
+
+    app = _Host()
+    async with app.run_test(size=(100, 24)) as pilot:
+        await pilot.pause()
+        screen = app.screen
+        log = screen.query_one("#diff-body", RichLog)
+        assert log.max_scroll_y > 0            # diff overflows the pane
+        assert log.scroll_y == 0               # initial view starts at top
+        screen.action_next_lane()              # switch to lane B
+        await pilot.pause()
+        assert log.scroll_y == 0               # still lands at the top

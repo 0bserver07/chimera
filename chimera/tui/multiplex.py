@@ -41,6 +41,7 @@ except ImportError as exc:  # pragma: no cover
 from chimera.core.loop_events import LoopEventType
 from chimera.tui.cohort import Cohort
 from chimera.tui.lane import Lane, LaneConfig
+from chimera.tui.logview import TranscriptLog
 from chimera.tui.render import LaneTranscript
 from chimera.tui.routing import Action, RoutingMode, route
 
@@ -90,7 +91,9 @@ class LanePane(Vertical):
 
     def compose(self) -> ComposeResult:
         yield Static(self._header_text(), classes="lane-header")
-        yield RichLog(classes="lane-log", wrap=True, markup=False, highlight=False)
+        # TranscriptLog = RichLog + follow-mode (sticky tail with an escape
+        # hatch) — a plain RichLog force-scrolls on every streamed event.
+        yield TranscriptLog(classes="lane-log", wrap=True, markup=False, highlight=False)
 
     def on_mount(self) -> None:
         self._transcript = LaneTranscript(self.query_one(RichLog).write)
@@ -121,10 +124,17 @@ class LanePane(Vertical):
             self._transcript.commit()
 
     def echo_user(self, text: str) -> None:
-        self.query_one(RichLog).write(Text.assemble(("› ", "bold cyan"), (text, "bold")))
+        # The user's own input always re-pins the tail (terminal convention),
+        # even if they had scrolled up to read.
+        log = self.query_one(TranscriptLog)
+        log.write(Text.assemble(("› ", "bold cyan"), (text, "bold")))
+        log.jump_to_tail()
 
-    def note(self, text: str, style: str = "magenta") -> None:
-        self.query_one(RichLog).write(Text(text, style=style))
+    def note(self, text: str, style: str = "magenta", *, follow: bool = False) -> None:
+        log = self.query_one(TranscriptLog)
+        log.write(Text(text, style=style))
+        if follow:
+            log.jump_to_tail()
 
     def feed_error(self, exc: object) -> None:
         self.query_one(RichLog).write(Text(f"turn failed: {exc}", style="red"))
@@ -406,11 +416,11 @@ class MultiplexApp(App):
                 self._start_turn(lane, text)
             elif a.action is Action.STEER:
                 lane.driver.steer(text)
-                pane.note(f"↳ steer: {text}")
+                pane.note(f"↳ steer: {text}", follow=True)
                 lane.note(f"↳ steer: {text}")
             elif a.action is Action.FOLLOW_UP:
                 lane.driver.queue_follow_up(text)
-                pane.note(f"↳ queued: {text}", style="cyan")
+                pane.note(f"↳ queued: {text}", style="cyan", follow=True)
         self._refresh_global()
 
     def _begin_race(self, lanes: list[Lane]) -> None:

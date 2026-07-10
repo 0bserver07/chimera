@@ -187,7 +187,10 @@ class ResultsScreen(Screen):
         )
         yield Static(scoreboard_table(self._cohort), id="scoreboard")
         yield Static("", id="diff-header")
-        yield RichLog(id="diff-body", wrap=False, markup=False, highlight=False)
+        # auto_scroll off: a diff is read top-down — with it on, every rebuilt
+        # view (lane/file/split switch) landed scrolled to the BOTTOM.
+        yield RichLog(id="diff-body", wrap=False, markup=False, highlight=False,
+                      auto_scroll=False)
         yield Footer()
 
     def on_mount(self) -> None:
@@ -226,6 +229,7 @@ class ResultsScreen(Screen):
         ))
         log = self.query_one("#diff-body", RichLog)
         log.clear()
+        log.scroll_home(animate=False)
         if not files:
             log.write(Text("(no changes produced by this lane)", style="dim italic"))
             return
