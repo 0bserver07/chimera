@@ -28,7 +28,6 @@ try:
     from rich.text import Text
     from textual import on
     from textual.app import App, ComposeResult
-    from textual.binding import Binding
     from textual.containers import Horizontal, Vertical
     from textual.screen import Screen
     from textual.widgets import Footer, Header, OptionList, RichLog, Static, TextArea
@@ -43,6 +42,17 @@ except ImportError as exc:  # pragma: no cover
 
 from chimera.core.loop_events import LoopEventType
 from chimera.tui.cohort import Cohort
+from chimera.tui.commands import completion_catalog, help_lines
+from chimera.tui.keys import (
+    KeymapError,
+    apply_keymap,
+    build_bindings,
+    hidden_actions,
+    key_for,
+    keymap_table,
+    load_user_keybinds,
+    resolve_keymap,
+)
 from chimera.tui.lane import Lane, LaneConfig
 from chimera.tui.live_region import LiveRegion
 from chimera.tui.logview import TranscriptLog
@@ -78,16 +88,9 @@ MIN_PANE_WIDTH = 32
 _HEADER_REFRESH_EVENTS = frozenset({
     LoopEventType.tool_use, LoopEventType.tool_result, LoopEventType.result,
 })
-# Bindings hidden (and disabled) in single-lane mode — they only make sense
-# with 2+ lanes. Ctrl+L is the reverse case: the single-lane "Clear" key
-# (ported from the retired single-agent app), hidden in multi-lane mode where
-# Ctrl+O "Clear lane" is the established binding.
-_SINGLE_HIDDEN_ACTIONS = frozenset({
-    "focus_prev_lane", "toggle_broadcast", "cancel_focused", "clear_focused",
-})
-_MULTI_HIDDEN_ACTIONS = frozenset({"clear_lane"})
-# Routing modes are meaningless with one lane; drop them from the catalog.
-_MULTI_ONLY_COMMANDS = frozenset({"/broadcast", "/target"})
+# Which bindings exist per lane mode and which slash commands exist per
+# surface both live in the registries now (chimera.tui.keys single_only /
+# multi_only flags → hidden_actions(); chimera.tui.commands context field).
 
 
 class LanePane(Vertical):
@@ -98,13 +101,16 @@ class LanePane(Vertical):
     identical to the single-agent TUI.
     """
 
-    def __init__(self, lane: Lane, **kwargs: Any) -> None:
+    def __init__(self, lane: Lane, *, expand_hint: str = "", **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self._lane = lane
         self._transcript: LaneTranscript | None = None
         self._live_region: LiveRegion | None = None
         self._live_frame = 0  # heartbeat animation tick, set by the app timer
         self._is_focus = False
+        #: The currently bound expand-toggle key, injected by the app from its
+        #: keybinding registry — elision markers advertise it (R-KEY-3).
+        self._expand_hint = expand_hint
 
     def compose(self) -> ComposeResult:
         yield Static(self._header_text(), classes="lane-header")
@@ -118,7 +124,9 @@ class LanePane(Vertical):
         yield LiveRegion(classes="lane-live")
 
     def on_mount(self) -> None:
-        self._transcript = LaneTranscript(self.query_one(RichLog).write)
+        self._transcript = LaneTranscript(
+            self.query_one(RichLog).write, expand_hint=self._expand_hint,
+        )
         self._live_region = self.query_one(LiveRegion)
 
     # -- rendering ------------------------------------------------------
@@ -221,6 +229,14 @@ class LanePane(Vertical):
         if self._transcript is not None:
             self._transcript.show_reasoning = value
 
+    def set_elide(self, value: bool) -> None:
+        """Collapse (True) or expand (False) tool output — display-only
+        (R-FOLD-2/3). Takes effect for tool results rendered from now on;
+        already-committed output re-renders with the transcript overlay
+        (R-FOLD-7, a later wave)."""
+        if self._transcript is not None:
+            self._transcript.elide = value
+
     def reveal_reasoning(self) -> bool:
         return self._transcript.reveal_last() if self._transcript is not None else False
 
@@ -249,33 +265,17 @@ class MultiplexApp(App):
     #hint { height: 1; color: $text-muted; padding: 0 1; }
     """
 
-    BINDINGS = [
-        Binding("ctrl+c", "cancel_all", "Cancel all / quit", priority=True),
-        Binding("ctrl+d", "quit", "Quit"),
-        # Tab completes a "/" command when one is being typed, else cycles focus.
-        Binding("tab", "smart_tab", "Complete / focus →", priority=True),
-        Binding("shift+tab", "focus_prev_lane", "Focus ←", priority=True),
-        Binding("ctrl+b", "toggle_broadcast", "Broadcast/target"),
-        Binding("ctrl+g", "cancel_focused", "Cancel lane"),
-        Binding("ctrl+o", "clear_focused", "Clear lane"),
-        # Single-lane alias (check_action swaps which of the two is live).
-        Binding("ctrl+l", "clear_lane", "Clear"),
-        Binding("ctrl+r", "show_results", "Compare results"),
-        # priority: the prompt's TextArea binds ctrl+e (cursor to line end)
-        # and would otherwise swallow the advertised reasoning toggle.
-        Binding("ctrl+e", "toggle_reasoning", "Reasoning", priority=True),
-        Binding("ctrl+t", "toggle_sidebar", "Sidebar"),
-    ]
+    #: Default bindings come from the declarative action registry (R-KEY-1);
+    #: per-key notes (priority flags, single/multi gating) live there. User
+    #: overrides from ``tui.keybinds`` are applied per instance in __init__.
+    BINDINGS = build_bindings()
 
-    #: Local slash-command catalog (drives /help and slash autocomplete).
+    #: Local slash-command catalog (drives /help and slash autocomplete),
+    #: derived from the slash-command registry (chimera.tui.commands).
     #: NOT named ``COMMANDS`` — that shadows Textual's command-palette provider
     #: registry on ``App``, and the palette then crashes on Ctrl+P trying to
     #: instantiate strings as providers.
-    SLASH_COMMANDS = [
-        "/broadcast", "/clear", "/cohorts", "/cost", "/exit", "/export",
-        "/help", "/model", "/quit", "/resume", "/results", "/summary",
-        "/target", "/tools",
-    ]
+    SLASH_COMMANDS = completion_catalog()
 
     def __init__(
         self,
@@ -284,6 +284,7 @@ class MultiplexApp(App):
         lane_cap: int | None = None,
         initial_task: str | None = None,
         persist_root: str | None = None,
+        keybinds: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
@@ -295,10 +296,22 @@ class MultiplexApp(App):
         self._single = len(cohort.lanes) == 1
         if self._single:
             self.title = "Chimera TUI"
-        self._slash_commands = [
-            c for c in self.SLASH_COMMANDS
-            if not (self._single and c in _MULTI_ONLY_COMMANDS)
-        ]
+        #: R-KEY-2: user rebinding. ``keybinds`` is injectable for tests; by
+        #: default the ``tui.keybinds`` table comes from the config chain. An
+        #: invalid table must not kill the app — fall back to defaults and
+        #: surface the (loud, both-actions-named) error once mounted.
+        #: (Named ``_keybinds``: Textual's App owns ``_keymap`` for its own
+        #: ``set_keymap`` feature — shadowing it corrupts binding refresh.)
+        self._keybinds_error: str | None = None
+        try:
+            self._keybinds = resolve_keymap(
+                load_user_keybinds() if keybinds is None else keybinds
+            )
+        except KeymapError as exc:
+            self._keybinds = resolve_keymap({})
+            self._keybinds_error = str(exc)
+        apply_keymap(self._bindings, self._keybinds)
+        self._slash_commands = completion_catalog(single=self._single)
         self._focus_index = 0
         self._panes: list[LanePane] = []
         self._pane_by_id: dict[str, LanePane] = {}
@@ -311,6 +324,7 @@ class MultiplexApp(App):
         self._completion_order = 0
         self._slots: Any = None  # asyncio.Semaphore, created on mount
         self._show_reasoning = False
+        self._tools_expanded = False  # R-FOLD-2 global expand toggle state
         self._sidebar_on = False
         self._live_frame = 0  # one app-level heartbeat clock for all panes
         self._live_timer: Any = None
@@ -325,9 +339,10 @@ class MultiplexApp(App):
         yield Static("", id="summary")
         yield Static("", id="tabstrip")
         pane_classes = "lane-pane single" if self._single else "lane-pane"
+        expand_hint = key_for("toggle_expand", self._keybinds)
         with Horizontal(id="lanes"):
             for lane in self._cohort.lanes:
-                pane = LanePane(lane, classes=pane_classes)
+                pane = LanePane(lane, classes=pane_classes, expand_hint=expand_hint)
                 self._panes.append(pane)
                 self._pane_by_id[lane.id] = pane
                 yield pane
@@ -347,6 +362,11 @@ class MultiplexApp(App):
         self._relayout()
         for pane in self._panes:
             pane.intro(single=self._single)
+        if self._keybinds_error:
+            self._say_focused(
+                f"tui.keybinds ignored (using defaults): {self._keybinds_error}",
+                style="red",
+            )
         self.set_interval(0.5, self._refresh_global)
         # ONE interval animates every pane's heartbeat (R-FOLD-1): per-pane
         # timers would drift out of phase and multiply wakeups.
@@ -362,12 +382,12 @@ class MultiplexApp(App):
 
         Single-lane mode hides the multi-lane chrome keys (focus-prev,
         broadcast toggle, per-lane cancel/clear) and enables Ctrl+L "Clear";
-        multi-lane mode is the mirror image. Slash commands are unaffected —
-        they dispatch directly, not through actions.
+        multi-lane mode is the mirror image. The mode sets come from the
+        action registry's ``single_only``/``multi_only`` flags. Slash
+        commands are unaffected — they dispatch directly, not through
+        actions.
         """
-        if self._single and action in _SINGLE_HIDDEN_ACTIONS:
-            return False
-        if not self._single and action in _MULTI_HIDDEN_ACTIONS:
+        if action in hidden_actions(self._single):
             return False
         return True
 
@@ -701,6 +721,21 @@ class MultiplexApp(App):
             else:
                 pane.note("reasoning: hidden", style="dim")
 
+    def action_toggle_expand(self) -> None:
+        """R-FOLD-2: the global expand toggle — flip tool-output elision
+        everywhere.
+
+        Display-only (the session record always keeps full output, R-FOLD-3)
+        and forward-looking: it changes how tool results render from now on.
+        Re-rendering already-committed output arrives with the transcript
+        overlay (R-FOLD-7, a later wave) — the panes' sinks are append-only.
+        """
+        self._tools_expanded = not self._tools_expanded
+        for pane in self._panes:
+            pane.set_elide(not self._tools_expanded)
+        state = "expanded" if self._tools_expanded else "collapsed"
+        self._say_focused(f"tool output: {state} (applies to new output)")
+
     def action_toggle_sidebar(self) -> None:
         self._sidebar_on = not self._sidebar_on
         self._relayout()
@@ -734,22 +769,12 @@ class MultiplexApp(App):
         if cmd in ("/exit", "/quit"):
             self.exit()
         elif cmd == "/help":
-            if self._single:
-                say(
-                    "/help /model /cost /tools /clear /summary /results /export "
-                    "/cohorts /resume [id] /exit  ·  "
-                    "Ctrl+C cancel · Ctrl+L clear · Ctrl+E reasoning · "
-                    "Ctrl+R results · Ctrl+T sidebar · Ctrl+J newline · "
-                    "Tab completes /commands · type while running to steer"
-                )
-            else:
-                say(
-                    "/help /model /cost /tools /clear /summary /results /export "
-                    "/cohorts /resume [id] /broadcast /target /exit  ·  "
-                    "Tab complete-or-focus · Ctrl+B mode · "
-                    "Ctrl+R compare · Ctrl+E reasoning · Ctrl+T sidebar · "
-                    "Ctrl+J newline · Ctrl+C cancel-all · Ctrl+G cancel-lane"
-                )
+            # Generated from the two registries: the slash-command catalog
+            # and the CURRENTLY-BOUND keys (true after rebinding, R-KEY-3).
+            for line in help_lines(single=self._single, keymap=self._keybinds):
+                say(line)
+        elif cmd == "/keys":
+            say("\n".join(keymap_table(self._keybinds)))
         elif cmd == "/model":
             if self._single and lane is not None:
                 # App-parity: the one model plus its context window.
@@ -840,10 +865,8 @@ class CohortPickerScreen(Screen):
     cohort and relaunches on the chosen one.
     """
 
-    BINDINGS = [
-        Binding("escape", "close", "Back"),
-        Binding("q", "close", "Back"),
-    ]
+    #: Pager-context actions from the keybinding registry (escape/q → close).
+    BINDINGS = build_bindings(context="pager")
 
     CSS = """
     #picker-title { height: 1; background: $primary; color: $text; padding: 0 1; }
@@ -866,6 +889,11 @@ class CohortPickerScreen(Screen):
         yield Footer()
 
     def on_mount(self) -> None:
+        # Pager-context user rebinds (tui.keybinds) apply here too; the host
+        # app already resolved + validated the keymap.
+        app = self.app
+        if isinstance(app, MultiplexApp):
+            apply_keymap(self._bindings, app._keybinds, context="pager")
         picker = self.query_one(OptionList)
         for row in self._rows:
             labels = ", ".join(str(ln.get("label")) for ln in row.get("lanes", []))
