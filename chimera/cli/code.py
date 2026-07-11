@@ -690,11 +690,15 @@ def run_code(args: Any) -> int:
             return 0
 
         # Full-screen Textual TUI (opt-in) — reuses the resolved model/cwd/env.
-        # Any --models spec (INCLUDING a single model) → the multiplexer, so one
-        # lane still gets the full surface (sidebar, results, resume). A lone
-        # lane defaults to inplace isolation (edits the real tree, daily-driver
-        # style); 2+ lanes isolate from each other (worktree/copy). Bare --tui
-        # with no --models keeps the classic single-agent app.
+        # EVERY --tui launch is the multiplexer (issue #172; the old
+        # single-agent app is a deprecated shim):
+        #   --models a,b,…  → N lanes racing one task, isolated from each
+        #                     other (worktree/copy); a single --models entry
+        #                     still gets a full lane, defaulting to inplace.
+        #   bare --tui      → the daily driver: a ONE-LANE multiplexer
+        #                     (inplace isolation, targeted routing,
+        #                     single-lane chrome). The model string reaches
+        #                     the driver verbatim — never lane-spec parsed.
         if getattr(args, "tui", False):
             # Resume a saved cohort (Phase 3.2): reopen its lanes and continue.
             resume_id = getattr(args, "resume", None)
@@ -727,9 +731,14 @@ def run_code(args: Any) -> int:
                 )
                 return 0
 
-            from chimera.tui.app import run_tui
+            from chimera.tui.multiplex import run_single_agent
 
-            run_tui(model=model, project_dir=cwd, preset=effective_preset, **agent_kwargs)
+            run_single_agent(
+                model=model, project_dir=cwd, preset=effective_preset,
+                task=getattr(args, "print_mode", None),
+                export=getattr(args, "export", None),
+                **agent_kwargs,
+            )
             return 0
 
         # Non-interactive -p mode

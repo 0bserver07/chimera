@@ -1,13 +1,26 @@
-"""Chimera TUI (Phase 1) — a single-agent coding TUI over ``AgentDriver``.
+"""DEPRECATED single-agent TUI — superseded by the one-lane multiplexer.
 
-The app owns no agent state: it drives :meth:`AgentDriver.send` (a stream of
-``LoopEvent``s) and renders each event into a transcript. Assistant text is
-accumulated and committed when the turn's message completes; tool calls and
-results stream in as they happen (the live feel). ``Ctrl+C`` cancels the
-running turn, slash commands are handled locally.
+Since issue #172 the single-agent frontend *is* the multiplexer with N=1:
+bare ``chimera code --tui`` launches
+:class:`~chimera.tui.multiplex.MultiplexApp` on one ``inplace`` lane (via
+:func:`chimera.tui.multiplex.run_single_agent`), rendering through the shared
+:class:`~chimera.tui.render.LaneTranscript` and carrying the full surface
+(results screen, tool sidebar, cohort persistence + resume) with single-lane
+chrome. This module was the earlier parallel implementation and is no longer
+load-bearing.
+
+Back-compat contract for one deprecation cycle:
+
+- :class:`ChimeraTUI` stays importable and functional, but constructing it
+  emits a :class:`DeprecationWarning`; it will be removed in a future 0.9.x
+  release. It receives no further features or fixes.
+- :func:`run_tui` keeps its signature but delegates to
+  :func:`~chimera.tui.multiplex.run_single_agent` — new code should call that
+  directly.
 """
 from __future__ import annotations
 
+import warnings
 from typing import TYPE_CHECKING, Any
 
 try:
@@ -35,7 +48,13 @@ __all__ = ["ChimeraTUI", "run_tui"]
 
 
 class ChimeraTUI(App):
-    """A single-agent coding TUI bound to one :class:`AgentDriver`."""
+    """A single-agent coding TUI bound to one :class:`AgentDriver`.
+
+    Deprecated: superseded by the one-lane
+    :class:`~chimera.tui.multiplex.MultiplexApp` (issue #172). Kept
+    importable and functional for one deprecation cycle; constructing it
+    warns, and it will be removed in a future release.
+    """
 
     CSS = """
     Screen { layers: base; }
@@ -59,6 +78,13 @@ class ChimeraTUI(App):
     SLASH_COMMANDS = ["/clear", "/cost", "/exit", "/help", "/model", "/quit", "/tools"]
 
     def __init__(self, driver: AgentDriver, **kwargs: Any) -> None:
+        warnings.warn(
+            "ChimeraTUI is deprecated: the single-agent TUI is now the "
+            "one-lane multiplexer (chimera.tui.multiplex.run_single_agent); "
+            "this class will be removed in a future release.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         super().__init__(**kwargs)
         self._agent = driver
         self._chunks: list[str] = []
@@ -283,10 +309,23 @@ def run_tui(
     preset: str = "coding_agent",
     **driver_kwargs: Any,
 ) -> None:
-    """Launch the single-agent Chimera TUI."""
-    from chimera.assembly.driver import AgentDriver
+    """Launch the single-agent Chimera TUI (now a one-lane multiplexer).
 
-    driver = AgentDriver(
+    Kept for API compatibility: the signature is unchanged, but since issue
+    #172 this delegates to :func:`chimera.tui.multiplex.run_single_agent` —
+    one ``inplace`` lane over the real tree with single-lane chrome. The
+    session gains the multiplexer lifecycle: it needs a TTY and persists as a
+    one-lane cohort on exit (resumable via ``--resume`` / ``/cohorts``). New
+    code should call ``run_single_agent`` directly.
+
+    Args:
+        model: Model name, passed to the driver verbatim.
+        project_dir: The tree the agent works in (default: cwd).
+        preset: Assembly preset for the lane.
+        **driver_kwargs: Extra :class:`AgentDriver` kwargs (e.g. ``max_turns``).
+    """
+    from chimera.tui.multiplex import run_single_agent
+
+    run_single_agent(
         model=model, project_dir=project_dir, preset=preset, **driver_kwargs,
     )
-    ChimeraTUI(driver).run()

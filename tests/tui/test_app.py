@@ -1,4 +1,10 @@
-"""Smoke tests for the Chimera TUI via Textual's run_test harness."""
+"""The single-agent TUI surface — a one-lane multiplexer (issue #172).
+
+Bare ``chimera code --tui`` runs :class:`MultiplexApp` on one inplace lane;
+this file pins that surface's behaviors plus the back-compat contract of the
+deprecated ``chimera.tui.app`` shim (importable one release, delegating
+``run_tui``).
+"""
 import pytest
 
 textual = pytest.importorskip("textual")  # skip if the [tui] extra isn't installed
@@ -66,57 +72,66 @@ class FakeDriver:
         self.followups.append(text)
 
 
-@pytest.mark.asyncio
-async def test_tui_runs_a_turn_and_renders():
-    from textual.widgets import RichLog
+# -- deprecated shim: chimera.tui.app ------------------------------------
+# Behavior coverage (turn rendering, slash commands, palette) migrated to
+# the one-lane MultiplexApp tests below; the shim keeps only its
+# back-compat contract for one deprecation cycle.
 
-    from chimera.tui.prompt import PromptArea
-
-    from chimera.tui.app import ChimeraTUI
-
-    app = ChimeraTUI(FakeDriver())
-    async with app.run_test() as pilot:
-        app.query_one("#prompt", PromptArea).value = "fix the bug"
-        await pilot.press("enter")
-        await pilot.pause()
-        await app.workers.wait_for_complete()
-        await pilot.pause()
-        assert app.query_one("#transcript", RichLog).lines  # something rendered
-
-
-@pytest.mark.asyncio
-async def test_slash_commands_do_not_crash():
-    from chimera.tui.prompt import PromptArea
-
-    from chimera.tui.app import ChimeraTUI
-
-    d = FakeDriver()
-    app = ChimeraTUI(d)
-    async with app.run_test() as pilot:
-        for cmd in ("/help", "/model", "/cost", "/tools", "/clear"):
-            app.query_one("#prompt", PromptArea).value = cmd
-            await pilot.press("enter")
-            await pilot.pause()
-        assert app.is_running  # still alive after all commands
-
-
-@pytest.mark.asyncio
-async def test_command_palette_does_not_crash():
-    """Regression: the slash catalog must not shadow Textual's App.COMMANDS."""
+def test_chimera_tui_is_deprecated_but_importable():
+    """One release of back-compat: the class imports, constructs with a
+    DeprecationWarning, and still doesn't shadow Textual's palette registry."""
     from textual.app import App
 
     from chimera.tui.app import ChimeraTUI
 
     assert ChimeraTUI.COMMANDS == App.COMMANDS
     assert all(isinstance(c, str) for c in ChimeraTUI.SLASH_COMMANDS)
+    with pytest.warns(DeprecationWarning, match="one-lane multiplexer"):
+        ChimeraTUI(FakeDriver())
 
-    app = ChimeraTUI(FakeDriver())
-    async with app.run_test() as pilot:
-        await pilot.press("ctrl+p")
-        await pilot.pause()
-        await pilot.press("escape")
-        await pilot.pause()
-        assert app.is_running
+
+def test_run_tui_delegates_to_the_one_lane_multiplexer(monkeypatch, tmp_path):
+    """run_tui keeps its signature but routes to run_single_agent."""
+    import chimera.tui.multiplex as mux
+    from chimera.tui.app import run_tui
+
+    calls: dict = {}
+    monkeypatch.setattr(
+        mux, "run_single_agent", lambda **kw: calls.update(kw),
+    )
+    run_tui(model="m-x", project_dir=str(tmp_path), preset="minimal", max_turns=3)
+    assert calls == {
+        "model": "m-x",
+        "project_dir": str(tmp_path),
+        "preset": "minimal",
+        "max_turns": 3,
+    }
+
+
+def test_bare_tui_cli_routes_to_single_agent(monkeypatch, tmp_path):
+    """`chimera code --tui` (no --models) constructs the one-lane multiplexer
+    path — chimera/tui/app.py is no longer load-bearing for the CLI."""
+    import argparse
+
+    import chimera.tui.multiplex as mux
+    from chimera.cli import code as code_cli
+
+    calls: dict = {}
+    monkeypatch.setattr(
+        mux, "run_single_agent", lambda **kw: calls.update(kw),
+    )
+
+    args = argparse.Namespace(
+        mode="interactive", preset=None, model="glm-5.2",
+        workdir=str(tmp_path), models="", tui=True,
+        resume=None, list_cohorts=False, export=None,
+        isolation=None, lane_cap=None, max_turns=None, print_mode=None,
+    )
+    assert code_cli.run_code(args) == 0
+    assert calls["model"] == "glm-5.2"
+    assert calls["preset"] == "coding_agent"
+    assert calls["project_dir"] == str(tmp_path)
+    assert calls["task"] is None
 
 
 # =========================================================================
