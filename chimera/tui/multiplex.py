@@ -29,11 +29,10 @@ try:
     from textual import on
     from textual.app import App, ComposeResult
     from textual.containers import Horizontal, Vertical
-    from textual.screen import Screen
-    from textual.widgets import Footer, Header, OptionList, RichLog, Static, TextArea
-    from textual.widgets.option_list import Option
+    from textual.widgets import Footer, Header, RichLog, Static, TextArea
 
     from chimera.tui.prompt import PromptArea, filter_commands
+    from chimera.tui.select import FuzzySelectScreen, SelectItem
 except ImportError as exc:  # pragma: no cover
     raise ImportError(
         "The Chimera multiplexer needs the 'tui' extra:\n"
@@ -878,70 +877,53 @@ class MultiplexApp(App):
         if not rows:
             self._say_focused("(no saved cohorts yet — they persist on exit)")
             return
-        self.push_screen(CohortPickerScreen(rows))
+        self.push_screen(CohortPickerScreen(rows), self._cohort_picked)
+
+    def _cohort_picked(self, cohort_id: Any) -> None:
+        """Dismissal callback for the cohort picker (``None`` = cancelled)."""
+        if cohort_id:
+            self.request_resume(str(cohort_id))
 
 
-class CohortPickerScreen(Screen):
+class CohortPickerScreen(FuzzySelectScreen):
     """In-TUI list of saved cohorts: Enter resumes the highlighted one.
 
-    Reached via ``/cohorts`` (or bare ``/resume``). Selecting a cohort asks the
-    app to exit with a resume request; the outer run loop persists the current
-    cohort and relaunches on the chosen one.
-    """
+    Reached via ``/cohorts`` (or bare ``/resume``); an instance of the
+    universal fuzzy-select (R-OVER-2) — type to filter by cohort id, lane
+    label, or task. The screen dismisses with the chosen cohort id (``None``
+    on Esc); :meth:`MultiplexApp._cohort_picked` asks the app to exit with a
+    resume request, and the outer run loop persists the current cohort before
+    relaunching on the chosen one. Newest cohort is pre-highlighted.
 
-    #: Pager-context actions from the keybinding registry (escape/q → close).
-    BINDINGS = build_bindings(context="pager")
-
-    CSS = """
-    #picker-title { height: 1; background: $primary; color: $text; padding: 0 1; }
-    #picker-list { height: 1fr; }
+    Bindings come from :class:`FuzzySelectScreen` (Esc cancels; printable keys
+    filter). Folding the keybinding registry's ``pager`` context onto the
+    select component (so user rebinds reach it) is tracked follow-up work
+    alongside ``ResultsScreen``.
     """
 
     def __init__(self, rows: list[dict[str, Any]], **kwargs: Any) -> None:
-        super().__init__(**kwargs)
-        self._rows = rows
-
-    def compose(self) -> ComposeResult:
-        yield Static(
-            Text(
-                f" Saved cohorts · {len(self._rows)} · Enter resumes · Esc back",
-                style="bold",
-            ),
-            id="picker-title",
+        super().__init__(
+            [self._item(row) for row in rows],
+            title=f"Saved cohorts · {len(rows)} · Enter resumes · Esc back",
+            placeholder="Type to filter saved cohorts…",
+            **kwargs,
         )
-        yield OptionList(id="picker-list")
-        yield Footer()
 
-    def on_mount(self) -> None:
-        # Pager-context user rebinds (tui.keybinds) apply here too; the host
-        # app already resolved + validated the keymap.
-        app = self.app
-        if isinstance(app, MultiplexApp):
-            apply_keymap(self._bindings, app._keybinds, context="pager")
-        picker = self.query_one(OptionList)
-        for row in self._rows:
-            labels = ", ".join(str(ln.get("label")) for ln in row.get("lanes", []))
-            task = row.get("task") or "—"
-            if len(task) > 46:
-                task = task[:45] + "…"
-            picker.add_option(Option(
-                f"{row['cohort_id']}  ·  {row.get('created_at', '?')}  ·  "
-                f"[{labels}]  ·  {task}",
-                id=row["cohort_id"],
-            ))
-        if self._rows:
-            picker.highlighted = 0  # keyboard-first: Enter resumes the newest
-        picker.focus()
-
-    @on(OptionList.OptionSelected)
-    def _picked(self, event: OptionList.OptionSelected) -> None:
-        app = self.app
-        self.app.pop_screen()
-        if isinstance(app, MultiplexApp) and event.option.id:
-            app.request_resume(str(event.option.id))
-
-    def action_close(self) -> None:
-        self.app.pop_screen()
+    @staticmethod
+    def _item(row: dict[str, Any]) -> SelectItem:
+        labels = ", ".join(str(ln.get("label")) for ln in row.get("lanes", []))
+        task = row.get("task") or "—"
+        if len(task) > 60:
+            task = task[:59] + "…"
+        cohort_id = str(row["cohort_id"])
+        return SelectItem(
+            value=cohort_id,
+            label=cohort_id,
+            description=f"[{labels}]  ·  {task}",
+            hint=str(row.get("created_at", "?")),
+            search_text=f"{labels} {task}",
+            id=cohort_id,
+        )
 
 
 def parse_lane_specs(models: list[str] | str, default_preset: str = "coding_agent") -> list[dict[str, str]]:
