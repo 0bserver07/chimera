@@ -44,8 +44,9 @@ except ImportError as exc:  # pragma: no cover
 from chimera.core.loop_events import LoopEventType
 from chimera.tui.cohort import Cohort
 from chimera.tui.lane import Lane, LaneConfig
+from chimera.tui.live_region import LiveRegion
 from chimera.tui.logview import TranscriptLog
-from chimera.tui.render import LaneTranscript
+from chimera.tui.render import LaneTranscript, heartbeat_line
 from chimera.tui.routing import Action, RoutingMode, route
 
 __all__ = [
@@ -101,6 +102,8 @@ class LanePane(Vertical):
         super().__init__(**kwargs)
         self._lane = lane
         self._transcript: LaneTranscript | None = None
+        self._live_region: LiveRegion | None = None
+        self._live_frame = 0  # heartbeat animation tick, set by the app timer
         self._is_focus = False
 
     def compose(self) -> ComposeResult:
@@ -108,9 +111,15 @@ class LanePane(Vertical):
         # TranscriptLog = RichLog + follow-mode (sticky tail with an escape
         # hatch) — a plain RichLog force-scrolls on every streamed event.
         yield TranscriptLog(classes="lane-log", wrap=True, markup=False, highlight=False)
+        # Live region (R-REN-6 visible + R-FOLD-1): uncommitted tail +
+        # thinking heartbeat, positionally fixed below the log — it keeps
+        # updating even when the user has scrolled up. Ephemeral by contract
+        # (R-VIEW-3): nothing it shows ever reaches a transcript sink.
+        yield LiveRegion(classes="lane-live")
 
     def on_mount(self) -> None:
         self._transcript = LaneTranscript(self.query_one(RichLog).write)
+        self._live_region = self.query_one(LiveRegion)
 
     # -- rendering ------------------------------------------------------
     def _header_text(self) -> Text:
@@ -132,10 +141,40 @@ class LanePane(Vertical):
     def feed(self, ev: Any) -> None:
         if self._transcript is not None:
             self._transcript.handle(ev)
+            self._refresh_live()
 
     def commit(self) -> None:
         if self._transcript is not None:
             self._transcript.commit()
+            self._refresh_live()  # tail flushed, thinking committed → hides
+
+    def _refresh_live(self) -> None:
+        """Sync the live region to the transcript's uncommitted state."""
+        if self._transcript is None or self._live_region is None:
+            return
+        hb = ""
+        if self._transcript.thinking_active:
+            hb = heartbeat_line(
+                self._transcript.thinking_elapsed,
+                self._transcript.thinking_chars,
+                self._live_frame,
+            )
+        self._live_region.show(
+            tail=self._transcript.live_tail,
+            heartbeat=hb,
+            markdown=self._transcript.markdown,
+        )
+
+    def pulse_live(self, frame: int) -> None:
+        """App-timer tick: advance the heartbeat animation (no pane timers)."""
+        self._live_frame = frame
+        if self._transcript is not None and self._transcript.thinking_active:
+            self._refresh_live()
+
+    def clear_live(self) -> None:
+        """Drop any live-region content immediately (lane clear)."""
+        if self._live_region is not None:
+            self._live_region.clear_live()
 
     def echo_user(self, text: str) -> None:
         # The user's own input always re-pins the tail (terminal convention),
@@ -273,6 +312,8 @@ class MultiplexApp(App):
         self._slots: Any = None  # asyncio.Semaphore, created on mount
         self._show_reasoning = False
         self._sidebar_on = False
+        self._live_frame = 0  # one app-level heartbeat clock for all panes
+        self._live_timer: Any = None
         #: Set by /resume (or the /cohorts picker) just before exit; the outer
         #: run loop reads it and relaunches on the requested saved cohort.
         self.resume_request: str | None = None
@@ -307,6 +348,9 @@ class MultiplexApp(App):
         for pane in self._panes:
             pane.intro(single=self._single)
         self.set_interval(0.5, self._refresh_global)
+        # ONE interval animates every pane's heartbeat (R-FOLD-1): per-pane
+        # timers would drift out of phase and multiply wakeups.
+        self._live_timer = self.set_interval(0.25, self._pulse_live)
         if self._initial_task:
             self._submit_text(self._initial_task)
 
@@ -410,6 +454,12 @@ class MultiplexApp(App):
         nodes = self.query("#global-status")
         if nodes:
             nodes.first(Static).update(self._global_status_text())
+
+    def _pulse_live(self) -> None:
+        # The single app-level heartbeat tick; panes not thinking no-op.
+        self._live_frame += 1
+        for pane in self._panes:
+            pane.pulse_live(self._live_frame)
 
     def _show_summary(self) -> None:
         rows = self._cohort.summary_rows()
@@ -603,6 +653,7 @@ class MultiplexApp(App):
         lane.driver.clear()
         pane = self._pane(lane.id)
         pane.query_one(RichLog).clear()
+        pane.clear_live()
         pane.note("(conversation cleared)", style="dim")
 
     def action_clear_lane(self) -> None:
