@@ -185,8 +185,8 @@ Layer 1: Environment     Local, Docker, Git, Remote, Cloud, PersistentShell
 
 ### TUI (`chimera/tui/`)
 Interactive frontends over AgentDriver (spec: `docs/specs/interactive-frontends.md`, all 3 phases shipped):
-- `app.py` — single-agent full-screen TUI (`chimera code --tui`)
-- `multiplex.py` — the multiplexer: N lanes race one task (`--tui --models a[:preset[:loop]],b,…` / `chimera otter --multiplex`), broadcast/targeted routing, resume
+- `app.py` — DEPRECATED shim (ChimeraTUI/run_tui superseded by the one-lane multiplexer, #172; importable one release, not load-bearing)
+- `multiplex.py` — the multiplexer: N lanes race one task (`--tui --models a[:preset[:loop]],b,…` / `chimera otter --multiplex`), broadcast/targeted routing, resume; bare `chimera code --tui` = `run_single_agent` (one inplace lane, single-lane chrome, model verbatim)
 - `lane.py` / `cohort.py` — Lane (driver+workspace+telemetry+tool_log), Cohort (manifest, persistence to `~/.chimera/cohorts/`, export, list/load for `--resume`)
 - `workspace.py` — per-lane isolation (git worktree per lane, copy fallback; `apply_diff` for resume)
 - `render.py` / `results.py` / `prompt.py` / `routing.py` / `history_io.py` — shared transcript rendering (markdown assistant prose, collapsed reasoning), comparison screen (scoreboard + per-file/split diffs), multi-line prompt + slash autocomplete, pure input routing, faithful history codec

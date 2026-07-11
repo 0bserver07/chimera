@@ -143,13 +143,18 @@ comparison stays sound: separate history, cost, workspace, and event stream.
 Because `send()` streams via async I/O, lanes run **genuinely concurrently** on
 the event loop; you watch them diverge in real time.
 
-**Launch:** `chimera code --tui --models glm-5.2,glm-4.6`. Any `--models` spec —
-including a single model — launches the multiplexer, so one lane still gets the
-full surface (sidebar, results, resume); a lone lane defaults to `inplace`
-isolation (it edits the real tree, daily-driver style), while 2+ lanes isolate
-from each other. Bare `--tui` with no `--models` keeps the classic single-agent
-app. Also available via the comparison-oriented
-alias `chimera otter --multiplex glm-5.2,glm-4.6`.
+**Launch:** `chimera code --tui --models glm-5.2,glm-4.6`. Every `--tui`
+launch is the multiplexer. Any `--models` spec — including a single model —
+gets one full-surface lane per entry (sidebar, results, resume); a lone lane
+defaults to `inplace` isolation (it edits the real tree, daily-driver style),
+while 2+ lanes isolate from each other. Bare `--tui` with no `--models` is the
+same one-lane multiplexer with **single-lane chrome** — no tabstrip or pane
+border, an app-style status line (model · tools · cost · state), `Ctrl+L`
+clears — and the `--model` string reaches the driver verbatim (never parsed as
+a lane spec, so provider-tagged names with `:` survive). The retired
+single-agent app (`chimera/tui/app.py`) survives one release as a deprecated
+import shim. Also available via the comparison-oriented alias
+`chimera otter --multiplex glm-5.2,glm-4.6`.
 
 **Keys:** `Tab` completes a `/command` being typed, else cycles lane focus ·
 `Ctrl+B` toggles broadcast/targeted · `Ctrl+R` opens the **comparison view** (a

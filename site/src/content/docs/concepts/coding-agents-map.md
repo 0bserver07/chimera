@@ -79,12 +79,15 @@ chimera code --tui --models glm-5.2,glm-5.2:codex,glm-4.6
 
 ## Knob 4 — one agent, or the multiplexer
 
-- **Bare `--tui`** (no `--models`) → the classic single-agent TUI: a full-screen
-  transcript, live streaming, mid-run steering.
-- **`--tui --models glm-5.2`** (one entry) → a **single-lane multiplexer**: the
-  same agent, plus the sidebar, the results screen, and `--resume`. A lone lane
-  defaults to `inplace` isolation — it edits your real tree, daily-driver style
-  (pass `--isolation worktree` for a sandbox + diff artifact instead).
+- **Bare `--tui`** (no `--models`) → the daily driver: a **one-lane
+  multiplexer** with single-lane chrome. Full-screen transcript, live
+  streaming, mid-run steering, plus the sidebar, results screen, and cohort
+  resume; `inplace` isolation (it edits your real tree), and your `--model`
+  string is used verbatim (handy for provider-tagged names with `:`).
+- **`--tui --models glm-5.2`** (one entry) → the same single lane, except the
+  entry is parsed as a lane spec (`model[:preset[:loop]]`). A lone lane also
+  defaults to `inplace` isolation (pass `--isolation worktree` for a sandbox +
+  diff artifact instead).
 - **`--tui --models a,b,c`** (two or more) → the **multiplexer race**: N lanes on
   the *same task*, side by side, each in its own isolated workspace.
 
