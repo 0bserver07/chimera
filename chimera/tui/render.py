@@ -147,6 +147,7 @@ def assistant_renderable(text: str, *, markdown: bool = False) -> Any:
 
 def format_event(
     ev: Any, chunks: list[str], *, markdown: bool = False, elide: bool = False,
+    expand_hint: str = "",
 ) -> list[Any]:
     """Render one loop event to zero or more renderables, in order.
 
@@ -160,6 +161,9 @@ def format_event(
     ``elide`` applies head+tail elision with per-tool-class caps to tool output
     (R-FOLD-2). It is display-only and defaults off so persistence callers
     (``Lane.record``) keep the full output in the session record (R-FOLD-3).
+    ``expand_hint`` names the key that expands elided output — the frontend
+    injects its *currently bound* expand-toggle key (R-KEY-3), so no key
+    string is ever hardcoded here; empty means no affordance to advertise.
     """
     t = ev.type
     out: list[Any] = []
@@ -191,6 +195,8 @@ def format_event(
             if elide:
                 caps = caps_for_tool(str(getattr(call, "name", "") or ""))
                 head, marker, tail = elide_middle(text, caps)
+                if marker and expand_hint:
+                    marker = f"{marker} ({expand_hint} expands)"
             if marker:
                 styled = Text()
                 styled.append(head, style=style)
@@ -253,6 +259,7 @@ class LaneTranscript:
         *,
         markdown: bool = True,
         clock: Callable[[], float] | None = None,
+        expand_hint: str = "",
     ) -> None:
         self._sink = sink
         self._clock: Callable[[], float] = clock if clock is not None else time.monotonic
@@ -268,6 +275,16 @@ class LaneTranscript:
         #: Reveal-affordance suffix on the committed reasoning trace. Both TUI
         #: frontends bind Ctrl+E; embedders with another binding can override.
         self.reveal_hint = "Ctrl+E to show"
+        #: Display-only tool-output elision (R-FOLD-2), on by default. Mutable:
+        #: the global expand toggle flips it live. Flipping affects tool
+        #: results rendered *afterwards* — the sink is append-only, so already
+        #: committed output re-renders only via the transcript overlay
+        #: (R-FOLD-7, a later wave).
+        self.elide = True
+        #: Key hint appended to elision markers (``… +37 lines … (<key>
+        #: expands)``). Injected by the frontend from its keybinding registry
+        #: so the marker always names the currently bound key (R-KEY-3).
+        self.expand_hint = expand_hint
 
     @property
     def live_tail(self) -> str:
@@ -325,7 +342,10 @@ class LaneTranscript:
         if t == LoopEventType.assistant:
             self._flush_stream(fallback=ev.data)
             return
-        for renderable in format_event(ev, self._chunks, markdown=self.markdown, elide=True):
+        for renderable in format_event(
+            ev, self._chunks,
+            markdown=self.markdown, elide=self.elide, expand_hint=self.expand_hint,
+        ):
             self._sink(renderable)
 
     def _commit_block(self, text: str) -> None:

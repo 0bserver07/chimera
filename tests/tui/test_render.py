@@ -229,6 +229,45 @@ def test_format_event_default_keeps_full_output():
     assert plain(out[0]) == _long_output(200)
 
 
+def test_elide_is_a_mutable_display_toggle():
+    # R-FOLD-2's global expand toggle flips this attribute live; it applies
+    # to tool results rendered afterwards (committed output re-renders with
+    # the transcript overlay, R-FOLD-7, a later wave).
+    sink: list = []
+    t = LaneTranscript(sink.append)
+    assert t.elide is True  # collapsed by default, same as before
+    t.elide = False
+    t.handle(_tool_result("bash", _long_output(100)))
+    assert plain(sink[0]) == _long_output(100)  # expanded: full output
+    t.elide = True
+    t.handle(_tool_result("bash", _long_output(100)))
+    assert "… +85 lines …" in plain(sink[1])    # collapsed again
+
+
+def test_expand_hint_names_the_injected_key_on_the_marker():
+    # The frontend injects its currently-bound expand key (R-KEY-3); the
+    # renderer never hardcodes one.
+    sink: list = []
+    t = LaneTranscript(sink.append, expand_hint="ctrl+x")
+    t.handle(_tool_result("bash", _long_output(100)))
+    assert "… +85 lines … (ctrl+x expands)" in plain(sink[0])
+
+
+def test_no_expand_hint_keeps_the_bare_marker():
+    sink: list = []
+    t = LaneTranscript(sink.append)  # no hint injected
+    t.handle(_tool_result("bash", _long_output(100)))
+    text = plain(sink[0])
+    assert "… +85 lines …" in text and "expands" not in text
+
+
+def test_format_event_expand_hint_only_applies_when_eliding():
+    out = format_event(
+        _tool_result("bash", _long_output(200)), [], expand_hint="ctrl+x",
+    )
+    assert "expands" not in plain(out[0])  # elide off: no marker, no hint
+
+
 def test_lane_record_persists_full_tool_output():
     # the recorded transcript is the session record: display caps never apply
     lane = Lane(LaneConfig("A", "A", "glm-5.2"), driver=SimpleNamespace())
