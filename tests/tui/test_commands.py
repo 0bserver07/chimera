@@ -3,6 +3,8 @@
 Pure (stdlib-only) except the autocomplete round-trip tests, which use the
 widget-free helpers from :mod:`chimera.tui.prompt`.
 """
+import pytest
+
 from chimera.tui.commands import (
     COMMAND_DEFS,
     canonical,
@@ -129,6 +131,7 @@ def test_help_mentions_composer_basics():
 
 # -- autocomplete from the registry (R-IN-2, registry half) -----------------------
 def test_filter_commands_over_registry_catalog():
+    pytest.importorskip("textual")  # prompt.py needs the tui extra
     from chimera.tui.prompt import filter_commands
 
     catalog = completion_catalog(single=True)
@@ -139,6 +142,7 @@ def test_filter_commands_over_registry_catalog():
 
 
 def test_complete_command_over_registry_catalog():
+    pytest.importorskip("textual")  # prompt.py needs the tui extra
     from chimera.tui.prompt import complete_command
 
     catalog = completion_catalog(single=False)

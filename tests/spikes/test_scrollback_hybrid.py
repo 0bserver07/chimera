@@ -16,6 +16,8 @@ from pathlib import Path
 
 import pytest
 
+pytest.importorskip("rich")  # spike renders via rich (ships with the tui extra); CI installs none
+
 _SPIKE = Path(__file__).resolve().parents[2] / "scripts" / "spikes" / "scrollback_hybrid.py"
 _spec = importlib.util.spec_from_file_location("scrollback_hybrid", _SPIKE)
 assert _spec is not None and _spec.loader is not None
