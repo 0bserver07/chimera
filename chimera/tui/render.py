@@ -5,10 +5,11 @@ event stream into a scrolling transcript that must *look* identical. This module
 holds that rendering as a small, sink-agnostic helper so the two frontends can't
 drift.
 
-The single-agent :class:`~chimera.tui.app.ChimeraTUI` predates this module and
-keeps its own inline copy (it is intentionally left untouched — Phase 2 is
-purely additive); the multiplexer's per-lane panes and the persisted transcript
-both go through :class:`LaneTranscript` here.
+Since issue #172 the single-agent surface *is* the one-lane multiplexer, so
+every live pane and the persisted transcript go through :class:`LaneTranscript`
+here. (The deprecated :class:`~chimera.tui.app.ChimeraTUI` shim still carries
+its historical inline copy until its scheduled removal; the CLI no longer
+constructs it.)
 
 Design notes:
 
@@ -122,7 +123,7 @@ def format_event(
         if text:
             ok = getattr(result, "success", True)
             style = "green" if ok else "red"
-            marker = ""
+            head, marker, tail = text, "", ""
             if elide:
                 caps = caps_for_tool(str(getattr(call, "name", "") or ""))
                 head, marker, tail = elide_middle(text, caps)
