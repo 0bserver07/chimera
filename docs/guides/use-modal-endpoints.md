@@ -142,3 +142,24 @@ run. You are billed GPU-seconds while the endpoint serves — for steady
 all-day traffic, compare against per-token API pricing before assuming the
 endpoint is cheaper. `modal endpoint stop <name>` when you are done; check
 spend in the Modal dashboard.
+
+## Field notes from the first live run (2026-07-10, GLM-5.2-FP8)
+
+Observed against a real endpoint (`chimera-glm52`, 8 × B200, us-west):
+
+- **The endpoint URL only appears on the dashboard.** `modal endpoint list`
+  (CLI 1.5.2, table AND `--json`) does not print it. The scheme observed:
+  `https://<workspace>--ep-<name>-server.<routing-region>.modal.direct`
+  — note `.modal.direct`, not `.modal.run`. Grab it from the endpoint's
+  dashboard page ("Copy Endpoint URL") and pass `--base-url` /
+  `base_url=` explicitly.
+- **`create` requires proxy tokens to exist first** (or
+  `--unauthenticated`): run `modal workspace proxy-tokens create` *before*
+  `modal endpoint create`.
+- **Cold start for a model this size was ~19 minutes** end-to-end
+  (create → provisioning → `live` in ~17 min; first request then 503s while
+  weights load; `/v1/models` flipped to 200 ~19 min after the first
+  request). A cold endpoint answers **503**, not a queued slow response —
+  poll `/v1/models` until 200 rather than retrying completions.
+- **Warm behavior**: one-shot completion latency 1.16 s, 40.5 tok/s output
+  on the smoke prompt. Scaledown window on the default recipe: 300 s.
