@@ -141,6 +141,8 @@ disable_error_code = ["import-not-found"]
 module = [
     "chimera.tui.app",
     "chimera.tui.approvals",
+    "chimera.tui.live_region",
+    "chimera.tui.logview",
     "chimera.tui.multiplex",
     "chimera.tui.prompt",
     "chimera.tui.results",
