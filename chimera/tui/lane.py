@@ -47,6 +47,11 @@ class LaneTelemetry:
     cost: float = 0.0
     tokens_in: int = 0
     tokens_out: int = 0
+    #: Prompt-side token count of the *latest* provider request (observed from
+    #: per-step ``assistant`` events) — the live context-usage gauge for the
+    #: status line (R-STAT-4). 0 until a provider reports usage; never
+    #: estimated locally.
+    context_tokens: int = 0
     steps: int = 0
     turns: int = 0
     elapsed: float = 0.0            # cumulative seconds spent running
@@ -161,6 +166,20 @@ class Lane:
         self._observe(ev)
 
     def _observe(self, ev: Any) -> None:
+        if ev.type == LoopEventType.assistant:
+            # Per-step responses carry the usage of that single request; its
+            # prompt side (fresh input + cache read/write for providers that
+            # split them out) is the real size of the context as last sent.
+            # The turn-end ``result`` usage is cumulative across steps and
+            # deliberately NOT used here.
+            usage = getattr(ev.data, "usage", None) or {}
+            prompt_side = (
+                _usage_tokens(usage, "input_tokens", "prompt_tokens")
+                + _usage_tokens(usage, "cache_read_input_tokens")
+                + _usage_tokens(usage, "cache_creation_input_tokens")
+            )
+            if prompt_side > 0:
+                self.telemetry.context_tokens = prompt_side
         if ev.type == LoopEventType.tool_use:
             self.tool_log.append((str(getattr(ev.data, "name", "?")), None))
         elif ev.type == LoopEventType.tool_result:

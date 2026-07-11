@@ -134,6 +134,16 @@ class AgentDriver:
         win = getattr(self._agent.provider, "context_window", None)
         return int(win) if win else None
 
+    @property
+    def auto_compaction(self) -> bool:
+        """Whether the agent loop has auto-compaction armed.
+
+        Surfaced for status displays (the context meter's ``(auto)`` marker);
+        reads the agent's compaction integration, which is present exactly
+        when the preset enabled compaction.
+        """
+        return getattr(self._agent, "_compaction", None) is not None
+
 
 def render_event(ev: LoopEvent) -> str | None:
     """Render a loop event as a single display line, or ``None`` to skip.
