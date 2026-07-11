@@ -28,8 +28,8 @@ def test_catalog_carries_every_previous_command():
     catalog = completion_catalog()
     for cmd in PREVIOUS_SLASH_COMMANDS:
         assert cmd in catalog, f"{cmd} dropped from the registry catalog"
-    # the only addition is /keys
-    assert set(catalog) - set(PREVIOUS_SLASH_COMMANDS) == {"/keys"}
+    # deliberate additions only: /keys (R-KEY-1) and /statusline (R-STAT-1)
+    assert set(catalog) - set(PREVIOUS_SLASH_COMMANDS) == {"/keys", "/statusline"}
 
 
 def test_catalog_is_sorted_slash_prefixed_strings():
