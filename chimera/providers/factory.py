@@ -176,10 +176,12 @@ def create_provider(
     if provider_type is None:
         provider_type = _infer_provider(model)
 
-    # Strip ``vllm/`` and ``sglang/`` model-id prefixes — they are hints
-    # used by ``_infer_provider`` to pick the right local server, not part
-    # of the model name the server itself sees.
-    if provider_type in ("vllm", "sglang") and "/" in model:
+    # Strip ``vllm/``, ``sglang/``, and ``modal-endpoint/`` model-id
+    # prefixes — they are hints used by ``_infer_provider`` to pick the
+    # right serving stack, not part of the model name the server itself
+    # sees. (For ``modal-endpoint/zai-org/GLM-5.2-FP8`` the tail keeps its
+    # own ``/`` — Hugging Face repo ids are ``org/name``.)
+    if provider_type in ("vllm", "sglang", "modal-endpoint") and "/" in model:
         head, _, tail = model.partition("/")
         if head.lower() == provider_type:
             model = tail
@@ -262,12 +264,16 @@ def _infer_provider(model: str) -> str:
     """
     model_lower = model.lower()
 
-    # Local OpenAI-compatible serving prefixes win unconditionally — the
-    # user explicitly opted into vLLM / SGLang by namespacing the model id.
+    # Serving-stack prefixes win unconditionally — the user explicitly
+    # opted into vLLM / SGLang / Modal managed endpoints by namespacing
+    # the model id. In particular ``modal-endpoint/zai-org/GLM-5.2-FP8``
+    # must NOT fall through to the ``glm`` → anthropic branch below.
     if model_lower.startswith("vllm/"):
         return "vllm"
     if model_lower.startswith("sglang/"):
         return "sglang"
+    if model_lower.startswith("modal-endpoint/"):
+        return "modal-endpoint"
 
     # Models that must NEVER be routed to the anthropic provider regardless of
     # env vars — they use fundamentally different wire protocols.
@@ -357,5 +363,6 @@ def _infer_provider(model: str) -> str:
         f"  3. Use a prefix that matches a known provider (claude-*, gpt-*,\n"
         f"     gpt-oss-* (Ollama), gemini-*, gemma* (Ollama), glm-*,\n"
         f"     kimi-*, grok-*, deepseek-*, llama*, qwen*, mistral*, phi*,\n"
-        f"     vllm/* (local vLLM), sglang/* (local SGLang))."
+        f"     vllm/* (local vLLM), sglang/* (local SGLang),\n"
+        f"     modal-endpoint/* (Modal managed endpoints))."
     )

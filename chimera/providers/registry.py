@@ -64,5 +64,6 @@ def _ensure_builtins_registered() -> None:
     import chimera.providers.ollama  # noqa: F401
     import chimera.providers.compatible  # noqa: F401
     import chimera.providers.modal  # noqa: F401
+    import chimera.providers.modal_endpoint  # noqa: F401
     import chimera.providers.xai  # noqa: F401
     import chimera.providers.faux  # noqa: F401
