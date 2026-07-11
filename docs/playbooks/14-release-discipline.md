@@ -44,6 +44,10 @@ Chimera's policy, set explicitly by the project owner:
 
 - Full suite green locally (excluding the documented live-infra files),
   `ruff`, `mypy`, trademark scrubs, docs-sync.
+- **CI-posture gate** (`bash scripts/ci_posture_check.sh`): CI installs no
+  `tui` extra — replicate its exact env + cold-cache mypy + its pytest
+  invocation locally before the push. Added after two red CI runs on the
+  0.9.1 batch proved local-green ≠ CI-green.
 - README/status refreshed to match reality.
 - Publish pipeline per `docs/playbooks/` release notes and
   the release-ops history (tag → CI publish → uvx verification).

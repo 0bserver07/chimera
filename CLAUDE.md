@@ -11,6 +11,7 @@ Compose coding agents from modular primitives. Synthesize codebases from specifi
 - **Tests:** `uv run pytest` (8534 passing + 97 skipped locally, excluding the live-infra files `tests/integration/test_env_docker_integration.py`, `tests/env/test_modal_sandbox.py`, `tests/env/test_ssh_live.py`; one `tests/function_synthesis/test_validation_split.py` test is env-sensitive locally but green in CI)
 - **Lint:** `uv run ruff check chimera/`
 - **Types:** `uv run mypy chimera/`
+- **CI posture (run before pushing batches):** `bash scripts/ci_posture_check.sh` — CI installs NO `tui` extra, so a green local gate can still be a red CI. New modules importing textual/rich need the pyproject `[[tool.mypy.overrides]]` textual block; tests importing them need `pytest.importorskip`. mypy caches are posture-specific — trust only cold-cache runs when extras change.
 - **Docs:** Astro/Starlight in `site/`. Local: `cd site && pnpm install && pnpm dev`. Deploys to <https://0bserver07.github.io/chimera/> via `.github/workflows/ci.yml`.
 - **Versioning:** stay in 0.9.x (patch bumps only, batched, unhurried); 1.0 is reserved for a major breakthrough — see `docs/playbooks/14-release-discipline.md`.
 
