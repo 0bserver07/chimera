@@ -45,6 +45,22 @@ commit receipts.
   streaming, nested-fence normalization, head/tail tool-output elision
   (`660a401`, `c4840a5`); follow-mode scrolling (`17b5f8e`); the UX
   refinements spec, ~45 requirements over 3 phases (`1663d7c`).
+- **TUI wave 2** (the spec's P2 + polish, five parallel slices): live-tail
+  region — streamed prose visible before block completion — plus a reasoning
+  heartbeat with honest chars/s (`5e1f7da`, `365feba`); declarative
+  keybinding + slash-command registries with `tui.keybinds` user rebinding,
+  conflict detection, `/keys`, and a global expand toggle whose elision
+  markers advertise the currently bound key (`d269c9b`–`6047956`);
+  status-line item registry with width-degradation ladder, inode-aware async
+  git watcher, context meter, terminal title, and `/statusline`
+  (`34c6d0b`–`cbd322d`); universal fuzzy-select modal powering the migrated
+  `/cohorts` picker (`64f4572`); **permission approvals as TUI modals**
+  (#171) — opt-in ApprovalBroker over a previously dormant
+  `permission_callback` seam, allow/deny/deny-with-feedback/allow-for-session,
+  queued FIFO, deadlock-guarded (`baa2983`); native-scrollback hybrid spike —
+  **GO (conditional)**: proven in tmux/screen, one multiplexer drops history
+  (detected + fallback required), report + runnable prototype (`8f9c36f`,
+  `52c7fbd`).
 - **Core/infra**: in-process hook lifecycle (`36b19fd`);
   `SessionTree.summarize_branch` (`7a612a9`); next-turn message queue that
   survives cancellation (`99d1b8c`); plugin hot-reload (`0f4316c`);
