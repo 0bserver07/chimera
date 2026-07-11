@@ -492,7 +492,7 @@ wheels = [
 
 [[package]]
 name = "chimera-run"
-version = "0.9.1.dev0"
+version = "0.9.1"
 source = { editable = "." }
 
 [package.optional-dependencies]

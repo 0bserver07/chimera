@@ -1,6 +1,6 @@
 # Chimera
 
-[![PyPI](https://img.shields.io/pypi/v/chimera-run.svg)](https://pypi.org/project/chimera-run/) [![Python](https://img.shields.io/pypi/pyversions/chimera-run.svg)](https://pypi.org/project/chimera-run/) [![License](https://img.shields.io/github/license/0bserver07/chimera.svg)](LICENSE) [![CI](https://github.com/0bserver07/chimera/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/0bserver07/chimera/actions/workflows/ci.yml) [![Tests](https://img.shields.io/badge/tests-8549%20passing-brightgreen)](https://github.com/0bserver07/chimera/actions) [![Docs](https://img.shields.io/badge/docs-0bserver07.github.io%2Fchimera-blue)](https://0bserver07.github.io/chimera/)
+[![PyPI](https://img.shields.io/pypi/v/chimera-run.svg)](https://pypi.org/project/chimera-run/) [![Python](https://img.shields.io/pypi/pyversions/chimera-run.svg)](https://pypi.org/project/chimera-run/) [![License](https://img.shields.io/github/license/0bserver07/chimera.svg)](LICENSE) [![CI](https://github.com/0bserver07/chimera/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/0bserver07/chimera/actions/workflows/ci.yml) [![Tests](https://img.shields.io/badge/tests-9606%20passing-brightgreen)](https://github.com/0bserver07/chimera/actions) [![Docs](https://img.shields.io/badge/docs-0bserver07.github.io%2Fchimera-blue)](https://0bserver07.github.io/chimera/)
 
 **An open-source Python framework for building coding agents.** Pick your provider, pick your tools, pick your loop. Chimera wires them together. Recreate SWE-Agent, Aider, Cline, or Codex in a few lines, or design something entirely new.
 
@@ -10,7 +10,7 @@ chimera mink                        # TUI-first coding agent
 chimera agents                      # list all 7 CLIs with one-line pitches
 ```
 
-**v0.9.0 status** — 8549 passing tests, 97 skipped, 0 failed. ruff + mypy (675 modules) + 7 trademark scrubs all green. Reproducible benchmarks: HumanEval 92.7% pass@1 with GLM-5.1 (152/164; 4-model run up to Opus 4.7 at 100%), MBPP 87.4%, SWE-bench Lite 10% (2/20, gap analysis documented). New in 0.9.0: the TUI multiplexer (below) — plus resumable cohorts, heterogeneous lanes (`model[:preset[:loop]]`), live reasoning display, and markdown transcripts. Raw results in `data/`.
+**v0.9.1 status** — 9606 passing tests, 92 skipped, 0 failed. ruff + mypy (705 modules) + 7 trademark scrubs all green. Flagship full-dataset scorecard on glm-5.2 (status_counts-verified, zero infra errors): mbpp-plus 99.7%, mbpp 99.1%, human-eval-plus 92.1%, math500 77.6%. New in 0.9.1: measurement-integrity fixes across the eval harness, benches running wholly on Modal cloud (durable detached grids), Modal managed Endpoints as a provider, and the TUI wave — one-lane multiplexer daily driver, stream-safe rendering, live tail + heartbeat, keybinding/status-line registries, opt-in approval modals ([release notes](docs/releases/0.9.1.md), [TUI guide](docs/guides/tui.md)). Raw results in `data/`.
 
 ## New in 0.9.0 — the multiplexer: race N agents on one task
 

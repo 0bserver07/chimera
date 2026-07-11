@@ -7,9 +7,12 @@ commit receipts.
 
 ## Unreleased
 
-<!-- Proposed batch name (finalize at release time): "the honest harness" —
-     measurement integrity + benches on Modal + the TUI that earns the
-     daily driver. -->
+(nothing yet — next batch accumulates here)
+
+## 0.9.1 — 2026-07-11 — the honest harness
+
+Measurement integrity + benches on Modal + the TUI that earns the daily
+driver. Narrative notes: `docs/releases/0.9.1.md`.
 
 ### Added
 
@@ -45,7 +48,8 @@ commit receipts.
   streaming, nested-fence normalization, head/tail tool-output elision
   (`660a401`, `c4840a5`); follow-mode scrolling (`17b5f8e`); the UX
   refinements spec, ~45 requirements over 3 phases (`1663d7c`).
-- **TUI wave 2** (the spec's P2 + polish, five parallel slices): live-tail
+- **TUI wave 2** (the spec's P2 + polish, five parallel slices; user guide:
+  `docs/guides/tui.md`): live-tail
   region — streamed prose visible before block completion — plus a reasoning
   heartbeat with honest chars/s (`5e1f7da`, `365feba`); declarative
   keybinding + slash-command registries with `tui.keybinds` user rebinding,
