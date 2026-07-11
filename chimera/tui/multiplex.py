@@ -12,6 +12,9 @@ lane or all of them. Concurrency is real — the driver streams via async I/O, s
 lanes overlap on Textual's event loop (see :mod:`chimera.tui.lane`).
 
 Launch: ``chimera code --tui --models glm-5.2,glm-5.1`` (or ``chimera otter``).
+Bare ``chimera code --tui`` runs the same app as a **one-lane multiplexer**
+(:func:`run_single_agent`): an ``inplace`` lane editing the real tree, with the
+single-lane chrome (no tabstrip, no pane border, an app-style status line).
 """
 from __future__ import annotations
 
@@ -49,6 +52,7 @@ __all__ = [
     "MultiplexApp",
     "LanePane",
     "run_multiplexer",
+    "run_single_agent",
     "resume_multiplexer",
     "print_saved_cohorts",
     "parse_lane_specs",
@@ -73,6 +77,16 @@ MIN_PANE_WIDTH = 32
 _HEADER_REFRESH_EVENTS = frozenset({
     LoopEventType.tool_use, LoopEventType.tool_result, LoopEventType.result,
 })
+# Bindings hidden (and disabled) in single-lane mode — they only make sense
+# with 2+ lanes. Ctrl+L is the reverse case: the single-lane "Clear" key
+# (ported from the retired single-agent app), hidden in multi-lane mode where
+# Ctrl+O "Clear lane" is the established binding.
+_SINGLE_HIDDEN_ACTIONS = frozenset({
+    "focus_prev_lane", "toggle_broadcast", "cancel_focused", "clear_focused",
+})
+_MULTI_HIDDEN_ACTIONS = frozenset({"clear_lane"})
+# Routing modes are meaningless with one lane; drop them from the catalog.
+_MULTI_ONLY_COMMANDS = frozenset({"/broadcast", "/target"})
 
 
 class LanePane(Vertical):
@@ -139,7 +153,19 @@ class LanePane(Vertical):
     def feed_error(self, exc: object) -> None:
         self.query_one(RichLog).write(Text(f"turn failed: {exc}", style="red"))
 
-    def intro(self) -> None:
+    def intro(self, *, single: bool = False) -> None:
+        if single:
+            # The daily-driver greeting (ported from the retired single-agent
+            # app): model + context window + how to get help / cancel.
+            c = getattr(self._lane.driver, "context_window", None)
+            ctx = f"{c:,}" if c else "?"
+            self.query_one(RichLog).write(Text(
+                f"Chimera TUI — {self._lane.config.model} — "
+                f"{self._lane.config.preset} — {ctx} ctx.  "
+                f"/help for commands · Ctrl+C cancels a turn.",
+                style="dim",
+            ))
+            return
         ws = self._lane.workspace
         where = f" · {ws.strategy}" if ws else ""
         self.query_one(RichLog).write(Text(
@@ -173,6 +199,10 @@ class MultiplexApp(App):
     #lanes { height: 1fr; }
     .lane-pane { width: 1fr; border: round $secondary; }
     .lane-pane.focused-lane { border: round $accent; }
+    /* Single-lane mode: one full-width pane, so per-lane chrome is noise. */
+    .lane-pane.single { border: none; }
+    .lane-pane.single.focused-lane { border: none; }
+    .lane-pane.single .lane-header { display: none; }
     .lane-header { height: 1; background: $boost; padding: 0 1; }
     .lane-log { height: 1fr; padding: 0 1; }
     #sidebar { width: 32; border: round $secondary; padding: 0 1; }
@@ -189,8 +219,12 @@ class MultiplexApp(App):
         Binding("ctrl+b", "toggle_broadcast", "Broadcast/target"),
         Binding("ctrl+g", "cancel_focused", "Cancel lane"),
         Binding("ctrl+o", "clear_focused", "Clear lane"),
+        # Single-lane alias (check_action swaps which of the two is live).
+        Binding("ctrl+l", "clear_lane", "Clear"),
         Binding("ctrl+r", "show_results", "Compare results"),
-        Binding("ctrl+e", "toggle_reasoning", "Reasoning"),
+        # priority: the prompt's TextArea binds ctrl+e (cursor to line end)
+        # and would otherwise swallow the advertised reasoning toggle.
+        Binding("ctrl+e", "toggle_reasoning", "Reasoning", priority=True),
         Binding("ctrl+t", "toggle_sidebar", "Sidebar"),
     ]
 
@@ -216,6 +250,16 @@ class MultiplexApp(App):
         super().__init__(**kwargs)
         self._cohort = cohort
         self._mode = cohort.routing
+        #: One lane = the daily-driver single-agent TUI (issue #172): same app,
+        #: with the multi-lane chrome (tabstrip, pane border/header, routing
+        #: modes) degraded away. See ``check_action`` and ``_relayout``.
+        self._single = len(cohort.lanes) == 1
+        if self._single:
+            self.title = "Chimera TUI"
+        self._slash_commands = [
+            c for c in self.SLASH_COMMANDS
+            if not (self._single and c in _MULTI_ONLY_COMMANDS)
+        ]
         self._focus_index = 0
         self._panes: list[LanePane] = []
         self._pane_by_id: dict[str, LanePane] = {}
@@ -239,15 +283,16 @@ class MultiplexApp(App):
         yield Static(self._global_status_text(), id="global-status")
         yield Static("", id="summary")
         yield Static("", id="tabstrip")
+        pane_classes = "lane-pane single" if self._single else "lane-pane"
         with Horizontal(id="lanes"):
             for lane in self._cohort.lanes:
-                pane = LanePane(lane, classes="lane-pane")
+                pane = LanePane(lane, classes=pane_classes)
                 self._panes.append(pane)
                 self._pane_by_id[lane.id] = pane
                 yield pane
             yield Static("", id="sidebar")
         yield Static("", id="hint")
-        yield PromptArea(placeholder=self._placeholder(), commands=self.SLASH_COMMANDS, id="prompt")
+        yield PromptArea(placeholder=self._placeholder(), commands=self._slash_commands, id="prompt")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -260,7 +305,7 @@ class MultiplexApp(App):
         self._update_focus_styles()
         self._relayout()
         for pane in self._panes:
-            pane.intro()
+            pane.intro(single=self._single)
         self.set_interval(0.5, self._refresh_global)
         if self._initial_task:
             self._submit_text(self._initial_task)
@@ -268,10 +313,26 @@ class MultiplexApp(App):
     def on_resize(self) -> None:
         self._relayout()
 
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
+        """Gate bindings by lane count (dynamic actions).
+
+        Single-lane mode hides the multi-lane chrome keys (focus-prev,
+        broadcast toggle, per-lane cancel/clear) and enables Ctrl+L "Clear";
+        multi-lane mode is the mirror image. Slash commands are unaffected —
+        they dispatch directly, not through actions.
+        """
+        if self._single and action in _SINGLE_HIDDEN_ACTIONS:
+            return False
+        if not self._single and action in _MULTI_HIDDEN_ACTIONS:
+            return False
+        return True
+
     def _relayout(self) -> None:
         n = len(self._panes)
         width = self.size.width or 80
-        self._tabbed = (width // max(n, 1)) < MIN_PANE_WIDTH
+        # One full-width lane never degrades to tabs — the strip would only
+        # repeat the single label the status line already shows.
+        self._tabbed = (not self._single) and (width // max(n, 1)) < MIN_PANE_WIDTH
         for i, pane in enumerate(self._panes):
             pane.display = (not self._tabbed) or (i == self._focus_index)
         strip = self.query_one("#tabstrip", Static)
@@ -295,12 +356,16 @@ class MultiplexApp(App):
 
     # -- status ---------------------------------------------------------
     def _placeholder(self) -> str:
+        if self._single:
+            return "Ask, or /help …"
         if self._mode is RoutingMode.BROADCAST:
             return "Broadcast to all lanes, or /help …"
         lane = self._focused_lane()
         return f"Target @{lane.label if lane else '?'}, or /help …"
 
     def _global_status_text(self) -> str:
+        if self._single:
+            return self._single_status_text()
         c = self._cohort
         n = len(c.lanes)
         mode = self._mode.value
@@ -315,6 +380,23 @@ class MultiplexApp(App):
             f"Σ${c.total_cost:.4f} · {self._elapsed():.1f}s · "
             f"first: {first.label if first else '—'} · [{mode}]"
         )
+
+    def _single_status_text(self) -> str:
+        """The daily-driver status line: model · tools · cost · state.
+
+        Ported from the retired single-agent app so bare ``--tui`` keeps its
+        per-driver status; lane/race counters would be noise for one lane.
+        """
+        lane = self._cohort.lanes[0]
+        t = lane.telemetry
+        state = t.liveness.value
+        if t.terminal_reason and t.terminal_reason not in ("completed", None):
+            state = f"{state}:{t.terminal_reason}"
+        tools = len(getattr(lane.driver, "tools", None) or [])
+        text = f" {lane.config.model}  ·  {tools} tools  ·  ${t.cost:.4f}  ·  {state}"
+        if t.steps:
+            text += f"  ·  {t.steps} st"
+        return text
 
     def _elapsed(self) -> float:
         if self._race_start is None:
@@ -379,7 +461,7 @@ class MultiplexApp(App):
     def _on_prompt_changed(self, event: TextArea.Changed) -> None:
         # Autocomplete hint (§13.6): show matching commands while a "/" prefix
         # is being typed; Tab completes.
-        matches = filter_commands(event.text_area.text, self.SLASH_COMMANDS)
+        matches = filter_commands(event.text_area.text, self._slash_commands)
         hint = self.query_one("#hint", Static)
         if matches:
             hint.update(Text("  ".join(matches) + "   (Tab completes)", style="dim"))
@@ -472,7 +554,10 @@ class MultiplexApp(App):
     def _finish_race(self) -> None:
         if self._race_start is not None and self._race_end is None:
             self._race_end = time.monotonic()
-        self._show_summary()
+        # One lane has nothing to rank: the transcript's own result line and
+        # the status bar already carry cost/steps. /summary still works.
+        if not self._single:
+            self._show_summary()
 
     # -- actions --------------------------------------------------------
     def action_cancel_all(self) -> None:
@@ -516,7 +601,13 @@ class MultiplexApp(App):
         if lane is None:
             return
         lane.driver.clear()
-        self._pane(lane.id).query_one(RichLog).clear()
+        pane = self._pane(lane.id)
+        pane.query_one(RichLog).clear()
+        pane.note("(conversation cleared)", style="dim")
+
+    def action_clear_lane(self) -> None:
+        """Ctrl+L, the single-lane "Clear" key (app-parity alias)."""
+        self.action_clear_focused()
 
     def action_show_results(self) -> None:
         ran = any(
@@ -537,7 +628,7 @@ class MultiplexApp(App):
         if prompt.has_focus and prompt.text.lstrip().startswith("/"):
             from chimera.tui.prompt import complete_command
 
-            completed = complete_command(prompt.text, self.SLASH_COMMANDS)
+            completed = complete_command(prompt.text, self._slash_commands)
             if completed != prompt.text:
                 prompt.text = completed
                 prompt.move_cursor(prompt.document.end)
@@ -592,19 +683,37 @@ class MultiplexApp(App):
         if cmd in ("/exit", "/quit"):
             self.exit()
         elif cmd == "/help":
-            say(
-                "/help /model /cost /tools /clear /summary /results /export "
-                "/cohorts /resume [id] /broadcast /target /exit  ·  "
-                "Tab complete-or-focus · Ctrl+B mode · "
-                "Ctrl+R compare · Ctrl+E reasoning · Ctrl+T sidebar · "
-                "Ctrl+J newline · Ctrl+C cancel-all · Ctrl+G cancel-lane"
-            )
+            if self._single:
+                say(
+                    "/help /model /cost /tools /clear /summary /results /export "
+                    "/cohorts /resume [id] /exit  ·  "
+                    "Ctrl+C cancel · Ctrl+L clear · Ctrl+E reasoning · "
+                    "Ctrl+R results · Ctrl+T sidebar · Ctrl+J newline · "
+                    "Tab completes /commands · type while running to steer"
+                )
+            else:
+                say(
+                    "/help /model /cost /tools /clear /summary /results /export "
+                    "/cohorts /resume [id] /broadcast /target /exit  ·  "
+                    "Tab complete-or-focus · Ctrl+B mode · "
+                    "Ctrl+R compare · Ctrl+E reasoning · Ctrl+T sidebar · "
+                    "Ctrl+J newline · Ctrl+C cancel-all · Ctrl+G cancel-lane"
+                )
         elif cmd == "/model":
-            say("  ".join(f"{ln.label}={ln.config.model}" for ln in self._cohort.lanes))
+            if self._single and lane is not None:
+                # App-parity: the one model plus its context window.
+                c = getattr(lane.driver, "context_window", None)
+                ctx = f"{c:,}" if c else "?"
+                say(f"{lane.config.model}  ({ctx} ctx)")
+            else:
+                say("  ".join(f"{ln.label}={ln.config.model}" for ln in self._cohort.lanes))
         elif cmd == "/cost":
-            say(f"Σ ${self._cohort.total_cost:.4f}  ·  " + "  ".join(
-                f"{ln.label}=${ln.telemetry.cost:.4f}" for ln in self._cohort.lanes
-            ))
+            if self._single:
+                say(f"cumulative: ${self._cohort.total_cost:.4f}")
+            else:
+                say(f"Σ ${self._cohort.total_cost:.4f}  ·  " + "  ".join(
+                    f"{ln.label}=${ln.telemetry.cost:.4f}" for ln in self._cohort.lanes
+                ))
         elif cmd == "/tools":
             if lane is not None:
                 say(", ".join(t.name for t in lane.driver.tools) or "(none)")
@@ -853,6 +962,11 @@ def run_multiplexer(
             task=task,
             source=source,
             isolation=workspaces.strategy,
+            # Routing modes only mean something with 2+ lanes; a lone lane is
+            # the daily driver and always addresses itself.
+            routing=(
+                RoutingMode.TARGETED if len(lanes) == 1 else RoutingMode.BROADCAST
+            ),
             workspaces=workspaces,
         )
     except BaseException:
@@ -863,6 +977,76 @@ def run_multiplexer(
         cohort, workspaces,
         lane_cap=lane_cap, initial_task=task, persist_root=persist_root,
         export=export, **agent_kwargs,
+    )
+
+
+def run_single_agent(
+    model: str = "glm-5.2",
+    project_dir: str | None = None,
+    preset: str = "coding_agent",
+    *,
+    task: str | None = None,
+    export: str | None = None,
+    persist_root: str | None = None,
+    **agent_kwargs: Any,
+) -> str | None:
+    """Run the daily-driver single-agent TUI: the multiplexer with N=1.
+
+    Bare ``chimera code --tui`` lands here (issue #172): one ``inplace`` lane —
+    the agent edits the real tree, daily-driver style — with targeted routing
+    and the single-lane chrome (no tabstrip, no pane border/header, an
+    app-style status line). Unlike a ``--models`` spec, *model* reaches the
+    driver **verbatim** (never split on ``:``), so provider-tagged model names
+    survive.
+
+    On exit the session persists as a one-lane cohort under
+    ``~/.chimera/cohorts/`` — resumable via ``--resume`` / ``/cohorts`` — the
+    same lifecycle as any multiplexer run.
+
+    Args:
+        model: Model name, passed to :class:`AgentDriver` unmodified.
+        project_dir: The tree the agent works in (default: cwd).
+        preset: Assembly preset for the lane.
+        task: Optional first task, auto-submitted on launch.
+        export: Optional zip path for the persisted cohort artifact.
+        persist_root: Override the cohort persistence root (used by tests).
+        **agent_kwargs: Extra :class:`AgentDriver` kwargs (e.g. ``max_turns``).
+
+    Returns:
+        The persisted cohort directory (or ``None`` if nothing ran).
+    """
+    if not sys.stdout.isatty():
+        raise SystemExit(
+            "the TUI needs an interactive terminal (a TTY); run it directly, not piped."
+        )
+
+    from chimera.assembly.driver import AgentDriver
+    from chimera.tui.workspace import provision_workspaces
+
+    source = os.path.abspath(project_dir or os.getcwd())
+    workspaces = provision_workspaces(source, ["A"], strategy="inplace")
+    try:
+        ws = workspaces[0]
+        driver = AgentDriver(
+            model=model, project_dir=str(ws.path), preset=preset, **agent_kwargs,
+        )
+        config = LaneConfig(lane_id="A", label=model, model=model, preset=preset)
+        cohort = Cohort(
+            [Lane(config, driver, ws)],
+            task=task,
+            source=source,
+            isolation=workspaces.strategy,
+            routing=RoutingMode.TARGETED,
+            workspaces=workspaces,
+        )
+    except BaseException:
+        workspaces.cleanup_all()
+        raise
+
+    return _run_cohort_loop(
+        cohort, workspaces,
+        initial_task=task, persist_root=persist_root, export=export,
+        **agent_kwargs,
     )
 
 

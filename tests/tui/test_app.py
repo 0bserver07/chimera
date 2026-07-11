@@ -34,7 +34,9 @@ class FakeDriver:
         self.total_cost = 0.0
         self.history: list = []
         self.cancelled = False
+        self.cleared = False
         self.steered: list[str] = []
+        self.followups: list[str] = []
 
     async def send(self, text):
         yield LoopEvent(LoopEventType.assistant_chunk, "hi ", 0)
@@ -58,6 +60,10 @@ class FakeDriver:
 
     def clear(self) -> None:
         self.history = []
+        self.cleared = True
+
+    def queue_follow_up(self, text: str) -> None:
+        self.followups.append(text)
 
 
 @pytest.mark.asyncio
@@ -111,3 +117,288 @@ async def test_command_palette_does_not_crash():
         await pilot.press("escape")
         await pilot.pause()
         assert app.is_running
+
+
+# =========================================================================
+# The single-agent surface as a ONE-LANE MULTIPLEXER (issue #172).
+#
+# Bare ``chimera code --tui`` runs MultiplexApp with one inplace lane; these
+# tests pin every user-visible behavior the retired single-agent app had —
+# turn rendering, mid-turn steering, Ctrl+C cancel/quit, Ctrl+L clear,
+# Ctrl+E reasoning, slash commands, autocomplete, prompt focus — plus the
+# single-lane chrome degradation and the run_single_agent construction rules.
+# =========================================================================
+
+def _single_cohort(driver, task=None):
+    from chimera.tui.cohort import Cohort
+    from chimera.tui.lane import Lane, LaneConfig
+    from chimera.tui.routing import RoutingMode
+
+    cfg = LaneConfig(lane_id="A", label=driver.model, model=driver.model)
+    return Cohort(
+        [Lane(cfg, driver, None)], task=task, routing=RoutingMode.TARGETED,
+    )
+
+
+async def _submit(app, pilot, text):
+    from chimera.tui.prompt import PromptArea
+
+    app.query_one("#prompt", PromptArea).value = text
+    await pilot.press("enter")
+    await pilot.pause()
+    await app.workers.wait_for_complete()
+    await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_single_lane_runs_a_turn_and_renders():
+    from textual.widgets import RichLog
+
+    from chimera.tui.multiplex import MultiplexApp
+
+    d = FakeDriver()
+    co = _single_cohort(d)
+    app = MultiplexApp(co)
+    async with app.run_test() as pilot:
+        await _submit(app, pilot, "fix the bug")
+        assert app.query_one(RichLog).lines  # something rendered
+        assert co.lanes[0].telemetry.turns == 1
+
+
+@pytest.mark.asyncio
+async def test_single_lane_typing_while_running_steers():
+    from chimera.tui.lane import Liveness
+    from chimera.tui.multiplex import MultiplexApp
+
+    d = FakeDriver()
+    co = _single_cohort(d)
+    app = MultiplexApp(co)
+    async with app.run_test() as pilot:
+        from chimera.tui.prompt import PromptArea
+
+        co.lanes[0].telemetry.liveness = Liveness.RUNNING  # mid-turn
+        app.query_one("#prompt", PromptArea).value = "also check the tests"
+        await pilot.press("enter")
+        await pilot.pause()
+        assert d.steered == ["also check the tests"]
+
+
+@pytest.mark.asyncio
+async def test_single_lane_ctrl_c_cancels_then_exits():
+    from chimera.tui.lane import Liveness
+    from chimera.tui.multiplex import MultiplexApp
+
+    d = FakeDriver()
+    co = _single_cohort(d)
+    app = MultiplexApp(co)
+    async with app.run_test() as pilot:
+        # Running: Ctrl+C cancels the turn, does NOT quit.
+        co.lanes[0].telemetry.liveness = Liveness.RUNNING
+        exits: list[bool] = []
+        app.exit = lambda *a, **k: exits.append(True)  # type: ignore[method-assign]
+        app.action_cancel_all()
+        await pilot.pause()
+        assert d.cancelled and not exits
+        # Idle: Ctrl+C quits.
+        co.lanes[0].telemetry.liveness = Liveness.DONE
+        app.action_cancel_all()
+        await pilot.pause()
+        assert exits
+
+
+@pytest.mark.asyncio
+async def test_single_lane_ctrl_l_clears_and_ctrl_o_is_disabled():
+    from textual.widgets import RichLog
+
+    from chimera.tui.multiplex import MultiplexApp
+
+    d = FakeDriver()
+    app = MultiplexApp(_single_cohort(d))
+    async with app.run_test() as pilot:
+        # Ctrl+O is the multi-lane clear key; single mode disables it.
+        await pilot.press("ctrl+o")
+        await pilot.pause()
+        assert not d.cleared
+        # Ctrl+L (ported from the single-agent app) clears, even with the
+        # prompt focused, and confirms in the transcript.
+        await pilot.press("ctrl+l")
+        await pilot.pause()
+        assert d.cleared
+        assert app.query_one(RichLog).lines  # "(conversation cleared)" note
+
+
+@pytest.mark.asyncio
+async def test_single_lane_ctrl_e_toggles_reasoning():
+    from chimera.tui.multiplex import LanePane, MultiplexApp
+
+    app = MultiplexApp(_single_cohort(FakeDriver()))
+    async with app.run_test() as pilot:
+        pane = app.query_one(LanePane)
+        assert app._show_reasoning is False
+        # Must fire from the (always-focused) prompt: the binding takes
+        # priority over TextArea's own ctrl+e (cursor-to-line-end).
+        await pilot.press("ctrl+e")
+        await pilot.pause()
+        assert app._show_reasoning is True
+        assert pane._transcript is not None
+        assert pane._transcript.show_reasoning is True
+        await pilot.press("ctrl+e")
+        await pilot.pause()
+        assert app._show_reasoning is False
+
+
+@pytest.mark.asyncio
+async def test_single_lane_chrome_degrades():
+    from chimera.tui.multiplex import LanePane, MultiplexApp
+    from chimera.tui.prompt import PromptArea
+
+    d = FakeDriver()
+    app = MultiplexApp(_single_cohort(d))
+    # Narrow enough that N>1 would go tabbed — one lane never does.
+    async with app.run_test(size=(30, 20)) as pilot:
+        await pilot.pause()
+        assert app._tabbed is False
+        assert app.query_one("#tabstrip").display is False
+        pane = app.query_one(LanePane)
+        assert pane.has_class("single")
+        assert str(app.query_one(".lane-header").styles.display) == "none"
+        # App-style status line: model · tools · cost · state.
+        status = app._global_status_text()
+        assert d.model in status and "tools" in status and "$" in status
+        assert "lanes:" not in status  # no cohort noise
+        assert app.query_one("#prompt", PromptArea).placeholder == "Ask, or /help …"
+        assert app.title == "Chimera TUI"
+
+
+@pytest.mark.asyncio
+async def test_single_lane_slash_commands_do_not_crash():
+    from chimera.tui.multiplex import MultiplexApp
+    from chimera.tui.prompt import PromptArea
+
+    d = FakeDriver()
+    app = MultiplexApp(_single_cohort(d))
+    async with app.run_test() as pilot:
+        for cmd in ("/help", "/model", "/cost", "/tools", "/clear", "/summary"):
+            app.query_one("#prompt", PromptArea).value = cmd
+            await pilot.press("enter")
+            await pilot.pause()
+        assert app.is_running
+        assert d.cleared  # /clear reached the driver
+
+
+@pytest.mark.asyncio
+async def test_single_lane_command_catalog_drops_routing_modes():
+    from chimera.tui.multiplex import MultiplexApp
+
+    app = MultiplexApp(_single_cohort(FakeDriver()))
+    assert "/broadcast" not in app._slash_commands
+    assert "/target" not in app._slash_commands
+    # Every single-agent command from the retired app is still present.
+    for cmd in ("/help", "/model", "/cost", "/tools", "/clear", "/exit", "/quit"):
+        assert cmd in app._slash_commands
+    # The richer multiplexer surface stays available to one lane.
+    for cmd in ("/cohorts", "/resume", "/results", "/summary", "/export"):
+        assert cmd in app._slash_commands
+
+
+@pytest.mark.asyncio
+async def test_single_lane_autocomplete_hint_and_prompt_focus():
+    from textual.widgets import Static
+
+    from chimera.tui.multiplex import MultiplexApp
+    from chimera.tui.prompt import PromptArea
+
+    app = MultiplexApp(_single_cohort(FakeDriver()))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        assert isinstance(app.focused, PromptArea)  # prompt focused on mount
+        app.query_one("#prompt", PromptArea).value = "/mo"
+        await pilot.pause()
+        hint = app.query_one("#hint", Static)
+        assert hint.display is True
+        assert "/model" in str(hint.render())
+
+
+@pytest.mark.asyncio
+async def test_multi_lane_chrome_and_bindings_unchanged():
+    from chimera.tui.multiplex import MultiplexApp
+    from chimera.tui.routing import RoutingMode
+
+    from chimera.tui.cohort import Cohort
+    from chimera.tui.lane import Lane, LaneConfig
+
+    def lane(i):
+        d = FakeDriver()
+        return Lane(LaneConfig(lane_id=chr(65 + i), label=f"m{i}", model=d.model), d, None)
+
+    app = MultiplexApp(Cohort([lane(0), lane(1)], routing=RoutingMode.BROADCAST))
+    assert app._single is False
+    assert "/broadcast" in app._slash_commands and "/target" in app._slash_commands
+    # The single-lane Ctrl+L alias is disabled with 2+ lanes; the multi-lane
+    # chrome actions stay live.
+    assert app.check_action("clear_lane", ()) is False
+    for action in ("focus_prev_lane", "toggle_broadcast", "cancel_focused", "clear_focused"):
+        assert app.check_action(action, ()) is True
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        assert "Broadcast" in app.query_one("#prompt").placeholder
+        assert app.title == "Chimera Multiplexer"
+
+
+def test_run_single_agent_builds_one_lane_inplace_cohort(tmp_path, monkeypatch):
+    """Bare --tui constructs a one-lane inplace multiplexer, model verbatim."""
+    import sys as _sys
+
+    import chimera.assembly.driver as driver_mod
+    import chimera.tui.multiplex as mux
+    from chimera.tui.routing import RoutingMode
+
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    (proj / "keep.txt").write_text("precious\n")
+
+    seen_driver: dict = {}
+    captured: dict = {}
+
+    class CapturingDriver:
+        def __init__(self, **kwargs):
+            seen_driver.update(kwargs)
+            self.tools: list = []
+            self.history: list = []
+
+    def fake_loop(cohort, workspaces, **kwargs):
+        captured["cohort"] = cohort
+        captured["workspaces"] = workspaces
+        captured["kwargs"] = kwargs
+        return "cohort-dir"
+
+    monkeypatch.setattr(driver_mod, "AgentDriver", CapturingDriver)
+    monkeypatch.setattr(mux, "_run_cohort_loop", fake_loop)
+    monkeypatch.setattr(_sys.stdout, "isatty", lambda: True)
+
+    out = mux.run_single_agent(
+        model="prov:tagged-model",  # colons must survive (no lane-spec parse)
+        project_dir=str(proj),
+        preset="coding_agent",
+        task="fix it",
+        max_turns=7,
+    )
+
+    assert out == "cohort-dir"
+    # Model string reached the driver verbatim; extra kwargs forwarded.
+    assert seen_driver["model"] == "prov:tagged-model"
+    assert seen_driver["preset"] == "coding_agent"
+    assert seen_driver["max_turns"] == 7
+
+    co = captured["cohort"]
+    assert len(co.lanes) == 1
+    assert co.isolation == "inplace"
+    assert co.routing is RoutingMode.TARGETED
+    lane = co.lanes[0]
+    assert lane.label == "prov:tagged-model"
+    assert lane.workspace is not None and lane.workspace.strategy == "inplace"
+    # Inplace: the lane's workspace IS the project tree, untouched.
+    assert lane.workspace.path == proj.resolve()
+    assert (proj / "keep.txt").read_text() == "precious\n"
+    assert captured["kwargs"]["initial_task"] == "fix it"
+    assert captured["kwargs"]["max_turns"] == 7
