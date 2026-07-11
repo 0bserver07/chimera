@@ -7,7 +7,14 @@ commit receipts.
 
 ## Unreleased
 
-(nothing yet — next batch accumulates here)
+### Added
+
+- `scripts/ci_posture_check.sh` — pre-push gate replicating CI's exact
+  no-tui-extra environment (sync, cold-cache mypy, CI's pytest invocation,
+  env restore); wired into CLAUDE.md and playbook 14 after the 0.9.1 batch's
+  two red CI runs proved local-green ≠ CI-green (`1f8ace0`). Definition-of-
+  done sweep added to CLAUDE.md; TUI + Modal-Endpoints guides propagated to
+  the docs site.
 
 ## 0.9.1 — 2026-07-11 — the honest harness
 

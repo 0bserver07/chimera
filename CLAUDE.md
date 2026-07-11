@@ -205,6 +205,16 @@ Interactive frontends over AgentDriver (spec: `docs/specs/interactive-frontends.
   - Flags: `--mode interactive|rpc|json`, `--models glm-5,claude-sonnet-4` (comma-separated for cycling)
   - Features: mid-turn steering, Ctrl+C cancellation, session auto-save to `~/.chimera/sessions/`, auto-compaction, skills discovery
 
+## Definition of Done (sweep BEFORE reporting anything as done)
+
+1. Gates green — tests, ruff, mypy, scrubs; `bash scripts/ci_posture_check.sh` when the change touches optional-extra code (CI installs no `tui` extra).
+2. Pushed, and CI green **on that SHA** (watch the `ci.yml` run, not the newest workflow).
+3. New user-facing surfaces have user docs (`docs/guides/`), not just specs/docstrings.
+4. `CHANGELOG.md` Unreleased entry lands **with** the work (playbook 14).
+5. Lessons become repo rules (CLAUDE.md / playbooks / scripts) — never only session memory.
+6. GitHub issues closed for shipped work, with commit references.
+7. Leftover processes/worktrees/cloud infra reconciled or explicitly handed off.
+
 ## Key Conventions
 
 - **Zero-dependency core.** Only stdlib in main package. Providers and tools like browser (playwright), remote env (httpx) are optional extras.
