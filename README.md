@@ -110,7 +110,7 @@ See [docs/architecture.md](docs/architecture.md) for the full 8-phase decomposit
 
 ## Install
 
-Latest release: **v0.8.0** ([release notes](https://github.com/0bserver07/chimera/releases/tag/v0.8.0) · [PyPI](https://pypi.org/project/chimera-run/0.8.0/)).
+Latest release: **v0.9.1** ([release notes](https://github.com/0bserver07/chimera/releases/tag/v0.9.1) · [PyPI](https://pypi.org/project/chimera-run/0.9.1/)).
 
 ```bash
 pip install chimera-run                       # core
