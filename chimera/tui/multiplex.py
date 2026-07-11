@@ -31,6 +31,7 @@ try:
     from textual.containers import Horizontal, Vertical
     from textual.widgets import Footer, Header, RichLog, Static, TextArea
 
+    from chimera.tui.approvals import ApprovalBroker, ApprovalModal, approvals_enabled
     from chimera.tui.prompt import PromptArea, filter_commands
     from chimera.tui.select import FuzzySelectScreen, SelectItem
 except ImportError as exc:  # pragma: no cover
@@ -149,7 +150,12 @@ class LanePane(Vertical):
         )
 
     def refresh_header(self) -> None:
-        self.query_one(".lane-header", Static).update(self._header_text())
+        # Teardown-safe (same posture as _refresh_global): a turn cancelled at
+        # app shutdown — e.g. quitting while it waits on an approval modal
+        # (#171) — runs _drive's finally after the pane's children unmounted.
+        nodes = self.query(".lane-header")
+        if nodes:
+            nodes.first(Static).update(self._header_text())
 
     def feed(self, ev: Any) -> None:
         if self._transcript is not None:
@@ -290,10 +296,14 @@ class MultiplexApp(App):
         initial_task: str | None = None,
         persist_root: str | None = None,
         keybinds: dict[str, Any] | None = None,
+        approval_broker: Any | None = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
         self._cohort = cohort
+        # -- permission approvals (#171): set only when the opt-in is on ----
+        self._approval_broker = approval_broker
+        self._active_approval: Any | None = None
         self._mode = cohort.routing
         #: One lane = the daily-driver single-agent TUI (issue #172): same app,
         #: with the multi-lane chrome (tabstrip, pane border/header, routing
@@ -381,6 +391,9 @@ class MultiplexApp(App):
         # ONE interval animates every pane's heartbeat (R-FOLD-1): per-pane
         # timers would drift out of phase and multiply wakeups.
         self._live_timer = self.set_interval(0.25, self._pulse_live)
+        # -- permission approvals (#171): drain the broker queue as modals --
+        if self._approval_broker is not None:
+            self.set_interval(0.15, self._pump_approvals)
         if self._initial_task:
             self._submit_text(self._initial_task)
 
@@ -510,7 +523,12 @@ class MultiplexApp(App):
                 f"{tag} {r['label']}({order},${r['cost']:.4f},{r['steps']}st,"
                 f"{r['elapsed']:.1f}s{extra})"
             )
-        summary = self.query_one("#summary", Static)
+        # Teardown-safe: the last turn's finally can reach here while the app
+        # is unmounting (see refresh_header) — a missing node is a no-op.
+        nodes = self.query("#summary")
+        if not nodes:
+            return
+        summary = nodes.first(Static)
         summary.update(Text(
             "cohort · " + "   ".join(parts) + "   ·   Ctrl+R: compare outputs",
             style="bold",
@@ -884,6 +902,46 @@ class MultiplexApp(App):
         if cohort_id:
             self.request_resume(str(cohort_id))
 
+    # -- permission approvals (#171, opt-in — see run_multiplexer) -------
+    def _pump_approvals(self) -> None:
+        """Show queued permission requests as modals, one at a time (FIFO).
+
+        Interval callback, active only when an :class:`ApprovalBroker` was
+        wired. While a modal is up, later requests wait in the broker queue;
+        a request withdrawn mid-modal (lane cancelled / timed out) retires
+        its stale modal so the queue keeps moving. Substance lives in
+        :mod:`chimera.tui.approvals`; this is only the presentation pump.
+        """
+        broker = self._approval_broker
+        if broker is None:
+            return
+        active = self._active_approval
+        if active is not None:
+            if active.withdrawn and isinstance(self.screen, ApprovalModal):
+                self.screen.dismiss(None)
+            return
+        pending = broker.next_pending()
+        if pending is None:
+            return
+        self._active_approval = pending
+        pane = self._pane_by_id.get(pending.lane_id)
+        if pane is not None:
+            pane.note(
+                f"⏸ approval needed: {pending.request.tool_name}", style="yellow",
+            )
+
+        def _decided(outcome: Any) -> None:
+            self._active_approval = None
+            broker.resolve_with_outcome(pending, outcome)
+            if pane is not None:
+                allowed = bool(getattr(outcome, "approved", False))
+                pane.note(
+                    "· approved" if allowed else "· denied",
+                    style="green" if allowed else "red",
+                )
+
+        self.push_screen(ApprovalModal(pending), _decided)
+
 
 class CohortPickerScreen(FuzzySelectScreen):
     """In-TUI list of saved cohorts: Enter resumes the highlighted one.
@@ -991,6 +1049,7 @@ def run_multiplexer(
     lane_cap: int | None = None,
     export: str | None = None,
     persist_root: str | None = None,
+    approvals: bool | None = None,
     **agent_kwargs: Any,
 ) -> str | None:
     """Provision isolated workspaces, build the cohort, run the multiplexer.
@@ -998,6 +1057,14 @@ def run_multiplexer(
     On exit the cohort is persisted (manifest + transcripts + diffs) *before*
     the ephemeral workspaces are torn down, and optionally exported to a zip.
     Returns the persisted cohort directory (or ``None`` if nothing ran).
+
+    Args:
+        approvals: Opt-in for permission-approval modals (#171). ``True``
+            wires an :class:`~chimera.tui.approvals.ApprovalBroker` into every
+            lane driver as its ``permission_callback``, so gated tool calls
+            pause on a modal instead of auto-approving. ``None`` (default)
+            defers to the ``CHIMERA_TUI_APPROVALS`` env var; ``False``/unset
+            keeps today's behavior (the assembled agent's BYPASS posture).
     """
     if not sys.stdout.isatty():
         raise SystemExit(
@@ -1018,6 +1085,9 @@ def run_multiplexer(
     source = os.path.abspath(project_dir or os.getcwd())
     workspaces = provision_workspaces(source, [s["lane_id"] for s in specs], strategy=isolation)
 
+    # -- permission approvals (#171): explicit opt-in; default unchanged ----
+    broker = ApprovalBroker() if approvals_enabled(approvals) else None
+
     # From here until app.run()'s own try/finally takes over, any failure
     # (driver construction — bad model / preset / loop spec, provider errors —
     # or Ctrl+C) must roll the worktrees back, or they leak with no cohort
@@ -1026,12 +1096,17 @@ def run_multiplexer(
         lanes: list[Lane] = []
         for spec, ws in zip(specs, workspaces):
             lane_loop = spec.get("loop") or None
+            lane_kwargs = dict(agent_kwargs)
+            if broker is not None:
+                lane_kwargs["permission_callback"] = broker.handler_for(
+                    spec["lane_id"], spec["label"],
+                )
             driver = AgentDriver(
                 model=spec["model"],
                 project_dir=str(ws.path),
                 preset=spec["preset"],
                 loop=lane_loop,
-                **agent_kwargs,
+                **lane_kwargs,
             )
             config = LaneConfig(
                 lane_id=spec["lane_id"],
@@ -1061,7 +1136,7 @@ def run_multiplexer(
     return _run_cohort_loop(
         cohort, workspaces,
         lane_cap=lane_cap, initial_task=task, persist_root=persist_root,
-        export=export, **agent_kwargs,
+        export=export, approval_broker=broker, **agent_kwargs,
     )
 
 
@@ -1143,6 +1218,7 @@ def _run_cohort_loop(
     initial_task: str | None = None,
     persist_root: str | None = None,
     export: str | None = None,
+    approval_broker: Any | None = None,
     **agent_kwargs: Any,
 ) -> str | None:
     """Run cohorts until the user leaves without requesting an in-TUI resume.
@@ -1159,6 +1235,7 @@ def _run_cohort_loop(
         try:
             app = MultiplexApp(
                 cohort, lane_cap=lane_cap, initial_task=task, persist_root=persist_root,
+                approval_broker=approval_broker,
             )
             app.run()
         finally:
@@ -1180,7 +1257,8 @@ def _run_cohort_loop(
         task = None
         try:
             cohort, workspaces = _load_saved_cohort(
-                requested, isolation=None, persist_root=persist_root, **agent_kwargs,
+                requested, isolation=None, persist_root=persist_root,
+                approval_broker=approval_broker, **agent_kwargs,
             )
         except Exception as exc:  # noqa: BLE001 - never crash after a clean session
             print(f"resume failed: {exc}")
@@ -1193,6 +1271,7 @@ def _load_saved_cohort(
     *,
     isolation: str | None = None,
     persist_root: str | None = None,
+    approval_broker: Any | None = None,
     **agent_kwargs: Any,
 ) -> tuple[Cohort, Any]:
     """Rebuild a saved cohort for resume (spec §13.2).
@@ -1232,9 +1311,15 @@ def _load_saved_cohort(
             apply_diff(ws.path, spec["diff"])  # restore produced changes (best-effort)
         preset = spec.get("preset") or "coding_agent"
         lane_loop = spec.get("loop") or None
+        lane_kwargs = dict(agent_kwargs)
+        # -- permission approvals (#171): re-bind lane handlers on resume ---
+        if approval_broker is not None:
+            lane_kwargs["permission_callback"] = approval_broker.handler_for(
+                spec["lane_id"], spec.get("label", spec["lane_id"]),
+            )
         driver = AgentDriver(
             model=spec["model"], project_dir=str(ws.path), preset=preset,
-            loop=lane_loop, **agent_kwargs,
+            loop=lane_loop, **lane_kwargs,
         )
         driver.load_history(deserialize_history(spec.get("history") or []))
         config = LaneConfig(
@@ -1287,6 +1372,7 @@ def resume_multiplexer(
     lane_cap: int | None = None,
     export: str | None = None,
     persist_root: str | None = None,
+    approvals: bool | None = None,
     **agent_kwargs: Any,
 ) -> str | None:
     """Reopen a saved cohort and continue it (spec §13.2).
@@ -1303,9 +1389,13 @@ def resume_multiplexer(
             "the multiplexer needs an interactive terminal (a TTY); run it directly."
         )
 
+    # -- permission approvals (#171): explicit opt-in; default unchanged ----
+    broker = ApprovalBroker() if approvals_enabled(approvals) else None
+
     try:
         cohort, workspaces = _load_saved_cohort(
-            cohort_id, isolation=isolation, persist_root=persist_root, **agent_kwargs,
+            cohort_id, isolation=isolation, persist_root=persist_root,
+            approval_broker=broker, **agent_kwargs,
         )
     except FileNotFoundError as exc:
         print(str(exc))
@@ -1315,5 +1405,5 @@ def resume_multiplexer(
     return _run_cohort_loop(
         cohort, workspaces,
         lane_cap=lane_cap, initial_task=None, persist_root=persist_root,
-        export=export, **agent_kwargs,
+        export=export, approval_broker=broker, **agent_kwargs,
     )

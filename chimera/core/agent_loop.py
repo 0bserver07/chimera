@@ -14,6 +14,7 @@ instances describing what happened on each step.
 from __future__ import annotations
 
 import asyncio
+import inspect
 import time
 from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING, Any
@@ -68,6 +69,7 @@ class AgentLoop:
         hook_matchers: list[HookMatcher] | None = None,
         permission_checker: PermissionChecker | None = None,
         permission_context: PermissionContext | None = None,
+        approval_handler: Any = None,
         content_replacement: ContentReplacementState | None = None,
         transcript: TranscriptStorage | None = None,
         file_state_cache: FileStateCache | None = None,
@@ -96,6 +98,15 @@ class AgentLoop:
             hook_matchers: Optional list of hook matchers to apply.
             permission_checker: Optional permission checker for tool calls.
             permission_context: Context snapshot for permission checks.
+            approval_handler: Optional interactive handler for ASK decisions
+                (#171). Called with a wire
+                :class:`~chimera.wire.types.ApprovalRequest`; may return an
+                :class:`~chimera.wire.types.ApprovalResponse` directly or an
+                awaitable of one. While an awaitable handler is pending it is
+                raced against *abort_signal*, so cancelling the turn never
+                deadlocks on an unanswered prompt. ``None`` keeps the legacy
+                behavior: ASK decisions skip the tool with a
+                "user approval needed" error result.
             content_replacement: Optional state tracker for large-result persistence.
             transcript: Optional transcript storage for recording messages.
             file_state_cache: Optional LRU file-state cache for tools.
@@ -492,14 +503,30 @@ class AgentLoop:
                             )
                             skip_tool = True
                         elif decision.behavior == PermissionBehavior.ASK:
-                            # No interactive handler — skip with "permission required"
-                            tool_call_results.append(
-                                (tc, ToolResult(
-                                    output="",
-                                    error="Permission required: user approval needed",
-                                )),
-                            )
-                            skip_tool = True
+                            if approval_handler is not None:
+                                # Interactive seam (#171): route the ASK to the
+                                # frontend and wait for the user's decision.
+                                approved, verdict = await _resolve_approval(
+                                    approval_handler, tc, effective_args, abort_signal,
+                                )
+                                if not approved:
+                                    tool_call_results.append(
+                                        (tc, ToolResult(
+                                            output="",
+                                            error=f"Permission denied: {verdict}",
+                                        )),
+                                    )
+                                    skip_tool = True
+                                # approved: fall through and execute unchanged
+                            else:
+                                # No interactive handler — skip with "permission required"
+                                tool_call_results.append(
+                                    (tc, ToolResult(
+                                        output="",
+                                        error="Permission required: user approval needed",
+                                    )),
+                                )
+                                skip_tool = True
                         # ALLOW: proceed; apply updated_input if provided
                         elif decision.updated_input is not None:
                             effective_args = decision.updated_input
@@ -743,6 +770,79 @@ def _find_tool(tools: list[BaseTool], name: str) -> BaseTool | None:
         if t.name == name:
             return t
     return None
+
+
+async def _resolve_approval(
+    handler: Any,
+    tc: ToolCall,
+    args: dict[str, Any],
+    abort_signal: AbortSignal | None,
+) -> tuple[bool, str]:
+    """Ask *handler* to decide an ASK permission for one tool call (#171).
+
+    The handler receives a wire :class:`~chimera.wire.types.ApprovalRequest`
+    and may answer synchronously or with an awaitable. An awaitable answer is
+    raced against *abort_signal* with the same cooperative-poll idiom the
+    tool-execution phase uses, so cancelling the turn while a prompt is open
+    resolves to a denial instead of deadlocking. A handler exception is a
+    denial, never a crash.
+
+    Args:
+        handler: Callable ``(ApprovalRequest) -> ApprovalResponse | awaitable``.
+        tc: The tool call awaiting approval.
+        args: Effective (hook-merged) tool arguments.
+        abort_signal: The turn's abort signal, if any.
+
+    Returns:
+        ``(approved, reason)`` — *reason* is the user's feedback when given,
+        else a generic verdict string.
+    """
+    from chimera.wire.types import ApprovalRequest
+
+    request = ApprovalRequest(
+        request_id=tc.id, tool_name=tc.name, tool_args=dict(args),
+    )
+    try:
+        outcome = handler(request)
+        if inspect.isawaitable(outcome):
+            handler_task = asyncio.ensure_future(outcome)
+            if abort_signal is not None:
+
+                async def _wait_for_abort() -> None:
+                    while not abort_signal.aborted:
+                        await asyncio.sleep(0.05)
+
+                abort_waiter = asyncio.ensure_future(_wait_for_abort())
+                done_set, _ = await asyncio.wait(
+                    {handler_task, abort_waiter},
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+                if handler_task not in done_set:
+                    handler_task.cancel()
+                    try:
+                        await handler_task
+                    except (asyncio.CancelledError, Exception):  # noqa: BLE001
+                        pass
+                    return False, "turn aborted while awaiting approval"
+                abort_waiter.cancel()
+                try:
+                    await abort_waiter
+                except asyncio.CancelledError:
+                    pass
+                response = handler_task.result()
+            else:
+                response = await handler_task
+        else:
+            response = outcome
+    except Exception as exc:  # noqa: BLE001 - a broken prompt must not kill the turn
+        return False, f"approval handler error: {exc}"
+    if response is None:
+        return False, "user denied"
+    approved = bool(getattr(response, "approved", False))
+    reason = str(getattr(response, "reason", "") or "")
+    if approved:
+        return True, reason or "approved by user"
+    return False, reason or "denied by user"
 
 
 def _classify_error(exc: Exception) -> str | None:

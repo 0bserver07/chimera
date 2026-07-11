@@ -140,6 +140,7 @@ disable_error_code = ["import-not-found"]
 [[tool.mypy.overrides]]
 module = [
     "chimera.tui.app",
+    "chimera.tui.approvals",
     "chimera.tui.multiplex",
     "chimera.tui.prompt",
     "chimera.tui.results",

@@ -200,6 +200,12 @@ class CodingAgent:
         # Permissions (if enabled)
         self._permission_checker = None
         self._permission_context = None
+        # Interactive approval seam (#171): the callback is stored and passed
+        # to AgentLoop as ``approval_handler`` so ASK decisions reach a real
+        # user (e.g. the TUI's ApprovalBroker). When None, the loaded context
+        # is swapped to BYPASS below — the legacy non-interactive posture in
+        # which nothing ever ASKs (effectively auto-approve).
+        self._permission_callback = permission_callback
         if config.permissions:
             try:
                 from chimera.permissions.checker import PermissionChecker
@@ -387,6 +393,7 @@ class CodingAgent:
             abort_signal=self._abort_signal,
             permission_checker=self._permission_checker,
             permission_context=self._permission_context,
+            approval_handler=getattr(self, "_permission_callback", None),
             hook_executor=self._hook_executor,
             hook_matchers=self._hook_matchers,
             transcript=self._transcript,
