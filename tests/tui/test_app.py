@@ -277,10 +277,13 @@ async def test_single_lane_chrome_degrades():
         pane = app.query_one(LanePane)
         assert pane.has_class("single")
         assert str(app.query_one(".lane-header").styles.display) == "none"
-        # App-style status line: model · tools · cost · state.
-        status = app._global_status_text()
-        assert d.model in status and "tools" in status and "$" in status
-        assert "lanes:" not in status  # no cohort noise
+        # Registry-rendered status line (R-STAT-1), default single order:
+        # model · context-used · cost · run-state. The context meter hides —
+        # FakeDriver reports no usage, and the meter never invents numbers.
+        status = app._global_status_text().plain
+        assert d.model in status and "$" in status and "idle" in status
+        assert "%" not in status  # context-used hidden without real data
+        assert "lanes" not in status  # no cohort noise
         assert app.query_one("#prompt", PromptArea).placeholder == "Ask, or /help …"
         assert app.title == "Chimera TUI"
 

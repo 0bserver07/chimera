@@ -71,6 +71,7 @@ COMMAND_DEFS: tuple[SlashCommand, ...] = (
     SlashCommand("model", "model per lane (context window when single)"),
     SlashCommand("resume", "switch to a saved cohort", args_hint="[id]"),
     SlashCommand("results", "open the comparison screen"),
+    SlashCommand("statusline", "status-line items: id, order, availability"),
     SlashCommand("summary", "cohort scoreboard"),
     SlashCommand("target", "route input to the focused lane only", context="multi"),
     SlashCommand("tools", "tools available to the focused lane"),

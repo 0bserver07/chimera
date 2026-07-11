@@ -58,6 +58,12 @@ from chimera.tui.live_region import LiveRegion
 from chimera.tui.logview import TranscriptLog
 from chimera.tui.render import LaneTranscript, heartbeat_line
 from chimera.tui.routing import Action, RoutingMode, route
+from chimera.tui.statusline import (
+    StatusContext,
+    StatusLine,
+    build_cohort_context,
+    build_lane_context,
+)
 
 __all__ = [
     "MultiplexApp",
@@ -328,6 +334,10 @@ class MultiplexApp(App):
         self._sidebar_on = False
         self._live_frame = 0  # one app-level heartbeat clock for all panes
         self._live_timer: Any = None
+        #: Status line + terminal title (R-STAT-1..5): configured item order,
+        #: async git facts, OSC title guard — all owned by StatusLine.
+        self._statusline = StatusLine(cohort.source or None, single=self._single)
+        self._status_ctx = StatusContext()
         #: Set by /resume (or the /cohorts picker) just before exit; the outer
         #: run loop reads it and relaunches on the requested saved cohort.
         self.resume_request: str | None = None
@@ -367,12 +377,18 @@ class MultiplexApp(App):
                 f"tui.keybinds ignored (using defaults): {self._keybinds_error}",
                 style="red",
             )
+        self._statusline.start()
         self.set_interval(0.5, self._refresh_global)
         # ONE interval animates every pane's heartbeat (R-FOLD-1): per-pane
         # timers would drift out of phase and multiply wakeups.
         self._live_timer = self.set_interval(0.25, self._pulse_live)
         if self._initial_task:
             self._submit_text(self._initial_task)
+
+    def on_unmount(self) -> None:
+        # Clean shutdown (R-STAT-3/5): stop the git watcher thread and
+        # restore the terminal title we replaced.
+        self._statusline.stop()
 
     def on_resize(self) -> None:
         self._relayout()
@@ -427,40 +443,39 @@ class MultiplexApp(App):
         lane = self._focused_lane()
         return f"Target @{lane.label if lane else '?'}, or /help …"
 
-    def _global_status_text(self) -> str:
+    def _global_status_text(self) -> Text:
+        """The status line via the item registry (R-STAT-1/2/4).
+
+        Multi-lane renders cohort aggregates; content and order come from
+        ``tui.status_line`` (default: the racing scoreboard), degraded per
+        segment to the terminal width so the line never wraps.
+        """
         if self._single:
             return self._single_status_text()
-        c = self._cohort
-        n = len(c.lanes)
-        mode = self._mode.value
-        if self._race_start is None:
-            return f" idle · lanes: {n} · Σ$0.0000 · [{mode}]  (type a task, Enter to race)"
-        first = c.first_finisher
-        task = c.task or "—"
-        if len(task) > 40:
-            task = task[:39] + "…"
-        return (
-            f" task: {task!r} · lanes: {n} · done: {c.done_count}/{n} · "
-            f"Σ${c.total_cost:.4f} · {self._elapsed():.1f}s · "
-            f"first: {first.label if first else '—'} · [{mode}]"
+        racing = self._race_start is not None
+        self._status_ctx = build_cohort_context(
+            self._cohort,
+            mode=self._mode.value,
+            elapsed=self._elapsed() if racing else None,
+            racing=racing,
+            git=self._statusline.git_facts(),
         )
+        return self._statusline.render(self._status_ctx, self._status_width())
 
-    def _single_status_text(self) -> str:
-        """The daily-driver status line: model · tools · cost · state.
+    def _single_status_text(self) -> Text:
+        """The daily-driver status line, same registry, lane-scoped context.
 
-        Ported from the retired single-agent app so bare ``--tui`` keeps its
-        per-driver status; lane/race counters would be noise for one lane.
+        Default order (spec §11): model · context-used · cost · run-state;
+        lane/race counters would be noise for one lane.
         """
-        lane = self._cohort.lanes[0]
-        t = lane.telemetry
-        state = t.liveness.value
-        if t.terminal_reason and t.terminal_reason not in ("completed", None):
-            state = f"{state}:{t.terminal_reason}"
-        tools = len(getattr(lane.driver, "tools", None) or [])
-        text = f" {lane.config.model}  ·  {tools} tools  ·  ${t.cost:.4f}  ·  {state}"
-        if t.steps:
-            text += f"  ·  {t.steps} st"
-        return text
+        self._status_ctx = build_lane_context(
+            self._cohort.lanes[0], git=self._statusline.git_facts(),
+        )
+        return self._statusline.render(self._status_ctx, self._status_width())
+
+    def _status_width(self) -> int:
+        # The #global-status Static has `padding: 0 1` — one column each side.
+        return max(16, (self.size.width or 80) - 2)
 
     def _elapsed(self) -> float:
         if self._race_start is None:
@@ -474,6 +489,8 @@ class MultiplexApp(App):
         nodes = self.query("#global-status")
         if nodes:
             nodes.first(Static).update(self._global_status_text())
+            # Terminal title mirrors the same context (R-STAT-5).
+            self._statusline.apply_title(self._status_ctx, app=self)
 
     def _pulse_live(self) -> None:
         # The single app-level heartbeat tick; panes not thinking no-op.
@@ -795,6 +812,13 @@ class MultiplexApp(App):
                 say(", ".join(t.name for t in lane.driver.tools) or "(none)")
         elif cmd == "/clear":
             self.action_clear_focused()
+        elif cmd == "/statusline":
+            # LIST view (R-STAT-1): id, order slot, availability. The
+            # interactive reorder picker arrives with the shared select-dialog
+            # component; StatusLine.describe() is the seam it will consume.
+            self._global_status_text()  # refresh the context snapshot
+            for line in self._statusline.describe(self._status_ctx):
+                say(line)
         elif cmd == "/summary":
             self._show_summary()
         elif cmd == "/results":
