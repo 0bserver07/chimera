@@ -20,6 +20,26 @@ Chimera's policy, set explicitly by the project owner:
    verified numbers (test counts, benchmark scores with their `data/*.json`
    provenance) — the same standard as the benchmark scorecards.
 
+## The changelog habit
+
+`CHANGELOG.md` is where batching becomes visible. The mechanics:
+
+1. **Entries land with the work.** When a batch of commits merges to master,
+   append curated entries (with commit shas as receipts) to the
+   `## Unreleased` section — grouped Added / Fixed / Changed / Deprecated.
+   Curate, don't enumerate: the changelog tells the story; `git log` holds
+   the inventory.
+2. **Batches get names.** Every released version block is
+   `## X.Y.Z — YYYY-MM-DD — <name>` where the name states the theme
+   ("the TUI multiplexer", "the daily driver"). A proposed name may sit in
+   the Unreleased section as a comment until release time.
+3. **A release = roll the accumulator.** Cutting X.Y.Z renames `Unreleased`
+   to the versioned, dated, named block and starts a fresh empty
+   `Unreleased`. No release without the roll; no roll without the release.
+4. **Same truth standard as the scorecards.** Numbers in changelog entries
+   (test counts, benchmark scores) must trace to command output or
+   `data/*.json` — an entry nobody can verify doesn't go in.
+
 ## What a release needs (unchanged gates)
 
 - Full suite green locally (excluding the documented live-infra files),

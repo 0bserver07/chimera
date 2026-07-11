@@ -1,5 +1,96 @@
 # Changelog
 
+Batches accumulate under **Unreleased** as they merge; a release rolls that
+section into a named, dated version block (the habit:
+`docs/playbooks/14-release-discipline.md`). Entries are verified facts with
+commit receipts.
+
+## Unreleased
+
+<!-- Proposed batch name (finalize at release time): "the honest harness" —
+     measurement integrity + benches on Modal + the TUI that earns the
+     daily driver. -->
+
+### Added
+
+- **Agent × benchmark matrix**: 25 benchmark adapters + the many-to-many
+  matrix runner, registry, and `bench-matrix` CLI (`b698fe9`, `f70bd07`,
+  `0073db3`); built-in roster grown 6 → 13 agents (`db3943e`);
+  replica-vs-real fidelity harness + `bench-fidelity` CLI (`0827fba`,
+  `d675b13`); THE FULL GRID — 13 agents × 7 benchmarks, 91 live cells,
+  $0.78 (`e38a49b`).
+- **Benches on Modal cloud**: per-task Modal/GPU sandboxes (`--env modal`,
+  `cbda807`, `865227e`); whole-cell cloud runs + parallel grid fan-out
+  (`5e4f55c`, `a2df0a4`); durable detached grids persisting to a Volume —
+  runs survive the laptop sleeping (`ec571b7`); SWE-bench instances in their
+  official per-instance images (`--env swe-modal`, `8d57ea8`);
+  `chimera bench-modal` (`5b28878`).
+- **Benchmark staging**: runnable set 7 → 16 benchmarks / 7,064 tasks incl.
+  the SWE family (`d6e6dc6`, `41d065e`); faithful FAIL_TO_PASS/PASS_TO_PASS
+  grading for swe-bench, swe-polybench, and multi-swe-bench (`ad8842d`,
+  `b110736`, `00d2624`).
+- **Flagship full-dataset scorecard** (coding-agent on glm-5.2, EXACT,
+  status_counts-verified): mbpp-plus 99.7%, mbpp 99.1%, human-eval-plus
+  92.1%, math500 77.6%; livecodebench ≥18.9% documented lower bound
+  (`a206f4b`, `95377cb`, `6bb9917`).
+- **Providers**: Modal managed **Endpoints** as a first-class provider —
+  `modal-endpoint/<hf-id>` model strings, proxy-token header auth, endpoint
+  discovery, live-smoked against a real endpoint (`9037bba`); generated
+  model catalog, 2,453 models (`2dc67b4`); unified prompt-caching knob
+  (`55032a7`); deterministic faux provider for zero-cost agent tests
+  (`b6ff4d4`); OpenAI-compat quirk flags (`d23efc3`).
+- **TUI**: the single-agent surface folded into a one-lane multiplexer —
+  bare `--tui` now gets results/resume/cohorts with single-lane chrome
+  (#172, `8e332af`–`d47812a`); progressive markdown block commitment during
+  streaming, nested-fence normalization, head/tail tool-output elision
+  (`660a401`, `c4840a5`); follow-mode scrolling (`17b5f8e`); the UX
+  refinements spec, ~45 requirements over 3 phases (`1663d7c`).
+- **Core/infra**: in-process hook lifecycle (`36b19fd`);
+  `SessionTree.summarize_branch` (`7a612a9`); next-turn message queue that
+  survives cancellation (`99d1b8c`); plugin hot-reload (`0f4316c`);
+  third-party UI-extension registration (`836f640`); typed failure taxonomy
+  for matrix cells (`f299ca1`); `verify_status` 8-check harness + the
+  live-bench-runs playbook (`c1e4992`).
+- **Process**: release-discipline playbook — stay in 0.9.x, name the
+  batches, 1.0 only for a breakthrough (`22adb37`); this Unreleased
+  accumulator.
+
+### Fixed
+
+- **Measurement integrity** (the war): errored/empty agent runs can no
+  longer grade as passes — including a HumanEval+ checker that was never
+  invoked, invalidating all pre-fix HumanEval+ numbers (`0275ec3`); matrix
+  cells no longer take their status from only the last task (`a44a687`);
+  zero-test pytest runs no longer count as SWE passes (`ad8842d`,
+  `9e33ef1`); budget cost tracking covers the async + streaming provider
+  paths (`eb87310`); real cost preserved on mid-run errors (`8e8da56`);
+  grid concurrency capped at 4 so one model account isn't flooded
+  (`c2e78f4`).
+- **TUI scrolling**: streaming no longer yanks the view to the bottom while
+  reading or drag-selecting; tabbed reveal and the results screen land where
+  the user expects (`17b5f8e`).
+- **TUI transcripts**: persisted session records were silently capped at
+  1,500 chars of tool output — persistence now keeps everything, truncation
+  is display-only (`c4840a5`); the advertised Ctrl+E reasoning toggle was
+  swallowed by the input widget in both TUIs (`ee70cb7`).
+- **Loops**: LintFeedbackLoop respected neither linter exit codes nor its
+  write path — the real derailment bug behind the grid's one uniform-zero
+  row (`9c19e7a`).
+
+### Changed
+
+- Brand-named replica agents renamed to loop-descriptive ids, with
+  back-compat aliases (`f835d90`).
+- CI: five per-codename trademark-scrub jobs consolidated into one
+  (`61693be`).
+
+### Deprecated
+
+- `ChimeraTUI` (the standalone single-agent app): importable and functional
+  behind a `DeprecationWarning`, but the CLI now always launches the
+  one-lane multiplexer; removal scheduled for the release after next
+  (`ee70cb7`).
+
 ## 0.9.0 — 2026-07-01 — the TUI multiplexer: race N agents on one task
 
 The `interactive-frontends` spec shipped in full (all 3 phases). Chimera's
