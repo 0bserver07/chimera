@@ -77,7 +77,8 @@ def test_lane_transcript_collapses_reasoning_by_default():
     assert sink == []  # buffered until a boundary
     t.handle(_assistant_ev("answer"))
     texts = [plain(r) for r in sink]
-    assert any("reasoning hidden (14 chars)" in p for p in texts)
+    # R-FOLD-1 extended the collapsed trace with elapsed + a reveal hint.
+    assert any("thought for" in p and "(14 chars)" in p for p in texts)
     assert any("answer" in p for p in texts)
     assert not any("step 1" in p for p in texts)  # collapsed
     # reveal_last prints the hidden block on demand
@@ -133,7 +134,7 @@ def test_lane_transcript_commit_flushes_pending_reasoning():
     t = LaneTranscript(sink.append)
     t.handle(_think_ev("tail thought"))
     t.commit()
-    assert any("reasoning hidden" in getattr(r, "plain", "") for r in sink)
+    assert any("thought for" in getattr(r, "plain", "") for r in sink)
     assert t.reveal_last() is True
 
 

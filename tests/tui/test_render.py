@@ -139,7 +139,7 @@ def test_interleaved_thinking_and_assistant_chunks():
     t.handle(_chunk("part two\n\n"))
     t.commit()
     texts = [plain(r) for r in sink]
-    assert sum("reasoning hidden" in x for x in texts) == 2
+    assert sum("thought for" in x for x in texts) == 2  # the R-FOLD-1 traces
     assert _markups(sink) == ["part one\n\n", "part two\n\n"]
     assert t.reveal_last() is True
 

@@ -26,11 +26,17 @@ Design notes:
   (R-FOLD-3) because ``elide`` defaults off.
 - ``tool_progress`` is intentionally dropped: it is ephemeral and must never be
   persisted (§3.1 ephemerality guarantee).
+- Reasoning accumulation exposes :attr:`LaneTranscript.thinking_active` /
+  ``thinking_elapsed`` / ``thinking_chars`` so a pane can render the R-FOLD-1
+  heartbeat (:func:`heartbeat_line`) while chunks stream. The heartbeat itself
+  is display chrome — it never goes through the sink (R-VIEW-3); only the
+  one-line committed trace does, extended with elapsed + size.
 - Dynamic agent/tool text is wrapped in :class:`rich.text.Text` so markup-
   significant characters render literally (§5.2 content safety).
 """
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
 from typing import Any
 
@@ -45,13 +51,71 @@ from chimera.tui.markdown_stream import (
     split_complete_blocks,
 )
 
-__all__ = ["LaneTranscript", "format_event", "assistant_renderable", "plain", "short"]
+__all__ = [
+    "LaneTranscript",
+    "assistant_renderable",
+    "fmt_chars",
+    "fmt_elapsed",
+    "format_event",
+    "heartbeat_line",
+    "plain",
+    "short",
+]
+
+#: Heartbeat pulse frames (R-FOLD-1): constant width 3 so the line never
+#: jitters as the animation ticks.
+_PULSE_FRAMES = ("·  ", "·· ", "···", " ··", "  ·", "   ")
 
 
 def short(value: Any, limit: int = 40) -> str:
     """Collapse a value to a single truncated line for an argument preview."""
     s = str(value).replace("\n", " ")
     return s if len(s) <= limit else s[: limit - 1] + "…"
+
+
+def fmt_elapsed(seconds: float) -> str:
+    """Compact elapsed-time label: ``5s``, ``42s``, ``2m 03s``."""
+    s = max(0, int(seconds))
+    if s < 60:
+        return f"{s}s"
+    return f"{s // 60}m {s % 60:02d}s"
+
+
+def fmt_chars(n: int) -> str:
+    """Honest size label in characters: ``412 chars``, ``~1.2k chars``.
+
+    Chars, not tokens: thinking deltas carry only text — no provider reports
+    token counts mid-stream (usage arrives on the ``done`` event, after
+    reasoning has ended) — and a fabricated token estimate would break the
+    honesty rule (R-VIEW-2).
+    """
+    if n < 1000:
+        return f"{n} chars"
+    return f"~{n / 1000:.1f}k chars"
+
+
+def heartbeat_line(elapsed: float, chars: int, frame: int = 2) -> str:
+    """The R-FOLD-1 reasoning heartbeat one-liner (display-only, never persisted).
+
+    ``∴ Thinking ··· 5s · ~1.2k chars · 240 chars/s`` — elapsed since the
+    first thinking chunk, accumulated size, and a live rate pulse. The rate
+    joins once a full second has elapsed (before that it would just be noise).
+
+    Args:
+        elapsed: Seconds since the first thinking chunk of the block.
+        chars: Characters of reasoning accumulated so far.
+        frame: Animation tick — one app-level timer advances it for every
+            pane (the frames cycle; any int is valid).
+
+    Returns:
+        The heartbeat line. Ephemeral by contract (R-VIEW-3): show it in a
+        live region, never write it to a transcript sink.
+    """
+    dots = _PULSE_FRAMES[frame % len(_PULSE_FRAMES)]
+    line = f"∴ Thinking {dots} {fmt_elapsed(elapsed)} · {fmt_chars(chars)}"
+    if elapsed >= 1.0 and chars:
+        line += f" · {chars / elapsed:.0f} chars/s"
+    return line
 
 
 def plain(renderable: Any) -> str:
@@ -168,20 +232,42 @@ class LaneTranscript:
 
     Reasoning (``thinking_chunk``) is accumulated separately and committed as a
     dim block when the next non-thinking content arrives (§13.4). Default is
-    **collapsed**: a one-line marker with the size; set :attr:`show_reasoning`
-    (the frontends bind a toggle key) to render the text, and
-    :meth:`reveal_last` prints the most recent hidden block on demand.
+    **collapsed**: a one-line trace with elapsed + size; set
+    :attr:`show_reasoning` (the frontends bind a toggle key) to render the
+    text, and :meth:`reveal_last` prints the most recent hidden block on
+    demand. While chunks accumulate, :attr:`thinking_active`,
+    :attr:`thinking_elapsed` and :attr:`thinking_chars` feed the R-FOLD-1
+    heartbeat (see :func:`heartbeat_line`) — the heartbeat is pane chrome and
+    is never written to the sink (R-VIEW-3).
+
+    Args:
+        sink: Callable receiving each committed renderable.
+        markdown: Render committed assistant prose as rich Markdown.
+        clock: Monotonic time source for the thinking elapsed/rate figures;
+            injectable for tests. Defaults to :func:`time.monotonic`.
     """
 
-    def __init__(self, sink: Callable[[Any], object], *, markdown: bool = True) -> None:
+    def __init__(
+        self,
+        sink: Callable[[Any], object],
+        *,
+        markdown: bool = True,
+        clock: Callable[[], float] | None = None,
+    ) -> None:
         self._sink = sink
+        self._clock: Callable[[], float] = clock if clock is not None else time.monotonic
         self._chunks: list[str] = []
         self._think: list[str] = []
+        self._think_started: float | None = None  # clock() at the first chunk
+        self._think_chars = 0
         self._last_thinking = ""
         self._streamed = False  # saw assistant_chunk since the last flush
         self._blocks_in_stream = 0  # committed blocks since the last flush
         self.show_reasoning = False
         self.markdown = markdown
+        #: Reveal-affordance suffix on the committed reasoning trace. Both TUI
+        #: frontends bind Ctrl+E; embedders with another binding can override.
+        self.reveal_hint = "Ctrl+E to show"
 
     @property
     def live_tail(self) -> str:
@@ -194,11 +280,36 @@ class LaneTranscript:
         """
         return "".join(self._chunks)
 
+    @property
+    def thinking_active(self) -> bool:
+        """True while reasoning chunks are accumulating (heartbeat should show)."""
+        return self._think_started is not None
+
+    @property
+    def thinking_chars(self) -> int:
+        """Characters of reasoning accumulated so far (honest size, not tokens)."""
+        return self._think_chars
+
+    @property
+    def thinking_elapsed(self) -> float:
+        """Seconds since the first chunk of the current reasoning block.
+
+        ``0.0`` when no block is accumulating. Monotonic within a block (it
+        reads the injected clock), resetting when the block commits.
+        """
+        if self._think_started is None:
+            return 0.0
+        return self._clock() - self._think_started
+
     def handle(self, ev: Any) -> None:
         """Render one event, writing any produced renderables to the sink."""
         t = getattr(ev, "type", None)
         if t == LoopEventType.thinking_chunk:
-            self._think.append(str(ev.data))
+            if self._think_started is None:
+                self._think_started = self._clock()
+            piece = str(ev.data)
+            self._think.append(piece)
+            self._think_chars += len(piece)
             return
         if self._think:
             self._commit_thinking()
@@ -244,6 +355,10 @@ class LaneTranscript:
         self._blocks_in_stream = 0
 
     def _commit_thinking(self) -> None:
+        elapsed = self.thinking_elapsed
+        chars = self._think_chars
+        self._think_started = None
+        self._think_chars = 0
         block = "".join(self._think).strip()
         self._think.clear()
         if not block:
@@ -252,8 +367,11 @@ class LaneTranscript:
         if self.show_reasoning:
             self._sink(Text(f"∴ {block}", style="dim italic"))
         else:
+            # The committed R-FOLD-1 trace: elapsed + honest size + the reveal
+            # affordance. The animated heartbeat itself never persists.
             self._sink(Text(
-                f"∴ reasoning hidden ({len(block)} chars) — toggle to show",
+                f"∴ thought for {fmt_elapsed(elapsed)} ({fmt_chars(chars)})"
+                f" — {self.reveal_hint}",
                 style="dim",
             ))
 
