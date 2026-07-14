@@ -619,7 +619,7 @@ requires-dist = [
     { name = "rich", marker = "extra == 'mink'", specifier = ">=13.7" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.4" },
     { name = "safetensors", marker = "extra == 'function-synthesis-transformers'", specifier = ">=0.4" },
-    { name = "textual", marker = "extra == 'tui'", specifier = ">=0.50" },
+    { name = "textual", marker = "extra == 'tui'", specifier = ">=8.0" },
     { name = "torch", marker = "extra == 'function-synthesis-compile'", specifier = ">=2.0" },
     { name = "torch", marker = "extra == 'function-synthesis-transformers'", specifier = ">=2.0" },
     { name = "transformers", marker = "extra == 'function-synthesis-compile'", specifier = ">=4.40" },
