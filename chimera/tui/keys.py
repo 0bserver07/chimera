@@ -120,6 +120,11 @@ KEY_ACTIONS: tuple[ActionDef, ...] = (
     # (cut) while the composer is focused — the expand affordance is
     # advertised on every elision marker, so it must always fire.
     ActionDef("toggle_expand", ("ctrl+x",), "Expand tool output", priority=True),
+    # Copy the current transcript selection to the system clipboard (OSC 52).
+    # Ctrl+C stays the cancel key (universal muscle memory); copy is Ctrl+Y —
+    # priority so it fires even while the composer is focused, since a selection
+    # is screen-level and persists across focus.
+    ActionDef("copy_selection", ("ctrl+y",), "Copy selection", priority=True),
     # Pager context: the cohort picker's dismiss keys ("q" is safe here —
     # no text input has focus on a pager screen).
     ActionDef("close", ("escape", "q"), "Back", context="pager"),

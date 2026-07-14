@@ -700,6 +700,11 @@ def run_code(args: Any) -> int:
         #                     single-lane chrome). The model string reaches
         #                     the driver verbatim — never lane-spec parsed.
         if getattr(args, "tui", False):
+            # --no-mouse leaves the terminal's own mouse handling intact, so
+            # native click-drag selection / copy / scrollback work (Track 1A);
+            # the default keeps Textual's mouse features (pane clicks, in-app
+            # selection + Ctrl+Y copy).
+            mouse = not getattr(args, "no_mouse", False)
             # Resume a saved cohort (Phase 3.2): reopen its lanes and continue.
             resume_id = getattr(args, "resume", None)
             if resume_id:
@@ -710,6 +715,7 @@ def run_code(args: Any) -> int:
                     isolation=getattr(args, "isolation", None),
                     lane_cap=getattr(args, "lane_cap", None),
                     export=getattr(args, "export", None),
+                    mouse=mouse,
                     **agent_kwargs,
                 )
                 return 0
@@ -727,6 +733,7 @@ def run_code(args: Any) -> int:
                     isolation=default_isolation(len(models), getattr(args, "isolation", None)),
                     lane_cap=getattr(args, "lane_cap", None),
                     export=getattr(args, "export", None),
+                    mouse=mouse,
                     **agent_kwargs,
                 )
                 return 0
@@ -737,6 +744,7 @@ def run_code(args: Any) -> int:
                 model=model, project_dir=cwd, preset=effective_preset,
                 task=getattr(args, "print_mode", None),
                 export=getattr(args, "export", None),
+                mouse=mouse,
                 **agent_kwargs,
             )
             return 0

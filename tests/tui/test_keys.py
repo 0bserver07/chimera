@@ -278,9 +278,12 @@ def test_build_bindings_matches_previous_bindings_exactly():
     built = [(b.key, b.action, b.priority) for b in build_bindings()]
     for entry in PREVIOUS_BINDINGS:
         assert entry in built, f"previously bound {entry} missing from registry build"
-    # ... and the only addition is the R-FOLD-2 expand toggle.
+    # ... plus the R-FOLD-2 expand toggle and the Track 1A copy-selection key.
     extras = [e for e in built if e not in PREVIOUS_BINDINGS]
-    assert extras == [("ctrl+x", "toggle_expand", True)]
+    assert extras == [
+        ("ctrl+x", "toggle_expand", True),
+        ("ctrl+y", "copy_selection", True),
+    ]
 
 
 def test_build_bindings_pager_context():

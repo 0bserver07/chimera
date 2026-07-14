@@ -679,6 +679,20 @@ class MultiplexApp(App):
             lane.driver.cancel()
             self._pane(lane.id).note("· cancel requested", style="red")
 
+    def action_copy_selection(self) -> None:
+        """Copy the transcript's current text selection to the clipboard (OSC 52).
+
+        Textual's own selection machinery highlights the drag; this commits it
+        to the system clipboard via ``App.copy_to_clipboard`` (OSC 52, so it
+        also lands on the *local* clipboard over SSH). Ctrl+C stays cancel.
+        """
+        text = self.screen.get_selected_text() if self.screen is not None else None
+        if not text:
+            self.notify("Nothing selected — drag to select first", severity="warning", timeout=2.0)
+            return
+        self.copy_to_clipboard(text)
+        self.notify(f"Copied {len(text):,} chars to clipboard", timeout=2.0)
+
     def action_focus_next_lane(self) -> None:
         if self._panes:
             self._focus_index = (self._focus_index + 1) % len(self._panes)
@@ -1050,6 +1064,7 @@ def run_multiplexer(
     export: str | None = None,
     persist_root: str | None = None,
     approvals: bool | None = None,
+    mouse: bool = True,
     **agent_kwargs: Any,
 ) -> str | None:
     """Provision isolated workspaces, build the cohort, run the multiplexer.
@@ -1136,7 +1151,7 @@ def run_multiplexer(
     return _run_cohort_loop(
         cohort, workspaces,
         lane_cap=lane_cap, initial_task=task, persist_root=persist_root,
-        export=export, approval_broker=broker, **agent_kwargs,
+        export=export, approval_broker=broker, mouse=mouse, **agent_kwargs,
     )
 
 
@@ -1148,6 +1163,7 @@ def run_single_agent(
     task: str | None = None,
     export: str | None = None,
     persist_root: str | None = None,
+    mouse: bool = True,
     **agent_kwargs: Any,
 ) -> str | None:
     """Run the daily-driver single-agent TUI: the multiplexer with N=1.
@@ -1206,7 +1222,7 @@ def run_single_agent(
     return _run_cohort_loop(
         cohort, workspaces,
         initial_task=task, persist_root=persist_root, export=export,
-        **agent_kwargs,
+        mouse=mouse, **agent_kwargs,
     )
 
 
@@ -1219,6 +1235,7 @@ def _run_cohort_loop(
     persist_root: str | None = None,
     export: str | None = None,
     approval_broker: Any | None = None,
+    mouse: bool = True,
     **agent_kwargs: Any,
 ) -> str | None:
     """Run cohorts until the user leaves without requesting an in-TUI resume.
@@ -1237,7 +1254,9 @@ def _run_cohort_loop(
                 cohort, lane_cap=lane_cap, initial_task=task, persist_root=persist_root,
                 approval_broker=approval_broker,
             )
-            app.run()
+            # mouse=False leaves the terminal's own mouse handling intact, so
+            # native click-drag selection / copy / scrollback work (Track 1A).
+            app.run(mouse=mouse)
         finally:
             # Capture the artifact BEFORE tearing down the workspaces (diffs
             # read from the live worktrees).
@@ -1373,6 +1392,7 @@ def resume_multiplexer(
     export: str | None = None,
     persist_root: str | None = None,
     approvals: bool | None = None,
+    mouse: bool = True,
     **agent_kwargs: Any,
 ) -> str | None:
     """Reopen a saved cohort and continue it (spec §13.2).
@@ -1405,5 +1425,5 @@ def resume_multiplexer(
     return _run_cohort_loop(
         cohort, workspaces,
         lane_cap=lane_cap, initial_task=None, persist_root=persist_root,
-        export=export, approval_broker=broker, **agent_kwargs,
+        export=export, approval_broker=broker, mouse=mouse, **agent_kwargs,
     )

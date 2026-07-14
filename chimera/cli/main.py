@@ -220,6 +220,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="Launch the full-screen Textual TUI instead of the line REPL (needs the 'tui' extra).",
     )
     code_parser.add_argument(
+        "--no-mouse",
+        dest="no_mouse",
+        action="store_true",
+        default=False,
+        help=(
+            "TUI: don't capture the mouse, so the terminal's own click-drag "
+            "text selection, copy, and scrollback work natively (like Claude "
+            "Code). Trade-off: disables Textual mouse features (pane clicks, "
+            "in-app selection). Copy a selection with Ctrl+Y either way."
+        ),
+    )
+    code_parser.add_argument(
         "--isolation",
         choices=["auto", "worktree", "copy", "inplace"],
         default=None,
