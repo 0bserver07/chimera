@@ -15,6 +15,13 @@ commit receipts.
   two red CI runs proved local-green ≠ CI-green (`1f8ace0`). Definition-of-
   done sweep added to CLAUDE.md; TUI + Modal-Endpoints guides propagated to
   the docs site.
+- **TUI text selection & copy** (modernization Track 1A): `Ctrl+Y` copies the
+  transcript selection to the system clipboard over OSC 52 (works over SSH;
+  Ctrl+C stays the cancel key), and `chimera code --tui --no-mouse` hands the
+  mouse back to the terminal so native click-drag selection / copy / scrollback
+  work (the terminal-native feel). Bumped the stale `textual` floor
+  `>=0.50` → `>=8.0` (the selection/copy/mouse APIs were already available;
+  they just weren't wired). Guide: `docs/guides/tui.md` (`bbe0e04`).
 
 ## 0.9.1 — 2026-07-11 — the honest harness
 
