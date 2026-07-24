@@ -56,6 +56,7 @@ binding's source (default / user / migrated). Defaults:
 | Ctrl+D | quit | reserved |
 | Ctrl+E | toggle reasoning | |
 | Ctrl+X | expand/collapse tool output | |
+| Ctrl+Y | copy selection to clipboard (OSC 52) | |
 | Ctrl+R | comparison screen (scoreboard + diffs) | |
 | Ctrl+L | clear conversation | single-lane |
 | Tab / Shift+Tab | complete `/command`, else cycle lanes | |
@@ -64,6 +65,25 @@ binding's source (default / user / migrated). Defaults:
 | Ctrl+J | newline in the composer | |
 
 Mid-turn, typing **steers** the running lane; at idle it starts a new turn.
+
+## Selecting and copying text
+
+Drag to select transcript text, then **Ctrl+Y** copies it to the system
+clipboard over OSC 52 — so it works even over SSH. Ctrl+C stays the cancel key.
+
+By default the TUI captures the mouse (for Textual's own selection and pane
+interactions). If you'd rather use your **terminal's native** click-drag
+selection, copy, and scrollback — the way Claude Code feels — launch with
+**`--no-mouse`**:
+
+```bash
+chimera code --tui --no-mouse
+```
+
+That hands the mouse back to the terminal (native select / copy / scroll all
+work) at the cost of Textual's in-app mouse features. Ctrl+Y still copies either
+way. OSC-52 copy needs a terminal that permits it (iTerm2, kitty, WezTerm, or
+tmux with `set -g set-clipboard on`); macOS Terminal.app does not.
 
 ## Configuration
 

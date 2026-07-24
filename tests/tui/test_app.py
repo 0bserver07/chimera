@@ -420,3 +420,33 @@ def test_run_single_agent_builds_one_lane_inplace_cohort(tmp_path, monkeypatch):
     assert (proj / "keep.txt").read_text() == "precious\n"
     assert captured["kwargs"]["initial_task"] == "fix it"
     assert captured["kwargs"]["max_turns"] == 7
+
+
+@pytest.mark.asyncio
+async def test_ctrl_y_copies_selection_to_clipboard():
+    """Track 1A: Ctrl+Y commits the transcript's text selection to the clipboard
+    (OSC 52 via App.copy_to_clipboard). Ctrl+C stays the cancel key."""
+    from chimera.tui.multiplex import MultiplexApp
+
+    app = MultiplexApp(_single_cohort(FakeDriver()))
+    async with app.run_test() as pilot:
+        copied: list[str] = []
+        app.copy_to_clipboard = lambda text: copied.append(text)  # type: ignore[method-assign]
+        app.screen.get_selected_text = lambda: "selected transcript text"  # type: ignore[method-assign]
+        await pilot.press("ctrl+y")
+        await pilot.pause()
+        assert copied == ["selected transcript text"]
+
+
+@pytest.mark.asyncio
+async def test_ctrl_y_with_no_selection_copies_nothing():
+    from chimera.tui.multiplex import MultiplexApp
+
+    app = MultiplexApp(_single_cohort(FakeDriver()))
+    async with app.run_test() as pilot:
+        copied: list[str] = []
+        app.copy_to_clipboard = lambda text: copied.append(text)  # type: ignore[method-assign]
+        app.screen.get_selected_text = lambda: ""  # nothing selected
+        await pilot.press("ctrl+y")
+        await pilot.pause()
+        assert copied == []

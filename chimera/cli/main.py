@@ -232,6 +232,19 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     code_parser.add_argument(
+        "--no-mouse",
+        dest="no_mouse",
+        action="store_true",
+        default=False,
+        help=(
+            "TUI: don't capture the mouse, so the terminal's own click-drag "
+            "text selection, copy, and scrollback work natively (the "
+            "terminal-native feel). Trade-off: disables Textual mouse features "
+            "(pane clicks, in-app selection). Copy a selection with Ctrl+Y "
+            "either way."
+        ),
+    )
+    code_parser.add_argument(
         "--isolation",
         choices=["auto", "worktree", "copy", "inplace"],
         default=None,

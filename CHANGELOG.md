@@ -264,6 +264,30 @@ commit receipts.
   extension/custom-state entry kind a faithful round-trip. Surfaced by the
   compaction/session audit; pinned in
   `tests/sessions/test_compaction_audit.py`.
+- **TUI text selection & copy** (modernization Track 1A): `Ctrl+Y` copies the
+  transcript selection to the system clipboard over OSC 52 (works over SSH;
+  Ctrl+C stays the cancel key), and `chimera code --tui --no-mouse` hands the
+  mouse back to the terminal so native click-drag selection / copy / scrollback
+  work (the terminal-native feel). Bumped the stale `textual` floor
+  `>=0.50` → `>=8.0` (the selection/copy/mouse APIs were already available;
+  they just weren't wired). Guide: `docs/guides/tui.md` (`bbe0e04`).
+
+### Fixed
+
+- **SessionMixin shell-history isolation**: tmux session shells (the
+  integration tests included) were real interactive shells writing every
+  sentinel command into the user's actual `~/.zsh_history` /
+  `~/.bash_history` — and a shell picking up only Apple's `/etc/zshrc`
+  (`SAVEHIST=1000`) truncated the real history file on exit (destroyed a
+  year of history on 2026-07-17; recovered from `fc -W` backup).
+  `start_session()` now points spawned shells at a throwaway
+  `ZDOTDIR`/`HISTFILE` temp dir (default on, `isolate_history=False` to opt
+  out; needs tmux >= 3.2 for `new-session -e`), cleaned up in
+  `end_session()`. Also hardened `run_in_session()` capture: sentinels are
+  quote-armored (`__CHIMERA_"START"__`) so the terminal's echo of the typed
+  command can never false-match the parser in any pane-wrap state, and
+  `capture-pane -J` joins output lines wrapped at pane width. Regression
+  tests: `tests/integration/test_env_session.py::TestHistoryIsolation`.
 
 ## 0.9.1 — 2026-07-11 — the honest harness
 

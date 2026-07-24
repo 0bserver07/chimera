@@ -475,7 +475,7 @@ def test_run_cohort_loop_switches_cohorts(tmp_path, monkeypatch):
             built.append(cohort)
             # first app requests a switch; second exits plainly
             self.resume_request = second.cohort_id if cohort is first else None
-        def run(self):
+        def run(self, **kwargs):  # accept mouse=... like the real App.run
             pass
 
     monkeypatch.setattr(mux, "MultiplexApp", FakeApp)
@@ -630,3 +630,25 @@ async def test_budget_slash_command_inspect_lists_caps():
         lines = app._budget_status_lines()
         assert any("cost $0.0000/$0.10" in ln for ln in lines)
         assert any(ln.startswith("cohort:") for ln in lines)
+def test_run_cohort_loop_threads_mouse_to_app_run(tmp_path, monkeypatch):
+    """Track 1A: --no-mouse (mouse=False) must reach App.run(mouse=...) so the
+    terminal keeps native click-drag selection / copy / scrollback."""
+    import chimera.tui.multiplex as mux
+
+    co = _cohort([FakeDriver("m1")], task="t")
+    captured: dict = {}
+
+    class FakeWS:
+        def cleanup_all(self) -> None:
+            pass
+
+    class FakeApp:
+        def __init__(self, cohort, **kwargs):
+            self.resume_request = None  # exit after one iteration
+
+        def run(self, **kwargs):
+            captured["mouse"] = kwargs.get("mouse")
+
+    monkeypatch.setattr(mux, "MultiplexApp", FakeApp)
+    mux._run_cohort_loop(co, FakeWS(), mouse=False, persist_root=str(tmp_path))
+    assert captured["mouse"] is False

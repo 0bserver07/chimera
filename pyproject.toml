@@ -39,7 +39,7 @@ mink = ["rich>=13.7", "pygments>=2.17"]
 notebook = ["nbformat>=5"]
 mcp = ["websockets>=12"]
 ssh = ["asyncssh>=2.14"]
-tui = ["textual>=0.50"]
+tui = ["textual>=8.0"]  # >=8: native text selection, get_selected_text, run(mouse=), OSC-52 copy_to_clipboard
 modal-sandbox = ["modal>=0.62"]
 e2b = ["e2b>=1.0"]
 all = ["chimera-run[anthropic,openai,browser,remote,mink,notebook,mcp,ssh,tui,modal-sandbox,e2b]"]
