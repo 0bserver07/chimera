@@ -7,7 +7,80 @@ commit receipts.
 
 ## Unreleased
 
-(nothing yet — next batch accumulates here)
+### Added
+
+- **Daytona cloud sandbox backend** (#144): `chimera/env/daytona.py` adds
+  `DaytonaEnvironment`, a third managed-sandbox backend beside Modal and E2B,
+  behind the same `Environment` ABC and the same `create_environment("daytona",
+  …)` factory call. Optional extra `chimera-run[daytona]` (`daytona>=0.200`) —
+  the core stays zero-dependency. Creates a sandbox from an `image=` or a
+  `snapshot=` (mutually exclusive; neither = the account default), execs
+  through `sandbox.process.exec`, round-trips files through `sandbox.fs`, and
+  deletes the sandbox on `cleanup()` unless `keep_alive=True`. `checkpoint()` /
+  `restore()` raise `NotImplementedError` — Daytona sandboxes are ephemeral.
+  **Unverified against the live service**: the adapter is written to the
+  published SDK surface and tested against a fake SDK, but no real sandbox has
+  been provisioned (that needs a paid account). The live smoke commands are in
+  the guide.
+- **Managed sandboxes are selectable from the CLI** (#144): `chimera
+  bench-matrix --env e2b|daytona` joins `--env modal|swe-modal`, with a new
+  `--sandbox-image` for the E2B template / Daytona image. Each task gets a
+  fresh sandbox. E2B was previously reachable only from Python — it had no CLI
+  surface at all.
+- **Cloud backends fail loudly without credentials** (#144): `E2BEnvironment`
+  and `DaytonaEnvironment` now raise `ValueError` at construction when neither
+  the `api_key=` argument nor `$E2B_API_KEY` / `$DAYTONA_API_KEY` is set, and
+  `bench-matrix --env e2b|daytona` exits `2` naming the missing variable. A
+  sandbox that quietly degraded to local execution would produce benchmark
+  cells indistinguishable from cloud ones — the same posture the Modal path
+  already took at the CLI, now enforced in the environments themselves.
+- **`chimera.env.base.glob_match`** — one definition of what
+  `list_files(pattern)` means: `pathlib.Path.glob` semantics, which
+  `LocalEnvironment` has always used. `tests/env/test_glob_match.py` pins it by
+  parity against a live `LocalEnvironment` over 13 patterns, so the rule cannot
+  drift per backend.
+- **`docs/guides/remote-and-cloud-environments.md`** — the user-facing story
+  for every non-local backend: the provider table, the selection syntax, the
+  credential requirements, per-service quickstarts, the SSH subprocess-vs-
+  asyncssh comparison, and the exact opt-in live-smoke commands. Mirrored into
+  the docs site.
+
+### Fixed
+
+- **Cloud backends selected nested files for top-level globs** (#144):
+  `E2BEnvironment.list_files("*.py")` filtered with `fnmatch`, whose `*`
+  crosses `/`, so it returned `sub/mod.py` where `LocalEnvironment` returned
+  only `mod.py` — the same benchmark would see different file sets depending
+  on which sandbox it ran in. Both cloud backends now filter through
+  `glob_match`. `"*"` consequently means top-level-only (it was previously
+  short-circuited to "everything"); `"**/*"` and `""` still mean everything.
+- **A missing `[ssh]` extra blanked out `asyncio`** (#127):
+  `chimera/env/ssh.py` imported `asyncio` inside the same `try` as `asyncssh`,
+  so an `ImportError` from the optional package set the stdlib module to `None`
+  too. Harmless in production (the async backend refuses to construct without
+  `asyncssh`) but it made the backend impossible to drive against a fake
+  transport. `asyncio` now imports unconditionally.
+
+### Changed
+
+- **The SSH remote-execution abstraction is pinned by tests that actually run
+  in CI** (#127): `AsyncSSHEnvironment` (asyncssh + native SFTP + ProxyJump
+  chains + connect retries, shipped in 0.5.0) had 12 tests, all behind
+  `pytest.importorskip("asyncssh")` — which is exactly CI's posture, so none of
+  them ever guarded a merge. `tests/env/test_ssh_contract.py` adds 34 tests
+  driving the real class against a fake `asyncssh` module injected at the
+  module boundary, covering connect (credential forwarding, unset-optional
+  omission, `ssh_options` precedence, multi-hop `ProxyJump` tunnelling, retry
+  budget, `ConnectionError` translation), exec (workdir prefixing and quoting,
+  stream/exit-status mapping, timeout → 124, concurrent batches), transfer
+  (SFTP round-trip, parent-dir creation, byte-exact upload/download, SFTP walk
+  + glob), checkpoint/restore (tar shape, path-traversal rejection, missing-
+  checkpoint reporting), and cleanup (idempotence, context-manager teardown).
+  These run in every posture, installed extra or not.
+- **`E2BEnvironment` raises instead of `AttributeError` when used before
+  `setup()`**, matching `AsyncSSHEnvironment`; `DaytonaEnvironment` does the
+  same. `tests/env/test_e2b.py` adds 18 tests for the backend that previously
+  had two.
 
 ## 0.9.2 — 2026-07-24 — the embeddable core
 

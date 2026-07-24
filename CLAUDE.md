@@ -68,13 +68,28 @@ Layer 1: Environment     Local, Docker, Git, Remote, Cloud, PersistentShell
 20 built-in tools: read, write, edit, bash, search, list_files, test, git, web_fetch, replace_in_file, verify, delegate, repo_map, image_read, browser, import_graph, think, ask_user, todo, dmail
 
 ### Environments (`chimera/env/`)
-- `base.py` — Environment ABC
-- `local.py` — LocalEnvironment (filesystem)
-- `git.py` — GitEnvironment (branch isolation)
-- `docker.py` — DockerEnvironment (container isolation)
-- `remote.py` — RemoteEnvironment (HTTP client to remote server)
-- `cloud.py` — CloudEnvironment (managed sandbox provisioning)
-- `shell.py` — PersistentShell (tmux sessions)
+- `base.py` — Environment ABC + `glob_match` (the ONE definition of
+  `list_files(pattern)`: pathlib glob semantics, `*` stops at `/`). Backends
+  that enumerate paths remotely must filter through it or benchmarks see
+  different file sets per sandbox.
+- `factory.py` — `create_environment(provider, **opts)`, the single entry point
+  for every backend + `register_environment` for custom ones
+- `local.py` / `git_env.py` / `docker.py` — filesystem, branch isolation, container
+- `ssh.py` — `SSHEnvironment` (stdlib, subprocess `ssh`/`scp`) and
+  `AsyncSSHEnvironment` (`[ssh]` extra: asyncssh, native SFTP, ProxyJump chains,
+  connect retries, bounded concurrency)
+- `remote.py` / `cloud.py` — HTTP workspace server / HTTP provisioning API
+- `modal_sandbox.py` / `e2b.py` / `daytona.py` — managed cloud sandboxes
+- `native_sandbox.py` — OS-native confinement (macOS Seatbelt, Linux Landlock)
+- **Cloud backends fail loudly.** Missing SDK → `ImportError` with the extra
+  hint; missing creds → `ValueError` at construction; `bench-matrix --env` exits
+  2. Never let a sandbox degrade to local — the result would be
+  indistinguishable from a real cloud run. Guide:
+  `docs/guides/remote-and-cloud-environments.md`
+- **Test posture:** fake SDK/transport injected at the module boundary
+  (`chimera.env.e2b.Sandbox`, `chimera.env.daytona._sdk`,
+  `chimera.env.ssh.asyncssh`) so the tests run in CI, which installs no extras.
+  `pytest.importorskip` on an optional extra means the test never guards a merge.
 
 ### Training (`chimera/training/`)
 - `trainer.py` — Trainer orchestrator

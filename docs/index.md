@@ -94,7 +94,7 @@ Requires **Python 3.11+**.
 | **Loops**            |     4 | ReAct, PlanAndExecute, Reflexion, TreeOfThought                           |
 | **Composition**      |     3 | Pipeline, Ensemble, Supervisor                                            |
 | **Strategies**       |     7 | TestConvergence, Curriculum, Ensemble, Passthrough, TreeSearch, MajorityVoting, AIMOEnsemble |
-| **Environments**     |     6 | Local, Docker, Git, Remote, Cloud, PersistentShell                        |
+| **Environments**     |    10 | Local, Git, Docker, SSH, SSH-async, Remote, Cloud, Modal, E2B, Daytona     |
 | **Workflows**        |     6 | CI Fix, Code Review, Research, Migration, Doc Generation, Test Generation |
 | **Infrastructure**   |    14 | Security, Secrets, Permissions, Events, Sessions, Compaction, Streaming, Detection, Config, Plugins, MCP, LSP, Auth, Checkpoints |
 

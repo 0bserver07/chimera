@@ -71,7 +71,8 @@ kimi-cli (≈`kimi` preset) · little-coder · opencode · pi · swe-agent ✅
 Reusable across every bench: **6 graders** (`chimera/eval/graders/`:
 LLMRubric, FileExists, PatternMatch, TestPass, Schema, Composite) and the
 **sandbox layer** (`chimera/env/`: local · docker · git · remote · cloud ·
-modal · e2b · native · ssh — Chimera's SWE-ReX equivalent).
+modal · e2b · daytona · native · ssh · ssh-async — Chimera's SWE-ReX
+equivalent; guide: `docs/guides/remote-and-cloud-environments.md`).
 
 > **Two honest exceptions** (loading works; grading is limited):
 > **SWE-Lancer** — ingestion + dollar-weighted scoring helpers are real, but
