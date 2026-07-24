@@ -22,7 +22,7 @@ import shutil
 import time
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Iterator, Sequence
 
 __all__ = [
     "ENV_FLAG",
@@ -457,19 +457,44 @@ class Team:
 
 
 class TeamMailbox:
-    """Per-agent message inbox stored as ``mailbox/<agent_id>.jsonl``."""
+    """Per-agent message inbox stored as ``mailbox/<agent_id>.jsonl``.
+
+    Messages carry a stable hex ``id`` so a *push* delivery path can
+    acknowledge exactly the messages it delivered
+    (:meth:`consume`) without disturbing anything that arrived in the
+    meantime. The pull path (:meth:`recv`) is unchanged: it still returns
+    everything currently in the box and, by default, drains it.
+    """
 
     def __init__(self, team: Team, agent_id: str) -> None:
         self.team = team
         self.agent_id = agent_id
         self.path = team.mailbox_dir / f"{agent_id}.jsonl"
 
-    def send(self, sender: str, content: str) -> None:
+    def send(self, sender: str, content: str) -> str:
+        """Append a message to this agent's inbox.
+
+        Args:
+            sender: Agent id (or component name) sending the message.
+            content: Message body.
+
+        Returns:
+            The hex message id stamped on the record. Delivery paths use
+            it to acknowledge a specific message via :meth:`consume`.
+        """
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        rec = {"from": sender, "to": self.agent_id, "content": content, "ts": time.time()}
+        message_id = secrets.token_hex(8)
+        rec = {
+            "id": message_id,
+            "from": sender,
+            "to": self.agent_id,
+            "content": content,
+            "ts": time.time(),
+        }
         with _flock(self.path):
             with open(self.path, "a", encoding="utf-8") as f:
                 f.write(json.dumps(rec) + "\n")
+        return message_id
 
     def recv(self, drain: bool = True) -> list[dict[str, Any]]:
         if not self.path.exists():
@@ -480,6 +505,49 @@ class TeamMailbox:
             if drain:
                 self.path.write_text("")
             return messages
+
+    def consume(self, message_ids: Sequence[str]) -> int:
+        """Remove already-delivered messages from the inbox, by id.
+
+        This is the acknowledgement half of the push path: a watcher
+        reads pending mail without draining, hands it to a live
+        teammate, and only then calls ``consume`` with the ids it
+        actually delivered. Because the file is re-read under the same
+        exclusive lock, messages appended between the read and the ack
+        survive and are still delivered by :meth:`recv`. A delivery that
+        fails simply never acks, so the message stays queued for the
+        pull path.
+
+        Args:
+            message_ids: Ids (as returned by :meth:`send`) to drop.
+                Unknown ids are ignored.
+
+        Returns:
+            Number of records removed.
+        """
+        wanted = {str(m) for m in message_ids}
+        if not wanted or not self.path.exists():
+            return 0
+        with _flock(self.path):
+            kept: list[str] = []
+            removed = 0
+            for line in self.path.read_text().splitlines():
+                if not line.strip():
+                    continue
+                try:
+                    rec = json.loads(line)
+                except json.JSONDecodeError:
+                    kept.append(line)  # never drop what we cannot read
+                    continue
+                if str(rec.get("id", "")) in wanted:
+                    removed += 1
+                    continue
+                kept.append(line)
+            if removed:
+                tmp = self.path.parent / (self.path.name + ".tmp")
+                tmp.write_text("".join(f"{ln}\n" for ln in kept))
+                os.replace(tmp, self.path)
+            return removed
 
 
 # ---------------------------------------------------------------------------

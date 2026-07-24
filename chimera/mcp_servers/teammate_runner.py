@@ -62,6 +62,18 @@ When ``--reuse-session`` is passed but ``--runtime`` is not ``acp`` the
 flag is downgraded with a warning and the runner falls back to
 spawn-per-task — preserving the legacy behavior so misconfigured
 invocations still make progress.
+
+Real-time mail (issue #149)
+---------------------------
+
+In persistent-session mode the runner also watches this teammate's
+mailbox (:class:`chimera.mcp_servers.team_push.MailboxWatcher`) and
+pushes new messages straight into the live session instead of waiting
+for the agent's next ``team_recv_messages`` call. Delivery is
+acknowledged per message, so anything the push path could not deliver
+stays queued for the ordinary pull path. Spawn-per-task runs have no
+live session to push into and are unchanged; ``--no-push`` turns the
+watcher off explicitly.
 """
 from __future__ import annotations
 
@@ -71,12 +83,14 @@ import shlex
 import subprocess
 import sys
 import tempfile
+import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Protocol, TextIO
 
 from chimera.cli.agent_teams import ENV_FLAG, Team, TeamMailbox
+from chimera.mcp_servers.team_push import DEFAULT_WATCH_INTERVAL, MailboxWatcher
 
 if TYPE_CHECKING:
     from chimera.acp.types import ACPSessionConfig
@@ -113,9 +127,49 @@ class _SessionState:
     Attributes:
         client: The live ACP client, or ``None`` if not yet started or
             after a crash forced teardown.
+        lock: Serialises everything that talks to ``client``. The task
+            loop and the mailbox watcher are different threads sharing
+            one stdio pipe, so exactly one of them may be inside a
+            ``session/sendMessage`` at a time.
     """
 
     client: ACPClientLike | None = None
+    lock: threading.Lock = field(default_factory=threading.Lock)
+
+
+class _ACPSteerSink:
+    """Deliver team mail into a live ACP session.
+
+    ACP's ``session/sendMessage`` is turn-scoped: a push that lands
+    while the teammate is mid-turn is delivered as the next message in
+    the same session, as soon as the current turn returns. That is a
+    turn-boundary guarantee, not a preemption — the honest bound is
+    "before the teammate starts its next task", versus the pull path's
+    "when the agent next chooses to check its inbox".
+
+    Raises rather than swallowing, so
+    :class:`~chimera.mcp_servers.team_push.MailboxWatcher` leaves
+    undelivered mail in the mailbox for the pull path.
+
+    Args:
+        state: The shared persistent-session state.
+    """
+
+    def __init__(self, state: _SessionState) -> None:
+        self._state = state
+
+    def steer(self, text: str) -> None:
+        """Send *text* to the live session.
+
+        Raises:
+            RuntimeError: If no session is currently alive (the runner
+                has not spawned one yet, or a crash tore it down).
+        """
+        with self._state.lock:
+            client = self._state.client
+            if client is None:
+                raise RuntimeError("no live ACP session to push into")
+            client.send_message(text)
 
 
 def _build_acp_config(
@@ -197,22 +251,43 @@ def _acp_run_one_task(
     else:
         factory = client_factory
 
-    if state.client is None:
+    # One writer at a time on the session's stdio: the mailbox watcher
+    # pushes team mail through the same client from another thread.
+    with state.lock:
+        if state.client is None:
+            try:
+                cfg = _build_acp_config(cmd_template, env)
+                state.client = factory(cfg)
+                state.client.start()
+                print(
+                    "chimera-team-run: started persistent ACP session.",
+                    file=log,
+                )
+            except Exception as e:
+                print(
+                    f"chimera-team-run: failed to start ACP session ({e!r}); "
+                    "will retry next iteration.",
+                    file=log,
+                )
+                # Best-effort teardown so we don't leak a half-started process.
+                client = state.client
+                state.client = None
+                if client is not None:
+                    try:
+                        client.stop()
+                    except Exception:
+                        pass
+                return -1
+
         try:
-            cfg = _build_acp_config(cmd_template, env)
-            state.client = factory(cfg)
-            state.client.start()
+            state.client.send_message(prompt)
+            return 0
+        except (RuntimeError, OSError, BrokenPipeError) as e:
             print(
-                "chimera-team-run: started persistent ACP session.",
+                f"chimera-team-run: ACP session crashed ({e!r}); "
+                "will respawn next iteration.",
                 file=log,
             )
-        except Exception as e:
-            print(
-                f"chimera-team-run: failed to start ACP session ({e!r}); "
-                "will retry next iteration.",
-                file=log,
-            )
-            # Best-effort teardown so we don't leak a half-started process.
             client = state.client
             state.client = None
             if client is not None:
@@ -221,24 +296,6 @@ def _acp_run_one_task(
                 except Exception:
                     pass
             return -1
-
-    try:
-        state.client.send_message(prompt)
-        return 0
-    except (RuntimeError, OSError, BrokenPipeError) as e:
-        print(
-            f"chimera-team-run: ACP session crashed ({e!r}); "
-            "will respawn next iteration.",
-            file=log,
-        )
-        client = state.client
-        state.client = None
-        if client is not None:
-            try:
-                client.stop()
-            except Exception:
-                pass
-        return -1
 
 
 __all__ = ["TEAMMATE_PROMPT", "run_loop", "main", "ACPClientFactory"]
@@ -276,6 +333,9 @@ Important:
 * Only call `team_complete_task` when the work is genuinely done. If you
   can't finish, call `team_release_task` so another teammate can pick it up.
 * Do not call `team_add_task` unless the lead asked you to. Stay in scope.
+* A message beginning `[team mail]` may arrive mid-run. It was delivered
+  straight from a teammate's mailbox, so it is already read — act on it
+  and do NOT call `team_recv_messages` for it again.
 """
 
 
@@ -322,6 +382,8 @@ def run_loop(
     reuse_session: bool = False,
     runtime: str = "spawn",
     acp_client_factory: ACPClientFactory | None = None,
+    push: bool = True,
+    push_interval: float = DEFAULT_WATCH_INTERVAL,
 ) -> int:
     """Poll-and-spawn loop.
 
@@ -356,6 +418,12 @@ def run_loop(
             to differ from spawn behavior).
         acp_client_factory: Optional injection point for tests; defaults
             to ``lambda cfg: ACPClient(cfg)``.
+        push: Watch this teammate's mailbox and push new messages into
+            the live session (issue #149). Only meaningful when a
+            persistent session exists — spawn-per-task runs have nothing
+            to push into and keep today's pull-only behavior regardless.
+            Undeliverable mail is always left for the pull path.
+        push_interval: Seconds between mailbox stats for the watcher.
 
     Returns:
         Exit code (0 on idle-timeout shutdown).
@@ -380,6 +448,28 @@ def run_loop(
     team.add_member(agent_id)
     prompt = TEAMMATE_PROMPT.format(agent_id=agent_id, team=team_name)
     mailbox = TeamMailbox(team, agent_id)
+
+    # Real-time mail (issue #149). A watcher only makes sense when there is
+    # a live session on the other end; spawn-per-task has none, so it keeps
+    # the pull-only behavior it has always had.
+    watcher: MailboxWatcher | None = None
+    if push and session_state is not None:
+        watcher = MailboxWatcher(
+            mailbox,
+            _ACPSteerSink(session_state),
+            interval=push_interval,
+            on_error=lambda exc: print(
+                f"chimera-team-run: mail push deferred to the pull path "
+                f"({exc!r}).",
+                file=log,
+            ),
+        )
+    elif push and reuse_session is False and runtime == "spawn":
+        print(
+            "chimera-team-run: spawn-per-task has no live session to push "
+            "into; team mail is delivered by team_recv_messages as usual.",
+            file=log,
+        )
 
     base_env = {
         **os.environ,
@@ -476,6 +566,14 @@ def run_loop(
         return released_any
 
     last_progress = time.time()
+
+    if watcher is not None:
+        watcher.start()
+        print(
+            f"chimera-team-run: watching mailbox for {agent_id}; new team "
+            f"mail is pushed into the live session.",
+            file=log,
+        )
 
     try:
         while True:
@@ -602,6 +700,16 @@ def run_loop(
                 )
                 time.sleep(poll_interval)
     finally:
+        # Stop the watcher BEFORE the session it pushes into, so a push in
+        # flight can never outlive the client it targets.
+        if watcher is not None:
+            watcher.stop()
+            if watcher.delivered:
+                print(
+                    f"chimera-team-run: pushed {watcher.delivered} message(s) "
+                    f"into the live session.",
+                    file=log,
+                )
         # Gracefully stop the persistent ACP subprocess on any exit path
         # (idle timeout, KeyboardInterrupt, or unexpected raise).
         if session_state is not None and session_state.client is not None:
@@ -675,6 +783,27 @@ def main(argv: list[str] | None = None) -> int:
             "downgraded with a warning."
         ),
     )
+    parser.add_argument(
+        "--no-push",
+        dest="push",
+        action="store_false",
+        default=True,
+        help=(
+            "Don't watch the mailbox for real-time delivery into a live "
+            "session; team mail then arrives only when the agent calls "
+            "team_recv_messages. No effect on spawn-per-task runs, which "
+            "have no live session to push into."
+        ),
+    )
+    parser.add_argument(
+        "--push-interval",
+        type=float,
+        default=DEFAULT_WATCH_INTERVAL,
+        help=(
+            "Seconds between mailbox checks for real-time delivery "
+            f"(default: {DEFAULT_WATCH_INTERVAL})."
+        ),
+    )
     args = parser.parse_args(argv)
 
     # In reuse-session ACP mode the placeholders are not required —
@@ -705,6 +834,8 @@ def main(argv: list[str] | None = None) -> int:
         max_nudges=args.max_nudges,
         reuse_session=args.reuse_session,
         runtime=args.runtime,
+        push=args.push,
+        push_interval=args.push_interval,
     )
 
 

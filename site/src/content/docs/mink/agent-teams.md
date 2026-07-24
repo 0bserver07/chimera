@@ -1,6 +1,6 @@
 ---
-title: "Mink Agent Teams"
-description: "Coordinate multiple coding agents (Codex, OpenCode, internal Chimera) as teammates on a shared file-locked task list via MCP."
+title: Mink Agent Teams
+description: Coordinate multiple coding agents (Codex, OpenCode, internal Chimera) as teammates on a shared file-locked task list via MCP.
 ---
 
 # Agent Teams
@@ -139,7 +139,8 @@ failing to make progress").
 ```bash
 chimera-team-run --team <name> --agent <agent_id> \
     --cmd '<external agent command with {prompt} or {prompt_file}>' \
-    [--idle-timeout 60] [--task-timeout 600] [--max-nudges 1]
+    [--idle-timeout 60] [--task-timeout 600] [--max-nudges 1] \
+    [--no-push] [--push-interval 0.25]
 ```
 
 The runner injects `CHIMERA_TEAM`, `CHIMERA_AGENT`, and
@@ -158,6 +159,74 @@ After `--max-nudges` consecutive no-progress iterations on the same stuck
 task, the runner force-releases the claim so another teammate can pick
 it up. Nudge counters reset when the task transitions out of `claimed`
 (completion, voluntary release, or runner-initiated release).
+
+### Real-time mail push
+
+By default, mail is delivered by **pull**: a teammate sees its mailbox
+when it calls `team_recv_messages`. With spawn-per-task that means "at
+the start of the next task", so a mid-run *"stop, requirements changed"*
+never lands.
+
+When a teammate has a **live session** (`--reuse-session --runtime acp`),
+the runner also watches that teammate's mailbox and pushes new messages
+straight into the running session:
+
+```text
+chimera-team-run: watching mailbox for opencode-1; new team mail is
+pushed into the live session.
+...
+chimera-team-run: pushed 2 message(s) into the live session.
+```
+
+The pushed message arrives as one steering message that names its
+senders:
+
+```text
+[team mail] 1 new message(s) for 'opencode-1' — read them before continuing:
+- from lead: scope changed, only touch auth.py
+```
+
+**Why a filesystem watch and not a socket.** The team substrate is
+deliberately daemonless: coordination is JSONL under
+`~/.chimera/teams/<name>/` guarded by `fcntl` locks, so any MCP host in
+any language can join by reading and writing files. A notify socket
+would add a transport only Chimera-side processes speak, plus a broker
+to keep alive. Watching the mailbox file keeps one source of truth, adds
+no dependency (stdlib `os.stat`), and is inert when nobody is listening.
+
+**Delivery semantics, precisely:**
+
+| Situation | What happens |
+|---|---|
+| Teammate idle between tasks | Delivered within ~`--push-interval` (default 0.25s), well inside a second |
+| Teammate mid-turn | Delivered at the next turn boundary — ACP's `session/sendMessage` is turn-scoped, so a push is the next message in the same session, not a preemption |
+| Spawn-per-task (no live session) | Nothing is pushed; mail waits for `team_recv_messages`, exactly as before |
+| Push fails (session died, crash mid-delivery) | The message is **not** acked, so it stays in the mailbox and the pull path delivers it |
+| `--no-push` | Watcher never starts; pull-only |
+
+Messages carry a stable `id`, and the watcher acknowledges exactly the
+ids it delivered (`TeamMailbox.consume`). Mail that arrives between the
+watcher's read and its ack survives, and a delivered message is never
+re-delivered by `team_recv_messages`. **Push can only ever be faster
+than pull — it cannot lose mail.**
+
+Mid-run delivery reuses the existing steering seam rather than a second
+channel: `AgentDriver`, `Session`, and `CodingAgent` all satisfy the
+`TeammateSink` protocol (`steer(text) -> None`) as-is, so an in-process
+Chimera teammate can be wired to the same `MailboxWatcher`:
+
+```python
+from chimera.cli.agent_teams import Team, TeamMailbox
+from chimera.mcp_servers.team_push import MailboxWatcher
+
+mailbox = TeamMailbox(Team("review-pr"), "chimera-1")
+with MailboxWatcher(mailbox, driver):   # driver: AgentDriver
+    ...                                 # mail lands via driver.steer()
+```
+
+Drivers that *cannot* steer (a subprocess-backed external lane, which
+only notes that steering is unsupported) must not be wrapped — leave the
+push path unconfigured so mail flows through the pull path.
 
 ### Session reuse (ACP)
 
@@ -335,9 +404,13 @@ least one, no double-claims.
 
 1. **Experimental** — gated by `CHIMERA_EXPERIMENTAL_AGENT_TEAMS=1`; the
    API may still change.
-2. **Pull, not push.** Teammates drain mailboxes when their next
-   invocation runs — there's no mid-task message delivery yet. See issue
-   [#149](https://github.com/0bserver07/chimera/issues/149).
+2. **Push needs a live session.** Mid-run delivery works for teammates
+   with a persistent session (`--reuse-session --runtime acp`) and for
+   in-process Chimera teammates — see
+   [Real-time mail push](#real-time-mail-push). Spawn-per-task teammates
+   have no session to push into and stay pull-only, and a push landing
+   mid-turn is delivered at the next turn boundary rather than
+   preempting the turn.
 3. **Cold start per task (default).** By default `chimera-team-run`
    spawns a fresh subprocess per task. For ACP-speaking agents,
    `--reuse-session --runtime acp` keeps one subprocess alive across N
@@ -365,6 +438,8 @@ least one, no double-claims.
   (`Team` class, `TeamMailbox`, file-locked primitives, `destroy`, `list_teams`)
 - MCP server: [`chimera/mcp_servers/team_server.py`](https://github.com/0bserver07/chimera/blob/master/chimera/mcp_servers/team_server.py)
 - Runner: [`chimera/mcp_servers/teammate_runner.py`](https://github.com/0bserver07/chimera/blob/master/chimera/mcp_servers/teammate_runner.py)
+- Mail push: [`chimera/mcp_servers/team_push.py`](https://github.com/0bserver07/chimera/blob/master/chimera/mcp_servers/team_push.py)
+  (`MailboxWatcher`, `TeammateSink`)
 - Live dashboard: [`chimera/mink/team_watch.py`](https://github.com/0bserver07/chimera/blob/master/chimera/mink/team_watch.py)
 - Role discovery: [`chimera/agents/team_roles.py`](https://github.com/0bserver07/chimera/blob/master/chimera/agents/team_roles.py)
 - Examples + verify: [`examples/agent_teams/`](https://github.com/0bserver07/chimera/tree/master/examples/agent_teams)

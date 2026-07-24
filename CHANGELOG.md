@@ -138,6 +138,28 @@ commit receipts.
   byte-identical (a test asserts it) and a terminal-palette theme exports no
   Textual design tokens at all. Guide: `docs/guides/tui.md` (new *Themes*
   section).
+- **Real-time mail push to running teammates** (#149): team messaging was
+  pull-only — a teammate saw its mailbox only when it next called
+  `team_recv_messages`, which under spawn-per-task means "at the start of the
+  next task", so a mid-run *"stop, requirements changed"* could never land. New
+  `chimera/mcp_servers/team_push.py` adds `MailboxWatcher` (a stdlib
+  `os.stat` watch with a debounce that coalesces bursts) and the `TeammateSink`
+  protocol. **The push path IS the existing steer seam**: `TeammateSink` is
+  `steer(text) -> None`, so `AgentDriver`, `Session`, and `CodingAgent` are
+  sinks as-is and mid-run mail rides the thread-safe steering queue to the next
+  step boundary. `chimera-team-run` wires the watcher for persistent-session
+  (`--reuse-session --runtime acp`) teammates; `--no-push` / `--push-interval`
+  tune it. **Push cannot lose mail**: `TeamMailbox.send` now stamps a stable
+  hex `id` on each record and the new `TeamMailbox.consume(ids)` acks exactly
+  what was delivered, under the mailbox lock — anything that fails to deliver,
+  arrives mid-ack, or predates the ids is left for the unchanged pull path.
+  Spawn-per-task runs have no live session to push into and keep today's
+  behavior byte-for-byte. A push landing mid-turn is delivered at the next
+  **turn boundary** (ACP `session/sendMessage` is turn-scoped) — documented as
+  such rather than claimed as preemption. Docs: `docs/mink/agent-teams.md`
+  ("Real-time mail push"). Tests: `tests/mcp/test_team_push.py` (19, incl. an
+  end-to-end proof through a real `AgentDriver` on the hermetic harness) and
+  three runner cases in `tests/mcp/test_teammate_runner.py`.
 
 ## 0.9.2 — 2026-07-24 — the embeddable core
 

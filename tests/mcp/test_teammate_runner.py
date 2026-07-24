@@ -425,6 +425,8 @@ class _FakeACPClient:
         self.start_calls = 0
         self.stop_calls = 0
         self.send_calls = 0
+        self.texts: list[str] = []
+        self.on_send: Callable[[int], None] | None = None
         self._started = False
 
     def start(self) -> None:
@@ -439,6 +441,9 @@ class _FakeACPClient:
         self, text: str, on_chunk: Callable[[str], None] | None = None,
     ) -> ACPResponse:
         self.send_calls += 1
+        self.texts.append(text)
+        if self.on_send is not None:
+            self.on_send(self.send_calls)
         if self.crash_on_send:
             raise RuntimeError("ACP process closed stdout")
         # Simulate the agent calling team_claim_task + team_complete_task
@@ -745,3 +750,122 @@ class TestSessionReuseCLI:
                 "--idle-timeout", "0.05",
                 "--runtime", "nonsense",
             ])
+
+
+# ---------------------------------------------------------------------------
+# Real-time mail push (issue #149)
+# ---------------------------------------------------------------------------
+
+
+class TestMailPush:
+    def test_reuse_session_pushes_mail_into_the_live_session(
+        self, tmp_path: Path,
+    ) -> None:
+        # A message sent while the teammate is working must reach the live
+        # session, not wait for the agent's next team_recv_messages call.
+        team = Team("push-live", root=tmp_path)
+        team.init()
+        team.add_task("task-a", created_by="lead")
+        mailbox = TeamMailbox(team, "acp-1")
+
+        factory = _factory_for(tmp_path, "push-live", "acp-1")
+
+        # The lead sends mail *while* the agent is mid-turn. The push lands
+        # on the next turn boundary (ACP sendMessage is turn-scoped).
+        def _mail_on_first_turn(call_no: int) -> None:
+            if call_no == 1:
+                mailbox.send("lead", "scope changed: skip the parser")
+
+        original_factory = factory
+
+        def _wrapped(cfg: ACPSessionConfig) -> _FakeACPClient:
+            client = original_factory(cfg)
+            client.on_send = _mail_on_first_turn
+            return client
+
+        rc = run_loop(
+            team_name="push-live",
+            agent_id="acp-1",
+            cmd_template="fake-acp-agent",
+            teams_root=tmp_path,
+            idle_timeout=1.5,
+            poll_interval=0.05,
+            log=io.StringIO(),
+            reuse_session=True,
+            runtime="acp",
+            acp_client_factory=_wrapped,
+            push_interval=0.05,
+        )
+
+        assert rc == 0
+        clients = original_factory.clients  # type: ignore[attr-defined]
+        pushed = [t for t in clients[0].texts if t.startswith("[team mail]")]
+        assert pushed, f"mail was never pushed; sent texts: {clients[0].texts}"
+        assert "scope changed: skip the parser" in pushed[0]
+        # Delivered mail is acked out of the mailbox, so the pull path
+        # cannot re-deliver it.
+        assert mailbox.recv(drain=False) == []
+
+    def test_push_can_be_disabled(self, tmp_path: Path) -> None:
+        team = Team("push-off", root=tmp_path)
+        team.init()
+        team.add_task("task-a", created_by="lead")
+        mailbox = TeamMailbox(team, "acp-1")
+
+        factory = _factory_for(tmp_path, "push-off", "acp-1")
+
+        def _mail_on_first_turn(call_no: int) -> None:
+            if call_no == 1:
+                mailbox.send("lead", "not pushed")
+
+        def _wrapped(cfg: ACPSessionConfig) -> _FakeACPClient:
+            client = factory(cfg)
+            client.on_send = _mail_on_first_turn
+            return client
+
+        run_loop(
+            team_name="push-off",
+            agent_id="acp-1",
+            cmd_template="fake-acp-agent",
+            teams_root=tmp_path,
+            idle_timeout=0.6,
+            poll_interval=0.05,
+            log=io.StringIO(),
+            reuse_session=True,
+            runtime="acp",
+            acp_client_factory=_wrapped,
+            push=False,
+        )
+
+        clients = factory.clients  # type: ignore[attr-defined]
+        assert not [t for t in clients[0].texts if t.startswith("[team mail]")]
+        pending = mailbox.recv(drain=False)
+        assert [m["content"] for m in pending] == ["not pushed"]
+
+    def test_spawn_per_task_keeps_pull_only_semantics(
+        self, tmp_path: Path,
+    ) -> None:
+        # No live session to push into: mail must stay in the mailbox for
+        # the agent's own team_recv_messages call. The mock agent below
+        # never reads its mailbox, so anything left there proves the push
+        # path did not touch it.
+        team = Team("push-spawn", root=tmp_path)
+        team.init()
+        team.add_task("task-a", created_by="lead")
+        mailbox = TeamMailbox(team, "spawn-1")
+        mailbox.send("lead", "pull-only delivery")
+
+        log = io.StringIO()
+        run_loop(
+            team_name="push-spawn",
+            agent_id="spawn-1",
+            cmd_template=_cmd_for(MOCK_AGENT),
+            teams_root=tmp_path,
+            idle_timeout=0.5,
+            poll_interval=0.05,
+            log=log,
+        )
+
+        pending = mailbox.recv(drain=False)
+        assert [m["content"] for m in pending] == ["pull-only delivery"]
+        assert "no live session to push into" in log.getvalue()
