@@ -2,8 +2,11 @@
 
 ``create_environment(provider, **opts)`` returns a ready (un-``setup``)
 :class:`~chimera.env.base.Environment` for any registered backend: local,
-git, docker, ssh, remote, cloud, modal, e2b, ….  Optional-dependency backends
-raise a clear, install-hinted error when their package is missing.
+git, docker, ssh, ssh-async, remote, cloud, modal, e2b, daytona, ….
+Optional-dependency backends raise a clear, install-hinted error when their
+package is missing, and the managed-sandbox backends (modal, e2b, daytona)
+additionally refuse to construct without credentials rather than degrading to
+local execution.  See ``docs/guides/remote-and-cloud-environments.md``.
 
 This unifies the previously ad-hoc construction paths (config files,
 ``bench-compare --env``, per-task ``env_factory`` callables, ``docker_env_factory``)
@@ -39,6 +42,7 @@ _BUILTIN: dict[str, tuple[str, str, str]] = {
     "cloud": ("chimera.env.cloud", "CloudEnvironment", "remote"),
     "modal": ("chimera.env.modal_sandbox", "ModalSandboxEnvironment", "modal-sandbox"),
     "e2b": ("chimera.env.e2b", "E2BEnvironment", "e2b"),
+    "daytona": ("chimera.env.daytona", "DaytonaEnvironment", "daytona"),
 }
 
 _CUSTOM: dict[str, Callable[..., "Environment"]] = {}

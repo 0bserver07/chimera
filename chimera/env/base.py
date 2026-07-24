@@ -7,9 +7,98 @@ Docker container, remote VM) must implement every abstract method defined here.
 
 from __future__ import annotations
 
+import re
 from abc import ABC, abstractmethod
+from functools import lru_cache
 
 from chimera.types import CommandResult, TestResult
+
+
+def _translate(pattern: str) -> str:
+    """Translate a pathlib-style glob into a regular expression.
+
+    Args:
+        pattern: A glob pattern using ``*``, ``**``, ``?`` and ``[seq]``.
+
+    Returns:
+        A regex source string (unanchored) equivalent to *pattern*.
+    """
+    out: list[str] = []
+    i, n = 0, len(pattern)
+    while i < n:
+        char = pattern[i]
+        if char == "*":
+            j = i
+            while j < n and pattern[j] == "*":
+                j += 1
+            if j - i >= 2:  # ``**`` spans path segments
+                if j < n and pattern[j] == "/":
+                    # Optional so ``**/x`` also matches a bare ``x``, matching
+                    # pathlib.
+                    out.append("(?:.*/)?")
+                    j += 1
+                else:
+                    out.append(".*")
+            else:  # a single ``*`` stops at the separator
+                out.append("[^/]*")
+            i = j
+            continue
+        if char == "?":
+            out.append("[^/]")
+            i += 1
+            continue
+        if char == "[":
+            j = i + 1
+            if j < n and pattern[j] == "!":
+                j += 1
+            if j < n and pattern[j] == "]":
+                j += 1
+            while j < n and pattern[j] != "]":
+                j += 1
+            if j >= n:  # unterminated class — treat as a literal bracket
+                out.append(re.escape(char))
+                i += 1
+                continue
+            body = pattern[i + 1 : j].replace("\\", r"\\")
+            if body.startswith("!"):
+                body = "^" + body[1:]
+            out.append(f"[{body}]")
+            i = j + 1
+            continue
+        out.append(re.escape(char))
+        i += 1
+    return "".join(out)
+
+
+@lru_cache(maxsize=512)
+def _compiled(pattern: str) -> re.Pattern[str]:
+    return re.compile(f"(?s:{_translate(pattern)})\\Z")
+
+
+def glob_match(path: str, pattern: str) -> bool:
+    """Match a workspace-relative POSIX path against a glob pattern.
+
+    Implements the semantics of :meth:`pathlib.Path.glob`, which
+    :class:`~chimera.env.local.LocalEnvironment` uses and which therefore
+    defines what ``list_files(pattern)`` means for *every* backend:
+
+    * ``*`` matches any run of characters **except** the path separator.
+    * ``**`` matches any number of path segments, including none.
+    * ``?`` matches a single non-separator character.
+    * ``[seq]`` / ``[!seq]`` character classes behave as in :mod:`fnmatch`.
+
+    Backends that enumerate remote paths themselves (E2B, Daytona, …) must
+    filter through this rather than raw :func:`fnmatch.fnmatch`, whose ``*``
+    happily crosses ``/`` and so wrongly reports nested files for ``"*.py"``.
+
+    Args:
+        path: A workspace-relative POSIX path, e.g. ``"sub/mod.py"``.
+        pattern: The glob to test it against.
+
+    Returns:
+        ``True`` when *path* matches *pattern*.
+    """
+    return _compiled(pattern).match(path) is not None
 
 
 class Environment(ABC):
@@ -53,6 +142,12 @@ class Environment(ABC):
     @abstractmethod
     def list_files(self, pattern: str = "**/*") -> list[str]:
         """List files matching a glob pattern.
+
+        Implementations must honour :func:`glob_match` semantics (those of
+        :meth:`pathlib.Path.glob`): a single ``*`` stops at the path
+        separator, ``**`` spans segments.  Backends that enumerate paths
+        remotely should filter through :func:`glob_match` so a given pattern
+        selects the same files no matter which backend is mounted.
 
         Args:
             pattern: Glob pattern relative to the workspace root.

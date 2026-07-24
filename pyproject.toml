@@ -42,7 +42,8 @@ ssh = ["asyncssh>=2.14"]
 tui = ["textual>=8.0"]  # >=8: native text selection, get_selected_text, run(mouse=), OSC-52 copy_to_clipboard
 modal-sandbox = ["modal>=0.62"]
 e2b = ["e2b>=1.0"]
-all = ["chimera-run[anthropic,openai,browser,remote,mink,notebook,mcp,ssh,tui,modal-sandbox,e2b]"]
+daytona = ["daytona>=0.200"]
+all = ["chimera-run[anthropic,openai,browser,remote,mink,notebook,mcp,ssh,tui,modal-sandbox,e2b,daytona]"]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",

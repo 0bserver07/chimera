@@ -13,21 +13,35 @@ run inside an ephemeral E2B microVM via the universal env factory:
 Requires the ``e2b`` package: ``pip install 'chimera-run[e2b]'`` (or
 ``pip install e2b``).  The API key is read from the ``api_key`` argument or the
 ``E2B_API_KEY`` environment variable.
+
+**Failure posture — deliberately loud.**  A cloud sandbox backend that quietly
+degrades to local execution silently invalidates every benchmark cell it
+produces, so both the missing-SDK and the missing-credential cases raise at
+construction time rather than at first use.  This mirrors the Modal path
+(:mod:`chimera.env.modal_sandbox` plus the ``bench-matrix --env modal``
+credential gate) and the sibling :mod:`chimera.env.daytona` backend.
 """
 
 from __future__ import annotations
 
-import fnmatch
 import os
 from typing import Any
 
-from chimera.env.base import Environment
+from chimera.env.base import Environment, glob_match
 from chimera.types import CommandResult, TestResult
 
 try:  # optional dependency
     from e2b import Sandbox  # type: ignore[import-not-found]
 except ImportError:  # pragma: no cover - exercised via factory ImportError path
     Sandbox = None  # type: ignore[assignment, misc]
+
+
+_CREDS_HINT = (
+    "E2BEnvironment requires an E2B API key. Pass api_key=... or set "
+    "$E2B_API_KEY. Refusing to continue: a cloud sandbox backend must never "
+    "silently fall back to local execution, because results produced locally "
+    "would be indistinguishable from results produced in the cloud."
+)
 
 
 class E2BEnvironment(Environment):
@@ -42,6 +56,10 @@ class E2BEnvironment(Environment):
         test_command: Command used by :meth:`run_tests`.
         sandbox_id: Connect to an existing sandbox instead of creating one.
         keep_alive: When ``True``, :meth:`cleanup` does not kill the sandbox.
+
+    Raises:
+        ImportError: When the ``e2b`` package is not installed.
+        ValueError: When no API key can be resolved.
     """
 
     def __init__(
@@ -59,7 +77,10 @@ class E2BEnvironment(Environment):
                 "E2BEnvironment requires the 'e2b' package. Install it with: "
                 "pip install 'chimera-run[e2b]'"
             )
-        self._api_key = api_key or os.environ.get("E2B_API_KEY")
+        resolved_key = api_key or os.environ.get("E2B_API_KEY")
+        if not resolved_key:
+            raise ValueError(_CREDS_HINT)
+        self._api_key = resolved_key
         self._template = template
         self._working_dir = working_dir.rstrip("/") or "/"
         self._timeout = timeout
@@ -105,28 +126,54 @@ class E2BEnvironment(Environment):
     # Filesystem
     # ------------------------------------------------------------------
 
+    def _require_sandbox(self) -> Any:
+        """Return the live sandbox handle, or explain that setup() was skipped.
+
+        Returns:
+            The E2B ``Sandbox`` created by :meth:`setup`.
+
+        Raises:
+            RuntimeError: When :meth:`setup` has not run (or cleanup already did).
+        """
+        if self._sbx is None:
+            raise RuntimeError(
+                "E2BEnvironment.setup() must be called before use "
+                "(or the environment was already cleaned up)."
+            )
+        return self._sbx
+
     def _abs(self, path: str) -> str:
         return path if path.startswith("/") else f"{self._working_dir}/{path}"
 
     def read_file(self, path: str) -> str:
-        content: Any = self._sbx.files.read(self._abs(path))
+        content: Any = self._require_sandbox().files.read(self._abs(path))
         return content if isinstance(content, str) else content.decode("utf-8")
 
     def write_file(self, path: str, content: str) -> None:
-        self._sbx.files.write(self._abs(path), content)
+        self._require_sandbox().files.write(self._abs(path), content)
 
     def list_files(self, pattern: str = "**/*") -> list[str]:
-        # E2B has no native glob; enumerate then filter with fnmatch.
+        """List files under *working_dir* matching a glob pattern.
+
+        E2B has no native glob, so this enumerates with ``find`` and filters
+        client-side through :func:`~chimera.env.base.glob_match` — the same
+        pathlib semantics :class:`~chimera.env.local.LocalEnvironment` uses.
+
+        Args:
+            pattern: Glob pattern relative to the working directory.
+
+        Returns:
+            Sorted workspace-relative paths that match *pattern*.
+        """
         res = self.run_command("find . -type f")
         files = [
             line[2:] if line.startswith("./") else line
             for line in res.stdout.splitlines()
             if line.strip()
         ]
-        if pattern in ("**/*", "*", ""):
-            return files
-        norm = pattern.replace("**/", "")
-        return [f for f in files if fnmatch.fnmatch(f, pattern) or fnmatch.fnmatch(f, norm)]
+        if pattern in ("**/*", ""):
+            return sorted(files)
+        return sorted(f for f in files if glob_match(f, pattern))
 
     # ------------------------------------------------------------------
     # Execution
@@ -136,7 +183,7 @@ class E2BEnvironment(Environment):
         self, cmd: str, timeout: int = 120, shell_name: str = "main"
     ) -> CommandResult:
         full = f"cd {self._working_dir} && {cmd}"
-        result: Any = self._sbx.commands.run(full, timeout=timeout)
+        result: Any = self._require_sandbox().commands.run(full, timeout=timeout)
         return CommandResult(
             stdout=getattr(result, "stdout", "") or "",
             stderr=getattr(result, "stderr", "") or "",

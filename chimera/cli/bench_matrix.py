@@ -25,7 +25,67 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from chimera.env.base import Environment
+
+# Managed-sandbox --env values -> (factory provider key, required env var).
+# Kept as data so adding a backend is one row here plus one in
+# chimera.env.factory, and so the credential gate stays testable in isolation.
+_SANDBOX_ENVS: dict[str, tuple[str, str]] = {
+    "e2b": ("e2b", "E2B_API_KEY"),
+    "daytona": ("daytona", "DAYTONA_API_KEY"),
+}
+
+
+def missing_sandbox_credentials(env_kind: str) -> str | None:
+    """Return the env var a managed-sandbox backend needs but does not have.
+
+    Args:
+        env_kind: One of the keys of :data:`_SANDBOX_ENVS`.
+
+    Returns:
+        The name of the missing environment variable, or ``None`` when
+        credentials are present.
+
+    Raises:
+        KeyError: If *env_kind* is not a managed-sandbox backend.
+    """
+    import os
+
+    _, env_var = _SANDBOX_ENVS[env_kind]
+    return None if os.environ.get(env_var) else env_var
+
+
+def _sandbox_env_factory(
+    env_kind: str, image: str | None
+) -> Callable[[], Environment]:
+    """Build a zero-arg factory that provisions one fresh sandbox per task.
+
+    The harness calls ``env.setup()`` itself for every task, so this must only
+    *construct* the environment — provisioning here would leak a sandbox.
+
+    Args:
+        env_kind: One of the keys of :data:`_SANDBOX_ENVS`.
+        image: Image/template override, or ``None`` for the service default.
+
+    Returns:
+        A callable returning a fresh, un-``setup`` :class:`Environment`.
+    """
+    from chimera.env.factory import create_environment
+
+    provider, _ = _SANDBOX_ENVS[env_kind]
+    # E2B calls it a template, Daytona calls it an image.
+    key = "template" if provider == "e2b" else "image"
+    opts: dict[str, Any] = {key: image} if image else {}
+
+    def _make() -> Environment:
+        return create_environment(provider, **opts)
+
+    return _make
 
 
 def add_bench_matrix_parser(
@@ -77,11 +137,14 @@ def add_bench_matrix_parser(
     p.add_argument(
         "--env",
         dest="env_kind",
-        choices=("local", "none", "modal", "swe-modal"),
+        choices=("local", "none", "modal", "swe-modal", "e2b", "daytona"),
         default="local",
         help="Per-task environment: 'local' fresh temp-dir (default), 'none', "
-        "'modal' — every task in a fresh Modal cloud sandbox — or 'swe-modal' — "
-        "run each SWE-bench instance in ITS per-instance evaluation image on Modal",
+        "'modal' — every task in a fresh Modal cloud sandbox — 'swe-modal' — "
+        "run each SWE-bench instance in ITS per-instance evaluation image on "
+        "Modal — or 'e2b' / 'daytona' for a fresh managed sandbox per task on "
+        "those services. Every cloud backend fails loudly without credentials "
+        "rather than silently running locally.",
     )
     p.add_argument(
         "--modal-gpu",
@@ -96,6 +159,13 @@ def add_bench_matrix_parser(
         "unset value defaults to python:3.11-slim; for 'swe-modal' an unset value "
         "means each task uses its own per-instance SWE image — set this to force a "
         "fixed image (e.g. a small image for a plumbing smoke test).",
+    )
+    p.add_argument(
+        "--sandbox-image",
+        default=None,
+        help="Image/template for --env e2b|daytona: an E2B template name "
+        "(unset defaults to 'base') or a Daytona Docker image (unset uses the "
+        "account's default snapshot). Ignored by the other --env values.",
     )
 
 
@@ -244,6 +314,26 @@ def run_bench_matrix(args: argparse.Namespace) -> int:
                 f"Per-task environment: SWE-bench on Modal ({_imgnote}, {_where})",
                 file=sys.stderr,
             )
+    elif args.env_kind in _SANDBOX_ENVS:
+        # Managed sandbox services (E2B, Daytona). Same posture as Modal: a
+        # missing key must stop the run, because a matrix cell produced
+        # locally is indistinguishable from one produced in the cloud.
+        missing = missing_sandbox_credentials(args.env_kind)
+        if missing is not None:
+            print(
+                f"chimera bench-matrix --env {args.env_kind}: no credentials "
+                f"found. Set {missing} (see "
+                "docs/guides/remote-and-cloud-environments.md).",
+                file=sys.stderr,
+            )
+            return 2
+
+        env_factory = _sandbox_env_factory(args.env_kind, args.sandbox_image)
+        _imgnote = args.sandbox_image or "service default image"
+        print(
+            f"Per-task environment: {args.env_kind} sandbox ({_imgnote})",
+            file=sys.stderr,
+        )
 
     print(
         f"Matrix: {len(runners)} agent(s) x {len(benchmarks)} benchmark(s) "
