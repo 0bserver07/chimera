@@ -139,6 +139,7 @@ class Cell:
     cost_usd: float
     status: str
     status_counts: dict[str, int] | None
+    category: str
     source: str
 
 
@@ -249,6 +250,7 @@ def _load_file(path: Path) -> tuple[str, list[Cell], dict]:
                 cost_usd=float(raw.get("cost_usd", 0.0)),
                 status=str(raw.get("status", "")),
                 status_counts={str(k): int(v) for k, v in counts.items()} if counts else None,
+                category=str(raw.get("category", "")),
                 source=name,
             )
         )
@@ -493,6 +495,16 @@ def _render_depth(cells: list[Cell]) -> list[str]:
                     continue
                 total_cost += cell.cost_usd
                 rank, _marker, _basis = _quality(cell)
+                if cell.total <= 0:
+                    # A cell that ran no task has no score. Rendering "0/0
+                    # (0.0%)" would read as a measured zero — the exact
+                    # false-precision this page exists to prevent.
+                    row.append("error")
+                    counts = cell.status_counts
+                    split = _split(counts) if counts else f"status {cell.status}"
+                    why = f", {cell.category}" if cell.category else ""
+                    dirty.append(f"`{agent} × {bench}` — no result ({split}{why})")
+                    continue
                 text = f"{cell.passed}/{cell.total} ({_pct(cell)})"
                 if rank >= 3:
                     text = "≥ " + text
@@ -507,6 +519,34 @@ def _render_depth(cells: list[Cell]) -> list[str]:
         out.append("")
         if dirty:
             out.append("Cells not fully clean: " + "; ".join(sorted(dirty)) + ".")
+            out.append("")
+        # Requested-but-absent work is reported, never silently dropped: a row
+        # or column that vanishes because its cells failed to land would make
+        # the grid look complete when it is not.
+        requested_agents = [a.strip() for a in _OBSERVATORY1_AGENTS.split(",") if a.strip()]
+        missing_agents = [a for a in requested_agents if a not in agents]
+        missing_cells = [
+            f"`{a} × {b}`"
+            for a in agents
+            for b in benches
+            if (a, b) not in latest
+        ]
+        if missing_agents or missing_cells:
+            notes = []
+            if missing_agents:
+                notes.append(
+                    "requested but absent entirely: "
+                    + ", ".join(f"`{a}`" for a in missing_agents)
+                )
+            if missing_cells:
+                notes.append("missing cells: " + ", ".join(sorted(missing_cells)))
+            out.append(
+                "**Incomplete run.** "
+                + "; ".join(notes)
+                + ". Those cells produced no receipt (failure or timeout) and are"
+                " excluded from the table rather than scored — the grid above is"
+                " what landed, not what was requested."
+            )
             out.append("")
         if multi:
             src_list = " · ".join(f"`[{refs[s]}]` = `data/{s}`" for s in sources)

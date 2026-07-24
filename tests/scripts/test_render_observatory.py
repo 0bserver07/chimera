@@ -325,3 +325,54 @@ def test_output_deterministic_and_site_copy_byte_identical(tmp_path: Path) -> No
     assert obs.main(["--data-dir", str(tmp_path), "--out", str(out), "--site-out", str(site)]) == 0
     assert out.read_bytes() == site.read_bytes()
     assert out.read_text(encoding="utf-8").endswith("\n")
+
+
+def test_zero_total_cell_renders_error_not_a_zero_score(tmp_path: Path) -> None:
+    """A cell that ran no task has no score.
+
+    Rendering ``0/0 (0.0%)`` would read as a *measured* zero — the false
+    precision this page exists to prevent (an errored run is not a 0% result).
+    """
+    data = tmp_path / "data"
+    _seed(data)
+    _write(
+        data,
+        "modal-grid-observatory1-20990101-000000.json",
+        [
+            _cell(agent="react", bench="mbpp-sanitized", total=50, passed=50,
+                  counts={"completed": 50}),
+            # Real shape of an errored cell (observatory1's reflexion x
+            # math500: a dataset-fetch 429): zeros with empty status_counts.
+            _cell(agent="reflexion", bench="math500", total=0, passed=0,
+                  status="error", counts={}, cost=0.0),
+        ],
+        run_id="observatory1",
+    )
+    page = obs.render(obs.load_inputs(data))
+    depth = page.split("## 2.")[1].split("## 3.")[0]
+    assert "0/0" not in depth
+    assert "(0.0%)" not in depth
+    assert "| error |" in depth or "error" in depth
+    assert "reflexion × math500" in depth and "no result" in depth
+
+
+def test_requested_but_absent_agent_is_reported_not_dropped(tmp_path: Path) -> None:
+    """A row whose cells never landed must be named, not silently omitted.
+
+    Otherwise a partial grid renders as if it were the whole requested run.
+    """
+    data = tmp_path / "data"
+    _seed(data)
+    _write(
+        data,
+        "modal-grid-observatory1-20990101-000000.json",
+        [_cell(agent="react", bench="mbpp-sanitized", total=50, passed=50,
+               counts={"completed": 50})],
+        run_id="observatory1",
+    )
+    page = obs.render(obs.load_inputs(data))
+    depth = page.split("## 2.")[1].split("## 3.")[0]
+    assert "Incomplete run" in depth
+    # every requested agent that produced nothing is named
+    for absent in ("coding-agent", "plan-execute", "reflexion", "tree-of-thought"):
+        assert absent in depth
