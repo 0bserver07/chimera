@@ -33,9 +33,24 @@ id, lane, or task; Enter resumes, Esc backs out).
 - **Scrolling follows you**: the view pins to the tail while you're at it;
   scroll up (wheel/keys/scrollbar/drag-select) and it freezes where you're
   reading; return to the bottom — or submit input — and it re-pins.
+- **Tool calls** render per class, not through one generic printer — a glyph
+  for the class, the tool's own name, and a distilled one-line summary:
+
+  | Row | Class |
+  |---|---|
+  | `$ bash pytest -q` | shell (bash, test, git, verify) — output framed as a card |
+  | `→ read src/app.py:12-40` | read |
+  | `← edit src/app.py` | write / edit |
+  | `✱ search "TODO" in chimera/` | search / list |
+  | `↳ delegate explore · map the repo` | sub-agents — output framed as a card |
+  | `⚙ your_tool(a=1, b=2)` | anything unregistered, exactly as before |
+
+  Shell, delegate, and web output is framed with a `│` gutter so a wall of
+  command output reads as a payload rather than as prose.
 - **Tool output** is elided for display (head + tail with a dim
   `… +N lines …` marker naming the expand key). The session record always
-  keeps the full output; press the expand toggle (default **Ctrl+X**) to
+  keeps the full output *and the generic `⚙ name(args)` form*, so persisted
+  transcripts are unchanged; press the expand toggle (default **Ctrl+X**) to
   flip elision globally for subsequently rendered results.
 - **Reasoning** is collapsed to a one-line trace
   (`∴ thought for 5s (~1.2k chars)`); **Ctrl+E** reveals it.

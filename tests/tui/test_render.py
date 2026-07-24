@@ -185,12 +185,21 @@ def _long_output(lines=200):
     return "\n".join(f"line {i:04d} " + "x" * 20 for i in range(lines))
 
 
+def _ungutter(text: str) -> str:
+    """Strip the R-REN-5 block-card gutter that shell-class output now carries."""
+    return "\n".join(
+        line[2:] if line.startswith("\u2502 ") else line for line in text.split("\n")
+    )
+
+
 def test_display_sink_elides_tool_output_head_and_tail():
     sink: list = []
     t = LaneTranscript(sink.append)
     t.handle(_tool_result("bash", _long_output(100)))
     [r] = sink
-    text = plain(r)
+    # bash is a block-card tool (R-REN-5): every line carries the gutter.
+    assert all(line.startswith("\u2502 ") for line in plain(r).split("\n"))
+    text = _ungutter(plain(r))
     assert text.startswith("line 0000")
     assert text.endswith("line 0099 " + "x" * 20)
     assert "… +85 lines …" in text  # shell class: 10 head + 5 tail
@@ -220,7 +229,8 @@ def test_short_tool_output_untouched_in_display():
     sink: list = []
     t = LaneTranscript(sink.append)
     t.handle(_tool_result("bash", "ok\ndone"))
-    assert plain(sink[0]) == "ok\ndone"
+    assert plain(sink[0]) == "\u2502 ok\n\u2502 done"       # card gutter, no elision
+    assert _ungutter(plain(sink[0])) == "ok\ndone"
 
 
 def test_format_event_default_keeps_full_output():
@@ -238,7 +248,7 @@ def test_elide_is_a_mutable_display_toggle():
     assert t.elide is True  # collapsed by default, same as before
     t.elide = False
     t.handle(_tool_result("bash", _long_output(100)))
-    assert plain(sink[0]) == _long_output(100)  # expanded: full output
+    assert _ungutter(plain(sink[0])) == _long_output(100)  # expanded: full output
     t.elide = True
     t.handle(_tool_result("bash", _long_output(100)))
     assert "… +85 lines …" in plain(sink[1])    # collapsed again

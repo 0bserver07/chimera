@@ -51,6 +51,7 @@ from chimera.tui.markdown_stream import (
     split_complete_blocks,
 )
 from chimera.tui.theme import Palette
+from chimera.tui.tool_render import call_row, is_block_tool, short_value
 
 __all__ = [
     "LaneTranscript",
@@ -81,9 +82,18 @@ def _pal(palette: Palette | None) -> Palette:
 
 
 def short(value: Any, limit: int = 40) -> str:
-    """Collapse a value to a single truncated line for an argument preview."""
-    s = str(value).replace("\n", " ")
-    return s if len(s) <= limit else s[: limit - 1] + "…"
+    """Collapse a value to a single truncated line for an argument preview.
+
+    Kept as this module's public name; the implementation now lives in
+    :func:`chimera.tui.tool_render.short_value` so the per-tool summarizers
+    share it without importing this rich-dependent module.
+    """
+    return short_value(value, limit)
+
+
+#: The block-card gutter: rich tool output (shell, delegate, web) is framed so
+#: it reads as a payload rather than as prose (R-REN-5).
+_CARD_GUTTER = "│ "
 
 
 def fmt_elapsed(seconds: float) -> str:
@@ -161,6 +171,44 @@ def _elision_marker(marker: str, expand_hint: str, full_hint: str) -> str:
     return f"{marker} ({' · '.join(parts)})" if parts else marker
 
 
+def _card(
+    head: str, marker: str, tail: str, *, style: str, pal: Palette,
+) -> Any:
+    """Frame rich tool output as a block card (R-REN-5).
+
+    Every line gets the :data:`_CARD_GUTTER` prefix in the ``tool.card`` slot,
+    so a wall of command output reads as a payload attached to its call rather
+    than as more prose. The elision marker keeps its own dim style and is
+    gutter-prefixed too, so the card stays visually contiguous.
+
+    Args:
+        head: The (possibly elided) head of the output.
+        marker: The elision marker, or ``""`` when nothing was elided.
+        tail: The elided tail, or ``""``.
+        style: The success/failure style for the output text.
+        pal: The active palette.
+
+    Returns:
+        A rich ``Text`` of the whole card.
+    """
+    gutter = pal.style("tool.card")
+    card = Text()
+    sections = [(head, style)]
+    if marker:
+        sections.append((marker, pal.style("chrome.elision")))
+    if tail:
+        sections.append((tail, style))
+    first = True
+    for section, section_style in sections:
+        for line in section.split("\n"):
+            if not first:
+                card.append("\n")
+            card.append(_CARD_GUTTER, style=gutter)
+            card.append(line, style=section_style)
+            first = False
+    return card
+
+
 def plain(renderable: Any) -> str:
     """Best-effort plain-text of a renderable (for the persisted transcript)."""
     if hasattr(renderable, "plain"):
@@ -191,6 +239,7 @@ def assistant_renderable(text: str, *, markdown: bool = False) -> Any:
 def format_event(
     ev: Any, chunks: list[str], *, markdown: bool = False, elide: bool = False,
     expand_hint: str = "", full_hint: str = "", palette: Palette | None = None,
+    tool_grammar: bool = False,
 ) -> list[Any]:
     """Render one loop event to zero or more renderables, in order.
 
@@ -213,6 +262,13 @@ def format_event(
     ``palette`` supplies the semantic slot colors (R-THEME-1); ``None`` uses
     the built-in default theme, whose slot values are exactly the styles this
     function hardcoded before themes existed.
+
+    ``tool_grammar`` turns on per-tool dispatch (R-REN-5): a class glyph, the
+    tool's own name as the verb, a distilled argument summary, and a block
+    card for tools whose output is a payload. It defaults **off** so the
+    persisted record (``Lane.record``) keeps the historical
+    ``⚙ name(k=v)`` form byte-for-byte; display sinks
+    (:class:`LaneTranscript`) turn it on.
     """
     t = ev.type
     pal = _pal(palette)
@@ -230,24 +286,35 @@ def format_event(
     elif t == LoopEventType.tool_use:
         tc = ev.data
         args = getattr(tc, "arguments", {}) or {}
-        preview = ", ".join(f"{k}={short(v)}" for k, v in list(args.items())[:3])
-        out.append(Text.assemble(
-            ("⚙ ", pal.style("tool.icon")),
-            (str(getattr(tc, "name", "?")), pal.style("tool.name")),
-            (f"({preview})", pal.style("tool.args")),
-        ))
+        name = str(getattr(tc, "name", "?"))
+        if tool_grammar:
+            icon, verb, summary = call_row(name, args)
+            out.append(Text.assemble(
+                (f"{icon} ", pal.style("tool.icon")),
+                (verb, pal.style("tool.name")),
+                (f" {summary}" if summary else "", pal.style("tool.args")),
+            ))
+        else:
+            preview = ", ".join(f"{k}={short(v)}" for k, v in list(args.items())[:3])
+            out.append(Text.assemble(
+                ("⚙ ", pal.style("tool.icon")),
+                (name, pal.style("tool.name")),
+                (f"({preview})", pal.style("tool.args")),
+            ))
     elif t == LoopEventType.tool_result:
         call, result = ev.data if isinstance(ev.data, tuple) else (None, ev.data)
         text = (getattr(result, "output", "") or "").rstrip()
         if text:
             ok = getattr(result, "success", True)
             style = pal.style("tool.ok") if ok else pal.style("tool.error")
+            tool_name = str(getattr(call, "name", "") or "")
             head, marker, tail = text, "", ""
             if elide:
-                caps = caps_for_tool(str(getattr(call, "name", "") or ""))
-                head, marker, tail = elide_middle(text, caps)
+                head, marker, tail = elide_middle(text, caps_for_tool(tool_name))
                 marker = _elision_marker(marker, expand_hint, full_hint)
-            if marker:
+            if tool_grammar and is_block_tool(tool_name):
+                out.append(_card(head, marker, tail, style=style, pal=pal))
+            elif marker:
                 styled = Text()
                 styled.append(head, style=style)
                 styled.append("\n")
@@ -307,6 +374,8 @@ class LaneTranscript:
             alongside it (R-FOLD-7).
         palette: Semantic slot colors (R-THEME-1); ``None`` uses the built-in
             default theme, which reproduces the pre-theme styles exactly.
+        tool_grammar: Per-tool call rendering (R-REN-5), on by default for
+            display sinks. The persisted record keeps the generic form.
     """
 
     def __init__(
@@ -318,6 +387,7 @@ class LaneTranscript:
         expand_hint: str = "",
         full_hint: str = "",
         palette: Palette | None = None,
+        tool_grammar: bool = True,
     ) -> None:
         self._sink = sink
         self._clock: Callable[[], float] = clock if clock is not None else time.monotonic
@@ -349,6 +419,9 @@ class LaneTranscript:
         #: Semantic slot colors (R-THEME-1). Mutable so a live ``/theme``
         #: preview repaints subsequent output without rebuilding the pane.
         self.palette = palette
+        #: Per-tool call rendering (R-REN-5): glyph + verb + distilled
+        #: argument summary, block cards for payload-shaped output.
+        self.tool_grammar = tool_grammar
 
     @property
     def live_tail(self) -> str:
@@ -410,6 +483,7 @@ class LaneTranscript:
             ev, self._chunks,
             markdown=self.markdown, elide=self.elide, expand_hint=self.expand_hint,
             full_hint=self.full_hint, palette=self.palette,
+            tool_grammar=self.tool_grammar,
         ):
             self._sink(renderable)
 

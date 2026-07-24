@@ -81,6 +81,24 @@ commit receipts.
   `setup()`**, matching `AsyncSSHEnvironment`; `DaytonaEnvironment` does the
   same. `tests/env/test_e2b.py` adds 18 tests for the backend that previously
   had two.
+- **Per-tool call rendering — a glyph, a verb, and a distilled summary per
+  tool class** (R-REN-5): `chimera/tui/tool_render.py` (stdlib-only) replaces
+  the single generic `⚙ name(k=v, k=v)` printer with a dispatch table — shell
+  `$`, read `→`, write/edit `←`, search/list `✱`, delegate `↳`, web `⇢`,
+  think/todo `∴` — each with an argument summarizer that distills what
+  matters: the command for a shell call, `path:12-40` for a read,
+  `"pattern" in path` for a search, `agent · task` for a delegation. Tools
+  whose output is a *payload* (shell, delegate, web) render it as a **block
+  card** with a `│` gutter; cheap tools stay plain inline rows. Two honesty
+  rules: **identity is never lost** (the verb is the tool's own name, so
+  `test` and `git` stay distinct under one `$`), and **unknown tools render
+  exactly as before** (`⚙` plus the historical three-argument preview), so
+  adding a tool needs no change here. MCP tools shed their plumbing —
+  `mcp__github__search` renders as `✱ search [github] "…"`. **Additive**: the
+  grammar is on for display sinks (`LaneTranscript`) and off in
+  `format_event`'s default, so `Lane.record` — the persisted transcript —
+  keeps the historical form byte-for-byte (pinned by a test).
+
 - **TUI themes — semantic slots, dark/light, user theme files, live preview**
   (spec `docs/specs/tui-ux-refinements.md` R-THEME-1..4): `chimera/tui/theme.py`
   is a stdlib-only theme engine — ~58 named semantic slots across seven
