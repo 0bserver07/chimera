@@ -144,6 +144,10 @@ Chimera lane on the same task, each in its own worktree. See
 
 ## See also
 
+- `docs/guides/inline-mode.md` — opt-in single-agent **inline mode**: render the
+  transcript into the terminal's native scrollback (mouse selection, copy,
+  wheel-scroll, after-exit persistence) with the composer/status band pinned
+  below. POSIX-only, off by default.
 - `docs/guides/external-lanes.md` — race real third-party agent CLIs as lanes.
 - `docs/building-a-tui.md` — drive the same event stream from your own frontend.
 - `docs/guides/use-modal-endpoints.md` — put a Modal-served model in a lane.

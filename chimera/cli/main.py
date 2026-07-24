@@ -220,6 +220,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="Launch the full-screen Textual TUI instead of the line REPL (needs the 'tui' extra).",
     )
     code_parser.add_argument(
+        "--inline",
+        action="store_true",
+        default=False,
+        help=(
+            "Single-agent --tui only: render into the terminal's NATIVE "
+            "scrollback (composer/status pinned below), so mouse selection, "
+            "copy, and wheel-scroll keep working and the transcript persists "
+            "after exit. POSIX TTYs only; falls back to full-screen elsewhere. "
+            "Off by default; also '[tui] inline' in the config."
+        ),
+    )
+    code_parser.add_argument(
         "--isolation",
         choices=["auto", "worktree", "copy", "inplace"],
         default=None,

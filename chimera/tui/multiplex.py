@@ -66,6 +66,7 @@ from chimera.tui.live_region import LiveRegion
 from chimera.tui.logview import TranscriptLog
 from chimera.tui.render import LaneTranscript, heartbeat_line
 from chimera.tui.routing import Action, RoutingMode, route
+from chimera.tui.scrollback import inline_capability
 from chimera.tui.statusline import (
     StatusContext,
     StatusLine,
@@ -1405,6 +1406,55 @@ def run_multiplexer(
     )
 
 
+def _resolve_inline(project_dir: str | None, inline_arg: bool) -> bool:
+    """Resolve whether inline (native-scrollback) mode was requested.
+
+    An explicit argument (the ``--inline`` CLI flag) wins; otherwise the
+    ``[tui] inline`` config knob supplies the default (§11; ``false``). Config
+    discovery is best-effort — a broken config never blocks a launch.
+    """
+    if inline_arg:
+        return True
+    try:
+        from chimera.config.user_config import load_tui_config
+
+        tui = load_tui_config(project_dir)
+    except Exception:  # noqa: BLE001 — config discovery must not block a launch
+        return False
+    return bool(tui.get("inline", False))
+
+
+def _run_inline_single(
+    cohort: Cohort,
+    workspaces: Any,
+    *,
+    lane: Lane,
+    initial_task: str | None,
+    persist_root: str | None,
+    export: str | None,
+) -> str | None:
+    """Drive one lane through the inline frontend, then finalize the cohort.
+
+    The native-scrollback counterpart to :func:`_run_cohort_loop`: no
+    full-screen app and no in-TUI cohort resume (a full-screen affordance), but
+    the *same* persistence — :func:`_finalize_cohort` runs in ``finally`` so a
+    crash still captures the artifact and tears down the workspaces.
+    """
+    from chimera.tui.inline_frontend import run_inline
+
+    cohort_dir = None
+    try:
+        run_inline(lane, initial_task=initial_task)
+    finally:
+        cohort_dir = _finalize_cohort(
+            cohort, workspaces, persist_root=persist_root, export=export,
+        )
+    print(f"cohort saved: {cohort_dir}")
+    if export:
+        print(f"exported: {export}")
+    return str(cohort_dir) if cohort_dir else None
+
+
 def run_single_agent(
     model: str = "glm-5.2",
     project_dir: str | None = None,
@@ -1414,6 +1464,7 @@ def run_single_agent(
     export: str | None = None,
     persist_root: str | None = None,
     lane_budget: Any = None,
+    inline: bool = False,
     **agent_kwargs: Any,
 ) -> str | None:
     """Run the daily-driver single-agent TUI: the multiplexer with N=1.
@@ -1439,6 +1490,16 @@ def run_single_agent(
         lane_budget: Budget for the lane (#170) — a
             :class:`~chimera.core.budget.BudgetSpec` or a compact string
             (``"$0.10/20steps"``); ``None`` falls back to ``[tui.budget]``.
+        inline: Opt into the native-scrollback inline frontend (R-VIEW-5): the
+            transcript flows into the terminal's own scrollback with the
+            composer/status band pinned at the bottom (native selection, copy,
+            wheel-scroll, after-exit persistence). Default ``False`` (unchanged
+            full-screen). ``None``/``False`` falls back to the ``[tui] inline``
+            config knob. Honored only where
+            :func:`~chimera.tui.scrollback.inline_capability` clears it (POSIX,
+            interactive TTY, no scrollback-hostile multiplexer); otherwise the
+            full-screen frontend runs and a one-line note explains why —
+            scrollback is never silently lost.
         **agent_kwargs: Extra :class:`AgentDriver` kwargs (e.g. ``max_turns``).
 
     Returns:
@@ -1480,11 +1541,70 @@ def run_single_agent(
         workspaces.cleanup_all()
         raise
 
+    # Inline (native-scrollback) mode is opt-in and gated (R-VIEW-5): the flag
+    # or config knob asks, and inline_capability enforces POSIX / interactive
+    # TTY / no scrollback-hostile multiplexer. On refusal, fall back to the
+    # full-screen frontend with a note — never a silent loss of scrollback.
+    decision = inline_capability(_resolve_inline(source, inline))
+    if decision.use_inline:
+        return _run_inline_single(
+            cohort, workspaces, lane=cohort.lanes[0],
+            initial_task=task, persist_root=persist_root, export=export,
+        )
+    if decision.refused:
+        sys.stderr.write(
+            f"inline mode unavailable ({decision.reason}); using the full-screen TUI.\n"
+        )
+
     return _run_cohort_loop(
         cohort, workspaces,
         initial_task=task, persist_root=persist_root, export=export,
         **agent_kwargs,
     )
+
+
+def _finalize_cohort(
+    cohort: Cohort,
+    workspaces: Any,
+    *,
+    persist_root: str | None,
+    export: str | None,
+) -> Any:
+    """Persist the cohort artifact, optionally export, prune, tear down workspaces.
+
+    The shared end-of-session ritual for both frontends (full-screen and
+    inline): capture the artifact *before* the ephemeral workspaces go away
+    (diffs read from the live worktrees), best-effort export + retention prune
+    (#173), then clean up. Extracted so the inline path (:func:`run_single_agent`
+    with ``inline=True``) persists byte-identically to the full-screen loop.
+
+    Returns:
+        The persisted cohort directory.
+    """
+    # Capture the artifact BEFORE tearing down the workspaces (diffs read
+    # from the live worktrees).
+    cohort_dir = cohort.persist(root=persist_root)
+    if export:
+        try:
+            cohort.export(export, cohort_dir=cohort_dir)
+        except Exception as exc:  # noqa: BLE001
+            sys.stderr.write(f"export failed: {exc}\n")
+    # Auto-prune old cohorts per the retention policy (#173), never the one we
+    # just saved. OFF by default; best-effort, never fatal.
+    try:
+        retention = load_cohort_retention()
+        if retention.active:
+            removed = prune_cohorts(
+                root=persist_root,
+                retention=retention,
+                exclude=(cohort.cohort_id,),
+            )
+            if removed:
+                print(f"pruned {len(removed)} old cohort(s)")
+    except Exception:  # noqa: BLE001 - pruning must never break a session
+        pass
+    workspaces.cleanup_all()
+    return cohort_dir
 
 
 def _run_cohort_loop(
@@ -1516,29 +1636,9 @@ def _run_cohort_loop(
             )
             app.run()
         finally:
-            # Capture the artifact BEFORE tearing down the workspaces (diffs
-            # read from the live worktrees).
-            cohort_dir = cohort.persist(root=persist_root)
-            if export:
-                try:
-                    cohort.export(export, cohort_dir=cohort_dir)
-                except Exception as exc:  # noqa: BLE001
-                    sys.stderr.write(f"export failed: {exc}\n")
-            # Auto-prune old cohorts per the retention policy (#173), never the
-            # one we just saved. OFF by default; best-effort, never fatal.
-            try:
-                retention = load_cohort_retention()
-                if retention.active:
-                    removed = prune_cohorts(
-                        root=persist_root,
-                        retention=retention,
-                        exclude=(cohort.cohort_id,),
-                    )
-                    if removed:
-                        print(f"pruned {len(removed)} old cohort(s)")
-            except Exception:  # noqa: BLE001 - pruning must never break a session
-                pass
-            workspaces.cleanup_all()
+            cohort_dir = _finalize_cohort(
+                cohort, workspaces, persist_root=persist_root, export=export,
+            )
         print(f"cohort saved: {cohort_dir}")
         if export:
             print(f"exported: {export}")

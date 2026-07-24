@@ -9,6 +9,28 @@ commit receipts.
 
 ### Added
 
+- **Inline mode — the single-agent transcript in the terminal's native
+  scrollback** (R-VIEW-5, opt-in): `chimera code --tui --inline` (or
+  `[tui] inline = true`) renders the daily driver's committed transcript into
+  the terminal's own scrollback — mouse selection, copy, wheel-scroll, and
+  after-exit persistence all work — with a pinned bottom band (separator +
+  composer + status) that repaints in place. No alternate screen, no mouse
+  capture. Productizes the proven spike (`docs/specs/tui-scrollback-hybrid.md`)
+  into two stdlib-honoring modules: `chimera/tui/scrollback.py` (pure
+  DECSTBM/reverse-index/synchronized-output escape builders + a `HybridScreen`
+  runtime with crash/SIGWINCH/clean-exit restoration, all stdlib) and
+  `chimera/tui/inline_frontend.py` (the async frontend driving an `AgentDriver`
+  through it, reusing the shared `LaneTranscript` renderer so committed prose
+  and persistence match the full-screen frontend). **Default OFF** and gated:
+  `inline_capability()` enforces POSIX + an interactive TTY on both streams and
+  **refuses inside a terminal multiplexer that drops partial-scroll-region
+  evictions from its scrollback** (detected by its `$ZELLIJ` session var),
+  falling back to full-screen with a one-line note — scrollback is never
+  silently lost. The multiplexer (`--models`) stays full-screen. Additive: no
+  `--inline` is byte-identical to before. Guide: `docs/guides/inline-mode.md`
+  (with a manual GUI-terminal verification checklist that must pass before the
+  default is ever flipped).
+
 - **Per-lane and cohort budgets in the multiplexer** (#170): a lane — and the
   cohort as a whole — can carry a budget on **cost** ($), **steps** (LLM
   turns), or **wall-clock** (active seconds), and stop cleanly with an honest

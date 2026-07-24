@@ -740,6 +740,7 @@ def run_code(args: Any) -> int:
                 task=getattr(args, "print_mode", None),
                 export=getattr(args, "export", None),
                 lane_budget=getattr(args, "lane_budget", None),
+                inline=getattr(args, "inline", False),
                 **agent_kwargs,
             )
             return 0
