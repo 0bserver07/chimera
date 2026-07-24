@@ -9,6 +9,33 @@ commit receipts.
 
 ### Added
 
+- **Hand-pricing reconciler — a dev-only drift audit for the billed-price
+  table** (Tier-2 T6): `scripts/audit_model_pricing.py` reconciles the
+  hand-maintained `chimera.providers.cost.PRICING` table against the public
+  models.dev catalog and reports where a billed rate has silently gone stale.
+  It complements the generator's existing `--check`, which guards only the
+  *generated* fallback catalog (`model_catalog.py`) — the small hand table
+  Chimera actually bills had no such guard. **Report-only by design**: hand
+  corrections always win over upstream, so it never rewrites a price; it exits
+  non-zero on drift (CI-able) but is intentionally **not** wired into CI. The
+  default run is offline (reconciles against the committed `model_catalog.py`
+  snapshot, no network) and high-signal — it compares only against
+  **first-party** manufacturer figures, since a hand rate disagreeing with a
+  reseller's markup is margin, not drift; reseller-only ids are surfaced
+  separately (`--include-resellers` opts in). `--live` fetches models.dev via
+  the generator's stdlib `urllib` path; `--json` emits a machine-readable
+  report. The **override convention** is a new `PRICING_OVERRIDES` frozenset in
+  `cost.py` marking prefixes whose divergence from upstream is deliberate
+  (GLM / DeepSeek-SKU placeholders, cross-endpoint billing nuances, local /
+  open-weight `$0` families) — the audit skips them, and membership does **not**
+  affect runtime resolution (the hand table still always wins). It caught a real
+  in-repo drift on the first run: the DeepSeek hand rates (`deepseek-chat`
+  $0.27/$1.10, `deepseek-reasoner` $0.55/$2.19) disagree with the first-party
+  models.dev figure ($0.14/$0.28). Dev-only: **zero new runtime dependency**,
+  and nothing under `chimera/` imports the script. Guide:
+  `site/src/content/docs/guides/model-catalog.md` (new *Auditing the hand table*
+  section).
+
 - **Inline mode — the single-agent transcript in the terminal's native
   scrollback** (R-VIEW-5, opt-in): `chimera code --tui --inline` (or
   `[tui] inline = true`) renders the daily driver's committed transcript into

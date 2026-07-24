@@ -106,6 +106,59 @@ Wire this into CI to catch a stale catalog before it ships.
 
 ---
 
+## Auditing the hand table
+
+`--check` guards the *generated* catalog. But the small hand table (`PRICING`) —
+the rates Chimera actually bills — has no such guard, and it is the one that
+silently goes stale: a vendor cuts a price, the models.dev figure follows, and
+the hand entry keeps quoting last year's rate. `scripts/audit_model_pricing.py`
+reconciles the hand table against models.dev:
+
+```bash
+python scripts/audit_model_pricing.py               # audit vs the committed snapshot (offline)
+python scripts/audit_model_pricing.py --live         # audit vs a fresh models.dev fetch
+python scripts/audit_model_pricing.py --json          # machine-readable report
+python scripts/audit_model_pricing.py --include-resellers  # also compare reseller-sourced ids
+```
+
+For each hand prefix it finds the models.dev record under the same id and
+compares the input/output rate. It **reports only** — it never rewrites a price,
+because hand corrections always win over upstream (that is the whole point of the
+two-source design). It exits non-zero when any drift is found, so it is CI-able;
+it is intentionally **not** wired into CI — run it by hand when refreshing prices.
+
+The default run is high-signal: it compares only against **first-party**
+(manufacturer / lab) figures, since a hand rate disagreeing with a reseller's
+markup is margin, not drift. Reseller-only ids are surfaced separately for
+eyeballing; `--include-resellers` compares those too. The offline default reads
+the committed snapshot and touches no network.
+
+### The override convention
+
+Some hand rates diverge from upstream **on purpose** — a placeholder pending a
+vendor's rate sheet, a cross-endpoint billing nuance, or a local / open-weight
+family billed at `$0`. Those prefixes are listed in
+`chimera.providers.cost.PRICING_OVERRIDES`, and the audit skips them so an
+intentional divergence is never reported as drift:
+
+```python
+from chimera.providers.cost import PRICING_OVERRIDES
+
+# A frozenset of PRICING prefixes whose divergence from models.dev is deliberate:
+#   "glm-5.2", "glm-5", …          — placeholders pending a public rate sheet
+#   "deepseek-v4-pro", …            — per-SKU rates not yet published
+#   "qwen3-coder", "gpt-oss-20b", … — local / open-weight, billed $0
+```
+
+Membership does **not** change runtime resolution — `get_model_pricing` always
+prefers the hand table regardless; the set is a marker for the auditor only.
+When the audit flags a new entry, resolve it one of two ways: correct the rate in
+`PRICING`, or — if the divergence is deliberate — add the prefix to
+`PRICING_OVERRIDES` with an inline reason. Never silence the audit by editing the
+script.
+
+---
+
 ## Overriding a price at runtime
 
 To register or override pricing for a prefix without regenerating anything,

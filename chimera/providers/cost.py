@@ -106,6 +106,36 @@ PRICING: dict[str, tuple[float, float]] = {
     "gemma3-27b-instruct": (0.0, 0.0),
 }
 
+# Prefixes in :data:`PRICING` whose hand rate DELIBERATELY diverges from the
+# public models.dev figure and must never be "corrected" toward upstream. Each
+# is a conscious override, for one of three reasons documented inline above:
+#
+#   * a **placeholder** pending a vendor's public rate sheet (the GLM family,
+#     the DeepSeek V3.1/coder/V4 SKUs, the Kimi preview line);
+#   * a **cross-endpoint billing nuance** upstream can't express (a model whose
+#     true billing depends on which endpoint or local bridge served it);
+#   * a **local / open-weight** family billed at ``$0`` because the serving
+#     daemon surfaces no price field.
+#
+# This is the marker convention consumed by the dev-only reconciler
+# ``scripts/audit_model_pricing.py``: it skips these prefixes so an intentional
+# divergence is never reported as drift, while still flagging a hand rate that
+# has silently gone stale. Membership does **not** affect runtime resolution —
+# :func:`get_model_pricing` always prefers the hand table regardless; hand
+# corrections always win. Removing a prefix here re-arms the audit for it.
+PRICING_OVERRIDES: frozenset[str] = frozenset({
+    # GLM — placeholders + z.ai-vs-Ollama-bridge billing nuance.
+    "glm-5.2", "glm-5.1", "glm-5", "glm-4.6", "glm-4-plus", "glm-4-flash",
+    # DeepSeek V3.1 / coder / V4 — explicit placeholders pending per-SKU rates.
+    "deepseek-v3.1-terminus", "deepseek-coder-v3",
+    "deepseek-v4-pro:cloud", "deepseek-v4-pro", "deepseek-v4",
+    # Kimi (Moonshot) — $0.6/$2.5 placeholder pending per-SKU rates.
+    "kimi-k2-0905-preview", "kimi-k2.5",
+    # Local / open-weight — billed $0 (no price field on the serving daemon).
+    "qwen3-coder-30b", "qwen3-coder", "qwen3-32b",
+    "gpt-oss-120b", "gpt-oss-20b", "mistral-codestral-2511", "gemma3-27b-instruct",
+})
+
 _pricing_lock = threading.Lock()
 
 # --- Generated-catalog fallback -------------------------------------------
