@@ -491,3 +491,142 @@ def test_run_cohort_loop_switches_cohorts(tmp_path, monkeypatch):
     assert (root / first.cohort_id / "manifest.json").exists()
     assert (root / second.cohort_id / "manifest.json").exists()
     assert out == str(root / second.cohort_id)
+
+
+# ---------------------------------------------------------------------------
+# budgets (#170)
+# ---------------------------------------------------------------------------
+
+def test_parse_lane_specs_budget_field():
+    from chimera.tui.multiplex import parse_lane_specs
+
+    specs = parse_lane_specs(["glm-5.2:coding_agent:plan:$0.10/20steps"])
+    assert specs[0]["budget"] == "$0.10/20steps"
+    assert specs[0]["loop"] == "plan"
+    assert specs[0]["label"] == "glm-5.2·plan"  # budget is not a label axis
+
+
+def test_parse_lane_specs_budget_with_empty_positional_fields():
+    from chimera.tui.multiplex import parse_lane_specs
+
+    specs = parse_lane_specs(["glm-5.2:::$0.05"])
+    assert specs[0]["budget"] == "$0.05"
+    assert specs[0]["preset"] == "coding_agent"  # empty preset -> default
+    assert specs[0]["loop"] == ""
+
+
+def test_parse_lane_specs_rejects_bad_budget_and_extra_fields():
+    from chimera.tui.multiplex import parse_lane_specs
+
+    with pytest.raises(ValueError):
+        parse_lane_specs(["glm-5.2:::notabudget"])
+    with pytest.raises(ValueError):
+        parse_lane_specs(["a:b:c:d:e"])
+
+
+def test_coerce_and_resolve_budgets():
+    from chimera.core.budget import BudgetSpec
+    from chimera.tui.multiplex import _coerce_budget, _resolve_budgets
+
+    assert _coerce_budget(None) is None
+    assert _coerce_budget("$0.10") == BudgetSpec(max_cost_usd=0.10)
+    assert _coerce_budget(BudgetSpec()) is None  # unset spec collapses to None
+    # Explicit args win and short-circuit config discovery.
+    lane, cohort = _resolve_budgets(None, "$0.10", "$1.00")
+    assert lane == BudgetSpec(max_cost_usd=0.10)
+    assert cohort == BudgetSpec(max_cost_usd=1.0)
+
+
+@pytest.mark.asyncio
+async def test_check_cohort_budget_cancels_busy_lanes():
+    import time
+
+    from chimera.core.budget import BudgetSpec
+    from chimera.tui.multiplex import MultiplexApp
+
+    d1, d2 = FakeDriver("m1"), FakeDriver("m2")
+    co = _cohort([d1, d2])
+    co.budget = BudgetSpec(max_cost_usd=0.001)
+    app = MultiplexApp(co)
+    async with app.run_test():
+        app._race_start = time.monotonic()
+        co.lanes[0].telemetry.cost = 0.005          # already over the aggregate cap
+        co.lanes[0].telemetry.liveness = Liveness.RUNNING
+        co.lanes[1].telemetry.liveness = Liveness.RUNNING
+        app._check_cohort_budget()
+        assert d1.cancelled and d2.cancelled        # cooperative cancel, both busy
+        assert app._cohort_cancelled == {
+            "A": "cohort_budget:cost", "B": "cohort_budget:cost",
+        }
+
+
+@pytest.mark.asyncio
+async def test_check_cohort_budget_noop_without_budget_or_race():
+    import time
+
+    from chimera.tui.multiplex import MultiplexApp
+
+    d = FakeDriver("m1")
+    co = _cohort([d])  # no cohort budget
+    app = MultiplexApp(co)
+    async with app.run_test():
+        app._race_start = time.monotonic()
+        co.lanes[0].telemetry.cost = 999.0
+        co.lanes[0].telemetry.liveness = Liveness.RUNNING
+        app._check_cohort_budget()
+        assert not d.cancelled
+
+
+@pytest.mark.asyncio
+async def test_cohort_cancelled_lane_reports_cohort_reason():
+    # When a cohort-cancelled lane's turn ends, its honest cohort reason wins
+    # over the driver's generic terminal reason.
+    from chimera.tui.multiplex import MultiplexApp
+
+    d = FakeDriver("m1")  # returns reason="completed"
+    co = _cohort([d], routing=RoutingMode.TARGETED)
+    app = MultiplexApp(co)
+    async with app.run_test() as pilot:
+        app._cohort_cancelled[co.lanes[0].id] = "cohort_budget:cost"
+        await _submit(app, pilot, "go")
+        assert co.lanes[0].telemetry.terminal_reason == "cohort_budget:cost"
+
+
+@pytest.mark.asyncio
+async def test_budget_slash_command_multi_sets_cohort():
+    from chimera.tui.multiplex import MultiplexApp
+
+    co = _cohort([FakeDriver("m1"), FakeDriver("m2")])
+    app = MultiplexApp(co)
+    async with app.run_test() as pilot:
+        await _submit(app, pilot, "/budget $0.001")
+        assert co.budget is not None and co.budget.max_cost_usd == 0.001
+        await _submit(app, pilot, "/budget off")
+        assert co.budget is None
+
+
+@pytest.mark.asyncio
+async def test_budget_slash_command_single_sets_lane():
+    from chimera.tui.multiplex import MultiplexApp
+
+    d = FakeDriver("m1")
+    co = _cohort([d], routing=RoutingMode.TARGETED)  # 1 lane -> single-lane surface
+    app = MultiplexApp(co)
+    async with app.run_test() as pilot:
+        await _submit(app, pilot, "/budget $0.05")
+        assert co.lanes[0].config.budget is not None
+        assert co.lanes[0].config.budget.max_cost_usd == 0.05
+
+
+@pytest.mark.asyncio
+async def test_budget_slash_command_inspect_lists_caps():
+    from chimera.core.budget import BudgetSpec
+    from chimera.tui.multiplex import MultiplexApp
+
+    co = _cohort([FakeDriver("m1")])
+    co.lanes[0].config.budget = BudgetSpec(max_cost_usd=0.10)
+    app = MultiplexApp(co)
+    async with app.run_test():
+        lines = app._budget_status_lines()
+        assert any("cost $0.0000/$0.10" in ln for ln in lines)
+        assert any(ln.startswith("cohort:") for ln in lines)

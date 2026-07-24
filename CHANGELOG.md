@@ -9,6 +9,26 @@ commit receipts.
 
 ### Added
 
+- **Per-lane and cohort budgets in the multiplexer** (#170): a lane — and the
+  cohort as a whole — can carry a budget on **cost** ($), **steps** (LLM
+  turns), or **wall-clock** (active seconds), and stop cleanly with an honest
+  terminal reason (`budget_exhausted:cost` / `:steps` / `:wall_clock`) instead
+  of burning tokens unbounded. Reuses the existing enforcement
+  (`chimera/core/budget.py` `BudgetSpec`/`BudgetEnforcer`) threaded through a
+  new `AgentLoop.run(budget_enforcer=…)` seam and `CodingAgent`/`AgentDriver`;
+  the one addition to `budget.py` is cumulative-*active* wall-clock via
+  `BudgetEnforcer.pause()` (idle between a lane's turns doesn't count) plus a
+  machine-readable `exhausted_dimension`. A **cohort** cap (total $ / steps /
+  race wall-clock) cancels still-running lanes cooperatively —
+  `cohort_budget:<dim>`, never a kill — while finished lanes keep their
+  outcome. Set it via `--lane-budget` / `--budget`, a per-lane `:budget` 4th
+  field in `--models`, `[tui.budget]` / `[tui.budget.cohort]` config, the
+  `/budget` slash command (inspect/set mid-cohort), or `run_multiplexer`
+  kwargs. A threshold-colored status-line `budget` meter (hidden when unset)
+  shows consumption vs cap, and the budget + its outcome ride the cohort
+  manifest for resume/inspection. Additive — no budget set is byte-identical
+  to before. Guide: `docs/guides/tui.md#budgets`.
+
 - **One config chain + cohort retention** (#173): the TUI's two config
   dialects (keybindings from `config.toml`, status line from
   `config.{yaml,yml,json}`) are unified behind one loader

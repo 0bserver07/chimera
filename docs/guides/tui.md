@@ -109,6 +109,21 @@ retain = 20            # keep only the newest 20 cohorts
 max-age-days = 30      # and/or drop cohorts older than 30 days
 ```
 
+**Budgets** — `tui.budget`. Default caps applied to every lane, plus a
+cohort-aggregate cap under `[tui.budget.cohort]`. **OFF by default**; see
+[Budgets](#budgets) below for the full story:
+
+```toml
+[tui.budget]                 # per-lane defaults
+max-cost = 0.10              # dollars
+max-steps = 20               # reason-act cycles (LLM turns)
+max-wall-clock = 300         # seconds of active running time
+
+[tui.budget.cohort]          # aggregate across all lanes
+max-cost = 1.00
+max-wall-clock = 900
+```
+
 ## Permission approvals (opt-in)
 
 By default the TUI runs tools without prompting (unchanged behavior). Turn
@@ -127,6 +142,55 @@ requests queue one modal at a time. Caveats: presets built with
 `permissions=False` (minimal / explore / swebench) have no checker, so the
 opt-in is a no-op there; strategy-loop lanes (`:plan-execute` etc.) bypass
 permission checks entirely (pre-existing).
+
+## Budgets
+
+Bound a race: a **lane** — and the **cohort** as a whole — can carry a budget
+that stops it cleanly with an honest terminal reason instead of letting a
+runaway lane burn tokens unbounded. Three dimensions, all optional:
+
+- **cost** — dollars spent (priced from provider usage).
+- **steps** — reason-act cycles (LLM turns; the `N st` in a pane header).
+- **wall-clock** — seconds of *active* running time (idle time between turns
+  does not count; a cohort's wall-clock is the race's real elapsed time).
+
+A lane that trips its budget ends the turn with reason
+`budget_exhausted:cost` / `:steps` / `:wall_clock` — shown in the pane header,
+the status-line budget meter, the scoreboard, and the persisted manifest. The
+unit that tips the budget is allowed to finish; the next one never starts.
+When the **cohort** cap trips, every still-running lane is cancelled
+cooperatively (the same SIGTERM-style cancel as `Ctrl+C`, never a kill) and
+reports `cohort_budget:<dim>`. Lanes that already finished under budget keep
+their own outcome. Budgets are **additive** — with none set, behavior is
+byte-identical to before.
+
+**Compact grammar.** A budget is a `/`-joined list of clauses, each a number
+with a unit: `$0.10` or `0.10usd` (cost), `20steps`/`20st` (steps),
+`300s`/`300sec` (wall-clock seconds), `40tc` (tool calls). A bare number is
+cost USD. Example: `$0.10/20steps/300s`.
+
+**Setting a budget** (highest precedence first):
+
+```bash
+# CLI: one flag for every lane, plus a cohort-aggregate cap
+chimera code --tui --models glm-5.2,glm-5.1 \
+    --lane-budget '$0.10/20steps' --budget '$1.00/900s'
+
+# Per-lane override in the model spec — a 4th ':' field (empty preset/loop OK)
+chimera code --tui --models 'glm-5.2:coding_agent:plan:$0.20,glm-5.1:::$0.05'
+```
+
+Config defaults live under `[tui.budget]` / `[tui.budget.cohort]` (see
+[Configuration](#configuration)). Embedders pass `lane_budget=` /
+`cohort_budget=` (a `BudgetSpec` or a compact string) to `run_multiplexer` /
+`run_single_agent`. A resumed cohort restores the budgets recorded in its
+manifest.
+
+**`/budget`** inspects live consumption for every lane and the cohort. With an
+argument it sets the budget — the focused lane in single-lane mode, the cohort
+in multi-lane mode; `/budget off` clears it. The status line carries a
+`budget` meter (`$0.04/$0.10 · 3/20 steps …`) that colors yellow then red as
+it approaches a cap, and hides entirely when no budget is set.
 
 ## Comparing lanes
 

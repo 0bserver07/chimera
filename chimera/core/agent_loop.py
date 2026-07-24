@@ -37,6 +37,7 @@ from chimera.sessions.transcript import TranscriptStorage
 from chimera.types import Message, ToolCall, ToolResult
 
 if TYPE_CHECKING:
+    from chimera.core.budget import BudgetEnforcer
     from chimera.core.compaction_integration import CompactionIntegration
     from chimera.core.interception import Interceptors
     from chimera.hooks.executor import HookExecutor
@@ -82,6 +83,7 @@ class AgentLoop:
         env: Any = None,
         loop_detector: Any = None,
         interceptors: "Interceptors | None" = None,
+        budget_enforcer: "BudgetEnforcer | None" = None,
     ) -> AsyncGenerator[LoopEvent, None]:
         """Run the agent loop, yielding :class:`LoopEvent` instances.
 
@@ -128,6 +130,16 @@ class AgentLoop:
                 has no event bus, so decisions surface through those
                 results rather than :class:`InterceptorEvent`.  ``None``
                 (default) leaves behavior unchanged.
+            budget_enforcer: Optional :class:`~chimera.core.budget.BudgetEnforcer`
+                (reused across turns by a caller that owns it, e.g. a TUI lane).
+                Each completed provider call and tool call is recorded against
+                it, and the wall clock is re-checked at every turn boundary; the
+                first crossed cap ends the run with reason
+                ``"budget_exhausted:<dimension>"`` (``cost`` / ``llm_calls`` /
+                ``wall_clock`` / ``tool_calls``), the unit that tipped it allowed
+                to finish. The caller is responsible for ``start()`` / ``pause()``
+                around the turn so wall-clock accrues only active time. ``None``
+                (default) leaves behavior byte-identical.
 
         Yields:
             :class:`LoopEvent` instances for each significant loop step.
@@ -135,6 +147,24 @@ class AgentLoop:
         start_time = time.time()
         total_usage: dict[str, int] = {}
         total_cost = 0.0
+
+        def _budget_result() -> LoopEvent:
+            """Build the terminal event for a tripped budget (reads live locals)."""
+            dimension = (
+                budget_enforcer.exhausted_dimension if budget_enforcer else None
+            ) or "budget"
+            return LoopEvent(
+                type=LoopEventType.result,
+                data=LoopResult(
+                    reason=f"budget_exhausted:{dimension}",
+                    messages=working_messages,
+                    usage=total_usage,
+                    cost_usd=total_cost,
+                    duration_ms=(time.time() - start_time) * 1000,
+                    turn_count=state.turn_count,
+                ),
+                turn=state.turn_count,
+            )
 
         # ----- Fire SESSION_START hook -----
         if hook_executor is not None and hook_matchers is not None:
@@ -186,6 +216,17 @@ class AgentLoop:
         _has_edit_tools = any(t.name in _EDIT_TOOL_NAMES for t in tools) if tools else False
 
         while True:
+            # ----- Check the budget before calling the model -----
+            # Re-checks the wall clock (which advances without records) and
+            # catches a cumulative cap already spent by a previous turn, so a
+            # lane that exhausted its budget stops the moment its next turn
+            # begins. Takes precedence over the abort check below.
+            if budget_enforcer is not None:
+                budget_enforcer.check()
+                if budget_enforcer.exhausted:
+                    yield _budget_result()
+                    return
+
             # ----- Check abort before calling the model -----
             if abort_signal is not None and abort_signal.aborted:
                 yield LoopEvent(
@@ -345,10 +386,15 @@ class AgentLoop:
 
             # Accumulate usage / cost
             _merge_usage(total_usage, response.usage)
-            total_cost += calculate_cost(
+            _step_cost = calculate_cost(
                 getattr(provider, "model_name", "unknown"),
                 response.usage,
             )
+            total_cost += _step_cost
+            # Record this completed provider call against the budget (its cost is
+            # the loop's own priced figure, so no provider wrapper is needed).
+            if budget_enforcer is not None:
+                budget_enforcer.record_llm_call(cost=_step_cost)
 
             # Record assistant message in transcript (CG-4)
             if transcript is not None:
@@ -363,6 +409,13 @@ class AgentLoop:
                 data=response,
                 turn=state.turn_count,
             )
+
+            # ----- Budget: a cost/LLM cap tripped by THIS call ends the turn -----
+            # The tipping call finished and its response is shown; the tools it
+            # requested are not started (the (N+1)th unit never runs).
+            if budget_enforcer is not None and budget_enforcer.exhausted:
+                yield _budget_result()
+                return
 
             # Surface each tool call before execution so a TUI can render the
             # call (name + args) ahead of its result.
@@ -703,6 +756,12 @@ class AgentLoop:
                                 original_size=len(result_text),
                             )
 
+                    # Record the completed tool call against the budget (the
+                    # normalized cross-loop unit; blocked/denied calls that never
+                    # executed are deliberately not counted).
+                    if budget_enforcer is not None:
+                        budget_enforcer.record_tool_call(stc.name)
+
                     tool_call_results.append((stc, sresult))
 
                 # --- POST_TOOL_USE / POST_TOOL_USE_FAILURE hook ---
@@ -818,6 +877,14 @@ class AgentLoop:
 
             # Advance LoopState via next_turn (CG-1)
             state = state.next_turn(assistant_msg, tool_result_messages)
+
+            # ----- Budget: a tool-call or wall-clock cap tripped this turn -----
+            # Checked after the turn's tool results are shown and before the
+            # abort check, so a budget stop reports as budget_exhausted rather
+            # than a generic abort.
+            if budget_enforcer is not None and budget_enforcer.exhausted:
+                yield _budget_result()
+                return
 
             # ----- Check abort after tool execution -----
             if abort_signal is not None and abort_signal.aborted:

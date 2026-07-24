@@ -238,6 +238,29 @@ def build_parser() -> argparse.ArgumentParser:
         help="Multiplexer only: max lanes running a turn at once (default: all lanes).",
     )
     code_parser.add_argument(
+        "--lane-budget",
+        dest="lane_budget",
+        default=None,
+        metavar="SPEC",
+        help=(
+            "TUI: per-lane budget that stops a lane cleanly when hit. Compact "
+            "form: $0.10 (cost) / 20steps / 300s (wall-clock), combinable with "
+            "'/' (e.g. $0.10/20steps). Per-lane override in --models via a 4th "
+            "field (model:preset:loop:$0.10). Also [tui.budget] in the config."
+        ),
+    )
+    code_parser.add_argument(
+        "--budget",
+        dest="cohort_budget",
+        default=None,
+        metavar="SPEC",
+        help=(
+            "Multiplexer only: cohort-aggregate budget (total $ / steps / race "
+            "wall-clock) that cancels still-running lanes when hit. Same compact "
+            "form as --lane-budget. Also [tui.budget.cohort] in the config."
+        ),
+    )
+    code_parser.add_argument(
         "--export",
         default=None,
         help="Multiplexer only: also write the cohort comparison artifact to this .zip on exit.",

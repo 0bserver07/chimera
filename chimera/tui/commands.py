@@ -61,6 +61,7 @@ class SlashCommand:
 #: keeping the source sorted keeps diffs reviewable).
 COMMAND_DEFS: tuple[SlashCommand, ...] = (
     SlashCommand("broadcast", "route new input to every lane", context="multi"),
+    SlashCommand("budget", "inspect or set the lane/cohort budget", args_hint="[$0.10/20steps]"),
     SlashCommand("clear", "clear the focused lane's conversation"),
     SlashCommand("cohorts", "pick a saved cohort to resume"),
     SlashCommand("cost", "cumulative cost (per lane when racing)"),

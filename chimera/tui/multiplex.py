@@ -41,6 +41,14 @@ except ImportError as exc:  # pragma: no cover
     ) from exc
 
 from chimera.core.loop_events import LoopEventType
+from chimera.tui.budget import (
+    budget_from_dict,
+    cohort_budget_from_config,
+    cohort_terminal_reason,
+    describe_budget,
+    lane_budget_from_config,
+    parse_budget_spec,
+)
 from chimera.tui.cohort import Cohort, load_cohort_retention, prune_cohorts
 from chimera.tui.commands import completion_catalog, help_lines
 from chimera.tui.keys import (
@@ -88,6 +96,54 @@ def default_isolation(lane_count: int, explicit: str | None) -> str:
     if explicit:
         return explicit
     return "inplace" if lane_count == 1 else "auto"
+
+
+def _coerce_budget(value: Any) -> Any:
+    """Normalize a budget argument to a :class:`BudgetSpec` or ``None``.
+
+    Accepts a compact budget string (parsed via
+    :func:`~chimera.tui.budget.parse_budget_spec`), an already-built
+    :class:`~chimera.core.budget.BudgetSpec`, or ``None``.
+    """
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return parse_budget_spec(value)
+    return value if getattr(value, "is_set", False) else None
+
+
+def _resolve_budgets(
+    project_dir: str | None,
+    lane_budget: Any,
+    cohort_budget: Any,
+) -> tuple[Any, Any]:
+    """Resolve the (lane-default, cohort) budgets from args + config (#170).
+
+    An explicit argument (CLI ``--lane-budget`` / ``--budget`` or a programmatic
+    :class:`BudgetSpec`) wins; otherwise the ``[tui.budget]`` and
+    ``[tui.budget.cohort]`` tables supply defaults. Config discovery is
+    best-effort — a broken config never blocks a launch. Both may be ``None``
+    (the unbudgeted default).
+
+    Returns:
+        ``(lane_default_spec, cohort_spec)``.
+    """
+    lane_spec = _coerce_budget(lane_budget)
+    cohort_spec = _coerce_budget(cohort_budget)
+    if lane_spec is not None and cohort_spec is not None:
+        return lane_spec, cohort_spec
+    try:
+        from chimera.config.user_config import load_tui_config
+
+        tui = load_tui_config(project_dir)
+    except Exception:  # noqa: BLE001 — config discovery must not block a launch
+        tui = {}
+    if lane_spec is None:
+        lane_spec = lane_budget_from_config(tui)
+    if cohort_spec is None:
+        cohort_spec = cohort_budget_from_config(tui)
+    return lane_spec, cohort_spec
+
 
 # A pane narrower than this is unreadable; below it we degrade to tabs (§6.3).
 MIN_PANE_WIDTH = 32
@@ -337,6 +393,10 @@ class MultiplexApp(App):
         self._race_start: float | None = None
         self._race_end: float | None = None
         self._completion_order = 0
+        #: Cohort budget (#170): lane ids cancelled by the aggregate cap, mapped
+        #: to their honest ``cohort_budget:<dim>`` terminal reason. Applied when
+        #: the cancelled turn ends, so the reason wins over the generic abort.
+        self._cohort_cancelled: dict[str, str] = {}
         self._slots: Any = None  # asyncio.Semaphore, created on mount
         self._show_reasoning = False
         self._tools_expanded = False  # R-FOLD-2 global expand toggle state
@@ -496,6 +556,9 @@ class MultiplexApp(App):
         return end - self._race_start
 
     def _refresh_global(self) -> None:
+        # Cohort budget (#170): enforce before rendering so a trip is reflected
+        # the same tick. A no-op when no cohort budget is set or before a race.
+        self._check_cohort_budget()
         # Interval-timer callback: it can race app teardown (the widget tree is
         # already unmounting), so a missing node is a no-op, not an error.
         nodes = self.query("#global-status")
@@ -650,6 +713,10 @@ class MultiplexApp(App):
                 pane.commit()
                 self._completion_order += 1
                 lane.on_turn_end(order=self._completion_order)
+                # Cohort budget (#170): a lane cancelled by the aggregate cap
+                # reports the honest cohort reason, not the generic abort.
+                if lane.id in self._cohort_cancelled:
+                    lane.telemetry.terminal_reason = self._cohort_cancelled[lane.id]
                 pane.refresh_header()
                 self._refresh_global()
                 if self._cohort.all_done:
@@ -662,6 +729,42 @@ class MultiplexApp(App):
         # the status bar already carry cost/steps. /summary still works.
         if not self._single:
             self._show_summary()
+
+    def _check_cohort_budget(self) -> None:
+        """Cancel still-running lanes when the cohort aggregate cap trips (#170).
+
+        Aggregates total $ and total steps across lanes plus the race's real
+        elapsed time, judges them against the cohort
+        :class:`~chimera.core.budget.BudgetSpec` (reusing its
+        :meth:`~chimera.core.budget.BudgetSpec.first_exhausted`), and on a hit
+        cooperatively cancels every busy lane — SIGTERM-style, the existing
+        ``driver.cancel()`` path, never a kill. The honest
+        ``cohort_budget:<dim>`` reason is recorded now and stamped onto each
+        lane's telemetry when its cancelled turn ends (see :meth:`_drive`), so it
+        wins over the generic abort reason. Idempotent: a lane already flagged is
+        skipped, so this is safe to call on every refresh tick.
+        """
+        spec = getattr(self._cohort, "budget", None)
+        if spec is None or self._race_start is None:
+            return
+        from chimera.core.budget import BudgetTally
+
+        tally = BudgetTally(
+            cost_usd=self._cohort.total_cost,
+            llm_calls=self._cohort.total_steps,
+            accumulated_sec=self._elapsed(),
+        )
+        hit = spec.first_exhausted(tally)
+        if hit is None:
+            return
+        reason = cohort_terminal_reason(hit[0])
+        for lane in self._cohort.lanes:
+            if lane.telemetry.busy and lane.id not in self._cohort_cancelled:
+                self._cohort_cancelled[lane.id] = reason
+                lane.driver.cancel()
+                pane = self._pane_by_id.get(lane.id)
+                if pane is not None:
+                    pane.note(f"· cohort budget hit ({reason})", style="red")
 
     # -- actions --------------------------------------------------------
     def action_cancel_all(self) -> None:
@@ -824,6 +927,8 @@ class MultiplexApp(App):
                 say(f"Σ ${self._cohort.total_cost:.4f}  ·  " + "  ".join(
                     f"{ln.label}=${ln.telemetry.cost:.4f}" for ln in self._cohort.lanes
                 ))
+        elif cmd == "/budget":
+            self._handle_budget_command(text)
         elif cmd == "/tools":
             if lane is not None:
                 say(", ".join(t.name for t in lane.driver.tools) or "(none)")
@@ -860,6 +965,83 @@ class MultiplexApp(App):
                 self._open_cohort_picker()
         else:
             say(f"unknown command: {cmd}", style="red")
+
+    # -- budgets (#170) --------------------------------------------------
+    def _budget_status_lines(self) -> list[str]:
+        """The ``/budget`` inspector: per-lane + cohort caps and consumption."""
+        lines: list[str] = []
+        for lane in self._cohort.lanes:
+            spec = lane.config.budget or getattr(lane.driver, "budget", None)
+            tally = getattr(lane.driver, "budget_tally", None)
+            desc = describe_budget(
+                spec,
+                cost_used=getattr(tally, "cost_usd", None),
+                steps_used=getattr(tally, "llm_calls", None),
+                wall_used=getattr(tally, "elapsed_sec", None),
+                tool_used=getattr(tally, "tool_calls", None),
+            )
+            lines.append(f"{lane.label}: {desc}")
+        cohort_spec = getattr(self._cohort, "budget", None)
+        lines.append("cohort: " + describe_budget(
+            cohort_spec,
+            cost_used=self._cohort.total_cost,
+            steps_used=self._cohort.total_steps,
+            wall_used=self._elapsed(),
+        ))
+        target = "this lane" if self._single else "the cohort"
+        lines.append(
+            f"set: /budget <$0.10/20steps/300s> (sets {target}); "
+            "/budget off clears it"
+        )
+        return lines
+
+    def _handle_budget_command(self, text: str) -> None:
+        """``/budget`` — inspect (no args) or set/clear the budget (#170).
+
+        With no argument it lists every lane's budget and the cohort cap with
+        live consumption. With a compact budget string it sets the focused
+        lane's budget in single-lane mode, or the cohort-aggregate budget in
+        multi-lane mode; ``off`` / ``none`` clears it.
+        """
+        lane = self._focused_lane()
+        pane = self._pane(lane.id) if lane is not None else None
+
+        def say(msg: str, style: str = "dim") -> None:
+            if pane is not None:
+                pane.note(msg, style=style)
+
+        arg = text[len("/budget"):].strip()
+        if not arg:
+            for line in self._budget_status_lines():
+                say(line)
+            return
+        clearing = arg.lower() in ("off", "none", "clear")
+        spec = None
+        if not clearing:
+            try:
+                spec = parse_budget_spec(arg)
+            except ValueError as exc:
+                say(f"bad budget: {exc}", style="red")
+                return
+            if spec is None:
+                say("no positive cap in that budget — nothing set", style="red")
+                return
+        if self._single and lane is not None:
+            # Record the cap on the lane config (drives the meter + manifest) and
+            # arm the enforcer when the driver supports it (a real AgentDriver
+            # does; an external lane cannot enforce, so it only records).
+            setter = getattr(lane.driver, "set_budget", None)
+            if setter is not None:
+                setter(spec)
+            lane.config.budget = spec
+            say("lane budget cleared" if spec is None else f"lane budget set: {arg}",
+                style="green")
+        else:
+            self._cohort.budget = spec
+            self._cohort_cancelled.clear()  # a fresh cap re-arms enforcement
+            say("cohort budget cleared" if spec is None else f"cohort budget set: {arg}",
+                style="green")
+        self._refresh_global()
 
     # -- in-TUI cohort resume (§13.2, interactive) -----------------------
     def _say_focused(self, msg: str, style: str = "dim") -> None:
@@ -987,20 +1169,30 @@ class CohortPickerScreen(FuzzySelectScreen):
 def parse_lane_specs(models: list[str] | str, default_preset: str = "coding_agent") -> list[dict[str, str]]:
     """Parse ``--models`` into lane specs.
 
-    Each entry is ``model``, ``model:preset``, or ``model:preset:loop`` — the
-    three per-lane comparison axes (§13.3) — or ``ext:<profile>``, an
+    Each entry is ``model``, ``model:preset``, ``model:preset:loop``, or
+    ``model:preset:loop:budget`` — the three per-lane comparison axes (§13.3)
+    plus an optional per-lane budget override (#170) — or ``ext:<profile>``, an
     **external-agent lane** (issue #169): a real third-party coding-agent CLI
     named by an :func:`~chimera.assembly.external_driver.resolve_external_profile`
     profile, raced beside Chimera lanes. External entries record
     ``preset="external"`` and carry the profile name under ``external``; they
-    take no preset/loop axes (those belong to the external tool itself).
+    take no preset/loop/budget axes (those belong to the external tool itself).
+
+    The 4th ``budget`` field is a compact budget string
+    (:func:`~chimera.tui.budget.parse_budget_spec`), e.g.
+    ``glm-5.2:coding_agent:plan:$0.10/20steps``; it overrides the uniform
+    ``--lane-budget`` / ``[tui.budget]`` default for just that lane. Reaching it
+    needs the preset/loop fields present (empty is fine):
+    ``glm-5.2:::$0.05`` budgets one lane at defaults.
 
     Lane ids are ``A``, ``B``, …; labels are the model with ``·preset`` /
     ``·loop`` appended when they differ from the default, and ``#k`` to
-    disambiguate duplicates.
+    disambiguate duplicates (the budget is a resource cap, not a comparison
+    axis, so it never enters the label).
 
     Raises:
-        ValueError: on an unknown preset, loop posture, or external profile.
+        ValueError: on an unknown preset, loop posture, external profile, too
+            many ``:`` fields, or an unparseable budget clause.
     """
     from chimera.assembly.coding_agent import LOOP_POSTURES
     from chimera.assembly.external_driver import (
@@ -1032,13 +1224,19 @@ def parse_lane_specs(models: list[str] | str, default_preset: str = "coding_agen
                 "preset": EXTERNAL_LANE_PRESET,
                 "loop": "",
                 "external": profile_name,
+                "budget": "",
                 "lane_id": lane_id,
                 "base": f"{EXTERNAL_LANE_PREFIX}:{profile_name}",
             })
             continue
+        if len(parts) > 4:
+            raise ValueError(
+                f"too many ':' fields in {item!r}; use model[:preset[:loop[:budget]]]"
+            )
         model = parts[0]
         preset = parts[1] if len(parts) > 1 and parts[1] else default_preset
         loop = parts[2] if len(parts) > 2 and parts[2] else ""
+        budget = parts[3] if len(parts) > 3 and parts[3] else ""
         if preset not in valid_presets:
             raise ValueError(
                 f"unknown preset {preset!r} in {item!r}; choose from {sorted(valid_presets)}"
@@ -1047,6 +1245,8 @@ def parse_lane_specs(models: list[str] | str, default_preset: str = "coding_agen
             raise ValueError(
                 f"unknown loop {loop!r} in {item!r}; choose from {sorted(valid_loops)}"
             )
+        if budget:
+            parse_budget_spec(budget)  # loud on an unparseable clause
         base = model
         if preset != default_preset:
             base += f"·{preset}"
@@ -1054,7 +1254,7 @@ def parse_lane_specs(models: list[str] | str, default_preset: str = "coding_agen
             base += f"·{loop}"
         parsed.append({
             "model": model, "preset": preset, "loop": loop, "external": "",
-            "lane_id": lane_id, "base": base,
+            "budget": budget, "lane_id": lane_id, "base": base,
         })
 
     totals = Counter(p["base"] for p in parsed)
@@ -1079,6 +1279,8 @@ def run_multiplexer(
     export: str | None = None,
     persist_root: str | None = None,
     approvals: bool | None = None,
+    lane_budget: Any = None,
+    cohort_budget: Any = None,
     **agent_kwargs: Any,
 ) -> str | None:
     """Provision isolated workspaces, build the cohort, run the multiplexer.
@@ -1094,6 +1296,14 @@ def run_multiplexer(
             pause on a modal instead of auto-approving. ``None`` (default)
             defers to the ``CHIMERA_TUI_APPROVALS`` env var; ``False``/unset
             keeps today's behavior (the assembled agent's BYPASS posture).
+        lane_budget: Per-lane budget applied to every lane (#170) — a
+            :class:`~chimera.core.budget.BudgetSpec` or a compact string
+            (``"$0.10/20steps/300s"``). A per-lane ``:budget`` field in the
+            model spec overrides it for that lane; ``None`` falls back to the
+            ``[tui.budget]`` config default.
+        cohort_budget: Cohort-aggregate budget (#170): a cap on total $ / total
+            steps / race wall-clock that cancels still-running lanes when
+            tripped. ``None`` falls back to the ``[tui.budget.cohort]`` config.
     """
     if not sys.stdout.isatty():
         raise SystemExit(
@@ -1114,6 +1324,9 @@ def run_multiplexer(
     source = os.path.abspath(project_dir or os.getcwd())
     workspaces = provision_workspaces(source, [s["lane_id"] for s in specs], strategy=isolation)
 
+    # -- budgets (#170): args win, else the [tui.budget] config defaults ----
+    lane_default_budget, cohort_spec = _resolve_budgets(source, lane_budget, cohort_budget)
+
     # -- permission approvals (#171): explicit opt-in; default unchanged ----
     broker = ApprovalBroker() if approvals_enabled(approvals) else None
 
@@ -1125,6 +1338,9 @@ def run_multiplexer(
         lanes: list[Lane] = []
         for spec, ws in zip(specs, workspaces):
             lane_loop = spec.get("loop") or None
+            # Per-lane budget (#170): the spec's ``:budget`` override, else the
+            # uniform default. External lanes carry none (they cannot enforce it).
+            lane_spec_budget = None
             driver: DriverProtocol
             if spec.get("external"):
                 # External-agent lane (#169): a real third-party CLI runs in
@@ -1140,11 +1356,14 @@ def run_multiplexer(
                     workdir=str(ws.path),
                 )
             else:
+                lane_spec_budget = parse_budget_spec(spec.get("budget")) or lane_default_budget
                 lane_kwargs = dict(agent_kwargs)
                 if broker is not None:
                     lane_kwargs["permission_callback"] = broker.handler_for(
                         spec["lane_id"], spec["label"],
                     )
+                if lane_spec_budget is not None:
+                    lane_kwargs["budget"] = lane_spec_budget
                 driver = AgentDriver(
                     model=spec["model"],
                     project_dir=str(ws.path),
@@ -1158,6 +1377,7 @@ def run_multiplexer(
                 model=spec["model"],
                 preset=spec["preset"],
                 loop=lane_loop,
+                budget=lane_spec_budget,
             )
             lanes.append(Lane(config, driver, ws))
 
@@ -1172,6 +1392,7 @@ def run_multiplexer(
                 RoutingMode.TARGETED if len(lanes) == 1 else RoutingMode.BROADCAST
             ),
             workspaces=workspaces,
+            budget=cohort_spec,
         )
     except BaseException:
         workspaces.cleanup_all()
@@ -1192,6 +1413,7 @@ def run_single_agent(
     task: str | None = None,
     export: str | None = None,
     persist_root: str | None = None,
+    lane_budget: Any = None,
     **agent_kwargs: Any,
 ) -> str | None:
     """Run the daily-driver single-agent TUI: the multiplexer with N=1.
@@ -1214,6 +1436,9 @@ def run_single_agent(
         task: Optional first task, auto-submitted on launch.
         export: Optional zip path for the persisted cohort artifact.
         persist_root: Override the cohort persistence root (used by tests).
+        lane_budget: Budget for the lane (#170) — a
+            :class:`~chimera.core.budget.BudgetSpec` or a compact string
+            (``"$0.10/20steps"``); ``None`` falls back to ``[tui.budget]``.
         **agent_kwargs: Extra :class:`AgentDriver` kwargs (e.g. ``max_turns``).
 
     Returns:
@@ -1229,12 +1454,20 @@ def run_single_agent(
 
     source = os.path.abspath(project_dir or os.getcwd())
     workspaces = provision_workspaces(source, ["A"], strategy="inplace")
+    # Budget (#170): the lane's own cap; for one lane it is also the cohort cap.
+    lane_spec_budget, _ = _resolve_budgets(source, lane_budget, None)
     try:
         ws = workspaces[0]
+        lane_kwargs = dict(agent_kwargs)
+        if lane_spec_budget is not None:
+            lane_kwargs["budget"] = lane_spec_budget
         driver = AgentDriver(
-            model=model, project_dir=str(ws.path), preset=preset, **agent_kwargs,
+            model=model, project_dir=str(ws.path), preset=preset, **lane_kwargs,
         )
-        config = LaneConfig(lane_id="A", label=model, model=model, preset=preset)
+        config = LaneConfig(
+            lane_id="A", label=model, model=model, preset=preset,
+            budget=lane_spec_budget,
+        )
         cohort = Cohort(
             [Lane(config, driver, ws)],
             task=task,
@@ -1369,6 +1602,8 @@ def _load_saved_cohort(
             apply_diff(ws.path, spec["diff"])  # restore produced changes (best-effort)
         preset = spec.get("preset") or "coding_agent"
         lane_loop = spec.get("loop") or None
+        # Restore the lane's saved budget (#170); external lanes carry none.
+        lane_budget_spec = budget_from_dict(spec.get("budget"))
         model = str(spec["model"])
         driver: DriverProtocol
         if model.startswith("ext:"):
@@ -1383,6 +1618,7 @@ def _load_saved_cohort(
                 resolve_external_profile(model.split(":", 1)[1]),
                 workdir=str(ws.path),
             )
+            lane_budget_spec = None
         else:
             lane_kwargs = dict(agent_kwargs)
             # -- permission approvals (#171): re-bind lane handlers on resume ---
@@ -1390,6 +1626,8 @@ def _load_saved_cohort(
                 lane_kwargs["permission_callback"] = approval_broker.handler_for(
                     spec["lane_id"], spec.get("label", spec["lane_id"]),
                 )
+            if lane_budget_spec is not None:
+                lane_kwargs["budget"] = lane_budget_spec
             driver = AgentDriver(
                 model=model, project_dir=str(ws.path), preset=preset,
                 loop=lane_loop, **lane_kwargs,
@@ -1401,6 +1639,7 @@ def _load_saved_cohort(
             model=spec["model"],
             preset=preset,
             loop=lane_loop,
+            budget=lane_budget_spec,
         )
         lane = Lane(config, driver, ws)
         tel = spec.get("telemetry") or {}
@@ -1419,6 +1658,7 @@ def _load_saved_cohort(
     cohort = Cohort(
         lanes, task=task, source=source, isolation=workspaces.strategy,
         routing=routing, cohort_id=cohort_id, workspaces=workspaces,
+        budget=budget_from_dict(manifest.get("budget")),
     )
     return cohort, workspaces
 

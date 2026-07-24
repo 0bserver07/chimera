@@ -727,6 +727,8 @@ def run_code(args: Any) -> int:
                     isolation=default_isolation(len(models), getattr(args, "isolation", None)),
                     lane_cap=getattr(args, "lane_cap", None),
                     export=getattr(args, "export", None),
+                    lane_budget=getattr(args, "lane_budget", None),
+                    cohort_budget=getattr(args, "cohort_budget", None),
                     **agent_kwargs,
                 )
                 return 0
@@ -737,6 +739,7 @@ def run_code(args: Any) -> int:
                 model=model, project_dir=cwd, preset=effective_preset,
                 task=getattr(args, "print_mode", None),
                 export=getattr(args, "export", None),
+                lane_budget=getattr(args, "lane_budget", None),
                 **agent_kwargs,
             )
             return 0

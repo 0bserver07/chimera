@@ -30,8 +30,9 @@ def test_catalog_carries_every_previous_command():
     catalog = completion_catalog()
     for cmd in PREVIOUS_SLASH_COMMANDS:
         assert cmd in catalog, f"{cmd} dropped from the registry catalog"
-    # deliberate additions only: /keys (R-KEY-1) and /statusline (R-STAT-1)
-    assert set(catalog) - set(PREVIOUS_SLASH_COMMANDS) == {"/keys", "/statusline"}
+    # deliberate additions only: /keys (R-KEY-1), /statusline (R-STAT-1),
+    # /budget (#170)
+    assert set(catalog) - set(PREVIOUS_SLASH_COMMANDS) == {"/keys", "/statusline", "/budget"}
 
 
 def test_catalog_is_sorted_slash_prefixed_strings():
@@ -138,7 +139,7 @@ def test_filter_commands_over_registry_catalog():
     assert filter_commands("/q", catalog) == ["/quit"]
     assert filter_commands("/re", catalog) == ["/results", "/resume"]
     assert filter_commands("/broadcast", catalog) == []   # multi-only, single surface
-    assert filter_commands("/b", completion_catalog(single=False)) == ["/broadcast"]
+    assert filter_commands("/b", completion_catalog(single=False)) == ["/broadcast", "/budget"]
 
 
 def test_complete_command_over_registry_catalog():

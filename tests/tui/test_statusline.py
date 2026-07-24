@@ -712,7 +712,7 @@ async def test_statusline_command_lists_catalog():
         await _submit(app, pilot, "/statusline")
         lines = [str(strip.text) for strip in app.query_one(RichLog).lines]
         joined = "\n".join(lines)
-        assert "status line: model → context-used → cost → run-state" in joined
+        assert "status line: model → context-used → cost → budget → run-state" in joined
         assert "context-used" in joined and "hidden" in joined  # availability shown
         assert "select dialog" in joined                        # picker seam declared
 
@@ -761,3 +761,63 @@ async def test_git_watcher_lifecycle_is_bound_to_the_app(tmp_path):
             lambda: "main" in app._global_status_text().plain, msg="branch in status",
         )
     assert not thread.is_alive()                      # clean shutdown on app exit
+
+
+# ---------------------------------------------------------------------------
+# budget meter (#170)
+# ---------------------------------------------------------------------------
+
+def test_budget_item_hidden_when_no_budget():
+    item = get_item("budget")
+    assert item is not None
+    assert item.render(StatusContext()) is None  # hide-when-unset
+
+
+def test_budget_item_shows_used_vs_cap():
+    from chimera.core.budget import BudgetSpec
+
+    ctx = StatusContext(
+        budget=BudgetSpec(max_cost_usd=0.10, max_llm_calls=20),
+        budget_cost_used=0.04, budget_steps_used=3,
+    )
+    text = get_item("budget").render(ctx)
+    assert text is not None
+    assert "$0.0400/$0.10" in text.plain
+    assert "3/20 steps" in text.plain
+    assert text.plain.startswith("budget ")
+
+
+def test_budget_item_threshold_colored():
+    from chimera.core.budget import BudgetSpec
+
+    warn = StatusContext(budget=BudgetSpec(max_cost_usd=1.0), budget_cost_used=0.75)
+    assert str(get_item("budget").render(warn).style) == "yellow"
+    err = StatusContext(budget=BudgetSpec(max_cost_usd=1.0), budget_cost_used=0.95)
+    assert str(get_item("budget").render(err).style) == "bold red"
+    ok = StatusContext(budget=BudgetSpec(max_cost_usd=1.0), budget_cost_used=0.10)
+    assert str(get_item("budget").render(ok).style) == ""
+
+
+def test_budget_item_sigma_prefix_for_cohort():
+    from chimera.core.budget import BudgetSpec
+
+    ctx = StatusContext(
+        budget=BudgetSpec(max_cost_usd=1.0), budget_cost_used=0.1, lanes_total=3,
+    )
+    assert get_item("budget").render(ctx).plain.startswith("Σ budget ")
+
+
+def test_build_lane_context_wires_budget():
+    from chimera.core.budget import BudgetSpec, BudgetTally
+    from chimera.tui.lane import Lane, LaneConfig
+
+    spec = BudgetSpec(max_cost_usd=0.10)
+    tally = BudgetTally(cost_usd=0.03, llm_calls=2)
+    driver = SimpleNamespace(
+        context_window=128_000, tools=[], budget=spec, budget_tally=tally,
+    )
+    lane = Lane(LaneConfig(lane_id="A", label="L", model="glm-5.2", budget=spec), driver, None)
+    ctx = build_lane_context(lane)
+    assert ctx.budget == spec
+    assert ctx.budget_cost_used == 0.03
+    assert ctx.budget_steps_used == 2

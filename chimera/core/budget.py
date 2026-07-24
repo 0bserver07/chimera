@@ -35,7 +35,18 @@ if TYPE_CHECKING:
     from chimera.core.cancellation import CancellationToken
     from chimera.providers.base import Provider
 
-__all__ = ["BudgetSpec", "BudgetTally", "BudgetEnforcer", "BudgetedProvider"]
+__all__ = [
+    "BUDGET_DIMENSIONS",
+    "BudgetSpec",
+    "BudgetTally",
+    "BudgetEnforcer",
+    "BudgetedProvider",
+]
+
+#: The stable machine tokens for the four cap dimensions, in the exact order
+#: :meth:`BudgetSpec.first_exhausted` evaluates them. Report/UI layers key off
+#: these rather than parsing the human ``exhausted_reason`` string.
+BUDGET_DIMENSIONS: tuple[str, ...] = ("tool_calls", "llm_calls", "wall_clock", "cost")
 
 
 @dataclass(frozen=True)
@@ -54,6 +65,49 @@ class BudgetSpec:
     max_wall_clock_sec: float | None = None
     max_cost_usd: float | None = None
 
+    @property
+    def is_set(self) -> bool:
+        """Whether any cap is set (an all-``None`` spec never trips)."""
+        return any(
+            cap is not None
+            for cap in (
+                self.max_tool_calls,
+                self.max_llm_calls,
+                self.max_wall_clock_sec,
+                self.max_cost_usd,
+            )
+        )
+
+    def first_exhausted(self, tally: BudgetTally) -> tuple[str, str] | None:
+        """Return ``(dimension, reason)`` of the first tripped cap, else ``None``.
+
+        The dimension is one of :data:`BUDGET_DIMENSIONS` — a stable token a
+        report/UI layer can switch on — and *reason* is the human-readable
+        ``"<dimension> (used/cap)"`` string. Caps are checked in
+        :data:`BUDGET_DIMENSIONS` order, so the first one crossed wins.
+
+        Args:
+            tally: Counters recorded so far.
+
+        Returns:
+            ``(dimension, reason)`` for the first exhausted cap, or ``None``.
+        """
+        if self.max_tool_calls is not None and tally.tool_calls >= self.max_tool_calls:
+            return "tool_calls", f"tool_calls ({tally.tool_calls}/{self.max_tool_calls})"
+        if self.max_llm_calls is not None and tally.llm_calls >= self.max_llm_calls:
+            return "llm_calls", f"llm_calls ({tally.llm_calls}/{self.max_llm_calls})"
+        if (
+            self.max_wall_clock_sec is not None
+            and tally.elapsed_sec >= self.max_wall_clock_sec
+        ):
+            return (
+                "wall_clock",
+                f"wall_clock ({tally.elapsed_sec:.1f}s/{self.max_wall_clock_sec:.0f}s)",
+            )
+        if self.max_cost_usd is not None and tally.cost_usd >= self.max_cost_usd:
+            return "cost", f"cost (${tally.cost_usd:.4f}/${self.max_cost_usd:.2f})"
+        return None
+
     def is_exhausted(self, tally: BudgetTally) -> tuple[bool, str | None]:
         """Judge a tally against this spec.
 
@@ -64,35 +118,36 @@ class BudgetSpec:
             ``(True, reason)`` naming the first exhausted cap, else
             ``(False, None)``.
         """
-        if self.max_tool_calls is not None and tally.tool_calls >= self.max_tool_calls:
-            return True, f"tool_calls ({tally.tool_calls}/{self.max_tool_calls})"
-        if self.max_llm_calls is not None and tally.llm_calls >= self.max_llm_calls:
-            return True, f"llm_calls ({tally.llm_calls}/{self.max_llm_calls})"
-        if (
-            self.max_wall_clock_sec is not None
-            and tally.elapsed_sec >= self.max_wall_clock_sec
-        ):
-            return True, f"wall_clock ({tally.elapsed_sec:.1f}s/{self.max_wall_clock_sec:.0f}s)"
-        if self.max_cost_usd is not None and tally.cost_usd >= self.max_cost_usd:
-            return True, f"cost (${tally.cost_usd:.4f}/${self.max_cost_usd:.2f})"
-        return False, None
+        hit = self.first_exhausted(tally)
+        return (True, hit[1]) if hit is not None else (False, None)
 
 
 @dataclass
 class BudgetTally:
-    """Mutable counters for one task run."""
+    """Mutable counters for one task run.
+
+    Wall-clock accounting supports an optional pause/resume model
+    (:meth:`BudgetEnforcer.start` / :meth:`BudgetEnforcer.pause`): time banked
+    from completed active intervals accumulates in :attr:`accumulated_sec`, so a
+    multi-turn caller (a TUI lane spanning several turns) can measure *active*
+    running time and let idle gaps between turns not count against a wall-clock
+    cap. A single-shot caller that only ever calls ``start()`` leaves
+    :attr:`accumulated_sec` at ``0.0`` and gets the original elapsed semantics.
+    """
 
     tool_calls: int = 0
     llm_calls: int = 0
     cost_usd: float = 0.0
     started_at: float | None = None
+    #: Active seconds banked from paused intervals (see the class docstring).
+    accumulated_sec: float = 0.0
 
     @property
     def elapsed_sec(self) -> float:
-        """Seconds since :attr:`started_at`; ``0.0`` before start."""
-        if self.started_at is None:
-            return 0.0
-        return time.monotonic() - self.started_at
+        """Banked active seconds plus the current running interval (``0.0``
+        before the first :meth:`BudgetEnforcer.start`)."""
+        running = 0.0 if self.started_at is None else time.monotonic() - self.started_at
+        return self.accumulated_sec + running
 
 
 class BudgetEnforcer:
@@ -120,6 +175,10 @@ class BudgetEnforcer:
         self._cancellation = cancellation
         self._lock = threading.Lock()
         self.exhausted_reason: str | None = None
+        #: The stable :data:`BUDGET_DIMENSIONS` token of the tripped cap (e.g.
+        #: ``"cost"``), set alongside :attr:`exhausted_reason`. ``None`` until a
+        #: cap trips — the machine-readable companion to the human reason.
+        self.exhausted_dimension: str | None = None
 
     @property
     def exhausted(self) -> bool:
@@ -127,10 +186,29 @@ class BudgetEnforcer:
         return self.exhausted_reason is not None
 
     def start(self) -> None:
-        """Start the wall clock (idempotent)."""
+        """Start (or resume) the wall clock.
+
+        Idempotent while running: a second call with an interval already open is
+        a no-op. After a :meth:`pause` it re-opens a fresh active interval, so
+        alternating ``start`` / ``pause`` measures cumulative *active* time.
+        """
         with self._lock:
             if self.tally.started_at is None:
                 self.tally.started_at = time.monotonic()
+
+    def pause(self) -> None:
+        """Bank the current active interval into the tally and stop the clock.
+
+        Pairs with :meth:`start` so a caller that runs in bursts (a TUI lane's
+        successive turns) accrues only active time against a wall-clock cap. A
+        no-op when the clock is not running. Re-evaluates the caps first, since
+        the wall clock may have crossed its limit during the interval.
+        """
+        with self._lock:
+            if self.tally.started_at is not None:
+                self._trip_if_exhausted()
+                self.tally.accumulated_sec += time.monotonic() - self.tally.started_at
+                self.tally.started_at = None
 
     def record_tool_call(self, tool_name: str = "") -> None:
         """Record one completed tool call and trip the budget if exhausted.
@@ -162,9 +240,9 @@ class BudgetEnforcer:
         # Caller holds the lock.
         if self.exhausted_reason is not None:
             return
-        hit, reason = self.spec.is_exhausted(self.tally)
-        if hit:
-            self.exhausted_reason = reason
+        hit = self.spec.first_exhausted(self.tally)
+        if hit is not None:
+            self.exhausted_dimension, self.exhausted_reason = hit
             if self._cancellation is not None:
                 self._cancellation.cancel()
 

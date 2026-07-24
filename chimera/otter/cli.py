@@ -656,6 +656,20 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         default=None,
         help=argparse.SUPPRESS,
     )
+    # Budgets (#170): per-lane and cohort-aggregate caps. Hidden like the other
+    # --multiplex knobs; documented in --help-long and docs/guides/tui.md.
+    behavior.add_argument(
+        "--lane-budget",
+        dest="lane_budget",
+        default=None,
+        help=argparse.SUPPRESS,
+    )
+    behavior.add_argument(
+        "--budget",
+        dest="cohort_budget",
+        default=None,
+        help=argparse.SUPPRESS,
+    )
     # WHY (O1 — wave 9): ``--user`` flips agents create scope. Hidden.
     behavior.add_argument(
         "--user",
@@ -2960,6 +2974,8 @@ def run(args: argparse.Namespace) -> int:
             isolation=default_isolation(len(models), getattr(args, "isolation", None)),
             lane_cap=getattr(args, "lane_cap", None),
             export=getattr(args, "export", None),
+            lane_budget=getattr(args, "lane_budget", None),
+            cohort_budget=getattr(args, "cohort_budget", None),
         )
         return 0
 

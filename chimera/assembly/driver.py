@@ -48,9 +48,9 @@ class DriverProtocol(Protocol):
     third-party CLI as a lane, issue #169) and test fakes satisfy it
     structurally. Beyond these requirements, frontends read a few *optional*
     attributes defensively via ``getattr`` — ``context_window``, ``thinking``,
-    ``auto_compaction``, ``model``, ``total_cost``, ``turn_count`` — so a
-    driver may omit them and the UI degrades honestly (hides the gauge rather
-    than fake it).
+    ``auto_compaction``, ``model``, ``total_cost``, ``turn_count``, ``budget``,
+    ``budget_tally`` — so a driver may omit them and the UI degrades honestly
+    (hides the gauge rather than fake it).
     """
 
     def send(self, text: str) -> AsyncIterator[LoopEvent]:
@@ -194,6 +194,34 @@ class AgentDriver:
         when the preset enabled compaction.
         """
         return getattr(self._agent, "_compaction", None) is not None
+
+    @property
+    def budget(self) -> Any:
+        """The lane's :class:`~chimera.core.budget.BudgetSpec`, or ``None``.
+
+        Surfaced for the status line's budget meter and the cohort manifest;
+        ``None`` when the lane carries no budget.
+        """
+        return getattr(self._agent, "budget", None)
+
+    @property
+    def budget_tally(self) -> Any:
+        """Live budget counters (cost / llm_calls / elapsed), or ``None``.
+
+        The enforcer's mutable tally, so a status display reads live
+        consumption during a turn rather than only the last turn-end snapshot.
+        """
+        return getattr(self._agent, "budget_tally", None)
+
+    def set_budget(self, budget: Any) -> None:
+        """Set or clear the lane's run budget mid-session (delegates to the agent).
+
+        Preserves consumption already recorded; takes effect on the next
+        :meth:`send`. A no-op for drivers whose agent has no budget support.
+        """
+        setter = getattr(self._agent, "set_budget", None)
+        if setter is not None:
+            setter(budget)
 
 
 def render_event(ev: LoopEvent) -> str | None:

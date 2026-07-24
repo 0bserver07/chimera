@@ -75,3 +75,33 @@ def test_reset_race_clears_markers():
     lane.reset_race()
     assert lane.telemetry.finished_order is None
     assert lane.telemetry.terminal_reason is None
+
+
+# -- budget (#170) ---------------------------------------------------------
+
+def test_budget_reason_relabeled_to_steps():
+    # The loop emits the raw enforcer dimension; the lane speaks "steps".
+    lane = _lane()
+    lane.record(LoopEvent(LoopEventType.result,
+                          _result(reason="budget_exhausted:llm_calls"), 0))
+    assert lane.telemetry.terminal_reason == "budget_exhausted:steps"
+
+
+def test_budget_cost_and_wall_reasons_pass_through():
+    for raw in ("budget_exhausted:cost", "budget_exhausted:wall_clock"):
+        lane = _lane()
+        lane.record(LoopEvent(LoopEventType.result, _result(reason=raw), 0))
+        assert lane.telemetry.terminal_reason == raw
+
+
+def test_lane_config_to_dict_omits_budget_when_unset():
+    cfg = LaneConfig(lane_id="A", label="A", model="glm-5.2")
+    assert "budget" not in cfg.to_dict()
+
+
+def test_lane_config_to_dict_records_budget_when_set():
+    from chimera.core.budget import BudgetSpec
+
+    cfg = LaneConfig(lane_id="A", label="A", model="glm-5.2",
+                     budget=BudgetSpec(max_cost_usd=0.10, max_llm_calls=20))
+    assert cfg.to_dict()["budget"] == {"max_cost": 0.10, "max_steps": 20}

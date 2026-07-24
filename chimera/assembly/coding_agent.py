@@ -95,6 +95,7 @@ class CodingAgent:
         enable_nudges: bool = True,
         loop: str | None = None,
         interceptors: Any = None,
+        budget: Any = None,
     ) -> None:
         from chimera.assembly.presets import PRESETS
         from chimera.assembly.system_prompts import CODING_AGENT_PROMPT, PRESET_PROMPTS
@@ -140,6 +141,22 @@ class CodingAgent:
         # the default AgentLoop path; strategy-loop lanes (plan-execute /
         # reflexion / tot via loop_adapter) are not yet covered.
         self._interceptors = interceptors
+
+        # Uniform run budget (T12, additive): a
+        # chimera.core.budget.BudgetSpec whose caps (cost / steps=llm_calls /
+        # wall-clock / tool_calls) end a run cleanly with a
+        # ``budget_exhausted:<dimension>`` reason. ONE enforcer is created here
+        # and reused across run() calls, so cost and step counts accumulate over
+        # the agent's whole life (a lane's successive turns), and wall-clock
+        # measures active time via start()/pause() around each turn. Enforcement
+        # rides the default AgentLoop path; strategy-loop lanes are not covered
+        # yet (same seam as interceptors). None / an all-None spec = unchanged.
+        self._budget = budget if budget is not None and budget.is_set else None
+        self._budget_enforcer: Any = None
+        if self._budget is not None:
+            from chimera.core.budget import BudgetEnforcer
+
+            self._budget_enforcer = BudgetEnforcer(self._budget)
 
         # Feature flags
         FeatureFlags.from_env()
@@ -394,53 +411,64 @@ class CodingAgent:
         turn_modified: list[str] = []
         last_turn = 0
 
-        async for event in loop.run(
-            messages=list(getattr(self, "_history", None) or []) + [Message.user(task)],
-            tools=self.tools,
-            provider=self.provider,
-            system_prompt=system_prompt,
-            max_turns=getattr(self, "_max_turns", self._config.max_turns),
-            abort_signal=self._abort_signal,
-            permission_checker=self._permission_checker,
-            permission_context=self._permission_context,
-            approval_handler=getattr(self, "_permission_callback", None),
-            hook_executor=self._hook_executor,
-            hook_matchers=self._hook_matchers,
-            transcript=self._transcript,
-            content_replacement=self._content_replacement,
-            compaction=self._compaction,
-            stream=self._config.streaming,
-            message_queue=getattr(self, "_message_queue", None),
-            enable_action_nudge=getattr(self, "_enable_nudges", True),
-            enable_auto_continue=getattr(self, "_enable_nudges", True),
-            env=_tool_env,
-            loop_detector=_loop_detector,
-            interceptors=getattr(self, "_interceptors", None),
-        ):
-            # Track modified files from tool_result events
-            if event.type == LoopEventType.tool_result:
-                tc, _result = event.data
-                if tc.name in _FILE_TOOLS:
-                    file_path = tc.arguments.get("path") or tc.arguments.get("file_path")
-                    if file_path and file_path not in turn_modified:
-                        turn_modified.append(file_path)
+        # Budget (T12): resume the lane's wall clock for this turn and bank it
+        # on exit, so idle time between turns never counts against a wall-clock
+        # cap. The enforcer is None (and this is a no-op) when no budget is set.
+        _enforcer = getattr(self, "_budget_enforcer", None)
+        if _enforcer is not None:
+            _enforcer.start()
+        try:
+            async for event in loop.run(
+                messages=list(getattr(self, "_history", None) or []) + [Message.user(task)],
+                tools=self.tools,
+                provider=self.provider,
+                system_prompt=system_prompt,
+                max_turns=getattr(self, "_max_turns", self._config.max_turns),
+                abort_signal=self._abort_signal,
+                permission_checker=self._permission_checker,
+                permission_context=self._permission_context,
+                approval_handler=getattr(self, "_permission_callback", None),
+                hook_executor=self._hook_executor,
+                hook_matchers=self._hook_matchers,
+                transcript=self._transcript,
+                content_replacement=self._content_replacement,
+                compaction=self._compaction,
+                stream=self._config.streaming,
+                message_queue=getattr(self, "_message_queue", None),
+                enable_action_nudge=getattr(self, "_enable_nudges", True),
+                enable_auto_continue=getattr(self, "_enable_nudges", True),
+                env=_tool_env,
+                loop_detector=_loop_detector,
+                interceptors=getattr(self, "_interceptors", None),
+                budget_enforcer=_enforcer,
+            ):
+                # Track modified files from tool_result events
+                if event.type == LoopEventType.tool_result:
+                    tc, _result = event.data
+                    if tc.name in _FILE_TOOLS:
+                        file_path = tc.arguments.get("path") or tc.arguments.get("file_path")
+                        if file_path and file_path not in turn_modified:
+                            turn_modified.append(file_path)
 
-                # When the turn advances, take a snapshot of what changed
-                if event.turn > last_turn and turn_modified:
-                    await self._snapshot_manager.take(
-                        turn=last_turn or 1,
-                        modified_files=list(turn_modified),
-                    )
-                    turn_modified.clear()
-                last_turn = event.turn
+                    # When the turn advances, take a snapshot of what changed
+                    if event.turn > last_turn and turn_modified:
+                        await self._snapshot_manager.take(
+                            turn=last_turn or 1,
+                            modified_files=list(turn_modified),
+                        )
+                        turn_modified.clear()
+                    last_turn = event.turn
 
-            # Persist the full conversation so the next run() has context.
-            if event.type == LoopEventType.result:
-                _res = event.data
-                if getattr(_res, "messages", None):
-                    self._history = list(_res.messages)
+                # Persist the full conversation so the next run() has context.
+                if event.type == LoopEventType.result:
+                    _res = event.data
+                    if getattr(_res, "messages", None):
+                        self._history = list(_res.messages)
 
-            yield event
+                yield event
+        finally:
+            if _enforcer is not None:
+                _enforcer.pause()
 
         # Take a final snapshot for any remaining modifications
         if turn_modified:
@@ -488,3 +516,43 @@ class CodingAgent:
     def history(self) -> list[Any]:
         """The accumulated conversation messages across run() calls."""
         return self._history
+
+    @property
+    def budget(self) -> Any:
+        """The agent's :class:`~chimera.core.budget.BudgetSpec`, or ``None``."""
+        return self._budget
+
+    @property
+    def budget_tally(self) -> Any:
+        """Live budget counters (cost / llm_calls / elapsed), or ``None``.
+
+        The enforcer's mutable :class:`~chimera.core.budget.BudgetTally` — read
+        by a status display for a live consumption meter. ``None`` when no
+        budget is set.
+        """
+        enforcer = getattr(self, "_budget_enforcer", None)
+        return enforcer.tally if enforcer is not None else None
+
+    def set_budget(self, budget: Any) -> None:
+        """Set or clear the run budget mid-session (e.g. the TUI ``/budget``).
+
+        Consumption already recorded is preserved (the new enforcer keeps the
+        prior tally), so a raised cap keeps counting from where it was and a
+        tightened one can trip on the next turn. ``None`` or an all-``None`` spec
+        clears the budget. Takes effect on the next :meth:`run` — an in-flight
+        turn keeps the enforcer it started with.
+
+        Args:
+            budget: A :class:`~chimera.core.budget.BudgetSpec`, or ``None``.
+        """
+        self._budget = budget if budget is not None and budget.is_set else None
+        if self._budget is None:
+            self._budget_enforcer = None
+            return
+        from chimera.core.budget import BudgetEnforcer
+
+        old = self._budget_enforcer
+        enforcer = BudgetEnforcer(self._budget)
+        if old is not None:
+            enforcer.tally = old.tally  # keep consumption spent under the old cap
+        self._budget_enforcer = enforcer

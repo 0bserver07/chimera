@@ -47,6 +47,7 @@ from rich.text import Text
 from chimera import __version__
 
 if TYPE_CHECKING:
+    from chimera.core.budget import BudgetSpec
     from chimera.tui.lane import Lane
 
 __all__ = [
@@ -75,9 +76,9 @@ __all__ = [
 # Ordered defaults (spec §11): the single-lane daily driver shows the model's
 # vitals; the multi-lane racing view keeps its scoreboard. Both are overridden
 # by ``tui.status_line`` — one knob, every lane count.
-DEFAULT_STATUS_LINE = ("model", "context-used", "cost", "run-state")
+DEFAULT_STATUS_LINE = ("model", "context-used", "cost", "budget", "run-state")
 DEFAULT_STATUS_LINE_MULTI = (
-    "task", "progress", "cost", "elapsed", "run-state", "mode", "hint",
+    "task", "progress", "cost", "budget", "elapsed", "run-state", "mode", "hint",
 )
 DEFAULT_TITLE = ("activity", "project")
 
@@ -137,6 +138,14 @@ class StatusContext:
     mode: str | None = None
     hint: str | None = None
     version: str = __version__
+    #: Budget meter (#170): the lane/cohort :class:`~chimera.core.budget.BudgetSpec`
+    #: (``None`` hides the item) and its live consumption per dimension. The used
+    #: fields stay ``None`` until known, so the meter never invents a number.
+    budget: BudgetSpec | None = None
+    budget_cost_used: float | None = None
+    budget_steps_used: int | None = None
+    budget_wall_used: float | None = None
+    budget_tool_used: int | None = None
 
 
 def build_lane_context(lane: Lane, *, git: GitFacts | None = None) -> StatusContext:
@@ -169,6 +178,11 @@ def build_lane_context(lane: Lane, *, git: GitFacts | None = None) -> StatusCont
     driver = lane.driver
     ws = lane.workspace
     window = getattr(driver, "context_window", None)
+    # Budget meter (#170): the spec (from the lane config, so it shows even
+    # before a turn arms the enforcer) plus live consumption from the driver's
+    # enforcer tally when a turn is under way.
+    budget = lane.config.budget or getattr(driver, "budget", None)
+    tally = getattr(driver, "budget_tally", None)
     return StatusContext(
         model=lane.config.model,
         reasoning=_maybe_str(getattr(driver, "thinking", None)),
@@ -183,6 +197,11 @@ def build_lane_context(lane: Lane, *, git: GitFacts | None = None) -> StatusCont
         tokens_out=t.tokens_out,
         cost=t.cost,
         lanes_total=1,
+        budget=budget,
+        budget_cost_used=getattr(tally, "cost_usd", None) if tally is not None else None,
+        budget_steps_used=getattr(tally, "llm_calls", None) if tally is not None else None,
+        budget_wall_used=getattr(tally, "elapsed_sec", None) if tally is not None else None,
+        budget_tool_used=getattr(tally, "tool_calls", None) if tally is not None else None,
     )
 
 
@@ -222,6 +241,9 @@ def build_cohort_context(
     else:
         state = "done"
     first = cohort.first_finisher
+    # Cohort budget meter (#170): aggregate consumption vs the cohort cap —
+    # total $ and total steps across lanes, race elapsed for wall-clock.
+    cohort_budget = getattr(cohort, "budget", None)
     return StatusContext(
         model=models.pop() if len(models) == 1 else None,
         project_dir=(getattr(cohort, "source", "") or None),
@@ -238,6 +260,12 @@ def build_cohort_context(
         elapsed=elapsed,
         mode=mode,
         hint=None if racing else "type a task, Enter to race",
+        budget=cohort_budget,
+        budget_cost_used=cohort.total_cost if cohort_budget is not None else None,
+        budget_steps_used=(
+            getattr(cohort, "total_steps", 0) if cohort_budget is not None else None
+        ),
+        budget_wall_used=elapsed if cohort_budget is not None else None,
     )
 
 
@@ -457,6 +485,66 @@ def _render_cost_short(ctx: StatusContext) -> Text | None:
     return Text(f"${ctx.cost:.2f}")
 
 
+def _budget_segments(ctx: StatusContext) -> tuple[list[str], float]:
+    """Per-dimension ``used/cap`` strings and the peak ratio (closest to a cap).
+
+    Returns ``([], 0.0)`` when no budget is set, so the caller hides the item.
+    """
+    spec = ctx.budget
+    if spec is None or not getattr(spec, "is_set", False):
+        return [], 0.0
+    parts: list[str] = []
+    ratios: list[float] = []
+    cost_cap = getattr(spec, "max_cost_usd", None)
+    if cost_cap:
+        used = ctx.budget_cost_used or 0.0
+        parts.append(f"${used:.4f}/${cost_cap:.2f}")
+        ratios.append(used / cost_cap)
+    step_cap = getattr(spec, "max_llm_calls", None)
+    if step_cap:
+        used_steps = ctx.budget_steps_used or 0
+        parts.append(f"{used_steps}/{step_cap} steps")
+        ratios.append(used_steps / step_cap)
+    wall_cap = getattr(spec, "max_wall_clock_sec", None)
+    if wall_cap:
+        used_wall = ctx.budget_wall_used or 0.0
+        parts.append(f"{used_wall:.0f}/{wall_cap:.0f}s")
+        ratios.append(used_wall / wall_cap)
+    tool_cap = getattr(spec, "max_tool_calls", None)
+    if tool_cap:
+        used_tools = ctx.budget_tool_used or 0
+        parts.append(f"{used_tools}/{tool_cap} tc")
+        ratios.append(used_tools / tool_cap)
+    return parts, (max(ratios) if ratios else 0.0)
+
+
+def _budget_style(peak: float) -> str:
+    """Threshold-color a budget meter by its peak consumption ratio."""
+    if peak >= _CONTEXT_ERROR:
+        return "bold red"
+    if peak >= _CONTEXT_WARN:
+        return "yellow"
+    return ""
+
+
+def _render_budget(ctx: StatusContext) -> Text | None:
+    """The budget meter (#170) — consumption vs cap, threshold-colored, hidden
+    when no budget is set."""
+    parts, peak = _budget_segments(ctx)
+    if not parts:
+        return None
+    prefix = "Σ budget " if ctx.lanes_total > 1 else "budget "
+    return Text(prefix + " · ".join(parts), style=_budget_style(peak))
+
+
+def _render_budget_short(ctx: StatusContext) -> Text | None:
+    parts, peak = _budget_segments(ctx)
+    if not parts:
+        return None
+    # Compact form: just the peak consumption percentage (which cap is tightest).
+    return Text(f"{peak * 100:.0f}% bdgt", style=_budget_style(peak))
+
+
 def _render_progress(ctx: StatusContext) -> Text | None:
     if ctx.lanes_total <= 1:
         return None
@@ -524,6 +612,8 @@ def _register_builtins() -> None:
                    description="cumulative token totals ↑in ↓out"),
         StatusItem("cost", _render_cost, 70, _render_cost_short,
                    description="accumulated cost ($; Σ across lanes)"),
+        StatusItem("budget", _render_budget, 78, _render_budget_short,
+                   description="budget meter: consumption vs cap (hidden when unset)"),
         StatusItem("progress", _render_progress, 85, _render_progress_short,
                    description="lane/cohort progress (multi-lane)"),
         StatusItem("task", _render_task, 40, _render_task_short, truncate="right",

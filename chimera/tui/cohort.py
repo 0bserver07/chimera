@@ -22,11 +22,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from chimera.tui.budget import budget_to_dict
 from chimera.tui.history_io import serialize_history
 from chimera.tui.lane import Lane
 from chimera.tui.routing import RoutingMode
 
 if TYPE_CHECKING:
+    from chimera.core.budget import BudgetSpec
     from chimera.tui.workspace import WorkspaceSet
 
 __all__ = [
@@ -84,9 +86,12 @@ class CohortManifest:
     isolation: str
     routing: str
     lanes: list[dict[str, Any]] = field(default_factory=list)
+    #: The cohort-aggregate budget (#170) in lane vocabulary, or ``None``. Only
+    #: written when set, so an unbudgeted cohort's manifest is unchanged.
+    budget: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        data: dict[str, Any] = {
             "cohort_id": self.cohort_id,
             "task": self.task,
             "created_at": self.created_at,
@@ -95,6 +100,9 @@ class CohortManifest:
             "routing": self.routing,
             "lanes": self.lanes,
         }
+        if self.budget is not None:
+            data["budget"] = self.budget
+        return data
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> CohortManifest:
@@ -106,6 +114,7 @@ class CohortManifest:
             isolation=data.get("isolation", ""),
             routing=data.get("routing", ""),
             lanes=data.get("lanes", []),
+            budget=data.get("budget"),
         )
 
 
@@ -122,6 +131,7 @@ class Cohort:
         routing: RoutingMode = RoutingMode.BROADCAST,
         cohort_id: str | None = None,
         workspaces: WorkspaceSet | None = None,
+        budget: BudgetSpec | None = None,
     ) -> None:
         self.lanes = lanes
         self.task = task
@@ -131,6 +141,9 @@ class Cohort:
         self.workspaces = workspaces
         self.cohort_id = cohort_id or _new_cohort_id()
         self.created_at = _now_iso()
+        #: The cohort-aggregate budget (#170): a cap on total $ / total steps /
+        #: race wall-clock across all lanes. ``None`` = unbudgeted.
+        self.budget = budget
 
     # -- live cohort state ----------------------------------------------
     @property
@@ -145,6 +158,11 @@ class Cohort:
     @property
     def total_cost(self) -> float:
         return sum(lane.telemetry.cost for lane in self.lanes)
+
+    @property
+    def total_steps(self) -> int:
+        """Steps summed across lanes — the unit for a cohort step budget."""
+        return sum(lane.telemetry.steps for lane in self.lanes)
 
     @property
     def first_finisher(self) -> Lane | None:
@@ -211,6 +229,7 @@ class Cohort:
             isolation=self.isolation,
             routing=self.routing.value,
             lanes=lanes,
+            budget=budget_to_dict(self.budget),
         )
 
     def summary_rows_by_id(self) -> dict[str, dict[str, Any]]:

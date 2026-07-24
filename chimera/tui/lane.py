@@ -20,10 +20,12 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any
 
 from chimera.core.loop_events import LoopEventType
+from chimera.tui.budget import budget_to_dict, relabel_lane_reason
 from chimera.tui.render import format_event, plain
 
 if TYPE_CHECKING:
     from chimera.assembly.driver import DriverProtocol
+    from chimera.core.budget import BudgetSpec
     from chimera.tui.workspace import LaneWorkspace
 
 __all__ = ["Liveness", "LaneTelemetry", "LaneConfig", "Lane"]
@@ -90,15 +92,25 @@ class LaneConfig:
     model: str
     preset: str = "coding_agent"
     loop: str | None = None  # reserved: per-lane loop override
+    #: Per-lane run budget (#170): a :class:`~chimera.core.budget.BudgetSpec`
+    #: whose cost/steps/wall-clock caps end the lane's turn with a
+    #: ``budget_exhausted:<dim>`` reason. ``None`` = unbudgeted (the default).
+    budget: BudgetSpec | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        data: dict[str, Any] = {
             "lane_id": self.lane_id,
             "label": self.label,
             "model": self.model,
             "preset": self.preset,
             "loop": self.loop,
         }
+        # Only budgeted lanes record a ``budget`` key, so an unbudgeted lane's
+        # manifest entry is byte-identical to before (#170 is additive).
+        budget = budget_to_dict(self.budget)
+        if budget is not None:
+            data["budget"] = budget
+        return data
 
 
 class Lane:
@@ -200,7 +212,9 @@ class Lane:
             usage = getattr(r, "usage", None) or {}
             self.telemetry.tokens_in += _usage_tokens(usage, "input_tokens", "prompt_tokens")
             self.telemetry.tokens_out += _usage_tokens(usage, "output_tokens", "completion_tokens")
-            self.telemetry.terminal_reason = getattr(r, "reason", None)
+            # The loop emits the raw enforcer dimension (``:llm_calls``); relabel
+            # it to the lane vocabulary (``:steps``) so every surface agrees.
+            self.telemetry.terminal_reason = relabel_lane_reason(getattr(r, "reason", None))
         elif ev.type == LoopEventType.error:
             self.telemetry.terminal_reason = "error"
 

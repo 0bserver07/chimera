@@ -85,3 +85,42 @@ def test_export_zip(tmp_path):
     cohort_dir = co.persist(root=tmp_path / "cohorts")
     archive = co.export(tmp_path / "out.zip", cohort_dir=cohort_dir)
     assert archive.exists() and archive.suffix == ".zip"
+
+
+# -- budgets (#170) --------------------------------------------------------
+
+def test_cohort_and_lane_budget_persist_and_restore(tmp_path):
+    from chimera.core.budget import BudgetSpec
+    from chimera.tui.budget import budget_from_dict
+
+    a = _lane("A", "glm-5.2")
+    a.config.budget = BudgetSpec(max_cost_usd=0.10, max_llm_calls=20)
+    _finish(a, 0.05, 2, order=1, reason="budget_exhausted:steps")
+
+    co = Cohort([a], task="race", budget=BudgetSpec(max_cost_usd=1.0))
+    out = co.persist(root=tmp_path / "cohorts")
+    manifest = json.loads((out / "manifest.json").read_text())
+
+    # Cohort-aggregate budget rides the top level; the lane keeps its own.
+    assert manifest["budget"] == {"max_cost": 1.0}
+    entry = manifest["lanes"][0]
+    assert entry["budget"] == {"max_cost": 0.10, "max_steps": 20}
+    # The honest terminal reason persisted with the lane's telemetry.
+    assert entry["telemetry"]["terminal_reason"] == "budget_exhausted:steps"
+
+    # Round-trips back to specs.
+    assert budget_from_dict(manifest["budget"]) == BudgetSpec(max_cost_usd=1.0)
+    assert budget_from_dict(entry["budget"]) == BudgetSpec(
+        max_cost_usd=0.10, max_llm_calls=20
+    )
+    m2 = CohortManifest.from_dict(manifest)
+    assert m2.budget == {"max_cost": 1.0}
+
+
+def test_unbudgeted_cohort_manifest_has_no_budget_key(tmp_path):
+    a = _lane("A", "glm-5.2")
+    _finish(a, 0.001, 1, order=1)
+    co = Cohort([a], task="x")
+    manifest = json.loads((co.persist(root=tmp_path / "cohorts") / "manifest.json").read_text())
+    assert "budget" not in manifest
+    assert "budget" not in manifest["lanes"][0]
