@@ -9,6 +9,38 @@ commit receipts.
 
 ### Added
 
+- **External-agent lanes — race real third-party agent CLIs in the
+  multiplexer** (`chimera/assembly/external_driver.py`, issue #169): a lane
+  whose driver spawns a real external coding-agent CLI as a subprocess in the
+  lane's own isolated worktree, translating its output into the same
+  `LoopEvent` stream every Chimera lane emits — so the multiplexer can race
+  the *actual upstream agents* against Chimera (or each other) on one task,
+  with the same scoreboard, cost/step telemetry, and cohort artifact. Selected
+  with `--models ext:<profile>,glm-5.2` beside any Chimera lane.
+  `ExternalAgentDriver` satisfies the formalized
+  `chimera.assembly.driver.DriverProtocol` (the driver duck-type a lane
+  drives): async `send()`→events, `cancel()` (SIGTERM the process group first,
+  kill only after a grace window — never a first-strike kill), honest
+  `steer`/`queue_follow_up` degradation (a system note, not a crash),
+  reconstructed `history` for persistence. Two protocols: `stream-json`
+  (newline-JSON events → assistant/tool_use/tool_result, with real cost +
+  token + step telemetry parsed from the result line) and `text` (plain stdout
+  streamed as assistant text, honest zero telemetry with a "telemetry
+  unavailable" note). Profiles are user config under
+  `[external_agents.<name>]` in `~/.chimera/config.toml` (`{task}`/`{workdir}`
+  templates, protocol, env-passthrough allowlist, timeout); one brand-safe
+  profile ships built in (`claude`, the Claude Code CLI's
+  `--print --output-format stream-json` mode). External lanes get a worktree
+  like any lane, so their file writes show in the Ctrl+R diffs and persist +
+  resume in the cohort artifact. Guide `docs/guides/external-lanes.md` (+ site
+  copy). 26 unit/integration tests over a scripted fake CLI (event mapping,
+  telemetry parse, exit-code → terminal reason, cancellation, timeout,
+  text-fallback, env allowlist, profile parsing, lane-spec + pane pilot,
+  persist→resume round-trip). Live-race acceptance: `ext:claude` vs
+  `glm-5.2[1m]` both wrote `greet.py` through the real headless multiplexer
+  (claude $0.326/5 steps, glm-5.2 $0.0028/3 steps), cohort persisted and
+  resumed with full round-trip (drivers rebuilt, history seeded, telemetry +
+  produced files restored).
 - **The embed surface (the SDK cut)** — `chimera.AgentSession` /
   `chimera.run_agent` / `chimera.TurnResult` (`chimera/embed.py`): the
   documented embedding API over the AgentDriver seam, semver-stable within

@@ -988,14 +988,26 @@ def parse_lane_specs(models: list[str] | str, default_preset: str = "coding_agen
     """Parse ``--models`` into lane specs.
 
     Each entry is ``model``, ``model:preset``, or ``model:preset:loop`` — the
-    three per-lane comparison axes (§13.3). Lane ids are ``A``, ``B``, …; labels
-    are the model with ``·preset`` / ``·loop`` appended when they differ from the
-    default, and ``#k`` to disambiguate duplicates.
+    three per-lane comparison axes (§13.3) — or ``ext:<profile>``, an
+    **external-agent lane** (issue #169): a real third-party coding-agent CLI
+    named by an :func:`~chimera.assembly.external_driver.resolve_external_profile`
+    profile, raced beside Chimera lanes. External entries record
+    ``preset="external"`` and carry the profile name under ``external``; they
+    take no preset/loop axes (those belong to the external tool itself).
+
+    Lane ids are ``A``, ``B``, …; labels are the model with ``·preset`` /
+    ``·loop`` appended when they differ from the default, and ``#k`` to
+    disambiguate duplicates.
 
     Raises:
-        ValueError: on an unknown preset or loop posture.
+        ValueError: on an unknown preset, loop posture, or external profile.
     """
     from chimera.assembly.coding_agent import LOOP_POSTURES
+    from chimera.assembly.external_driver import (
+        EXTERNAL_LANE_PREFIX,
+        EXTERNAL_LANE_PRESET,
+        resolve_external_profile,
+    )
     from chimera.assembly.loop_adapter import REAL_LOOPS
     from chimera.assembly.presets import DEPRECATED_PRESET_ALIASES, PRESETS
 
@@ -1006,6 +1018,24 @@ def parse_lane_specs(models: list[str] | str, default_preset: str = "coding_agen
     parsed: list[dict[str, str]] = []
     for i, item in enumerate(raw):
         parts = [p.strip() for p in item.split(":")]
+        lane_id = chr(65 + i) if i < 26 else f"L{i + 1}"
+        if parts[0] == EXTERNAL_LANE_PREFIX:
+            if len(parts) != 2 or not parts[1]:
+                raise ValueError(
+                    f"bad external lane spec {item!r}: use ext:<profile-name> "
+                    f"(external lanes take no preset/loop axes)"
+                )
+            profile_name = parts[1]
+            resolve_external_profile(profile_name)  # loud on unknown/invalid
+            parsed.append({
+                "model": f"{EXTERNAL_LANE_PREFIX}:{profile_name}",
+                "preset": EXTERNAL_LANE_PRESET,
+                "loop": "",
+                "external": profile_name,
+                "lane_id": lane_id,
+                "base": f"{EXTERNAL_LANE_PREFIX}:{profile_name}",
+            })
+            continue
         model = parts[0]
         preset = parts[1] if len(parts) > 1 and parts[1] else default_preset
         loop = parts[2] if len(parts) > 2 and parts[2] else ""
@@ -1022,9 +1052,8 @@ def parse_lane_specs(models: list[str] | str, default_preset: str = "coding_agen
             base += f"·{preset}"
         if loop:
             base += f"·{loop}"
-        lane_id = chr(65 + i) if i < 26 else f"L{i + 1}"
         parsed.append({
-            "model": model, "preset": preset, "loop": loop,
+            "model": model, "preset": preset, "loop": loop, "external": "",
             "lane_id": lane_id, "base": base,
         })
 
@@ -1072,7 +1101,7 @@ def run_multiplexer(
             "run it directly, not piped."
         )
 
-    from chimera.assembly.driver import AgentDriver
+    from chimera.assembly.driver import AgentDriver, DriverProtocol
     from chimera.tui.workspace import provision_workspaces
 
     try:
@@ -1096,18 +1125,33 @@ def run_multiplexer(
         lanes: list[Lane] = []
         for spec, ws in zip(specs, workspaces):
             lane_loop = spec.get("loop") or None
-            lane_kwargs = dict(agent_kwargs)
-            if broker is not None:
-                lane_kwargs["permission_callback"] = broker.handler_for(
-                    spec["lane_id"], spec["label"],
+            driver: DriverProtocol
+            if spec.get("external"):
+                # External-agent lane (#169): a real third-party CLI runs in
+                # this lane's worktree. Approval brokering and agent kwargs
+                # are Chimera-loop machinery — they do not apply here.
+                from chimera.assembly.external_driver import (
+                    ExternalAgentDriver,
+                    resolve_external_profile,
                 )
-            driver = AgentDriver(
-                model=spec["model"],
-                project_dir=str(ws.path),
-                preset=spec["preset"],
-                loop=lane_loop,
-                **lane_kwargs,
-            )
+
+                driver = ExternalAgentDriver(
+                    resolve_external_profile(spec["external"]),
+                    workdir=str(ws.path),
+                )
+            else:
+                lane_kwargs = dict(agent_kwargs)
+                if broker is not None:
+                    lane_kwargs["permission_callback"] = broker.handler_for(
+                        spec["lane_id"], spec["label"],
+                    )
+                driver = AgentDriver(
+                    model=spec["model"],
+                    project_dir=str(ws.path),
+                    preset=spec["preset"],
+                    loop=lane_loop,
+                    **lane_kwargs,
+                )
             config = LaneConfig(
                 lane_id=spec["lane_id"],
                 label=spec["label"],
@@ -1283,7 +1327,7 @@ def _load_saved_cohort(
     Raises:
         FileNotFoundError: Unknown cohort id.
     """
-    from chimera.assembly.driver import AgentDriver
+    from chimera.assembly.driver import AgentDriver, DriverProtocol
     from chimera.tui.history_io import deserialize_history
     from chimera.tui.workspace import apply_diff, provision_workspaces
 
@@ -1311,16 +1355,31 @@ def _load_saved_cohort(
             apply_diff(ws.path, spec["diff"])  # restore produced changes (best-effort)
         preset = spec.get("preset") or "coding_agent"
         lane_loop = spec.get("loop") or None
-        lane_kwargs = dict(agent_kwargs)
-        # -- permission approvals (#171): re-bind lane handlers on resume ---
-        if approval_broker is not None:
-            lane_kwargs["permission_callback"] = approval_broker.handler_for(
-                spec["lane_id"], spec.get("label", spec["lane_id"]),
+        model = str(spec["model"])
+        driver: DriverProtocol
+        if model.startswith("ext:"):
+            # External-agent lane (#169): rebuild from its profile; the saved
+            # minimal history seeds the transcript context for the artifact.
+            from chimera.assembly.external_driver import (
+                ExternalAgentDriver,
+                resolve_external_profile,
             )
-        driver = AgentDriver(
-            model=spec["model"], project_dir=str(ws.path), preset=preset,
-            loop=lane_loop, **lane_kwargs,
-        )
+
+            driver = ExternalAgentDriver(
+                resolve_external_profile(model.split(":", 1)[1]),
+                workdir=str(ws.path),
+            )
+        else:
+            lane_kwargs = dict(agent_kwargs)
+            # -- permission approvals (#171): re-bind lane handlers on resume ---
+            if approval_broker is not None:
+                lane_kwargs["permission_callback"] = approval_broker.handler_for(
+                    spec["lane_id"], spec.get("label", spec["lane_id"]),
+                )
+            driver = AgentDriver(
+                model=model, project_dir=str(ws.path), preset=preset,
+                loop=lane_loop, **lane_kwargs,
+            )
         driver.load_history(deserialize_history(spec.get("history") or []))
         config = LaneConfig(
             lane_id=spec["lane_id"],

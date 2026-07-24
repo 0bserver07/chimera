@@ -1,9 +1,12 @@
 """Lane model + telemetry for the multiplexer (spec §6.1, §6.5).
 
-A **lane** is one agent session reduced to a pane: its own
-:class:`~chimera.assembly.driver.AgentDriver`, its own isolated workspace, and
-its own telemetry. Lanes share nothing mutable (R-ISO-2/3), which is what makes
-side-by-side comparison sound.
+A **lane** is one agent session reduced to a pane: its own driver (anything
+satisfying :class:`~chimera.assembly.driver.DriverProtocol` — an
+:class:`~chimera.assembly.driver.AgentDriver`, or an
+:class:`~chimera.assembly.external_driver.ExternalAgentDriver` wrapping a real
+third-party CLI), its own isolated workspace, and its own telemetry. Lanes
+share nothing mutable (R-ISO-2/3), which is what makes side-by-side comparison
+sound.
 
 This module is presentation-agnostic: it folds a driver's ``LoopEvent`` stream
 into a :class:`LaneTelemetry` snapshot and a plain-text transcript. The
@@ -20,7 +23,7 @@ from chimera.core.loop_events import LoopEventType
 from chimera.tui.render import format_event, plain
 
 if TYPE_CHECKING:
-    from chimera.assembly.driver import AgentDriver
+    from chimera.assembly.driver import DriverProtocol
     from chimera.tui.workspace import LaneWorkspace
 
 __all__ = ["Liveness", "LaneTelemetry", "LaneConfig", "Lane"]
@@ -110,7 +113,7 @@ class Lane:
     def __init__(
         self,
         config: LaneConfig,
-        driver: AgentDriver,
+        driver: DriverProtocol,
         workspace: LaneWorkspace | None = None,
     ) -> None:
         self.config = config

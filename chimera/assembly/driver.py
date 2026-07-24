@@ -30,14 +30,62 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol
 
 from chimera.core.loop_events import LoopEvent, LoopEventType
 
 if TYPE_CHECKING:
     from chimera.assembly.coding_agent import CodingAgent
 
-__all__ = ["AgentDriver", "render_event"]
+__all__ = ["AgentDriver", "DriverProtocol", "render_event"]
+
+
+class DriverProtocol(Protocol):
+    """The driver contract a frontend lane drives — the ONLY seam a lane needs.
+
+    :class:`AgentDriver` is the canonical implementation;
+    :class:`~chimera.assembly.external_driver.ExternalAgentDriver` (a real
+    third-party CLI as a lane, issue #169) and test fakes satisfy it
+    structurally. Beyond these requirements, frontends read a few *optional*
+    attributes defensively via ``getattr`` — ``context_window``, ``thinking``,
+    ``auto_compaction``, ``model``, ``total_cost``, ``turn_count`` — so a
+    driver may omit them and the UI degrades honestly (hides the gauge rather
+    than fake it).
+    """
+
+    def send(self, text: str) -> AsyncIterator[LoopEvent]:
+        """Run one turn, yielding events; MUST end with exactly one ``result``."""
+        ...
+
+    def steer(self, text: str) -> None:
+        """Inject a mid-run message (or note that steering is unsupported)."""
+        ...
+
+    def queue_follow_up(self, text: str) -> None:
+        """Queue a message for after the turn (or note it is unsupported)."""
+        ...
+
+    def cancel(self) -> None:
+        """Abort the current turn."""
+        ...
+
+    def clear(self) -> None:
+        """Forget the conversation."""
+        ...
+
+    def load_history(self, messages: list[Any]) -> None:
+        """Seed the conversation from a saved history (session resume)."""
+        ...
+
+    @property
+    def tools(self) -> list[Any]:
+        """The driver's tools (objects with a ``name``); may be empty."""
+        ...
+
+    @property
+    def history(self) -> list[Any]:
+        """The conversation as :class:`~chimera.types.Message`-like items."""
+        ...
 
 
 class AgentDriver:
