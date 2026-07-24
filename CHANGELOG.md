@@ -9,6 +9,16 @@ commit receipts.
 
 ### Added
 
+- **The embed surface (the SDK cut)** — `chimera.AgentSession` /
+  `chimera.run_agent` / `chimera.TurnResult` (`chimera/embed.py`): the
+  documented embedding API over the AgentDriver seam, semver-stable within
+  0.9.x. Streaming `send()`, blocking `run()`/`run_async()` returning
+  final text + cost/steps/reason, steer / follow-up / cancel / clear,
+  `close()` + context manager; re-exported from the package root alongside
+  `AgentDriver`/`render_event`/`LoopEvent`/`LoopEventType`. 5-minute guide
+  `docs/guides/embed.md` (+ site copy), 15 FauxProvider unit tests, and a
+  real-turn acceptance run (glm-5.2 wrote and verified a file, $0.0082)
+  (`f0f11d3`).
 - `scripts/ci_posture_check.sh` — pre-push gate replicating CI's exact
   no-tui-extra environment (sync, cold-cache mypy, CI's pytest invocation,
   env restore); wired into CLAUDE.md and playbook 14 after the 0.9.1 batch's
