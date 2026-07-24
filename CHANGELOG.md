@@ -7,6 +7,15 @@ commit receipts.
 
 ## Unreleased
 
+(nothing yet — next batch accumulates here)
+
+## 0.9.2 — 2026-07-24 — the embeddable core
+
+Chimera becomes something you can *embed*, *verify*, and *race*: a stable
+SDK surface, a reproducible public results page, and third-party agent CLIs
+running as lanes beside Chimera's own. Narrative notes:
+`docs/releases/0.9.2.md`.
+
 ### Added
 
 - **Hand-pricing reconciler — a dev-only drift audit for the billed-price
