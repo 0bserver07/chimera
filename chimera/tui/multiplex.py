@@ -22,6 +22,7 @@ import os
 import sys
 import time
 from collections import Counter
+from dataclasses import replace
 from typing import Any
 
 try:
@@ -29,7 +30,7 @@ try:
     from textual import on
     from textual.app import App, ComposeResult
     from textual.containers import Horizontal, Vertical
-    from textual.widgets import Footer, Header, RichLog, Static, TextArea
+    from textual.widgets import Footer, Header, OptionList, RichLog, Static, TextArea
 
     from chimera.tui.approvals import ApprovalBroker, ApprovalModal, approvals_enabled
     from chimera.tui.prompt import PromptArea, filter_commands
@@ -73,10 +74,12 @@ from chimera.tui.statusline import (
     build_cohort_context,
     build_lane_context,
 )
+from chimera.tui.theme import Palette, ThemeSettings, load_theme_settings
 
 __all__ = [
     "MultiplexApp",
     "LanePane",
+    "ThemePickerScreen",
     "run_multiplexer",
     "run_single_agent",
     "resume_multiplexer",
@@ -164,7 +167,16 @@ class LanePane(Vertical):
     identical to the single-agent TUI.
     """
 
-    def __init__(self, lane: Lane, *, expand_hint: str = "", **kwargs: Any) -> None:
+    def __init__(
+        self,
+        lane: Lane,
+        *,
+        expand_hint: str = "",
+        full_hint: str = "",
+        palette: Palette | None = None,
+        animations: bool = True,
+        **kwargs: Any,
+    ) -> None:
         super().__init__(**kwargs)
         self._lane = lane
         self._transcript: LaneTranscript | None = None
@@ -174,6 +186,12 @@ class LanePane(Vertical):
         #: The currently bound expand-toggle key, injected by the app from its
         #: keybinding registry — elision markers advertise it (R-KEY-3).
         self._expand_hint = expand_hint
+        #: The transcript-overlay key, advertised beside it (R-FOLD-7).
+        self._full_hint = full_hint
+        #: Semantic slot colors (R-THEME-1); ``None`` = the default theme.
+        self._palette = palette
+        #: R-THEME-4 motion gate: False freezes the heartbeat pulse.
+        self._animations = animations
 
     def compose(self) -> ComposeResult:
         yield Static(self._header_text(), classes="lane-header")
@@ -188,7 +206,10 @@ class LanePane(Vertical):
 
     def on_mount(self) -> None:
         self._transcript = LaneTranscript(
-            self.query_one(RichLog).write, expand_hint=self._expand_hint,
+            self.query_one(RichLog).write,
+            expand_hint=self._expand_hint,
+            full_hint=self._full_hint,
+            palette=self._palette,
         )
         self._live_region = self.query_one(LiveRegion)
 
@@ -234,6 +255,7 @@ class LanePane(Vertical):
                 self._transcript.thinking_elapsed,
                 self._transcript.thinking_chars,
                 self._live_frame,
+                animate=self._animations,
             )
         self._live_region.show(
             tail=self._transcript.live_tail,
@@ -308,6 +330,17 @@ class LanePane(Vertical):
     def reveal_reasoning(self) -> bool:
         return self._transcript.reveal_last() if self._transcript is not None else False
 
+    def set_palette(self, palette: Palette | None) -> None:
+        """Repaint with a new theme palette (R-THEME-3 live preview).
+
+        Forward-looking, like the expand toggle: the pane's sink is
+        append-only, so already-committed renderables keep the styles they were
+        written with; everything rendered from now on uses *palette*.
+        """
+        self._palette = palette
+        if self._transcript is not None:
+            self._transcript.palette = palette
+
 
 class MultiplexApp(App):
     """Full-screen host for N lanes racing one task (spec §6)."""
@@ -354,8 +387,23 @@ class MultiplexApp(App):
         persist_root: str | None = None,
         keybinds: dict[str, Any] | None = None,
         approval_broker: Any | None = None,
+        theme_settings: ThemeSettings | None = None,
         **kwargs: Any,
     ) -> None:
+        #: R-THEME-1..4: resolved theme settings + the live palette. Injectable
+        #: for tests; by default read from the same config chain as keybinds
+        #: and the status line. Discovery is best-effort — a broken theme file
+        #: degrades to the default theme (byte-identical to pre-theme output).
+        #: Resolved BEFORE ``super().__init__``: the framework builds its
+        #: stylesheet from ``get_css_variables()`` inside App's constructor.
+        self._theme_settings = (
+            theme_settings if theme_settings is not None
+            else load_theme_settings(cohort.source or None)
+        )
+        self._palette = self._theme_settings.palette()
+        #: Preview state for the ``/theme`` picker: the palette to restore when
+        #: the picker is cancelled (R-THEME-3).
+        self._theme_restore: Palette | None = None
         super().__init__(**kwargs)
         self._cohort = cohort
         # -- permission approvals (#171): set only when the opt-in is on ----
@@ -422,7 +470,13 @@ class MultiplexApp(App):
         expand_hint = key_for("toggle_expand", self._keybinds)
         with Horizontal(id="lanes"):
             for lane in self._cohort.lanes:
-                pane = LanePane(lane, classes=pane_classes, expand_hint=expand_hint)
+                pane = LanePane(
+                    lane,
+                    classes=pane_classes,
+                    expand_hint=expand_hint,
+                    palette=self._palette,
+                    animations=self._theme_settings.animations,
+                )
                 self._panes.append(pane)
                 self._pane_by_id[lane.id] = pane
                 yield pane
@@ -447,11 +501,19 @@ class MultiplexApp(App):
                 f"tui.keybinds ignored (using defaults): {self._keybinds_error}",
                 style="red",
             )
+        if self._theme_settings.error:
+            self._say_focused(
+                f"tui theme config: {self._theme_settings.error}", style="red",
+            )
         self._statusline.start()
         self.set_interval(0.5, self._refresh_global)
         # ONE interval animates every pane's heartbeat (R-FOLD-1): per-pane
-        # timers would drift out of phase and multiply wakeups.
-        self._live_timer = self.set_interval(0.25, self._pulse_live)
+        # timers would drift out of phase and multiply wakeups. With animations
+        # off (R-THEME-4) the pulse is static, so the tick only has to keep the
+        # elapsed/size figures honest — a quarter of the wakeups does that.
+        self._live_timer = self.set_interval(
+            0.25 if self._theme_settings.animations else 1.0, self._pulse_live,
+        )
         # -- permission approvals (#171): drain the broker queue as modals --
         if self._approval_broker is not None:
             self.set_interval(0.15, self._pump_approvals)
@@ -465,6 +527,69 @@ class MultiplexApp(App):
 
     def on_resize(self) -> None:
         self._relayout()
+
+    # -- themes (R-THEME-1..4) -------------------------------------------
+    def get_css_variables(self) -> dict[str, str]:
+        """Merge the theme's slot colors into the framework's design tokens.
+
+        Only hex-valued slots are exported (see
+        :meth:`chimera.tui.theme.Palette.css_variables`), so a terminal-palette
+        theme — including the default — leaves framework chrome exactly as
+        shipped and this override is a no-op.
+        """
+        # Annotated so mypy keeps a concrete dict under CI's no-textual posture
+        # (the framework resolves to Any there — a bare call returns Any).
+        variables: dict[str, str] = dict(super().get_css_variables())
+        variables.update(self._palette.css_variables())
+        return variables
+
+    def apply_palette(self, palette: Palette) -> None:
+        """Adopt *palette* live: panes repaint, framework chrome re-resolves.
+
+        Used by the ``/theme`` picker for preview and for the final choice
+        (R-THEME-3). Already-committed transcript renderables keep their
+        original styles — the sinks are append-only — so the switch shows up
+        on everything rendered from here on.
+        """
+        self._palette = palette
+        for pane in self._panes:
+            pane.set_palette(palette)
+        try:
+            self.refresh_css(animate=False)
+        except Exception:  # noqa: BLE001 - a repaint failure must not kill a turn
+            pass
+
+    def _open_theme_picker(self) -> None:
+        """``/theme``: pick a theme with live preview and restore-on-cancel."""
+        settings = self._theme_settings
+        names = sorted(settings.themes) or [self._palette.name]
+        self._theme_restore = self._palette
+
+        def _preview(name: str) -> None:
+            self.apply_palette(settings.palette(name))
+
+        def _chosen(name: Any) -> None:
+            if name:
+                self._theme_settings = replace(settings, theme=str(name))
+                self.apply_palette(settings.palette(str(name)))
+                self._say_focused(
+                    f"theme: {name} ({settings.mode}) — persist it with "
+                    f'[tui] theme = "{name}"', style="green",
+                )
+            elif self._theme_restore is not None:
+                self.apply_palette(self._theme_restore)  # cancel restores
+            self._theme_restore = None
+
+        self.push_screen(
+            ThemePickerScreen(
+                [settings.themes[n] for n in names if n in settings.themes],
+                current=self._palette.name,
+                mode=settings.mode,
+                depth=settings.depth,
+                on_preview=_preview,
+            ),
+            _chosen,
+        )
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
         """Gate bindings by lane count (dynamic actions).
@@ -970,6 +1095,8 @@ class MultiplexApp(App):
             self._mode = RoutingMode.BROADCAST if cmd == "/broadcast" else RoutingMode.TARGETED
             self.query_one("#prompt", PromptArea).placeholder = self._placeholder()
             self._refresh_global()
+        elif cmd == "/theme":
+            self._handle_theme_command(text)
         elif cmd == "/cohorts":
             self._open_cohort_picker()
         elif cmd == "/resume":
@@ -980,6 +1107,44 @@ class MultiplexApp(App):
                 self._open_cohort_picker()
         else:
             say(f"unknown command: {cmd}", style="red")
+
+    # -- themes (#R-THEME-3) ---------------------------------------------
+    def _handle_theme_command(self, text: str) -> None:
+        """``/theme`` — open the picker, list themes, or switch directly.
+
+        ``/theme`` opens the fuzzy picker (live preview, Esc restores);
+        ``/theme list`` prints the catalog with the active mode and depth;
+        ``/theme <name>`` switches immediately. The choice is session-scoped —
+        the message names the config key that makes it permanent.
+        """
+        arg = text[len("/theme"):].strip()
+        settings = self._theme_settings
+        if not arg:
+            self._open_theme_picker()
+            return
+        if arg in ("list", "ls"):
+            self._say_focused(
+                f"mode {settings.mode} ({settings.mode_setting}) · "
+                f"{settings.depth} · animations "
+                f"{'on' if settings.animations else 'off'}"
+            )
+            for name in sorted(settings.themes):
+                theme = settings.themes[name]
+                mark = "▸" if name == self._palette.name else " "
+                where = "" if theme.source == "builtin" else f"  [{theme.source}]"
+                self._say_focused(f" {mark} {name} — {theme.description}{where}")
+            return
+        if arg not in settings.themes:
+            self._say_focused(
+                f"unknown theme {arg!r} — try /theme list", style="red",
+            )
+            return
+        self._theme_settings = replace(settings, theme=arg)
+        self.apply_palette(settings.palette(arg))
+        self._say_focused(
+            f'theme: {arg} ({settings.mode}) — persist it with [tui] theme = "{arg}"',
+            style="green",
+        )
 
     # -- budgets (#170) --------------------------------------------------
     def _budget_status_lines(self) -> list[str]:
@@ -1179,6 +1344,65 @@ class CohortPickerScreen(FuzzySelectScreen):
             search_text=f"{labels} {task}",
             id=cohort_id,
         )
+
+
+class ThemePickerScreen(FuzzySelectScreen):
+    """In-TUI theme picker with live preview and restore-on-cancel (R-THEME-3).
+
+    Another instance of the universal fuzzy-select (R-OVER-2): type to filter
+    by name, description, or source file. Moving the highlight *previews* the
+    theme immediately (the app repaints behind the modal); Enter keeps it and
+    Esc restores whatever was active when the picker opened — the caller wires
+    both through the ``on_preview`` callback and the dismissal value.
+
+    Args:
+        themes: The catalog to offer (built-ins plus user theme files).
+        current: Name of the active theme (pre-highlighted).
+        mode: Resolved dark/light mode, shown in the title.
+        depth: Resolved color depth, shown in the title.
+        on_preview: Called with a theme name whenever the highlight moves.
+    """
+
+    def __init__(
+        self,
+        themes: list[Any],
+        *,
+        current: str = "",
+        mode: str = "dark",
+        depth: str = "truecolor",
+        on_preview: Any = None,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(
+            [self._item(theme) for theme in themes],
+            title=f"Themes · {mode} · {depth} · Enter keeps · Esc restores",
+            placeholder="Type to filter themes…",
+            initial=current or None,
+            **kwargs,
+        )
+        self._on_preview = on_preview
+
+    @staticmethod
+    def _item(theme: Any) -> SelectItem:
+        builtin = theme.source == "builtin"
+        return SelectItem(
+            value=theme.name,
+            label=theme.name,
+            description=theme.description or "(no description)",
+            hint="built-in" if builtin else "user",
+            search_text="" if builtin else str(theme.source),
+            id=f"theme-{theme.name}",
+        )
+
+    @on(OptionList.OptionHighlighted, "#select-list")
+    def _preview_highlighted(self, event: Any) -> None:
+        """Live preview: repaint the app behind the modal as the cursor moves."""
+        if self._on_preview is None:
+            return
+        option = getattr(event, "option", None)
+        option_id = str(getattr(option, "id", "") or "")
+        if option_id.startswith("theme-"):
+            self._on_preview(option_id[len("theme-"):])
 
 
 def parse_lane_specs(models: list[str] | str, default_preset: str = "coding_agent") -> list[dict[str, str]]:
@@ -1457,9 +1681,17 @@ def _run_inline_single(
     """
     from chimera.tui.inline_frontend import run_inline
 
+    # Same theme chain as the full-screen app (R-THEME-1..4); best-effort, so a
+    # broken theme file never blocks an inline launch.
+    settings = load_theme_settings(cohort.source or None)
     cohort_dir = None
     try:
-        run_inline(lane, initial_task=initial_task)
+        run_inline(
+            lane,
+            initial_task=initial_task,
+            palette=settings.palette(),
+            animations=settings.animations,
+        )
     finally:
         cohort_dir = _finalize_cohort(
             cohort, workspaces, persist_root=persist_root, export=export,

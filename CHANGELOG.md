@@ -81,6 +81,32 @@ commit receipts.
   `setup()`**, matching `AsyncSSHEnvironment`; `DaytonaEnvironment` does the
   same. `tests/env/test_e2b.py` adds 18 tests for the backend that previously
   had two.
+- **TUI themes — semantic slots, dark/light, user theme files, live preview**
+  (spec `docs/specs/tui-ux-refinements.md` R-THEME-1..4): `chimera/tui/theme.py`
+  is a stdlib-only theme engine — ~58 named semantic slots across seven
+  families (`base`, `status`, `chrome`, `tool`, `markdown`, `syntax`, `diff`)
+  plus three opacity knobs, so a theme maps *meanings*, never widgets. Themes
+  may declare a `vars` palette that slots reference by `$name` (resolved with
+  circular-reference detection), and every value may carry `{dark, light}`
+  variants. Three built-ins ship: `default` (terminal palette — the 16 ANSI
+  colors), `chimera` (truecolor house theme, full dark/light), and `mono`
+  (structure only). **Mode detection** cascades `$CHIMERA_THEME_MODE` →
+  `$CHIMERA_TERM_BG` luminance → `$COLORFGBG` → dark; **color-depth
+  degradation** detects truecolor/256/16 and quantizes hex values to the
+  nearest palette entry, while `NO_COLOR` drops color but keeps bold/dim/reverse
+  (and forces `animations = false`). **User themes** load from `themes/`
+  directories in every config scope (`~/.config/chimera/`, `~/.chimera/`,
+  `<project>/.chimera/`, TOML/JSON/YAML, later scopes win) through the same
+  unified loader as keybinds and the status line; a malformed theme degrades to
+  the default and reports why instead of blocking a launch. **`/theme`** opens
+  the existing universal fuzzy-select (R-OVER-2) with **live preview and
+  restore-on-cancel**; `/theme list` prints the catalog, `/theme <name>`
+  switches directly. Config: `[tui] theme`, `theme_mode` (auto/dark/light/lock),
+  `animations`. **Additive and pinned**: the `default` theme's slot values are
+  exactly the styles the renderers hardcoded before, so an unconfigured TUI is
+  byte-identical (a test asserts it) and a terminal-palette theme exports no
+  Textual design tokens at all. Guide: `docs/guides/tui.md` (new *Themes*
+  section).
 
 ## 0.9.2 — 2026-07-24 — the embeddable core
 

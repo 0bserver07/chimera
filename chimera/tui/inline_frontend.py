@@ -210,6 +210,8 @@ class BandModel:
     rows_total: int
     frame: int
     interactive: bool
+    #: R-THEME-4 motion gate: False freezes the spinner to a static glyph.
+    animate: bool = True
 
 
 def build_band_rows(m: BandModel, cols: int) -> tuple[list[str], int]:
@@ -242,7 +244,7 @@ def build_band_rows(m: BandModel, cols: int) -> tuple[list[str], int]:
 
     status_src = Text()
     if m.running:
-        spin = _SPINNER[m.frame % len(_SPINNER)]
+        spin = _SPINNER[m.frame % len(_SPINNER)] if m.animate else _SPINNER[0]
         status_src.append(f"{spin} working", style="yellow")
         status_src.append(
             f" · {m.elapsed:4.1f}s · ${m.cost:.4f} · {m.steps} steps", style="dim"
@@ -299,6 +301,10 @@ class InlineFrontend:
         band_height: Rows reserved for the bottom band.
         markdown: Render committed assistant prose as rich Markdown.
         clock: Monotonic time source (injectable for tests).
+        palette: Semantic slot colors (R-THEME-1); ``None`` = the default
+            theme, whose slots reproduce the pre-theme styles exactly.
+        animations: R-THEME-4 motion gate; False freezes the spinner and the
+            reasoning heartbeat to static glyphs.
     """
 
     def __init__(
@@ -309,11 +315,14 @@ class InlineFrontend:
         band_height: int = 3,
         markdown: bool = True,
         clock: Any = None,
+        palette: Any = None,
+        animations: bool = True,
     ) -> None:
         self.lane = lane
         self.driver = lane.driver
         self.screen = HybridScreen(out if out is not None else sys.stdout, band_height=band_height)
-        self.transcript = LaneTranscript(self._sink, markdown=markdown)
+        self.transcript = LaneTranscript(self._sink, markdown=markdown, palette=palette)
+        self._animations = bool(animations)
         self.composer = ""
         self._model = str(getattr(lane.config, "model", "?"))
         self._clock = clock if clock is not None else time.monotonic
@@ -489,6 +498,7 @@ class InlineFrontend:
             rows_total=self.screen.geom.rows,
             frame=self._frame,
             interactive=self.screen.stdin_fd is not None,
+            animate=self._animations,
         )
 
     def _repaint(self) -> None:
@@ -529,6 +539,8 @@ def run_inline(
     band_height: int = 3,
     markdown: bool = True,
     out: IO[str] | None = None,
+    palette: Any = None,
+    animations: bool = True,
 ) -> None:
     """Run the inline daily driver for one lane (blocking).
 
@@ -543,6 +555,11 @@ def run_inline(
         band_height: Rows reserved for the bottom band.
         markdown: Render committed assistant prose as rich Markdown.
         out: Output stream (defaults to ``sys.stdout``).
+        palette: Semantic slot colors (R-THEME-1); ``None`` = default theme.
+        animations: R-THEME-4 motion gate (False → static spinner).
     """
-    frontend = InlineFrontend(lane, out=out, band_height=band_height, markdown=markdown)
+    frontend = InlineFrontend(
+        lane, out=out, band_height=band_height, markdown=markdown,
+        palette=palette, animations=animations,
+    )
     asyncio.run(frontend.run(initial_task=initial_task))

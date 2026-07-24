@@ -75,6 +75,8 @@ COMMAND_DEFS: tuple[SlashCommand, ...] = (
     SlashCommand("statusline", "status-line items: id, order, availability"),
     SlashCommand("summary", "cohort scoreboard"),
     SlashCommand("target", "route input to the focused lane only", context="multi"),
+    SlashCommand("theme", "pick a theme (live preview) / list / switch",
+                 args_hint="[name|list]"),
     SlashCommand("tools", "tools available to the focused lane"),
 )
 

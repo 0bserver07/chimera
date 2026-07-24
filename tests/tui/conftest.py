@@ -42,6 +42,25 @@ def _no_machine_tui_config(monkeypatch: pytest.MonkeyPatch):
     yield
 
 
+@pytest.fixture(autouse=True)
+def _no_machine_theme(monkeypatch: pytest.MonkeyPatch):
+    """Render the default theme regardless of this machine's ``[tui] theme``.
+
+    The multiplexer resolves themes through the same config chain (plus
+    ``themes/`` directories); tests that exercise theming pass
+    ``theme_settings=`` explicitly.
+    """
+    try:
+        import chimera.tui.multiplex as _multiplex
+        from chimera.tui.theme import ThemeSettings
+    except ImportError:  # pragma: no cover - no tui extra
+        return
+    monkeypatch.setattr(
+        _multiplex, "load_theme_settings",
+        lambda *a, **k: ThemeSettings.resolve({}, env={"TERM": "xterm-256color"}),
+    )
+
+
 @pytest.fixture
 def real_load_tui_config():
     """The unstubbed loader, for tests that exercise config discovery."""

@@ -50,6 +50,7 @@ from chimera.tui.markdown_stream import (
     normalize_nested_fences,
     split_complete_blocks,
 )
+from chimera.tui.theme import Palette
 
 __all__ = [
     "LaneTranscript",
@@ -65,6 +66,18 @@ __all__ = [
 #: Heartbeat pulse frames (R-FOLD-1): constant width 3 so the line never
 #: jitters as the animation ticks.
 _PULSE_FRAMES = ("·  ", "·· ", "···", " ··", "  ·", "   ")
+
+#: The static pulse glyph used when animations are off (R-THEME-4).
+_STATIC_PULSE = "···"
+
+#: The unconfigured palette: its slot values are exactly the styles this module
+#: hardcoded before themes existed, so ``palette=None`` renders identically.
+_DEFAULT_PALETTE = Palette()
+
+
+def _pal(palette: Palette | None) -> Palette:
+    """The caller's palette, or the byte-identical default one."""
+    return palette if palette is not None else _DEFAULT_PALETTE
 
 
 def short(value: Any, limit: int = 40) -> str:
@@ -94,7 +107,9 @@ def fmt_chars(n: int) -> str:
     return f"~{n / 1000:.1f}k chars"
 
 
-def heartbeat_line(elapsed: float, chars: int, frame: int = 2) -> str:
+def heartbeat_line(
+    elapsed: float, chars: int, frame: int = 2, *, animate: bool = True,
+) -> str:
     """The R-FOLD-1 reasoning heartbeat one-liner (display-only, never persisted).
 
     ``∴ Thinking ··· 5s · ~1.2k chars · 240 chars/s`` — elapsed since the
@@ -106,16 +121,44 @@ def heartbeat_line(elapsed: float, chars: int, frame: int = 2) -> str:
         chars: Characters of reasoning accumulated so far.
         frame: Animation tick — one app-level timer advances it for every
             pane (the frames cycle; any int is valid).
+        animate: When False (``[tui] animations = false`` or ``NO_COLOR``,
+            R-THEME-4) the pulse freezes to a static glyph; the honest
+            elapsed/size/rate figures still update.
 
     Returns:
         The heartbeat line. Ephemeral by contract (R-VIEW-3): show it in a
         live region, never write it to a transcript sink.
     """
-    dots = _PULSE_FRAMES[frame % len(_PULSE_FRAMES)]
+    dots = _PULSE_FRAMES[frame % len(_PULSE_FRAMES)] if animate else _STATIC_PULSE
     line = f"∴ Thinking {dots} {fmt_elapsed(elapsed)} · {fmt_chars(chars)}"
     if elapsed >= 1.0 and chars:
         line += f" · {chars / elapsed:.0f} chars/s"
     return line
+
+
+def _elision_marker(marker: str, expand_hint: str, full_hint: str) -> str:
+    """Append the affordance clause to an elision marker (R-FOLD-2/7).
+
+    Both hints name *currently bound* keys supplied by the frontend (R-KEY-3);
+    an unbound key arrives empty and is simply not advertised.
+
+    Args:
+        marker: The bare marker (``"… +37 lines …"``), or ``""`` when nothing
+            was elided.
+        expand_hint: Key that flips the global expand toggle.
+        full_hint: Key that opens the untruncated transcript overlay.
+
+    Returns:
+        The marker with its affordance clause, or ``marker`` unchanged.
+    """
+    if not marker:
+        return marker
+    parts = []
+    if expand_hint:
+        parts.append(f"{expand_hint} expands")
+    if full_hint:
+        parts.append(f"{full_hint} full transcript")
+    return f"{marker} ({' · '.join(parts)})" if parts else marker
 
 
 def plain(renderable: Any) -> str:
@@ -147,7 +190,7 @@ def assistant_renderable(text: str, *, markdown: bool = False) -> Any:
 
 def format_event(
     ev: Any, chunks: list[str], *, markdown: bool = False, elide: bool = False,
-    expand_hint: str = "",
+    expand_hint: str = "", full_hint: str = "", palette: Palette | None = None,
 ) -> list[Any]:
     """Render one loop event to zero or more renderables, in order.
 
@@ -164,8 +207,15 @@ def format_event(
     ``expand_hint`` names the key that expands elided output — the frontend
     injects its *currently bound* expand-toggle key (R-KEY-3), so no key
     string is ever hardcoded here; empty means no affordance to advertise.
+    ``full_hint`` names the key that opens the untruncated transcript overlay
+    (R-FOLD-7), appended to the same marker when set.
+
+    ``palette`` supplies the semantic slot colors (R-THEME-1); ``None`` uses
+    the built-in default theme, whose slot values are exactly the styles this
+    function hardcoded before themes existed.
     """
     t = ev.type
+    pal = _pal(palette)
     out: list[Any] = []
     if t == LoopEventType.assistant_chunk:
         chunks.append(str(ev.data))
@@ -182,26 +232,26 @@ def format_event(
         args = getattr(tc, "arguments", {}) or {}
         preview = ", ".join(f"{k}={short(v)}" for k, v in list(args.items())[:3])
         out.append(Text.assemble(
-            ("⚙ ", "yellow"), (str(getattr(tc, "name", "?")), "bold yellow"),
-            (f"({preview})", "dim"),
+            ("⚙ ", pal.style("tool.icon")),
+            (str(getattr(tc, "name", "?")), pal.style("tool.name")),
+            (f"({preview})", pal.style("tool.args")),
         ))
     elif t == LoopEventType.tool_result:
         call, result = ev.data if isinstance(ev.data, tuple) else (None, ev.data)
         text = (getattr(result, "output", "") or "").rstrip()
         if text:
             ok = getattr(result, "success", True)
-            style = "green" if ok else "red"
+            style = pal.style("tool.ok") if ok else pal.style("tool.error")
             head, marker, tail = text, "", ""
             if elide:
                 caps = caps_for_tool(str(getattr(call, "name", "") or ""))
                 head, marker, tail = elide_middle(text, caps)
-                if marker and expand_hint:
-                    marker = f"{marker} ({expand_hint} expands)"
+                marker = _elision_marker(marker, expand_hint, full_hint)
             if marker:
                 styled = Text()
                 styled.append(head, style=style)
                 styled.append("\n")
-                styled.append(marker, style="dim")
+                styled.append(marker, style=pal.style("chrome.elision"))
                 if tail:
                     styled.append("\n")
                     styled.append(tail, style=style)
@@ -209,9 +259,9 @@ def format_event(
             else:
                 out.append(Text(text, style=style))
     elif t == LoopEventType.error:
-        out.append(Text(f"error: {ev.data}", style="red"))
+        out.append(Text(f"error: {ev.data}", style=pal.style("status.error")))
     elif t == LoopEventType.compact_boundary:
-        out.append(Text("… [context compacted]", style="dim"))
+        out.append(Text("… [context compacted]", style=pal.style("chrome.rule")))
     elif t == LoopEventType.result:
         r = ev.data
         reason = getattr(r, "reason", "") or ""
@@ -219,10 +269,10 @@ def format_event(
             f"· {getattr(r, 'turn_count', 0)} steps · "
             f"${float(getattr(r, 'cost_usd', 0) or 0):.4f}"
             + (f" · {reason}" if reason else ""),
-            style="dim",
+            style=pal.style("chrome.result"),
         ))
     elif t == LoopEventType.system and ev.data:
-        out.append(Text(str(ev.data), style="dim"))
+        out.append(Text(str(ev.data), style=pal.style("chrome.rule")))
     return out
 
 
@@ -251,6 +301,12 @@ class LaneTranscript:
         markdown: Render committed assistant prose as rich Markdown.
         clock: Monotonic time source for the thinking elapsed/rate figures;
             injectable for tests. Defaults to :func:`time.monotonic`.
+        expand_hint: Currently bound expand-toggle key, advertised on
+            elision markers (R-KEY-3).
+        full_hint: Currently bound transcript-overlay key, advertised
+            alongside it (R-FOLD-7).
+        palette: Semantic slot colors (R-THEME-1); ``None`` uses the built-in
+            default theme, which reproduces the pre-theme styles exactly.
     """
 
     def __init__(
@@ -260,6 +316,8 @@ class LaneTranscript:
         markdown: bool = True,
         clock: Callable[[], float] | None = None,
         expand_hint: str = "",
+        full_hint: str = "",
+        palette: Palette | None = None,
     ) -> None:
         self._sink = sink
         self._clock: Callable[[], float] = clock if clock is not None else time.monotonic
@@ -285,6 +343,12 @@ class LaneTranscript:
         #: expands)``). Injected by the frontend from its keybinding registry
         #: so the marker always names the currently bound key (R-KEY-3).
         self.expand_hint = expand_hint
+        #: Companion hint naming the transcript-overlay key (R-FOLD-7): the
+        #: universal fold target every elision points at.
+        self.full_hint = full_hint
+        #: Semantic slot colors (R-THEME-1). Mutable so a live ``/theme``
+        #: preview repaints subsequent output without rebuilding the pane.
+        self.palette = palette
 
     @property
     def live_tail(self) -> str:
@@ -345,6 +409,7 @@ class LaneTranscript:
         for renderable in format_event(
             ev, self._chunks,
             markdown=self.markdown, elide=self.elide, expand_hint=self.expand_hint,
+            full_hint=self.full_hint, palette=self.palette,
         ):
             self._sink(renderable)
 
@@ -384,22 +449,25 @@ class LaneTranscript:
         if not block:
             return
         self._last_thinking = block
+        pal = _pal(self.palette)
         if self.show_reasoning:
-            self._sink(Text(f"∴ {block}", style="dim italic"))
+            self._sink(Text(f"∴ {block}", style=pal.style("chrome.reasoning")))
         else:
             # The committed R-FOLD-1 trace: elapsed + honest size + the reveal
             # affordance. The animated heartbeat itself never persists.
             self._sink(Text(
                 f"∴ thought for {fmt_elapsed(elapsed)} ({fmt_chars(chars)})"
                 f" — {self.reveal_hint}",
-                style="dim",
+                style=pal.style("chrome.reasoning-trace"),
             ))
 
     def reveal_last(self) -> bool:
         """Print the most recent reasoning block; True if there was one."""
         if not self._last_thinking:
             return False
-        self._sink(Text(f"∴ {self._last_thinking}", style="dim italic"))
+        self._sink(Text(
+            f"∴ {self._last_thinking}", style=_pal(self.palette).style("chrome.reasoning"),
+        ))
         return True
 
     def commit(self) -> None:

@@ -118,6 +118,17 @@ status_line = ["model", "git", "context-used", "tokens", "cost", "run-state"]
 title = ["activity", "project"]   # terminal title; "off" disables
 ```
 
+**Themes** — `tui.theme` / `tui.theme_mode` / `tui.animations`. Semantic slot
+themes with dark/light variants, auto mode detection, and user theme files;
+see [Themes](#themes) below:
+
+```toml
+[tui]
+theme = "chimera"      # default | chimera | mono | <your theme file's stem>
+theme_mode = "auto"    # auto | dark | light | lock
+animations = true      # false → static spinners (NO_COLOR forces this off)
+```
+
 **Cohort retention** — `tui.cohorts`. Bare `--tui` sessions persist one
 cohort each under `~/.chimera/cohorts/`; a retention policy caps them. **OFF
 by default** (nothing is ever pruned without a policy); the cohort being run
@@ -143,6 +154,76 @@ max-wall-clock = 300         # seconds of active running time
 max-cost = 1.00
 max-wall-clock = 900
 ```
+
+## Themes
+
+A theme maps **semantic slots** — not widget colors. Roughly sixty named
+slots in seven families (`base`, `status`, `chrome`, `tool`, `markdown`,
+`syntax`, `diff`) plus three opacity knobs; swap a theme and every surface
+follows, because nothing addresses a widget.
+
+Three built-ins:
+
+| Theme | What it is |
+|---|---|
+| `default` | **the default** — terminal palette (your 16 ANSI colors), byte-identical to pre-theme output |
+| `chimera` | the house theme: truecolor with full dark/light variants |
+| `mono` | no color at all — structure carried by bold/dim/reverse |
+
+```toml
+[tui]
+theme = "chimera"       # built-in name, or the stem of a theme file
+theme_mode = "auto"     # auto | dark | light | lock
+animations = true       # false → static spinners and a frozen heartbeat pulse
+```
+
+**`/theme`** opens a fuzzy picker that **previews live** as you move the
+highlight — Enter keeps the theme, **Esc restores** what you had. `/theme list`
+prints the catalog with the active mode and color depth; `/theme <name>`
+switches straight away. A `/theme` switch is session-scoped; the message tells
+you the config key that makes it permanent.
+
+**Dark/light detection** (`theme_mode = "auto"`, the default) cascades:
+`$CHIMERA_THEME_MODE` → `$CHIMERA_TERM_BG` (a `#rrggbb` terminal background,
+judged by luminance) → `$COLORFGBG` → dark. `lock` detects once and ignores
+later terminal notifications; `dark`/`light` pin it outright.
+
+**Degradation** is automatic (nothing to configure): truecolor is detected
+from `$COLORTERM`, 256 colors from `$TERM`, else 16. Hex slot values quantize
+to the nearest palette entry; ANSI color *names* pass through untouched at
+every depth, which is why the default theme looks native in any terminal.
+**`NO_COLOR`** drops color entirely — attributes (bold, dim, reverse) survive,
+so the interface still reads as designed — and implies `animations = false`.
+
+**Your own themes** live as files under any config scope's `themes/`
+directory — `~/.config/chimera/themes/`, `~/.chimera/themes/`, or
+`<project>/.chimera/themes/` — in TOML (canonical), JSON, or YAML. The file
+stem is the theme name, and later scopes win. A theme may declare a `vars`
+palette that slots reference by `$name`, so a palette swap never touches the
+slots:
+
+```toml
+# ~/.chimera/themes/midnight.toml
+description = "cool dark"
+
+[vars]
+ink   = { dark = "#c8d3f5", light = "#2a2f45" }
+leaf  = "#7fd88f"
+
+[slots]
+base.text  = "$ink"
+diff.add   = "$leaf"
+tool.name  = "bold $leaf"
+"markdown.code" = "cyan"        # ANSI names are fine anywhere
+
+[opacity]
+reasoning = 0.6                 # <0.85 renders as the terminal's dim attribute
+```
+
+Any value may be a `{ dark = …, light = … }` pair; a missing variant falls
+back to the other one. Unknown slot names, circular `$var` chains, and
+malformed files are rejected — the TUI starts on the default theme and says
+why, rather than failing to launch.
 
 ## Permission approvals (opt-in)
 
