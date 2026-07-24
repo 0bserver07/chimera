@@ -380,25 +380,27 @@ def cmd_skills(_session: Any, env: Any, _args: str, out: PrintFn) -> None:
     imported on a partial install (skills is an optional surface).
     """
     try:
-        from chimera.skills.discovery import (
-            default_search_paths,
-            discover_skills,
-        )
+        from chimera.skills.discovery import discover_all_skills
     except Exception as exc:  # noqa: BLE001
         out(f"/skills: discovery unavailable ({exc})")
         return
 
     workdir = str(getattr(env, "workdir", None) or os.getcwd())
-    paths = default_search_paths(workdir=workdir)
     try:
-        skills = discover_skills(paths)
+        # Also lists other harnesses' skills when the opt-in foreign scan is
+        # enabled (config / CHIMERA_SKILLS_FOREIGN); default off.
+        skills = discover_all_skills(workdir=workdir)
     except Exception as exc:  # noqa: BLE001
         out(f"/skills: discovery failed: {exc}")
         return
     if not skills:
         out("/skills: no skills discovered")
         return
-    rows = [f"  {s.name:<24} {s.description}" for s in skills]
+    rows = []
+    for s in skills:
+        src = getattr(s, "source", "chimera")
+        suffix = "" if src == "chimera" else f"  (source: {src})"
+        rows.append(f"  {s.name:<24} {s.description}{suffix}")
     out("\n".join([f"Discovered {len(skills)} skill(s):", *rows]))
 
 

@@ -15,6 +15,7 @@ description: "Skill Discovery"
 | `content` | `str` | Full markdown body of the skill file |
 | `file_path` | `str` | Absolute path to the `SKILL.md` file |
 | `base_dir` | `str` | Directory containing the file |
+| `source` | `str` | Provenance: `"chimera"` for a native skill, else the foreign source directory (e.g. `~/.codex/skills`) |
 
 ## SKILL.md format
 
@@ -36,6 +37,10 @@ Name must match `^[a-z0-9][a-z0-9-]{0,63}$`.  Missing `name` or
 |----------|-------------|
 | `discover_skills(search_paths)` | Walk directories for `SKILL.md` files; later paths override earlier ones by name |
 | `default_search_paths(workdir)` | Return the three default skill paths in priority order |
+| `discover_all_skills(workdir)` | Native skills plus (opt-in) other harnesses' skills, merged with native winning |
+| `discover_foreign_skills(dirs)` | Discover skills from other harnesses' directories, each tagged with its `source` |
+| `resolve_foreign_config()` | Read `(enabled, allowlist)` for the foreign scan from the config chain |
+| `default_foreign_skill_dirs()` | Return the well-known default foreign-directory allowlist |
 | `bundled_algorithms_path()` | Return the path to the bundled algorithm skills shipped with the package |
 | `format_skills_for_prompt(skills)` | Render a `## Available Skills` bullet list for system prompt injection |
 | `default_remote_cache()` | Return `~/.chimera/cache/skills` (the default remote cache root) |
@@ -53,6 +58,24 @@ wins.  This mirrors the rest of Chimera's project-over-user precedence
 model: a project skill named `algo-binary-search` overrides the bundled
 version, and a user skill of the same name overrides the project
 version.
+
+## Cross-harness interop (opt-in)
+
+`discover_all_skills()` extends discovery to *also* read the skill
+directories other coding-agent harnesses keep in your home directory —
+a configurable allowlist that defaults to `~/.claude/skills`,
+`~/.codex/skills`, and `~/.agents/skills`. It is **off by default**
+(a foreign skill's description would otherwise land in the system prompt
+unreviewed) and is enabled through the config chain
+(`[skills] scan-foreign = true` in `~/.chimera/config.toml`) or the
+`CHIMERA_SKILLS_FOREIGN` environment variable.
+
+Precedence is **project > user Chimera > foreign**, and within foreign,
+allowlist order — a native skill always wins a name collision. Foreign
+skills are tagged with their source directory so
+`format_skills_for_prompt()` can label their provenance. See the
+[cross-harness skill interop guide](/guides/skill-interop/) for the full
+configuration and precedence reference.
 
 ## Bundled algorithm skills (G12)
 

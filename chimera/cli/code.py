@@ -837,8 +837,11 @@ def run_code(args: Any) -> int:
     # WHY (audit M-19): same pattern as above — log instead of swallow so a
     # broken SKILL.md surfaces visibly without crashing the REPL.
     try:
-        from chimera.skills.discovery import discover_skills, default_search_paths, format_skills_for_prompt
-        skills = discover_skills(default_search_paths(workdir))
+        from chimera.skills.discovery import discover_all_skills, format_skills_for_prompt
+        # discover_all_skills also folds in other harnesses' skill dirs when
+        # the opt-in foreign scan is enabled (config / CHIMERA_SKILLS_FOREIGN);
+        # default off, so this is unchanged for users who never enable it.
+        skills = discover_all_skills(workdir)
         skills_section = format_skills_for_prompt(skills)
         if skills_section:
             system += "\n\n" + skills_section

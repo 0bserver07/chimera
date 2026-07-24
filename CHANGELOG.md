@@ -24,6 +24,32 @@ commit receipts.
   non-message entries that persist, navigate, and are skipped by
   `get_messages`. 9 hermetic pins (faux provider / fake summarizer, no real
   LLM).
+- **Cross-harness skill interop — discovery reads other harnesses' skill
+  directories** (`chimera/skills/discovery.py`): skill discovery can now
+  *also* scan the `SKILL.md` directories other coding-agent harnesses keep in
+  the user's home directory — a configurable allowlist defaulting to the
+  well-known set (`~/.claude/skills`, `~/.codex/skills`, `~/.agents/skills`).
+  Serves the interop-not-compete pillar: reuse portable skills you already
+  have instead of copying them into `~/.chimera/skills/`. **Opt-in and safe by
+  default** — the foreign scan is OFF unless enabled via the existing config
+  chain (`[skills] scan-foreign = true` in `~/.chimera/config.toml`, allowlist
+  overridable with `foreign-dirs`) or the `CHIMERA_SKILLS_FOREIGN` env var,
+  because a foreign skill's description would otherwise reach the system prompt
+  unreviewed; with the scan off, behavior is byte-for-byte unchanged.
+  New surface: `discover_all_skills()` (native + additive foreign, native
+  always winning a name collision), `discover_foreign_skills()`,
+  `resolve_foreign_config()`, `default_foreign_skill_dirs()`, and a new
+  `Skill.source` provenance field. Documented precedence: **project > user
+  Chimera > foreign**, and within foreign, **allowlist order**.
+  `format_skills_for_prompt()` labels each foreign skill with its source
+  directory (e.g. `(source: ~/.codex/skills)`) plus a one-line third-party
+  note, so the user and the model can tell foreign instructions from project
+  ones; native-only output is unchanged. Wired into `chimera code`'s prompt
+  injection and the `/skills` listing. Guide `docs/guides/skill-interop.md`
+  (+ site copy) and the skill-discovery module doc. 14 new tests over a fake
+  foreign skills dir (source tagging, `~` expansion, allowlist precedence,
+  native-wins-over-foreign, default-off pin, config + env resolution, env
+  overrides config, provenance labeling).
 - **External-agent lanes — race real third-party agent CLIs in the
   multiplexer** (`chimera/assembly/external_driver.py`, issue #169): a lane
   whose driver spawns a real external coding-agent CLI as a subprocess in the
