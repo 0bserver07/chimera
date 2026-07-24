@@ -56,6 +56,29 @@ MOCK_AGENT = textwrap.dedent("""
 MOCK_AGENT_NOOP = "import sys; print('mock-agent: did nothing', file=sys.stderr)"
 
 
+# A mock agent that records its own argv + the propagated policy env into
+# the teams home, then completes the task. Lets us assert exactly what the
+# runner handed the external runtime.
+MOCK_AGENT_RECORD_ENV = textwrap.dedent("""
+    import json, os, sys
+    from chimera.cli.agent_teams import Team
+    home = os.environ['CHIMERA_TEAMS_HOME']
+    with open(os.path.join(home, 'spawn_record.json'), 'w') as f:
+        json.dump({
+            'policy': os.environ.get('CHIMERA_TEAM_POLICY'),
+            'demo_sandbox': os.environ.get('DEMO_SANDBOX'),
+            'argv': sys.argv[1:],
+        }, f)
+    team = Team(os.environ['CHIMERA_TEAM'])
+    agent = os.environ['CHIMERA_AGENT']
+    for rec in team.list_tasks():
+        if rec.get('status') == 'open':
+            if team.claim_task(rec['id'], agent):
+                team.complete_task(rec['id'], agent, result='recorded')
+                break
+""").strip()
+
+
 # A mock agent that sleeps forever — to test task_timeout.
 MOCK_AGENT_HANG = "import time; time.sleep(30)"
 
@@ -869,3 +892,188 @@ class TestMailPush:
         pending = mailbox.recv(drain=False)
         assert [m["content"] for m in pending] == ["pull-only delivery"]
         assert "no live session to push into" in log.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# Permission propagation (issue #150)
+# ---------------------------------------------------------------------------
+
+
+class TestPolicyPropagation:
+    def _record(self, tmp_path: Path) -> dict[str, Any]:
+        import json
+        return json.loads((tmp_path / "spawn_record.json").read_text())
+
+    def test_teammate_inherits_the_teams_policy(self, tmp_path: Path) -> None:
+        # The lead sets one posture; the teammate does not get a vote.
+        team = Team("inherit", root=tmp_path)
+        team.init(policy="read-only")
+        team.add_task("t", created_by="lead")
+
+        log = io.StringIO()
+        rc = run_loop(
+            team_name="inherit",
+            agent_id="w1",
+            cmd_template=_cmd_for(MOCK_AGENT_RECORD_ENV),
+            teams_root=tmp_path,
+            idle_timeout=0.4,
+            poll_interval=0.05,
+            log=log,
+            policy_runtime="chimera",
+        )
+
+        assert rc == 0
+        assert self._record(tmp_path)["policy"] == "read-only"
+        assert "team policy 'read-only'" in log.getvalue()
+
+    def test_explicit_policy_overrides_the_team(self, tmp_path: Path) -> None:
+        team = Team("override", root=tmp_path)
+        team.init(policy="read-only")
+        team.add_task("t", created_by="lead")
+
+        run_loop(
+            team_name="override",
+            agent_id="w1",
+            cmd_template=_cmd_for(MOCK_AGENT_RECORD_ENV),
+            teams_root=tmp_path,
+            idle_timeout=0.4,
+            poll_interval=0.05,
+            log=io.StringIO(),
+            policy="dangerous",
+            policy_runtime="chimera",
+        )
+
+        assert self._record(tmp_path)["policy"] == "dangerous"
+
+    def test_no_policy_anywhere_leaves_the_environment_untouched(
+        self, tmp_path: Path,
+    ) -> None:
+        # The unchanged-by-default guarantee.
+        team = Team("unpoliced", root=tmp_path)
+        team.init()
+        team.add_task("t", created_by="lead")
+
+        run_loop(
+            team_name="unpoliced",
+            agent_id="w1",
+            cmd_template=_cmd_for(MOCK_AGENT_RECORD_ENV),
+            teams_root=tmp_path,
+            idle_timeout=0.4,
+            poll_interval=0.05,
+            log=io.StringIO(),
+        )
+
+        assert self._record(tmp_path)["policy"] is None
+
+    def test_translated_flags_are_spliced_into_the_command(
+        self, tmp_path: Path, monkeypatch: Any,
+    ) -> None:
+        from chimera.mcp_servers.team_policy import RuntimeAdapter
+
+        adapter = RuntimeAdapter.from_config(
+            "demo",
+            {
+                "read-only": "--sandbox ro --add-dir {teams_home}",
+                "env": {"read-only": {"DEMO_SANDBOX": "ro"}},
+            },
+        )
+        monkeypatch.setattr(
+            "chimera.mcp_servers.team_policy.load_runtime_adapters",
+            lambda: {"demo": adapter},
+        )
+
+        team = Team("spliced", root=tmp_path)
+        team.init(policy="read-only")
+        team.add_task("t", created_by="lead")
+
+        run_loop(
+            team_name="spliced",
+            agent_id="w1",
+            cmd_template=_cmd_for(MOCK_AGENT_RECORD_ENV) + " {policy_args}",
+            teams_root=tmp_path,
+            idle_timeout=0.4,
+            poll_interval=0.05,
+            log=io.StringIO(),
+            policy_runtime="demo",
+        )
+
+        record = self._record(tmp_path)
+        assert record["argv"] == [
+            "--sandbox", "ro", "--add-dir", str(tmp_path.resolve()),
+        ]
+        assert record["demo_sandbox"] == "ro"
+
+    def test_missing_placeholder_warns_instead_of_guessing(
+        self, tmp_path: Path, monkeypatch: Any,
+    ) -> None:
+        from chimera.mcp_servers.team_policy import RuntimeAdapter
+
+        adapter = RuntimeAdapter.from_config("demo", {"read-only": "--sandbox ro"})
+        monkeypatch.setattr(
+            "chimera.mcp_servers.team_policy.load_runtime_adapters",
+            lambda: {"demo": adapter},
+        )
+
+        team = Team("unspliced", root=tmp_path)
+        team.init(policy="read-only")
+        team.add_task("t", created_by="lead")
+
+        log = io.StringIO()
+        run_loop(
+            team_name="unspliced",
+            agent_id="w1",
+            cmd_template=_cmd_for(MOCK_AGENT_RECORD_ENV),
+            teams_root=tmp_path,
+            idle_timeout=0.4,
+            poll_interval=0.05,
+            log=log,
+            policy_runtime="demo",
+        )
+
+        assert "were NOT applied" in log.getvalue()
+        # The env-borne posture still travelled, so a Chimera-side teammate
+        # would still be bound by it.
+        assert self._record(tmp_path)["policy"] == "read-only"
+
+    def test_unknown_runtime_refuses_to_launch(self, tmp_path: Path) -> None:
+        import pytest
+
+        team = Team("unknown-rt", root=tmp_path)
+        team.init(policy="read-only")
+
+        with pytest.raises(ValueError, match="no policy translation"):
+            run_loop(
+                team_name="unknown-rt",
+                agent_id="w1",
+                cmd_template="totally-unconfigured-agent {prompt}",
+                teams_root=tmp_path,
+                idle_timeout=0.2,
+                poll_interval=0.05,
+                log=io.StringIO(),
+            )
+
+    def test_main_surfaces_an_unknown_runtime_as_exit_2(
+        self, tmp_path: Path,
+    ) -> None:
+        Team("cli-unknown", root=tmp_path).init(policy="read-only")
+
+        rc = main([
+            "--team", "cli-unknown", "--agent", "w1",
+            "--cmd", "totally-unconfigured-agent {prompt}",
+            "--teams-home", str(tmp_path),
+            "--idle-timeout", "0.2",
+        ])
+        assert rc == 2
+
+    def test_main_accepts_an_explicit_policy(self, tmp_path: Path) -> None:
+        Team("cli-policy", root=tmp_path).init()
+
+        rc = main([
+            "--team", "cli-policy", "--agent", "w1",
+            "--cmd", _cmd_for(MOCK_AGENT_RECORD_ENV) + " {prompt}",
+            "--teams-home", str(tmp_path),
+            "--idle-timeout", "0.2",
+            "--policy", "read-only",
+            "--policy-runtime", "chimera",
+        ])
+        assert rc == 0

@@ -63,6 +63,19 @@ flag is downgraded with a warning and the runner falls back to
 spawn-per-task — preserving the legacy behavior so misconfigured
 invocations still make progress.
 
+Permission propagation (issue #150)
+-----------------------------------
+
+``--policy read-only|workspace-write|dangerous`` gives this teammate a
+posture; omitting it inherits whatever the lead set on the team, so one
+``chimera team create --policy ...`` governs every teammate instead of
+each runtime being configured separately. The resolved posture is
+exported as ``CHIMERA_TEAM_POLICY`` (a Chimera teammate then binds
+itself to it in-process) and translated into the external runtime's own
+flags through :mod:`chimera.mcp_servers.team_policy`, spliced in via a
+``{policy_args}`` placeholder in ``--cmd``. With no policy anywhere,
+nothing changes.
+
 Real-time mail (issue #149)
 ---------------------------
 
@@ -90,6 +103,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Protocol, TextIO
 
 from chimera.cli.agent_teams import ENV_FLAG, Team, TeamMailbox
+from chimera.mcp_servers.team_policy import (
+    apply_policy_args,
+    detect_runtime,
+    translate_policy,
+)
 from chimera.mcp_servers.team_push import DEFAULT_WATCH_INTERVAL, MailboxWatcher
 
 if TYPE_CHECKING:
@@ -384,6 +402,9 @@ def run_loop(
     acp_client_factory: ACPClientFactory | None = None,
     push: bool = True,
     push_interval: float = DEFAULT_WATCH_INTERVAL,
+    policy: str | None = None,
+    policy_runtime: str | None = None,
+    workspace: Path | None = None,
 ) -> int:
     """Poll-and-spawn loop.
 
@@ -424,9 +445,25 @@ def run_loop(
             to push into and keep today's pull-only behavior regardless.
             Undeliverable mail is always left for the pull path.
         push_interval: Seconds between mailbox stats for the watcher.
+        policy: Permission posture for this teammate (issue #150).
+            ``None`` inherits the team's configured policy — that
+            inheritance IS the propagation. When neither is set,
+            permissions stay each runtime's own business, exactly as
+            before.
+        policy_runtime: Adapter name for translating the policy into the
+            external runtime's flags. ``None`` detects it from the first
+            token of ``cmd_template``.
+        workspace: Directory the teammate may write to under
+            ``workspace-write``. Defaults to the current directory.
 
     Returns:
         Exit code (0 on idle-timeout shutdown).
+
+    Raises:
+        ValueError: If a policy is in force but names an unknown posture
+            or a runtime with no translation. Running a teammate at an
+            unknown posture is the silent failure the policy exists to
+            remove, so it fails loudly instead.
     """
     # Coerce flags: --reuse-session is only meaningful with --runtime acp.
     # A misconfigured invocation should still make progress, so we warn
@@ -479,6 +516,41 @@ def run_loop(
     }
     if teams_root is not None:
         base_env["CHIMERA_TEAMS_HOME"] = str(teams_root)
+
+    # Permission propagation (issue #150). An explicit --policy wins; with
+    # none, the teammate inherits whatever posture the lead set on the team.
+    effective_policy = policy or team.policy
+    if effective_policy is not None:
+        runtime_name = policy_runtime or detect_runtime(cmd_template)
+        translation = translate_policy(
+            effective_policy,
+            runtime_name,
+            workspace=workspace,
+            teams_home=teams_root,
+        )
+        # The posture travels the same way identity does, so a Chimera
+        # teammate binds itself to it in-process with no config edit.
+        base_env["CHIMERA_TEAM_POLICY"] = translation.policy
+        base_env.update(translation.env)
+        if translation.args:
+            if "{policy_args}" in cmd_template:
+                cmd_template = apply_policy_args(cmd_template, translation)
+            else:
+                # Guessing where flags belong in someone else's command
+                # line is how you get a silently-unenforced posture.
+                print(
+                    f"chimera-team-run: policy {translation.policy!r} maps to "
+                    f"{translation.args_string!r} for runtime "
+                    f"{translation.runtime!r}, but --cmd has no "
+                    f"{{policy_args}} placeholder; those flags were NOT "
+                    f"applied.",
+                    file=log,
+                )
+        print(
+            f"chimera-team-run: team policy {translation.policy!r} "
+            f"(runtime {translation.runtime!r}) applied to {agent_id}.",
+            file=log,
+        )
 
     def _my_completed() -> int:
         return sum(
@@ -804,6 +876,34 @@ def main(argv: list[str] | None = None) -> int:
             f"(default: {DEFAULT_WATCH_INTERVAL})."
         ),
     )
+    parser.add_argument(
+        "--policy",
+        default=None,
+        help=(
+            "Permission posture for this teammate: read-only, "
+            "workspace-write, or dangerous. Omit to inherit the team's "
+            "configured policy; with neither set, permissions stay each "
+            "runtime's own business."
+        ),
+    )
+    parser.add_argument(
+        "--policy-runtime",
+        default=None,
+        help=(
+            "Which runtime's dialect to translate the policy into. "
+            "Defaults to the first token of --cmd. Declare unknown "
+            "runtimes with a [team_runtimes.<name>] table in "
+            "~/.chimera/config.toml."
+        ),
+    )
+    parser.add_argument(
+        "--workspace",
+        default=None,
+        help=(
+            "Directory the teammate may write to under workspace-write "
+            "(default: the current directory)."
+        ),
+    )
     args = parser.parse_args(argv)
 
     # In reuse-session ACP mode the placeholders are not required —
@@ -823,20 +923,30 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     root = Path(args.teams_home).expanduser() if args.teams_home else None
-    return run_loop(
-        team_name=args.team,
-        agent_id=args.agent,
-        cmd_template=args.cmd,
-        teams_root=root,
-        idle_timeout=args.idle_timeout,
-        task_timeout=args.task_timeout,
-        poll_interval=args.poll_interval,
-        max_nudges=args.max_nudges,
-        reuse_session=args.reuse_session,
-        runtime=args.runtime,
-        push=args.push,
-        push_interval=args.push_interval,
-    )
+    workspace = Path(args.workspace).expanduser() if args.workspace else None
+    try:
+        return run_loop(
+            team_name=args.team,
+            agent_id=args.agent,
+            cmd_template=args.cmd,
+            teams_root=root,
+            idle_timeout=args.idle_timeout,
+            task_timeout=args.task_timeout,
+            poll_interval=args.poll_interval,
+            max_nudges=args.max_nudges,
+            reuse_session=args.reuse_session,
+            runtime=args.runtime,
+            push=args.push,
+            push_interval=args.push_interval,
+            policy=args.policy,
+            policy_runtime=args.policy_runtime,
+            workspace=workspace,
+        )
+    except ValueError as exc:
+        # An unresolvable posture must stop the teammate, not launch it
+        # at whatever permissions it happens to have.
+        print(f"chimera-team-run: {exc}", file=sys.stderr)
+        return 2
 
 
 if __name__ == "__main__":

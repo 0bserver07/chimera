@@ -621,6 +621,35 @@ def _read_steering_input() -> str | None:
     return None
 
 
+def _team_policy_interceptors(workspace: str) -> Any:
+    """Build agent-team policy interceptors for this process, if any.
+
+    A Chimera process spawned as a teammate inherits its lead's
+    permission posture through the environment
+    (``CHIMERA_TEAM_POLICY``), the same channel the runner already uses
+    for team identity. Turning that into a ``tool_call`` interceptor is
+    what makes the posture *binding* rather than advisory.
+
+    Args:
+        workspace: Directory writes are allowed to target under
+            ``workspace-write``.
+
+    Returns:
+        An :class:`~chimera.core.interception.Interceptors` chain, or
+        ``None`` when no team policy is configured — in which case the
+        agent behaves exactly as it always has.
+
+    Raises:
+        ValueError: If ``CHIMERA_TEAM_POLICY`` names an unknown posture.
+            Running unrestricted because a posture failed to parse is
+            the precise failure this feature exists to remove, so the
+            caller is expected to refuse the run.
+    """
+    from chimera.mcp_servers.team_policy import team_interceptors_from_env
+
+    return team_interceptors_from_env(workspace)
+
+
 # -- Main REPL --
 
 def run_code(args: Any) -> int:
@@ -759,9 +788,23 @@ def run_code(args: Any) -> int:
             from chimera.assembly.coding_agent import CodingAgent
             from chimera.core.loop_events import LoopEventType
 
+            # Agent-team permission propagation (#150). When this process
+            # was spawned as a teammate under a team policy, the posture
+            # arrives in the environment alongside the team identity and
+            # becomes a real tool_call gate — a teammate cannot out-vote
+            # its lead. Returns None (unchanged behavior) otherwise.
+            try:
+                team_interceptors = _team_policy_interceptors(cwd)
+            except ValueError as exc:
+                # Fail closed: better to refuse the task than to work
+                # through it at permissions nobody chose.
+                print(f"team policy error: {exc}", file=sys.stderr)
+                return 2
+
             async def _print_run() -> None:
                 agent = CodingAgent(
                     model=model, preset=effective_preset, project_dir=cwd,
+                    interceptors=team_interceptors,
                     **agent_kwargs,
                 )
                 saw_chunk = False

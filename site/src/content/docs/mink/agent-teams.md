@@ -46,7 +46,7 @@ agent command per task.
 export CHIMERA_EXPERIMENTAL_AGENT_TEAMS=1
 
 # Lifecycle
-chimera team create <name> [--model kimi-k2.6]
+chimera team create <name> [--model kimi-k2.6] [--policy read-only|workspace-write|dangerous]
 chimera team join <name> <agent_id>
 chimera team rm <name> [--force]
 chimera team ls [--json]
@@ -54,6 +54,11 @@ chimera team ls [--json]
 # Tasks
 chimera team task add <name> "<description>" [--by <id>] [--depends-on <task_id> ...]
 chimera team task list <name>
+
+# Permissions
+chimera team policy <name>                   # show the team's posture
+chimera team policy <name> read-only         # set it (or 'none' to clear)
+chimera team audit <name> [--agent <id>] [--json]
 
 # Status & dashboard
 chimera team status <name>
@@ -128,6 +133,120 @@ cannot be completed until its plan is approved:
 - `CHIMERA_AUTO_APPROVE_PLANS=1` auto-approves at propose time
   (headless runs).
 
+## Permission propagation
+
+Every coding-agent runtime spells "what may this agent touch" its own
+way — sandbox flags, a config file's permission block, an in-process
+policy object. Configuring each teammate separately means the lead has
+no way to say *"this team runs read-only"* and have it hold, and the
+failure is silent: a teammate quietly running looser than intended looks
+exactly like one running correctly.
+
+A team therefore carries **one posture**, set by the lead, inherited by
+every teammate:
+
+```bash
+chimera team create review-pr --policy read-only
+chimera team policy review-pr workspace-write   # change it later
+```
+
+| Policy | Means |
+|---|---|
+| `read-only` | Only the read tools (`read_file`, `search`, `list_files`, `repo_map`, `import_graph`). Writes and shell are denied. |
+| `workspace-write` | Reads and shell allowed; writes must land inside the workspace (plus the teams home). |
+| `dangerous` | No restriction — for sandboxes you already trust. |
+
+Unset (the default) means what it always meant: each runtime's own
+configuration is in charge, and nothing about your existing teams
+changes.
+
+### How the posture reaches a teammate
+
+`chimera-team-run` resolves the posture — explicit `--policy` wins,
+otherwise the team's — and propagates it two ways:
+
+1. **`CHIMERA_TEAM_POLICY` in the environment**, alongside the
+   `CHIMERA_TEAM` / `CHIMERA_AGENT` identity the runner already exports.
+   A **Chimera teammate binds itself** to it: the policy becomes a
+   `tool_call` interceptor, which runs *before* hooks and before the
+   agent's own permission check, so a teammate cannot out-vote its lead.
+2. **Translated flags for an external runtime**, spliced into `--cmd`
+   wherever you put `{policy_args}`:
+
+   ```bash
+   chimera-team-run --team review-pr --agent ext-1 \
+       --cmd 'my-agent {policy_args} run "{prompt}"' \
+       --policy workspace-write --workspace ~/project
+   ```
+
+Translations are **data**. Chimera's own runtime is built in and needs
+no flags at all (the env var does the work). Any other runtime is your
+command, so its dialect is your config — declare it once in
+`~/.chimera/config.toml`:
+
+```toml
+[team_runtimes.my-agent]
+read-only = "--sandbox read-only"
+workspace-write = "--sandbox write --add-dir {workspace} --add-dir {teams_home}"
+dangerous = "--no-sandbox"
+
+[team_runtimes.my-agent.env]
+workspace-write = { MY_AGENT_SANDBOX = "write" }
+```
+
+`{workspace}` and `{teams_home}` are substituted at spawn time. The
+runtime name is matched against the first token of `--cmd`, or set it
+explicitly with `--policy-runtime`.
+
+**A posture that cannot be translated stops the teammate.** If a policy
+is in force and the runtime has no adapter, `chimera-team-run` exits 2
+with the list of known runtimes rather than launching an agent at
+permissions nobody chose. Likewise, if the flags exist but `--cmd` has
+no `{policy_args}`, the runner says so loudly instead of guessing where
+they belong in your command line.
+
+### `team_*` is never blocked
+
+Coordination tools are the substrate a teammate stands on, not the work
+it does. A `read-only` teammate that cannot call `team_claim_task` is
+not safe, it is broken — and broken in the confusing way, where tools
+fail with permission errors that look like the agent misbehaving. Every
+posture allows `team_*` unconditionally, and `workspace-write` always
+adds the teams home to the writable roots. That is the same class of
+footgun as the sandbox-write gotcha below, hidden on purpose.
+
+### Blocked calls are visible
+
+A posture that silently blocks work would look like a lazy agent. Every
+denial is recorded to `~/.chimera/teams/<name>/audit.jsonl` and surfaces
+in both status and the audit list:
+
+```console
+$ chimera team status review-pr
+{
+  "name": "review-pr",
+  "policy": "read-only",
+  ...
+  "policy_decisions": { "denied": 3 }
+}
+
+$ chimera team audit review-pr
+denied    codex-1           write_file          team policy 'read-only' does not allow 'write_file' (set by the team lead)
+```
+
+### Honest scope
+
+- In-process enforcement is real only where Chimera owns the loop
+  (a `chimera code` teammate). For a third-party runtime the
+  translation configures **that runtime's** sandbox — enforcement is
+  still its own; what the layer removes is the operator having to
+  remember three dialects and getting one of them wrong.
+- Under `workspace-write`, path confinement inspects the write tools'
+  arguments (`path`, resolved through symlinks). **Shell commands are
+  allowed and are not path-checked** — confining a subprocess is a
+  sandbox's job, not an argument parser's, which is exactly why the
+  policy is also translated into the runtime's own sandbox flags.
+
 ## Runner layer: `chimera-team-run`
 
 Polls the team's task list and spawns the configured external agent
@@ -140,7 +259,9 @@ failing to make progress").
 chimera-team-run --team <name> --agent <agent_id> \
     --cmd '<external agent command with {prompt} or {prompt_file}>' \
     [--idle-timeout 60] [--task-timeout 600] [--max-nudges 1] \
-    [--no-push] [--push-interval 0.25]
+    [--no-push] [--push-interval 0.25] \
+    [--policy read-only|workspace-write|dangerous] \
+    [--policy-runtime <name>] [--workspace <dir>]
 ```
 
 The runner injects `CHIMERA_TEAM`, `CHIMERA_AGENT`, and
@@ -421,9 +542,12 @@ least one, no double-claims.
 4. **No plan-approval workflow.** Tasks can't yet require a
    teammate-proposed plan + lead-approve gate. See issue
    [#147](https://github.com/0bserver07/chimera/issues/147).
-5. **Permissions are per-runtime.** Each agent's sandbox / approval
-   policy is configured in its own config — no unified propagation yet.
-   See issue [#150](https://github.com/0bserver07/chimera/issues/150).
+5. **Permission enforcement is in-process only for Chimera teammates.**
+   The lead's posture propagates to every runtime (see
+   [Permission propagation](#permission-propagation)), but only a
+   Chimera teammate is *bound* by it in-process; for a third-party
+   runtime the layer configures that runtime's own sandbox. Under
+   `workspace-write`, shell commands are not path-checked.
 6. **Stuck claims** get nudged and force-released; the task isn't lost,
    but the agent's "I claimed it" intent is. Tune `--max-nudges` if
    you're seeing agents that need more time.
@@ -440,6 +564,8 @@ least one, no double-claims.
 - Runner: [`chimera/mcp_servers/teammate_runner.py`](https://github.com/0bserver07/chimera/blob/master/chimera/mcp_servers/teammate_runner.py)
 - Mail push: [`chimera/mcp_servers/team_push.py`](https://github.com/0bserver07/chimera/blob/master/chimera/mcp_servers/team_push.py)
   (`MailboxWatcher`, `TeammateSink`)
+- Permission propagation: [`chimera/mcp_servers/team_policy.py`](https://github.com/0bserver07/chimera/blob/master/chimera/mcp_servers/team_policy.py)
+  (`RuntimeAdapter`, `WorkspaceWrite`, `team_policy_interceptor`)
 - Live dashboard: [`chimera/mink/team_watch.py`](https://github.com/0bserver07/chimera/blob/master/chimera/mink/team_watch.py)
 - Role discovery: [`chimera/agents/team_roles.py`](https://github.com/0bserver07/chimera/blob/master/chimera/agents/team_roles.py)
 - Examples + verify: [`examples/agent_teams/`](https://github.com/0bserver07/chimera/tree/master/examples/agent_teams)

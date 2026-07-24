@@ -11,6 +11,8 @@ Subcommands::
     chimera team task add <name> "<desc>" add a task
     chimera team task list <name>         list tasks
     chimera team status <name>            show team config + counts
+    chimera team policy <name> [P]        show or set the team's posture
+    chimera team audit <name>             show policy decisions (denials)
     chimera team ls                       list all teams
     chimera team rm <name> [--force]      destroy a team
     chimera team watch <name>             live status dashboard
@@ -28,12 +30,14 @@ from chimera.agents.team_roles import discover_team_roles
 from chimera.cli.agent_teams import (
     ENV_FLAG,
     Team,
+    TeamAudit,
     create_team,
     destroy_team,
     is_enabled,
     join_team,
     list_teams,
 )
+from chimera.mcp_servers.team_policy import POLICY_VALUES
 from chimera.mink.team_watch import watch_team
 
 
@@ -45,6 +49,15 @@ def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") 
     p_create = team_sub.add_parser("create", help="Create a new team")
     p_create.add_argument("name")
     p_create.add_argument("--model", default="kimi-k2.6")
+    p_create.add_argument(
+        "--policy",
+        default=None,
+        choices=list(POLICY_VALUES),
+        help=(
+            "Permission posture every teammate inherits. Omit to leave "
+            "each runtime's own configuration in charge."
+        ),
+    )
 
     p_join = team_sub.add_parser("join", help="Join an existing team")
     p_join.add_argument("name")
@@ -70,6 +83,25 @@ def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") 
 
     p_status = team_sub.add_parser("status", help="Show team summary")
     p_status.add_argument("name")
+
+    p_policy = team_sub.add_parser(
+        "policy", help="Show or set the team's permission posture",
+    )
+    p_policy.add_argument("name")
+    p_policy.add_argument(
+        "policy",
+        nargs="?",
+        default=None,
+        choices=list(POLICY_VALUES) + ["none"],
+        help="New posture, or 'none' to clear it. Omit to show the current one.",
+    )
+
+    p_audit = team_sub.add_parser(
+        "audit", help="Show policy decisions recorded for a team",
+    )
+    p_audit.add_argument("name")
+    p_audit.add_argument("--agent", default=None, help="Filter to one teammate.")
+    p_audit.add_argument("--json", dest="as_json", action="store_true")
 
     p_ls = team_sub.add_parser("ls", help="List all teams")
     p_ls.add_argument("--json", dest="as_json", action="store_true", help="Emit JSON.")
@@ -108,8 +140,14 @@ def run(args: argparse.Namespace) -> int:
 
     action = getattr(args, "team_action", None)
     if action == "create":
-        team = create_team(args.name, default_model=args.model)
+        team = create_team(
+            args.name,
+            default_model=args.model,
+            policy=getattr(args, "policy", None),
+        )
         print(f"created team '{team.name}' at {team.dir}")
+        if team.policy:
+            print(f"policy: {team.policy} (inherited by every teammate)")
         return 0
     if action == "join":
         team = join_team(args.name, args.agent_id)
@@ -140,14 +178,54 @@ def run(args: argparse.Namespace) -> int:
         tasks = team.list_tasks()
         open_tasks = sum(1 for t in tasks if t.get("status") == "open")
         completed = sum(1 for t in tasks if t.get("status") == "completed")
+        audit = TeamAudit(team)
+        # A posture that silently blocked work would look like a lazy
+        # agent, so the blocked count rides alongside the task counts.
         print(json.dumps({
             "name": cfg.get("name"),
             "default_model": cfg.get("default_model"),
             "members": cfg.get("members", []),
+            "policy": team.policy,
             "tasks_total": len(tasks),
             "tasks_open": open_tasks,
             "tasks_completed": completed,
+            "policy_decisions": audit.summary(),
         }, indent=2))
+        return 0
+
+    if action == "policy":
+        team = Team(args.name)
+        if not team.exists():
+            print(f"team '{args.name}' does not exist", file=sys.stderr)
+            return 1
+        requested = getattr(args, "policy", None)
+        if requested is None:
+            print(team.policy or "none")
+            return 0
+        try:
+            team.set_policy(None if requested == "none" else requested)
+        except ValueError as exc:
+            print(f"refused: {exc}", file=sys.stderr)
+            return 1
+        print(f"policy: {team.policy or 'none'}")
+        return 0
+
+    if action == "audit":
+        team = Team(args.name)
+        if not team.exists():
+            print(f"team '{args.name}' does not exist", file=sys.stderr)
+            return 1
+        entries = TeamAudit(team).entries(agent_id=getattr(args, "agent", None))
+        if getattr(args, "as_json", False):
+            print(json.dumps(entries, indent=2))
+        elif not entries:
+            print("no policy decisions recorded")
+        else:
+            for rec in entries:
+                print(
+                    f"{rec.get('decision', '?'):8}  {rec.get('agent_id', '?'):16}  "
+                    f"{rec.get('tool', '?'):18}  {rec.get('reason', '')}"
+                )
         return 0
 
     if action == "ls":
@@ -161,6 +239,7 @@ def run(args: argparse.Namespace) -> int:
                 for t in teams:
                     print(
                         f"{t['name']:24}  members={len(t['members'])}  "
+                        f"policy={t.get('policy') or 'none'}  "
                         f"open={t['tasks_open']}  claimed={t['tasks_claimed']}  "
                         f"completed={t['tasks_completed']}"
                     )
@@ -203,7 +282,8 @@ def run(args: argparse.Namespace) -> int:
         return 0
 
     print(
-        "usage: chimera team {create|join|task|status|ls|rm|watch|approvals|roles} ...",
+        "usage: chimera team "
+        "{create|join|task|status|policy|audit|ls|rm|watch|approvals|roles} ...",
         file=sys.stderr,
     )
     return 1

@@ -161,6 +161,38 @@ commit receipts.
   end-to-end proof through a real `AgentDriver` on the hermetic harness) and
   three runner cases in `tests/mcp/test_teammate_runner.py`.
 
+- **Unified per-teammate permission propagation** (#150): a team now carries
+  **one posture, set by the lead, inherited by every teammate** —
+  `chimera team create --policy read-only|workspace-write|dangerous`, plus
+  `chimera team policy <name> [P|none]` to read or change it. New
+  `chimera/mcp_servers/team_policy.py` maps each posture to a real
+  `PermissionPolicy` (`read-only` → the existing `ReadOnly` preset;
+  `workspace-write` → a new `WorkspaceWrite` that resolves a write tool's
+  `path` through symlinks and denies anything escaping the allowed roots;
+  `dangerous` → `AutoApprove`). `chimera-team-run --policy` resolves
+  explicit-then-team and propagates it two ways: `CHIMERA_TEAM_POLICY` in the
+  teammate's environment (the same channel identity already travels), and
+  runtime-specific flags spliced into `--cmd` at a `{policy_args}`
+  placeholder. **A Chimera teammate is *bound* by the posture, not merely
+  told it**: `chimera code -p` turns it into a `tool_call` interceptor, which
+  runs before hooks and before the agent's own permission check — a teammate
+  cannot out-vote its lead. Translations are data: Chimera's runtime is
+  built in (no flags needed) and any other runtime is declared by the
+  operator under `[team_runtimes.<name>]` in `config.toml`, with
+  `{workspace}` / `{teams_home}` substitution. **Failures are loud, never
+  silent**: an untranslatable runtime exits 2 with the known list rather than
+  launching at permissions nobody chose, and flags with nowhere to go are
+  reported instead of guessed into someone else's command line. `team_*`
+  tools are allowed under **every** posture and `workspace-write` always adds
+  the teams home to the writable roots — a read-only teammate that cannot
+  claim its task is not safe, it is broken. Denials are recorded to
+  `audit.jsonl` (new `TeamAudit`) and surface in `chimera team status`
+  (`policy_decisions`) and a new `chimera team audit`. With no policy
+  configured anywhere, behavior is unchanged. Docs:
+  `docs/mink/agent-teams.md` ("Permission propagation"). Tests:
+  `tests/mcp/test_team_policy.py` (50, incl. a real-loop case proving a
+  blocked write never touches the filesystem) and eight runner cases.
+
 ## 0.9.2 — 2026-07-24 — the embeddable core
 
 Chimera becomes something you can *embed*, *verify*, and *race*: a stable

@@ -6,9 +6,10 @@ same task without duplicating work.
 
 State layout (under ``~/.chimera/teams/<team-name>/``)::
 
-    config.json              team metadata (name, default_model, members[])
+    config.json              team metadata (name, default_model, members[], policy)
     task_list.jsonl          append-only task queue (claim/release rewrite in-place)
     mailbox/<agent_id>.jsonl per-agent direct-message inbox
+    audit.jsonl              append-only record of policy decisions
 
 This module is intentionally stdlib-only (``fcntl``, ``os``, ``json``,
 ``pathlib``, ``secrets``).
@@ -27,6 +28,7 @@ from typing import Any, Iterator, Sequence
 __all__ = [
     "ENV_FLAG",
     "Team",
+    "TeamAudit",
     "TeamMailbox",
     "create_team",
     "destroy_team",
@@ -99,11 +101,23 @@ class Team:
         self.config_path = self.dir / "config.json"
         self.task_path = self.dir / "task_list.jsonl"
         self.mailbox_dir = self.dir / "mailbox"
+        self.audit_path = self.dir / "audit.jsonl"
 
     # ---- lifecycle ---------------------------------------------------------
 
-    def init(self, default_model: str = "kimi-k2.6") -> None:
-        """Create the team directory and seed config/task/mailbox files."""
+    def init(
+        self, default_model: str = "kimi-k2.6", policy: str | None = None,
+    ) -> None:
+        """Create the team directory and seed config/task/mailbox files.
+
+        Args:
+            default_model: Default model id stored in the team config.
+            policy: Optional permission posture inherited by every
+                teammate (``read-only`` / ``workspace-write`` /
+                ``dangerous``). ``None`` leaves each runtime's own
+                configuration in charge, which is the behavior teams had
+                before policies existed.
+        """
         self.mailbox_dir.mkdir(parents=True, exist_ok=True)
         if not self.config_path.exists():
             self._save_config({
@@ -111,12 +125,54 @@ class Team:
                 "default_model": default_model,
                 "members": [],
                 "created_at": time.time(),
+                "policy": policy,
             })
+        elif policy is not None:
+            self.set_policy(policy)
         if not self.task_path.exists():
             self.task_path.touch()
 
     def exists(self) -> bool:
         return self.config_path.exists()
+
+    # ---- policy ------------------------------------------------------------
+
+    @property
+    def policy(self) -> str | None:
+        """The team's permission posture, or ``None`` when unset.
+
+        This is the lead's posture: teammates inherit it rather than each
+        deciding for itself. ``None`` means "unconfigured" — every
+        runtime keeps its own permission configuration, exactly as
+        before policies existed.
+        """
+        if not self.config_path.exists():
+            return None
+        value = self.load_config().get("policy")
+        return str(value) if value else None
+
+    def set_policy(self, policy: str | None) -> None:
+        """Set (or clear) the team's permission posture.
+
+        Args:
+            policy: A policy name (validated by
+                :func:`chimera.mcp_servers.team_policy.parse_policy`),
+                or ``None`` to clear it.
+
+        Raises:
+            ValueError: If *policy* names no known posture.
+        """
+        resolved: str | None = None
+        if policy is not None:
+            from chimera.mcp_servers.team_policy import parse_policy
+
+            resolved = parse_policy(policy)
+        with _flock(self.config_path):
+            cfg = json.loads(self.config_path.read_text() or "{}")
+            cfg["policy"] = resolved
+            tmp = self.config_path.with_suffix(".json.tmp")
+            tmp.write_text(json.dumps(cfg, indent=2, sort_keys=True))
+            os.replace(tmp, self.config_path)
 
     # ---- config ------------------------------------------------------------
 
@@ -550,14 +606,113 @@ class TeamMailbox:
             return removed
 
 
+class TeamAudit:
+    """Append-only record of policy decisions, at ``audit.jsonl``.
+
+    A permission posture that silently blocks work is worse than no
+    posture at all: the operator sees an agent that "just didn't do the
+    task". Every denial lands here so ``chimera team status`` can say
+    what was blocked, for whom, and why.
+
+    Args:
+        team: The team whose audit trail this is.
+    """
+
+    def __init__(self, team: Team) -> None:
+        self.team = team
+        self.path = team.audit_path
+
+    def record(
+        self,
+        agent_id: str,
+        tool: str,
+        decision: str,
+        reason: str = "",
+        policy: str = "",
+    ) -> None:
+        """Append one decision.
+
+        Args:
+            agent_id: Teammate the decision applied to.
+            tool: Tool name that was evaluated.
+            decision: Outcome, e.g. ``"denied"``.
+            reason: Human-readable explanation.
+            policy: The policy in force when the decision was made.
+        """
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        rec = {
+            "agent_id": agent_id,
+            "tool": tool,
+            "decision": decision,
+            "reason": reason,
+            "policy": policy,
+            "ts": time.time(),
+        }
+        with _flock(self.path):
+            with open(self.path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(rec) + "\n")
+
+    def entries(self, agent_id: str | None = None) -> list[dict[str, Any]]:
+        """Return recorded decisions, oldest first.
+
+        Args:
+            agent_id: Optional filter; ``None`` returns every entry.
+
+        Returns:
+            The matching audit records.
+        """
+        if not self.path.exists():
+            return []
+        with _flock(self.path, exclusive=False):
+            lines = self.path.read_text().splitlines()
+        out: list[dict[str, Any]] = []
+        for line in lines:
+            if not line.strip():
+                continue
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if agent_id is None or rec.get("agent_id") == agent_id:
+                out.append(rec)
+        return out
+
+    def summary(self) -> dict[str, int]:
+        """Count entries by decision.
+
+        Returns:
+            Mapping of decision (e.g. ``"denied"``) to occurrence count.
+        """
+        counts: dict[str, int] = {}
+        for rec in self.entries():
+            key = str(rec.get("decision", "unknown"))
+            counts[key] = counts.get(key, 0) + 1
+        return counts
+
+
 # ---------------------------------------------------------------------------
 # Convenience helpers
 # ---------------------------------------------------------------------------
 
-def create_team(name: str, members: list[str] | None = None, default_model: str = "kimi-k2.6") -> Team:
-    """Create a team and pre-populate its initial member list."""
+def create_team(
+    name: str,
+    members: list[str] | None = None,
+    default_model: str = "kimi-k2.6",
+    policy: str | None = None,
+) -> Team:
+    """Create a team and pre-populate its initial member list.
+
+    Args:
+        name: Team name (directory under :func:`teams_root`).
+        members: Agent ids to add immediately.
+        default_model: Default model id stored in the team config.
+        policy: Optional permission posture every teammate inherits.
+
+    Returns:
+        The created (or reopened) team.
+    """
     team = Team(name)
-    team.init(default_model=default_model)
+    team.init(default_model=default_model, policy=policy)
     for agent_id in members or []:
         team.add_member(agent_id)
     return team
@@ -607,9 +762,10 @@ def list_teams(root: Path | None = None) -> list[dict[str, Any]]:
 
     Returns:
         A list of dicts (sorted by ``name``) with keys ``name``,
-        ``members`` (list[str]), ``tasks_total``, ``tasks_open``,
-        ``tasks_claimed``, ``tasks_completed``, and ``dir`` (str path).
-        Returns ``[]`` when the root directory does not exist.
+        ``members`` (list[str]), ``policy`` (str | None),
+        ``tasks_total``, ``tasks_open``, ``tasks_claimed``,
+        ``tasks_completed``, and ``dir`` (str path). Returns ``[]`` when
+        the root directory does not exist.
     """
     base = root or teams_root()
     if not base.exists():
@@ -626,6 +782,7 @@ def list_teams(root: Path | None = None) -> list[dict[str, Any]]:
         out.append({
             "name": child.name,
             "members": list(cfg.get("members", [])),
+            "policy": cfg.get("policy") or None,
             "tasks_total": len(tasks),
             "tasks_open": sum(1 for t in tasks if t.get("status") == "open"),
             "tasks_claimed": sum(1 for t in tasks if t.get("status") == "claimed"),
