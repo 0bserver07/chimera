@@ -680,10 +680,8 @@ def parse_item_order(value: Any, default: Sequence[str]) -> tuple[str, ...]:
 
 
 # ---------------------------------------------------------------------------
-# TUI config (spec §11) — project `.chimera` over user scope
+# TUI config (spec §11) — one loader, one precedence chain
 # ---------------------------------------------------------------------------
-
-_CONFIG_BASENAMES = ("config.yaml", "config.yml", "config.json")
 
 
 def load_tui_config(
@@ -693,11 +691,15 @@ def load_tui_config(
 ) -> dict[str, Any]:
     """Load the merged ``tui`` config section.
 
-    Scopes, lowest to highest precedence: ``~/.config/chimera/``,
-    ``~/.chimera/``, ``<project>/.chimera/`` — first existing
-    ``config.{yaml,yml,json}`` per scope, shallow-merged key-by-key. Parse
-    errors degrade to an empty scope (a broken config must not take the TUI
-    down).
+    Thin adapter over the unified user-config loader
+    (:func:`chimera.config.user_config.load_tui_config`): the status line, the
+    keybindings, and the skills toggles now all read one config chain. Scopes,
+    lowest to highest precedence — ``~/.config/chimera/``, ``~/.chimera/``,
+    ``<project>/.chimera/`` — each accepting any ``config.{toml,yaml,yml,json}``
+    (``config.toml`` canonical, winning on a key collision), deep-merged so a
+    higher scope's ``status_line`` does not erase a lower scope's ``keybinds``.
+    Parse errors degrade to an empty scope (a broken config must not take the
+    TUI down).
 
     Args:
         project_dir: Project root (default: cwd).
@@ -706,29 +708,9 @@ def load_tui_config(
     Returns:
         The ``tui`` section as a dict (``{}`` when absent).
     """
-    home_path = Path(home) if home is not None else Path.home()
-    project = Path(project_dir) if project_dir else Path.cwd()
-    merged: dict[str, Any] = {}
-    for scope in (
-        home_path / ".config" / "chimera",
-        home_path / ".chimera",
-        project / ".chimera",
-    ):
-        for basename in _CONFIG_BASENAMES:
-            path = scope / basename
-            if not path.is_file():
-                continue
-            try:
-                from chimera.config.config_file import ChimeraConfig
+    from chimera.config.user_config import load_tui_config as _load_tui_config
 
-                data = ChimeraConfig.from_file(path).data or {}
-            except Exception:
-                data = {}
-            tui = data.get("tui")
-            if isinstance(tui, dict):
-                merged.update(tui)
-            break  # one file per scope
-    return merged
+    return _load_tui_config(project_dir, home=home)
 
 
 # ---------------------------------------------------------------------------

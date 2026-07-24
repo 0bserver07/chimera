@@ -13,8 +13,10 @@ before workspace teardown, since cleanup removes the tree.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import uuid
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -27,12 +29,39 @@ from chimera.tui.routing import RoutingMode
 if TYPE_CHECKING:
     from chimera.tui.workspace import WorkspaceSet
 
-__all__ = ["CohortManifest", "Cohort", "default_cohort_root"]
+__all__ = [
+    "Cohort",
+    "CohortManifest",
+    "CohortRetention",
+    "default_cohort_root",
+    "load_cohort_retention",
+    "prune_cohorts",
+]
 
 
 def default_cohort_root() -> Path:
     """The default parent dir for persisted cohorts (``~/.chimera/cohorts``)."""
     return Path.home() / ".chimera" / "cohorts"
+
+
+def _atomic_write_text(path: Path, text: str) -> None:
+    """Write *text* to *path* atomically (temp file in the same dir + rename).
+
+    Adopts the durability discipline of the session event log
+    (:mod:`chimera.sessions.eventlog.log`): a crash or a concurrent reader
+    never observes a half-written ``manifest.json`` — the file is either its
+    previous contents or the complete new contents, never a truncation, because
+    :func:`os.replace` swaps it atomically within the filesystem. The temp file
+    is hidden (dot-prefixed) so a mid-write ``iterdir`` scan does not mistake it
+    for a cohort artifact.
+
+    Args:
+        path: Destination file.
+        text: Full contents to write.
+    """
+    tmp = path.with_name(f".{path.name}.tmp")
+    tmp.write_text(text, encoding="utf-8")
+    os.replace(tmp, path)
 
 
 def _now_iso() -> str:
@@ -201,20 +230,24 @@ class Cohort:
         out = base / self.cohort_id
         out.mkdir(parents=True, exist_ok=True)
 
-        (out / "manifest.json").write_text(
-            json.dumps(self.manifest().to_dict(), indent=2), encoding="utf-8"
+        # Atomic writes for the resume-critical artifacts (manifest, summary,
+        # per-lane history + diff): ``list_saved`` / ``load_saved`` parse these,
+        # so a truncated file would silently drop a cohort from the picker.
+        _atomic_write_text(
+            out / "manifest.json",
+            json.dumps(self.manifest().to_dict(), indent=2),
         )
-        (out / "summary.json").write_text(
-            json.dumps(self.summary_rows(), indent=2), encoding="utf-8"
+        _atomic_write_text(
+            out / "summary.json", json.dumps(self.summary_rows(), indent=2)
         )
         for lane in self.lanes:
-            (out / f"lane-{lane.id}.transcript.txt").write_text(
-                lane.transcript_text(), encoding="utf-8"
+            _atomic_write_text(
+                out / f"lane-{lane.id}.transcript.txt", lane.transcript_text()
             )
             # Faithful conversation history for resume (§13.2).
             history = serialize_history(getattr(lane.driver, "history", []) or [])
-            (out / f"lane-{lane.id}.history.json").write_text(
-                json.dumps(history, indent=2), encoding="utf-8"
+            _atomic_write_text(
+                out / f"lane-{lane.id}.history.json", json.dumps(history, indent=2)
             )
             if lane.workspace is not None:
                 try:
@@ -222,7 +255,7 @@ class Cohort:
                 except Exception as exc:  # noqa: BLE001 - diff is best-effort
                     diff = f"(diff unavailable: {exc})"
                 if diff:
-                    (out / f"lane-{lane.id}.diff").write_text(diff, encoding="utf-8")
+                    _atomic_write_text(out / f"lane-{lane.id}.diff", diff)
         return out
 
     def export(self, dest: str | Path, *, cohort_dir: Path | None = None) -> Path:
@@ -286,3 +319,208 @@ class Cohort:
             diff = diff_path.read_text(encoding="utf-8") if diff_path.is_file() else ""
             lanes.append({**entry, "history": history, "diff": diff})
         return {"manifest": manifest, "cohort_dir": str(cohort_dir), "lanes": lanes}
+
+
+# ---------------------------------------------------------------------------
+# Auto-pruning (issue #173) — keep the cohort store from growing without bound
+# ---------------------------------------------------------------------------
+
+
+def _positive_int(value: Any) -> int | None:
+    """Coerce a config value to a positive int, else ``None`` (knob disabled)."""
+    if isinstance(value, bool):  # bool is an int subclass — reject it explicitly
+        return None
+    if isinstance(value, int):
+        return value if value > 0 else None
+    if isinstance(value, str):
+        try:
+            parsed = int(value.strip())
+        except ValueError:
+            return None
+        return parsed if parsed > 0 else None
+    return None
+
+
+def _positive_float(value: Any) -> float | None:
+    """Coerce a config value to a positive float, else ``None`` (knob disabled)."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value) if value > 0 else None
+    if isinstance(value, str):
+        try:
+            parsed = float(value.strip())
+        except ValueError:
+            return None
+        return parsed if parsed > 0 else None
+    return None
+
+
+@dataclass(frozen=True)
+class CohortRetention:
+    """The cohort auto-pruning policy (issue #173).
+
+    Both knobs are optional and **OFF by default**, so no configuration means
+    no pruning — persisted cohorts accumulate exactly as before (the
+    data-preserving default: nobody loses work they did not ask to discard).
+    Configure under ``[tui.cohorts]`` in ``~/.chimera/config.toml``::
+
+        [tui.cohorts]
+        retain = 20            # keep only the newest 20 cohorts
+        max-age-days = 30      # also drop cohorts older than 30 days
+
+    Args:
+        retain: Keep at most this many of the newest cohorts; ``None`` keeps
+            any number.
+        max_age_days: Drop cohorts older than this many days; ``None`` imposes
+            no age limit.
+    """
+
+    retain: int | None = None
+    max_age_days: float | None = None
+
+    @property
+    def active(self) -> bool:
+        """Whether any knob is set (an inactive policy prunes nothing)."""
+        return self.retain is not None or self.max_age_days is not None
+
+    @classmethod
+    def from_tui_config(cls, tui: Mapping[str, Any] | None) -> CohortRetention:
+        """Parse a ``[tui.cohorts]`` table (dash or underscore keys).
+
+        Unset, non-positive, or malformed values disable that knob — the safe
+        default is "prune nothing" unless a valid positive limit is given.
+
+        Args:
+            tui: The merged ``tui`` config section (or ``None``).
+
+        Returns:
+            The resolved policy (inactive when no valid knob is present).
+        """
+        cohorts = tui.get("cohorts") if isinstance(tui, Mapping) else None
+        if not isinstance(cohorts, Mapping):
+            return cls()
+        return cls(
+            retain=_positive_int(cohorts.get("retain")),
+            max_age_days=_positive_float(
+                cohorts.get("max-age-days", cohorts.get("max_age_days"))
+            ),
+        )
+
+
+def load_cohort_retention(
+    project_dir: str | os.PathLike[str] | None = None,
+) -> CohortRetention:
+    """Resolve the cohort-retention policy from the unified config chain.
+
+    Reads the ``tui`` section across the standard scopes (XDG < user <
+    project) via :func:`chimera.config.user_config.load_tui_config`, so a global
+    cap in ``~/.chimera/config.toml`` or a per-project override both apply. Any
+    failure yields the inactive (prune-nothing) default — config discovery must
+    never block a TUI launch.
+
+    Args:
+        project_dir: Project root for the project-scope lookup (default: cwd).
+
+    Returns:
+        The resolved :class:`CohortRetention`.
+    """
+    try:
+        from chimera.config.user_config import load_tui_config
+
+        return CohortRetention.from_tui_config(load_tui_config(project_dir))
+    except Exception:  # noqa: BLE001 — config discovery is best-effort.
+        return CohortRetention()
+
+
+def _cohort_age_days(manifest_path: Path, entry: Path, ref: datetime) -> float:
+    """Age of a cohort in days: manifest ``created_at``, dir mtime as fallback."""
+    created: datetime | None = None
+    try:
+        data = json.loads(manifest_path.read_text(encoding="utf-8"))
+        raw = data.get("created_at")
+        if isinstance(raw, str) and raw:
+            created = datetime.fromisoformat(raw)
+    except (OSError, json.JSONDecodeError, ValueError):
+        created = None
+    if created is None:
+        try:
+            created = datetime.fromtimestamp(entry.stat().st_mtime, tz=timezone.utc)
+        except OSError:
+            return 0.0
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=timezone.utc)
+    return max(0.0, (ref - created).total_seconds() / 86400.0)
+
+
+def prune_cohorts(
+    root: str | Path | None = None,
+    retention: CohortRetention | None = None,
+    *,
+    exclude: Iterable[str] = (),
+    now: datetime | None = None,
+) -> list[str]:
+    """Delete old persisted cohorts per *retention*; return the ids removed.
+
+    Cohorts are ordered newest-first by id (ids are ``<UTC-stamp>-<rand>``, so
+    lexical order is chronological). The newest ``retention.retain`` are always
+    kept (a hard floor); among the older remainder, a cohort is removed when
+    ``retention.max_age_days`` says it is too old — or, when only ``retain`` is
+    set, simply because it is past the newest-N window. When only
+    ``max_age_days`` is set, every cohort older than the limit is removed
+    regardless of count.
+
+    Ids in *exclude* are never removed — the caller passes the cohort it is
+    about to run or resume, so a live cohort is untouchable. Only directories
+    that carry a ``manifest.json`` are considered, so unrelated files under
+    *root* are never deleted. Deletion is best-effort: a directory that vanishes
+    or is locked by a concurrent instance is skipped, never fatal.
+
+    A no-op returning ``[]`` when *retention* is ``None``/inactive, when *root*
+    does not exist, or when nothing qualifies — the default, data-preserving
+    behavior.
+
+    Args:
+        root: Cohort store root (default: ``~/.chimera/cohorts``).
+        retention: The policy; ``None`` or inactive prunes nothing.
+        exclude: Cohort ids that must survive (e.g. the one being resumed).
+        now: Clock override for age comparisons (default: current UTC time).
+
+    Returns:
+        The cohort ids deleted, newest-to-oldest.
+    """
+    if retention is None or not retention.active:
+        return []
+    base = Path(root) if root is not None else default_cohort_root()
+    if not base.is_dir():
+        return []
+
+    excluded = set(exclude)
+    ref = now or datetime.now(timezone.utc)
+    entries: list[tuple[str, Path, float]] = []
+    for entry in base.iterdir():
+        manifest_path = entry / "manifest.json"
+        if not entry.is_dir() or not manifest_path.is_file():
+            continue
+        entries.append(
+            (entry.name, entry, _cohort_age_days(manifest_path, entry, ref))
+        )
+    entries.sort(key=lambda item: item[0], reverse=True)  # newest id first
+
+    keep = retention.retain
+    max_age = retention.max_age_days
+    removed: list[str] = []
+    for position, (cohort_id, entry, age) in enumerate(entries):
+        if cohort_id in excluded:
+            continue
+        if keep is not None and position < keep:
+            continue  # always keep the newest N (the retain floor)
+        # Past the retain window (or no retain set): delete when an age limit
+        # says so, or when a retain limit alone applies to this overflow.
+        if (max_age is not None and age > max_age) or (max_age is None and keep is not None):
+            try:
+                shutil.rmtree(entry)
+            except OSError:
+                continue  # best-effort: a concurrent reader/racer is not fatal
+            removed.append(cohort_id)
+    return removed

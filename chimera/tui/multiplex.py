@@ -41,7 +41,7 @@ except ImportError as exc:  # pragma: no cover
     ) from exc
 
 from chimera.core.loop_events import LoopEventType
-from chimera.tui.cohort import Cohort
+from chimera.tui.cohort import Cohort, load_cohort_retention, prune_cohorts
 from chimera.tui.commands import completion_catalog, help_lines
 from chimera.tui.keys import (
     KeymapError,
@@ -1291,6 +1291,20 @@ def _run_cohort_loop(
                     cohort.export(export, cohort_dir=cohort_dir)
                 except Exception as exc:  # noqa: BLE001
                     sys.stderr.write(f"export failed: {exc}\n")
+            # Auto-prune old cohorts per the retention policy (#173), never the
+            # one we just saved. OFF by default; best-effort, never fatal.
+            try:
+                retention = load_cohort_retention()
+                if retention.active:
+                    removed = prune_cohorts(
+                        root=persist_root,
+                        retention=retention,
+                        exclude=(cohort.cohort_id,),
+                    )
+                    if removed:
+                        print(f"pruned {len(removed)} old cohort(s)")
+            except Exception:  # noqa: BLE001 - pruning must never break a session
+                pass
             workspaces.cleanup_all()
         print(f"cohort saved: {cohort_dir}")
         if export:

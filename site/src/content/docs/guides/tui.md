@@ -67,14 +67,19 @@ Mid-turn, typing **steers** the running lane; at idle it starts a new turn.
 
 ## Configuration
 
-Two knobs ship today, read from different files (unification is tracked
-work — documented as-is):
+All TUI settings live under `tui.*` in **one config chain**, read through a
+single loader (`chimera/config/user_config.py`). The canonical file is
+`~/.chimera/config.toml` (`$CHIMERA_CONFIG_HOME` overrides the directory);
+older `config.{yaml,yml,json}` files in the same scopes still load as a
+compatibility shim. Precedence, lowest to highest: `~/.config/chimera/` <
+`~/.chimera/` < `<project>/.chimera/`, deep-merged key-by-key (TOML wins a
+collision within a scope). A missing or broken config never blocks startup.
+The full map is in [Persistence & config model](../notes/persistence-model).
 
-**Keybindings** — `tui.keybinds` in `~/.chimera/config.toml` (the shared CLI
-defaults file; `$CHIMERA_CONFIG_HOME` overrides the directory). Value = key
-string, list of keys, or `false` to unbind. Unknown actions, conflicting
-keys, and attempts to unbind reserved actions (`cancel_all`, `quit`) are
-rejected loudly — the TUI starts on defaults and tells you why:
+**Keybindings** — `tui.keybinds`. Value = key string, list of keys, or
+`false` to unbind. Unknown actions, conflicting keys, and attempts to unbind
+reserved actions (`cancel_all`, `quit`) are rejected loudly — the TUI starts
+on defaults and tells you why:
 
 ```toml
 [tui.keybinds]
@@ -83,18 +88,26 @@ show_results  = ["ctrl+r", "f2"]  # multiple keys
 toggle_sidebar = false            # unbind
 ```
 
-**Status line & title** — `tui.status_line` / `tui.title` in a
-`config.{yaml,yml,json}` under any of `~/.config/chimera/`, `~/.chimera/`,
-`<project>/.chimera/` (later scopes win, key-by-key):
+**Status line & title** — `tui.status_line` / `tui.title`. Items hide
+themselves when their data source is unavailable, and the line degrades
+segment-by-segment on narrow terminals instead of wrapping:
 
-```yaml
-tui:
-  status_line: [model, git, context-used, tokens, cost, run-state]
-  title: [activity, project]     # terminal title; "off" disables
+```toml
+[tui]
+status_line = ["model", "git", "context-used", "tokens", "cost", "run-state"]
+title = ["activity", "project"]   # terminal title; "off" disables
 ```
 
-Items hide themselves when their data source is unavailable, and the line
-degrades segment-by-segment on narrow terminals instead of wrapping.
+**Cohort retention** — `tui.cohorts`. Bare `--tui` sessions persist one
+cohort each under `~/.chimera/cohorts/`; a retention policy caps them. **OFF
+by default** (nothing is ever pruned without a policy); the cohort being run
+or resumed is never deleted:
+
+```toml
+[tui.cohorts]
+retain = 20            # keep only the newest 20 cohorts
+max-age-days = 30      # and/or drop cohorts older than 30 days
+```
 
 ## Permission approvals (opt-in)
 

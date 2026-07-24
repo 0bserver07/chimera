@@ -293,9 +293,10 @@ def _env_foreign_flag() -> bool | None:
 def resolve_foreign_config() -> tuple[bool, list[str]]:
     """Resolve whether to scan foreign dirs, and which ones, from config.
 
-    Reads the same config chain every Chimera CLI uses —
-    ``~/.chimera/config.toml`` (``$CHIMERA_CONFIG_HOME`` honored) — looking
-    for a ``[skills]`` table::
+    Reads the user scope through the unified config loader — canonical
+    ``~/.chimera/config.toml`` (``$CHIMERA_CONFIG_HOME`` honored), with a
+    ``config.{yaml,yml,json}`` in the same directory accepted as a compat
+    shim — looking for a ``[skills]`` table::
 
         [skills]
         scan-foreign = true
@@ -320,12 +321,13 @@ def resolve_foreign_config() -> tuple[bool, list[str]]:
 
     table: Any = None
     try:
-        # Late import + same reader as every Chimera CLI (stdlib tomllib);
-        # see :mod:`chimera.cli.config_loader`. Kept local to avoid a
-        # skills -> cli import at module load and to stay best-effort.
-        from chimera.cli.config_loader import load_config
+        # Late import + the unified user-config reader (stdlib tomllib for the
+        # canonical ``config.toml``, plus the YAML/JSON compat shim); see
+        # :mod:`chimera.config.user_config`. Kept local to avoid a
+        # skills -> config import at module load and to stay best-effort.
+        from chimera.config.user_config import load_user_scope_config
 
-        table = load_config().get("skills")
+        table = load_user_scope_config().get("skills")
     except Exception:  # noqa: BLE001 — config discovery is best-effort.
         table = None
 

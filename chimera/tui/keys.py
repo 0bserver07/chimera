@@ -7,9 +7,9 @@ generated ``/help`` keys section and ``/keys`` table
 (:func:`keymap_table`), and config-aware hint lookups (:func:`key_for`,
 R-KEY-3) such as the tool-output elision marker.
 
-User rebinding (R-KEY-2) reads a ``tui.keybinds`` table from the existing
-config chain (``~/.chimera/config.toml``, honoring ``$CHIMERA_CONFIG_HOME`` —
-see :mod:`chimera.cli.config_loader`)::
+User rebinding (R-KEY-2) reads a ``tui.keybinds`` table from the unified user
+config chain (canonical ``~/.chimera/config.toml``, honoring
+``$CHIMERA_CONFIG_HOME`` — see :mod:`chimera.config.user_config`)::
 
     [tui.keybinds]
     toggle_sidebar = "f2"                 # rebind
@@ -338,18 +338,20 @@ def keymap_table(keymap: Mapping[str, ResolvedBinding] | None = None) -> list[st
 def load_user_keybinds() -> dict[str, Any]:
     """Read the ``tui.keybinds`` override table from the user config chain.
 
-    Uses the same ``~/.chimera/config.toml`` file (honoring
-    ``$CHIMERA_CONFIG_HOME``) every Chimera CLI reads its defaults from; a
-    missing file, missing table, or malformed section reads as "no
-    overrides" — startup must never fail on config discovery. (Validation of
-    the table's *contents* is :func:`resolve_keymap`'s job, and is loud.)
+    Reads the user scope through the unified config loader
+    (:func:`chimera.config.user_config.load_user_scope_config`): the canonical
+    ``~/.chimera/config.toml`` (honoring ``$CHIMERA_CONFIG_HOME``), now also
+    accepting a ``config.{yaml,yml,json}`` in the same directory. A missing
+    file, missing table, or malformed section reads as "no overrides" — startup
+    must never fail on config discovery. (Validation of the table's *contents*
+    is :func:`resolve_keymap`'s job, and is loud.)
 
     Returns:
         The raw override table (possibly empty).
     """
-    from chimera.cli.config_loader import load_config
+    from chimera.config.user_config import load_user_scope_config
 
-    tui = load_config().get("tui")
+    tui = load_user_scope_config().get("tui")
     if not isinstance(tui, dict):
         return {}
     keybinds = tui.get("keybinds")

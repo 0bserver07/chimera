@@ -9,6 +9,18 @@ commit receipts.
 
 ### Added
 
+- **One config chain + cohort retention** (#173): the TUI's two config
+  dialects (keybindings from `config.toml`, status line from
+  `config.{yaml,yml,json}`) are unified behind one loader
+  (`chimera/config/user_config.py`) — canonical `~/.chimera/config.toml`,
+  YAML/JSON kept as a read-time compat shim, one documented precedence
+  (XDG < user < project, deep-merged). Keybindings, status line, skills
+  toggles, and the new cohort-retention policy all read through it;
+  behavior is byte-identical when no config is present. Bare `--tui`
+  cohorts can now auto-prune (`[tui.cohorts] retain` / `max-age-days`) —
+  OFF by default, never touches the running cohort. Map + deferred
+  convergence: `docs/notes/persistence-model.md`.
+
 - **Compaction/session audit — reversibility, iterative-summary, and typed
   non-message entries** (`docs/notes/compaction-audit.md`,
   `tests/sessions/test_compaction_audit.py`): a verify-first Tier-2 audit of
