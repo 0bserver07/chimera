@@ -54,6 +54,14 @@ _LAZY_ATTRS: dict[str, str] = {
     "TreeOfThought": "chimera.core.loops",
     # Assembly
     "CodingAgent": "chimera.assembly.coding_agent",
+    # Embedding (the stable SDK surface — docs/guides/embed.md)
+    "AgentSession": "chimera.embed",
+    "TurnResult": "chimera.embed",
+    "run_agent": "chimera.embed",
+    "AgentDriver": "chimera.assembly.driver",
+    "render_event": "chimera.assembly.driver",
+    "LoopEvent": "chimera.core.loop_events",
+    "LoopEventType": "chimera.core.loop_events",
     # Composition
     "Ensemble": "chimera.composition",
     "Pipeline": "chimera.composition",

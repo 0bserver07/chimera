@@ -20,6 +20,11 @@ print(f"cost: ${driver.total_cost:.4f}")
 That's a working (if minimal) coding agent. The reference REPL
 (`chimera code`) is ~70 lines on top of this.
 
+> Embedding an agent in an app rather than building a frontend? Start with
+> the stable SDK cut over this same seam — `chimera.AgentSession` /
+> `chimera.run_agent` in `docs/guides/embed.md`. Everything below still
+> applies to it (an `AgentSession` *is* an `AgentDriver`).
+
 ## AgentDriver
 
 `chimera.assembly.driver.AgentDriver` — a small, stateful control surface.

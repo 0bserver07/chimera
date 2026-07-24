@@ -184,6 +184,9 @@ Layer 1: Environment     Local, Docker, Git, Remote, Cloud, PersistentShell
 - `loop_adapter.py` — run a strategy loop (plan-execute/reflexion/tot) as a LoopEvent stream (worker-thread bridge, bounded provider)
 - `presets.py` / `system_prompts.py` / `tool_sets.py` — AssemblyConfig PRESETS (coding_agent, codex, minimal, explore), prompts, tool factories
 
+### Embedding (`chimera/embed.py`)
+- The stable SDK surface (semver-stable within 0.9.x): `chimera.AgentSession` (AgentDriver subclass + blocking `run()`/`run_async()` → `TurnResult`, `close()`, context manager) and `chimera.run_agent` one-liner; re-exported from the package root with `AgentDriver`/`render_event`/`LoopEvent`/`LoopEventType`. Guide: `docs/guides/embed.md`
+
 ### TUI (`chimera/tui/`)
 Interactive frontends over AgentDriver (spec: `docs/specs/interactive-frontends.md`, all 3 phases shipped):
 - `app.py` — DEPRECATED shim (ChimeraTUI/run_tui superseded by the one-lane multiplexer, #172; importable one release, not load-bearing)
