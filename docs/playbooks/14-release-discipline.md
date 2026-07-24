@@ -5,8 +5,18 @@ Chimera's policy, set explicitly by the project owner:
 
 ## The rules
 
-1. **Stay in 0.9.x for a long time.** March through 0.9.1, 0.9.2, … 0.9.N —
-   patch bumps only. Feature accumulation does not justify a minor bump.
+0. **SUB-VERSIONS, not a marching patch digit.** The third digit is NOT a
+   batch counter. After `0.9.2`, further work ships as `0.9.2.1`, `0.9.2.2`,
+   … — a fourth component (PEP 440 accepts it; `uv`/PyPI sort it correctly).
+   The dev version between releases is therefore `0.9.2.N.dev0`, never
+   `0.9.3.dev0`.
+   **`0.9.3` is not reachable by accumulating batches.** Moving the third
+   digit requires an explicit decision by the project owner, for a reason
+   stated out loud — not "we shipped a lot since 0.9.2."
+   *This rule exists because the third digit was marched 0.9.0 → 0.9.1 →
+   0.9.2 inside three weeks. That is inflation. It stops here.*
+1. **Stay in 0.9.x for a long time.** Feature accumulation does not justify a
+   minor bump, and does not justify a patch bump either — see rule 0.
 2. **1.0 is reserved for a major breakthrough.** Not "lots of good releases" —
    a capability step-change that redefines what the framework is. Default
    answer to "is this 1.0?" is *no*.

@@ -13,7 +13,7 @@ Compose coding agents from modular primitives. Synthesize codebases from specifi
 - **Types:** `uv run mypy chimera/`
 - **CI posture (run before pushing batches):** `bash scripts/ci_posture_check.sh` — CI installs NO `tui` extra, so a green local gate can still be a red CI. New modules importing textual/rich need the pyproject `[[tool.mypy.overrides]]` textual block; tests importing them need `pytest.importorskip`. mypy caches are posture-specific — trust only cold-cache runs when extras change.
 - **Docs:** Astro/Starlight in `site/`. Local: `cd site && pnpm install && pnpm dev`. Deploys to <https://0bserver07.github.io/chimera/> via `.github/workflows/ci.yml`.
-- **Versioning:** stay in 0.9.x (patch bumps only, batched, unhurried); 1.0 is reserved for a major breakthrough — see `docs/playbooks/14-release-discipline.md`.
+- **Versioning — SUB-VERSIONS, do not march the digit.** After `0.9.2`, batches ship as `0.9.2.1`, `0.9.2.2`, … (fourth component); the dev version is `0.9.2.N.dev0`, **never `0.9.3.dev0`**. Moving the third digit (→ 0.9.3) needs an explicit owner decision, never accumulation; 1.0 needs a breakthrough. Full rules: `docs/playbooks/14-release-discipline.md`.
 
 ## Architecture
 
