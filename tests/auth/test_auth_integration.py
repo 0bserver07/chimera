@@ -9,6 +9,27 @@ import pytest
 from chimera.providers.factory import create_provider
 
 
+@pytest.fixture(autouse=True)
+def _prime_builtin_registry() -> None:
+    """Register built-in providers BEFORE any test here patches ``_registry``.
+
+    ``create_provider`` lazily calls ``_ensure_builtins_registered()``, which
+    flips a module-level guard *and then* imports every provider module so each
+    self-registers. If that first call happens **inside** a
+    ``patch("...registry._registry", {...})`` window, those registrations land
+    in the temporary dict and are thrown away when the patch is restored —
+    while the guard stays flipped, so the imports are never re-run and the real
+    registry is left permanently missing its built-ins. That poisons
+    ``list_providers()`` for every later test in the session.
+
+    Priming the registry here forces the lazy import to happen against the real
+    dict, so the patches below are pure substitutions with no global fallout.
+    """
+    from chimera.providers.registry import _ensure_builtins_registered
+
+    _ensure_builtins_registered()
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

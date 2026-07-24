@@ -3,10 +3,15 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import dataclass, field
 from typing import Any
 
 from chimera.providers.base import Provider, Response, ToolSchema
+from chimera.providers.capabilities import (
+    CompatFlags,
+    ProviderCapabilities,
+    WireProtocol,
+    resolve_capabilities,
+)
 from chimera.types import Message, ToolCall
 
 try:
@@ -14,38 +19,26 @@ try:
 except ImportError:
     httpx = None  # type: ignore[assignment]
 
-
-@dataclass(frozen=True)
-class CompatFlags:
-    """Quirk parameterization for OpenAI-compatible backends.
-
-    One wire protocol serves many backends, but they disagree on small
-    request/response details. Rather than fork the provider per backend,
-    the differences live in this flags table — auto-detected from the model
-    id by :func:`detect_compat_flags`, overridable via the provider ctor.
-
-    Attributes:
-        max_tokens_field: Request field naming the output cap. Newer OpenAI
-            reasoning models require ``max_completion_tokens``; most compat
-            backends only accept ``max_tokens``.
-        supports_temperature: Some reasoning models reject ``temperature``
-            outright; when ``False`` it is omitted from the payload.
-        extra_payload: Backend-specific request params merged into every
-            payload (e.g. a reasoning-effort knob).
-    """
-
-    max_tokens_field: str = "max_tokens"
-    supports_temperature: bool = True
-    extra_payload: dict[str, Any] = field(default_factory=dict)
-
-
-#: Model-id prefixes that require the ``max_completion_tokens`` field and
-#: reject ``temperature`` (OpenAI reasoning-model conventions).
-_REASONING_PREFIXES = ("o1", "o3", "o4", "gpt-5")
+# ``CompatFlags`` now lives in ``chimera.providers.capabilities`` as the
+# OpenAI-compat request projection of the unified capability matrix; it is
+# re-exported here so existing callers (``from chimera.providers.compatible
+# import CompatFlags``) keep working unchanged.
+__all__ = [
+    "CompatFlags",
+    "OpenAICompatibleProvider",
+    "detect_compat_flags",
+]
 
 
 def detect_compat_flags(model: str) -> CompatFlags:
     """Best-effort :class:`CompatFlags` for *model* by id convention.
+
+    Thin façade over the capability matrix: resolves the OpenAI-compat
+    capabilities for *model* (a leading ``provider/`` namespace is tolerated
+    and stripped) and projects them onto the three request knobs. The
+    reasoning-model conventions — ``o1``/``o3``/``o4``/``gpt-5`` want
+    ``max_completion_tokens`` and reject ``temperature`` — now live in the
+    matrix as data rather than a local prefix tuple.
 
     Args:
         model: Upstream model id (provider prefixes like ``openai/`` are
@@ -54,10 +47,8 @@ def detect_compat_flags(model: str) -> CompatFlags:
     Returns:
         Flags matching known conventions; the permissive default otherwise.
     """
-    bare = model.lower().split("/")[-1]
-    if bare.startswith(_REASONING_PREFIXES):
-        return CompatFlags(max_tokens_field="max_completion_tokens", supports_temperature=False)
-    return CompatFlags()
+    bare = model.split("/")[-1]
+    return resolve_capabilities(WireProtocol.OPENAI_COMPAT, model=bare).to_compat_flags()
 
 
 class OpenAICompatibleProvider(Provider):
@@ -82,6 +73,7 @@ class OpenAICompatibleProvider(Provider):
         context_length: int = 128_000,
         extra_headers: dict[str, str] | None = None,
         flags: CompatFlags | None = None,
+        provider: str | None = None,
     ) -> None:
         """Initialise the provider.
 
@@ -99,8 +91,14 @@ class OpenAICompatibleProvider(Provider):
                 ``HTTP-Referer`` / ``X-Title``, e.g.). Merged after
                 *headers* so an explicit *extra_headers* entry wins on
                 key collision.
-            flags: Backend quirk parameterization. ``None`` auto-detects
-                from the model id via :func:`detect_compat_flags`.
+            flags: Backend quirk parameterization. ``None`` derives them from
+                the capability matrix (see *provider*), projecting the
+                resolved :class:`~chimera.providers.capabilities.ProviderCapabilities`
+                onto the OpenAI-compat request knobs.
+            provider: Optional provider name used to resolve provider-level
+                capability overrides from the matrix (e.g. ``"acmecloud"``). When
+                ``None``, only the ``openai-compat`` protocol default plus any
+                model-prefix override apply — the historical behaviour.
         """
         if httpx is None:
             raise ImportError("pip install httpx")
@@ -114,7 +112,14 @@ class OpenAICompatibleProvider(Provider):
             **(extra_headers or {}),
         }
         self._context_length = context_length
-        self._flags = flags if flags is not None else detect_compat_flags(model)
+        self._provider = provider
+        # Source quirks from the unified capability matrix (protocol default +
+        # optional provider override + model-prefix override), then project to
+        # the request-shaping flags. An explicit ``flags=`` still wins.
+        self._capabilities: ProviderCapabilities = resolve_capabilities(
+            WireProtocol.OPENAI_COMPAT, provider=provider, model=model.split("/")[-1],
+        )
+        self._flags = flags if flags is not None else self._capabilities.to_compat_flags()
 
     def complete(
         self,
@@ -226,16 +231,20 @@ class OpenAICompatibleProvider(Provider):
         return api_messages
 
     def _convert_tools(self, tools: list[ToolSchema]) -> list[dict[str, Any]]:
+        # ``strict: true`` asks the backend to constrain generated arguments to
+        # the JSON schema. Gated on the matrix so it stays absent for backends
+        # that don't advertise strict-tool support (the historical shape).
+        strict = self._capabilities.supports_strict_tools
         result = []
         for tool in tools:
-            result.append({
-                "type": "function",
-                "function": {
-                    "name": tool["name"],
-                    "description": tool.get("description", ""),
-                    "parameters": tool.get("input_schema", tool.get("parameters", {})),
-                },
-            })
+            function: dict[str, Any] = {
+                "name": tool["name"],
+                "description": tool.get("description", ""),
+                "parameters": tool.get("input_schema", tool.get("parameters", {})),
+            }
+            if strict:
+                function["strict"] = True
+            result.append({"type": "function", "function": function})
         return result
 
     @property

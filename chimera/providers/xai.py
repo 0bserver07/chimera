@@ -104,6 +104,7 @@ def create_xai_provider(
         base_url=resolved_base_url,
         api_key=resolved_key,
         context_length=context_length,
+        provider="xai",
         **kwargs,
     )
 

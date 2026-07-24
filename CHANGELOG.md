@@ -50,6 +50,29 @@ commit receipts.
   foreign skills dir (source tagging, `~` expansion, allowlist precedence,
   native-wins-over-foreign, default-off pin, config + env resolution, env
   overrides config, provenance labeling).
+- **Declarative provider capability matrix** (`chimera/providers/capabilities.py`):
+  a frozen `ProviderCapabilities` dataclass of quirk knobs — max-tokens field
+  name, temperature / strict-tool support, `ThinkingFormat` + `CacheStyle`
+  enums, tiered-pricing / 1h-cache-write-premium / stop-sequence / extra-header
+  flags, default output cap — keyed by a small `WireProtocol` set
+  (`openai-compat`, `anthropic-compat`, `google`) rather than by brand.
+  Divergence resolves in three data layers, most-specific wins: protocol
+  default → provider override → model-prefix override (`resolve_capabilities`
+  / `register_capabilities`, `extra_payload` merged additively). The existing
+  `CompatFlags` quirk system is unified into the matrix (now its OpenAI-compat
+  request projection via `to_compat_flags`; the reasoning-model prefix tuple
+  and `AnthropicProvider`'s large-output prefix set moved out of code into
+  matrix rows). Providers consume it with no behavior change:
+  `OpenAICompatibleProvider` gained a `provider=` hint and derives its flags +
+  strict-tool wire shape from the matrix, `AnthropicProvider._default_max_tokens`
+  reads it, and the google/compat/anthropic providers expose `_capabilities`.
+  A brand-new backend on an existing protocol is now a ~20-line data row +
+  registry entry with no `Provider` subclass — shipped as the fictional
+  `acmecloud` provider (`chimera/providers/acmecloud.py`) and pinned by a
+  snapshot test proving every provider resolves to its pre-refactor quirk
+  behavior. Zero new deps
+  (`capabilities.py` is pure stdlib; SDKs stay optional extras). Guide:
+  `docs/guides/add-a-provider.md` (+ site copy).
 - **External-agent lanes — race real third-party agent CLIs in the
   multiplexer** (`chimera/assembly/external_driver.py`, issue #169): a lane
   whose driver spawns a real external coding-agent CLI as a subprocess in the

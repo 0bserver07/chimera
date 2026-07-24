@@ -9,6 +9,11 @@ from collections.abc import AsyncIterator, Iterator
 from typing import TYPE_CHECKING, Any
 
 from chimera.providers.base import CACHE_LEVELS, Provider, Response, StreamEvent, ToolSchema
+from chimera.providers.capabilities import (
+    ProviderCapabilities,
+    WireProtocol,
+    resolve_capabilities,
+)
 from chimera.types import Message, ToolCall
 
 if TYPE_CHECKING:
@@ -687,17 +692,27 @@ class AnthropicProvider(Provider):
         return 200_000  # Default
 
     @property
+    def _capabilities(self) -> ProviderCapabilities:
+        """Resolved Anthropic-compat capabilities for this model (matrix-sourced).
+
+        The per-model quirks — chiefly the larger default output cap for the
+        non-Claude models served over the Anthropic Messages API (GLM via
+        z.ai, Kimi via Moonshot, Qwen/DeepSeek, ``z-*``) — live in the
+        capability matrix as data, keyed off the model id. See
+        :mod:`chimera.providers.capabilities`.
+        """
+        return resolve_capabilities(WireProtocol.ANTHROPIC_COMPAT, model=self._model)
+
+    @property
     def _default_max_tokens(self) -> int:
         """Per-turn output cap when the caller doesn't pass ``max_tokens``.
 
         Non-Anthropic models served over this API (GLM/Kimi/Qwen via z.ai)
         support much larger outputs than Claude, so give them headroom for long
-        file writes; Claude stays at a safe 8192.
+        file writes; Claude stays at a safe 8192. Sourced from the capability
+        matrix (:attr:`_capabilities`) rather than a hardcoded prefix set.
         """
-        model = self._model.lower()
-        if model.startswith(("glm", "kimi", "qwen", "deepseek", "z-")):
-            return 32_768
-        return 8_192
+        return self._capabilities.default_max_tokens
 
     @property
     def supports_tool_use(self) -> bool:

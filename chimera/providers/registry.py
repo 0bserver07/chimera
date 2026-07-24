@@ -66,4 +66,5 @@ def _ensure_builtins_registered() -> None:
     import chimera.providers.modal  # noqa: F401
     import chimera.providers.modal_endpoint  # noqa: F401
     import chimera.providers.xai  # noqa: F401
+    import chimera.providers.acmecloud  # noqa: F401
     import chimera.providers.faux  # noqa: F401

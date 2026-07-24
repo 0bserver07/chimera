@@ -57,6 +57,7 @@ Layer 1: Environment     Local, Docker, Git, Remote, Cloud, PersistentShell
 - `base.py` — Provider ABC (with `thinking` param), Response, StreamEvent
 - `factory.py` — `create_provider()` auto-detection via registry
 - `registry.py` — Runtime provider registry (`register_provider`, `get_provider_factory`, self-registration)
+- `capabilities.py` — Declarative capability matrix: `ProviderCapabilities` quirk record keyed by `WireProtocol` (openai-compat/anthropic-compat/google), `resolve_capabilities`/`register_capabilities` (protocol default → provider → model-prefix override). Providers source quirks from it (`CompatFlags` is its openai-compat projection). Add a backend on an existing protocol as a ~20-line data row — guide: `docs/guides/add-a-provider.md`
 - `thinking.py` — ThinkingLevel enum (OFF/MINIMAL/LOW/MEDIUM/HIGH/MAX), `budget_for_level()`
 - `proxy.py` — ProxyProvider (HTTP relay for centralized key management)
 - `anthropic.py`, `openai_provider.py`, `google.py`, `ollama.py`, `modal.py`, `compatible.py`

@@ -6,6 +6,11 @@ import uuid
 from typing import TYPE_CHECKING, Any
 
 from chimera.providers.base import Provider, Response, ToolSchema
+from chimera.providers.capabilities import (
+    ProviderCapabilities,
+    WireProtocol,
+    resolve_capabilities,
+)
 from chimera.types import Message, ToolCall
 
 if TYPE_CHECKING:
@@ -145,6 +150,17 @@ class GoogleProvider(Provider):
             else:
                 cleaned[k] = v
         return cleaned
+
+    @property
+    def _capabilities(self) -> ProviderCapabilities:
+        """Resolved ``google`` wire-protocol capabilities for this model.
+
+        Introspection hook mirroring the other providers: the Gemini request
+        shape (``max_output_tokens`` field name, no client-side cache markers,
+        tiered long-context pricing) is described declaratively in the
+        capability matrix. See :mod:`chimera.providers.capabilities`.
+        """
+        return resolve_capabilities(WireProtocol.GOOGLE, model=self._model_name)
 
     @property
     def context_window(self) -> int:
