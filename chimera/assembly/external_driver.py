@@ -13,7 +13,7 @@ Profiles
 A lane is configured by an :class:`ExternalAgentProfile`: the command template
 (``{task}`` and ``{workdir}`` placeholders), the output protocol, an optional
 env passthrough allowlist, and a timeout. One profile ships built in —
-``claude`` (the Claude Code CLI, whose ``--print --output-format stream-json``
+`claude` (the `claude` CLI, whose ``--print --output-format stream-json``
 mode this repo already integrates against). Users register more under
 ``[external_agents.<name>]`` tables in ``~/.chimera/config.toml`` (the same
 config chain every Chimera CLI reads; ``$CHIMERA_CONFIG_HOME`` honored)::
@@ -26,7 +26,7 @@ config chain every Chimera CLI reads; ``$CHIMERA_CONFIG_HOME`` honored)::
 
 Protocols
 ---------
-- ``stream-json`` — newline-delimited JSON events in the Claude Code CLI's
+- ``stream-json`` — newline-delimited JSON events in the `claude` CLI's
   stream-json vocabulary (``system``/``assistant``/``user``/``result`` lines;
   the mapping table lives on :class:`_StreamJsonParser`). Cost, token usage,
   and step counts are parsed from the ``result`` line, so telemetry is real.
@@ -156,8 +156,8 @@ class ExternalAgentProfile:
         )
 
 
-#: Profiles that work out of the box. Only ``claude`` ships committed: the
-#: Claude Code CLI is already integrated against throughout this repo and its
+#: Profiles that work out of the box. Only `claude` ships committed: the
+#: `claude` CLI is already integrated against throughout this repo and its
 #: name is safe to carry in source. Other agents' CLIs are added by users via
 #: config (profile names are user data).
 BUILTIN_PROFILES: dict[str, ExternalAgentProfile] = {
@@ -255,7 +255,7 @@ def _stringify_block_content(data: Any) -> str:
 
 
 class _StreamJsonParser:
-    """Newline-JSON → ``LoopEvent`` mapping (Claude Code CLI vocabulary).
+    """Newline-JSON → ``LoopEvent`` mapping (`claude` CLI vocabulary).
 
     Mapping (one emitted line → zero or more events, in order):
 

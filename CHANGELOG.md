@@ -94,9 +94,10 @@ commit receipts.
   from committed `data/*.json` receipts by the new stdlib-only
   `scripts/render_observatory.py`: flagship full-dataset scorecard with
   EXACT / ~EXACT / lower-bound labels derived from per-task `status_counts`,
-  the multi-agent depth-matrix section (renders the `observatory1` n=50 grid
-  when its receipt lands; honest "in flight" block until then), the 13 × 7
-  n=1 breadth grid, per-cell provenance (every number names its receipt
+  the multi-agent **depth matrix — the first real one**: 4 architectures ×
+  4 benchmarks at n=50 on glm-5.2 (`observatory1`, 16 cells, $4.34;
+  mbpp/mbpp-plus saturate at ~100% while math500 separates them 80–84%),
+  the 13 × 7 n=1 breadth grid, per-cell provenance (every number names its receipt
   file), and per-section uvx + detached-Modal reproduce commands. The
   generator enforces build-time integrity (an `error`-status cell claiming
   passes aborts, exit 2), `--check` exits 1 when the committed page is stale

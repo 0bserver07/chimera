@@ -15,7 +15,7 @@ the same scoreboard, telemetry, and cohort artifact.
 
 ```bash
 set -a; source .env; set +a          # model credentials for the Chimera lane
-# race the Claude Code CLI against glm-5.2, isolated worktree each:
+# race the claude CLI against glm-5.2, isolated worktree each:
 chimera code --tui --models ext:claude,glm-5.2[1m]
 ```
 
@@ -37,7 +37,7 @@ chimera code --tui --models ext:claude,glm-5.2,glm-5.1:explore
 ## Profiles
 
 A profile says how to run one CLI. One ships built in — **`claude`**, the
-Claude Code CLI (`--print --output-format stream-json`), which this repo
+`claude` CLI (`--print --output-format stream-json`), which this repo
 already integrates against. Everything else is your own config, under
 `[external_agents.<name>]` tables in `~/.chimera/config.toml` (the same file
 every Chimera CLI reads; `$CHIMERA_CONFIG_HOME` is honored):
@@ -61,7 +61,7 @@ the known profiles.
 
 | Protocol | Input | Telemetry |
 |----------|-------|-----------|
-| `stream-json` | newline-delimited JSON events (the Claude Code CLI's `stream-json` vocabulary) | **real** — cost, tokens, and step count parsed from the final `result` line |
+| `stream-json` | newline-delimited JSON events (the `claude` CLI's `stream-json` vocabulary) | **real** — cost, tokens, and step count parsed from the final `result` line |
 | `text` | plain stdout | **honest zeros** — no cost/step data exists; the lane says so with a system note. Wall-clock time is still real. |
 
 ### stream-json event mapping

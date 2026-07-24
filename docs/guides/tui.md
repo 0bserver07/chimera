@@ -124,7 +124,7 @@ view lands at the top. `/export` zips the cohort artifact.
 ## Racing a real external agent
 
 A lane can wrap a *real third-party coding-agent CLI* instead of a Chimera
-agent — `--models ext:claude,glm-5.2` races the Claude Code CLI against a
+agent — `--models ext:claude,glm-5.2` races the `claude` CLI against a
 Chimera lane on the same task, each in its own worktree. See
 `docs/guides/external-lanes.md` for profiles, protocols, and the honest limits
 (telemetry varies, no steering).
