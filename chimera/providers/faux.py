@@ -43,10 +43,12 @@ import json
 import time
 from typing import TYPE_CHECKING, Any
 
-from chimera.providers.base import Provider, Response
+from chimera.providers.base import Provider, Response, StreamEvent
 from chimera.types import Message, ToolCall
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from chimera.providers.base import ToolSchema
     from chimera.providers.thinking import ThinkingLevel
 
@@ -62,7 +64,7 @@ class FauxProviderError(RuntimeError):
 # A single scripted completion. All keys optional; see module docstring.
 #   {"text": str}
 #   {"tool_calls": [{"name": str, "arguments": dict}, ...], "text": str?}
-#   {"thinking": str, "text": str}
+#   {"thinking": str | list[str], "text": str}   # list = streamed chunk per item
 #   {"error": str}
 #   {..., "usage": {"input_tokens": int, "output_tokens": int}}  # explicit override
 ScriptStep = dict[str, Any]
@@ -223,14 +225,24 @@ class FauxProvider(Provider):
 
     def _next_step(self) -> ScriptStep:
         """Return the step for this call, advancing the playhead."""
+        step = self._peek_step()
         if self._step_index < len(self._script):
-            step = self._script[self._step_index]
             self._step_index += 1
-            return step
-        # Exhausted.
-        if self._on_exhausted == "repeat" and self._script:
-            return self._script[-1]
-        return {"text": self._final_text}
+        return step
+
+    @staticmethod
+    def _thinking_chunks(step: ScriptStep) -> list[str]:
+        """Scripted thinking as a list of chunks (empty when absent).
+
+        A ``str`` value is one chunk; a ``list``/``tuple`` value is one chunk
+        per item — that is how :meth:`stream` decides how many
+        ``thinking_delta`` events to emit for the step.
+        """
+        raw = step.get("thinking", "")
+        if isinstance(raw, (list, tuple)):
+            return [str(chunk) for chunk in raw if str(chunk)]
+        text = str(raw)
+        return [text] if text else []
 
     def _build_tool_calls(self, step: ScriptStep) -> list[ToolCall]:
         """Materialise ``ToolCall`` objects with deterministic ids."""
@@ -273,7 +285,7 @@ class FauxProvider(Provider):
             raise FauxProviderError(str(step["error"]))
 
         text = str(step.get("text", ""))
-        thinking_text = str(step.get("thinking", ""))
+        thinking_text = "".join(self._thinking_chunks(step))
         tool_calls = self._build_tool_calls(step)
 
         # Deterministic usage: output tokens from the produced text + serialized
@@ -303,14 +315,61 @@ class FauxProvider(Provider):
 
         return Response(content=text, tool_calls=tool_calls, usage=usage)
 
-    # ``stream()`` / ``async_complete()`` / ``async_stream()`` are inherited
-    # unchanged from :class:`~chimera.providers.base.Provider`: the base
-    # ``stream`` default calls ``complete()`` once and re-emits its content as a
-    # ``text_delta`` event, one ``tool_call_start`` per tool call, and a final
-    # ``done`` event carrying the usage dict — exactly the deterministic content
-    # this provider produces. A scripted ``{"error": ...}`` step therefore
-    # surfaces from ``stream()`` too (the base impl calls ``complete()`` on first
-    # iteration, which raises). The async variants bridge these via executor/queue.
+    def stream(
+        self,
+        messages: list[Message],
+        tools: list[ToolSchema] | None = None,
+        temperature: float = 0.0,
+        max_tokens: int | None = None,
+        thinking: ThinkingLevel | None = None,
+        cancel_event: Any | None = None,
+        **kwargs: Any,
+    ) -> Iterator[StreamEvent]:
+        """Stream the next scripted step as deterministic events.
+
+        Mirrors the base-class default (one ``text_delta`` with the full
+        content, one ``tool_call_start`` per tool call, a terminal ``done``
+        carrying usage) and additionally emits one ``thinking_delta`` event
+        per scripted thinking chunk *before* the text — so loop/TUI reasoning
+        paths (``thinking_chunk`` events, heartbeats) are exercisable without
+        a live reasoning model. Steps without ``thinking`` stream exactly as
+        the base default did.
+
+        Accounting is identical to :meth:`complete` (which this calls once on
+        first iteration); a scripted ``{"error": ...}`` step therefore raises
+        from here too.
+
+        Yields:
+            :class:`~chimera.providers.base.StreamEvent` instances.
+
+        Raises:
+            FauxProviderError: If the scripted step is an ``{"error": ...}`` step.
+        """
+        del tools, temperature, max_tokens, thinking, cancel_event, kwargs
+        # Peek the upcoming step for its thinking chunks BEFORE complete()
+        # advances the playhead (the Response carries no thinking field).
+        chunks = self._thinking_chunks(self._peek_step())
+        response = self.complete(messages)
+        for chunk in chunks:
+            yield StreamEvent(type="thinking_delta", content=chunk)
+        if response.content:
+            yield StreamEvent(type="text_delta", content=response.content)
+        for tc in response.tool_calls:
+            yield StreamEvent(type="tool_call_start", tool_call=tc)
+        yield StreamEvent(type="done", usage=response.usage)
+
+    def _peek_step(self) -> ScriptStep:
+        """The step the next :meth:`complete` call will play (no advance)."""
+        if self._step_index < len(self._script):
+            return self._script[self._step_index]
+        if self._on_exhausted == "repeat" and self._script:
+            return self._script[-1]
+        return {"text": self._final_text}
+
+    # ``async_complete()`` / ``async_stream()`` are inherited unchanged from
+    # :class:`~chimera.providers.base.Provider`; they bridge ``complete()`` /
+    # the ``stream()`` above via executor/queue, so scripted thinking and
+    # ``{"error": ...}`` steps surface identically on the async surfaces.
 
     @property
     def total_tokens(self) -> int:

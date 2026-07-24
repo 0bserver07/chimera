@@ -360,3 +360,56 @@ def test_create_provider_passes_script_kwarg() -> None:
     )
     assert isinstance(provider, FauxProvider)
     assert provider.complete(_user("q")).content == "wired"
+
+
+# --------------------------------------------------------------------------- #
+# Scripted thinking streams as thinking_delta chunks (harness support)
+# --------------------------------------------------------------------------- #
+def test_stream_emits_scripted_thinking_chunks_in_order() -> None:
+    provider = FauxProvider([{"thinking": ["hmm, ", "let me see"], "text": "ans"}])
+
+    events = list(provider.stream(_user("q")))
+
+    assert [e.type for e in events] == [
+        "thinking_delta", "thinking_delta", "text_delta", "done",
+    ]
+    assert [e.content for e in events[:2]] == ["hmm, ", "let me see"]
+    assert events[2].content == "ans"
+    assert events[3].usage is not None
+    assert events[3].usage["thinking_tokens"] == len("hmm, let me see") // 4
+
+
+def test_stream_string_thinking_is_one_chunk() -> None:
+    provider = FauxProvider([{"thinking": "single blob", "text": "ans"}])
+
+    events = list(provider.stream(_user("q")))
+
+    assert [e.type for e in events] == ["thinking_delta", "text_delta", "done"]
+    assert events[0].content == "single blob"
+
+
+def test_stream_without_thinking_matches_base_default_shape() -> None:
+    provider = FauxProvider([
+        {"text": "t", "tool_calls": [{"name": "ping", "arguments": {}}]},
+    ])
+
+    events = list(provider.stream(_user("q")))
+
+    assert [e.type for e in events] == ["text_delta", "tool_call_start", "done"]
+
+
+def test_thinking_chunk_list_joins_for_complete_usage() -> None:
+    provider = FauxProvider([{"thinking": ["xx", "xx"], "text": "y"}])
+
+    resp = provider.complete(_user("q"))
+
+    assert resp.content == "y"
+    assert resp.usage["thinking_tokens"] == 1  # len("xxxx") // 4
+
+
+def test_stream_accounting_matches_complete() -> None:
+    provider = FauxProvider([{"thinking": ["a", "b"], "text": "answer"}])
+
+    list(provider.stream(_user("q")))
+
+    assert provider.call_count == 1  # stream() bills exactly one completion

@@ -178,6 +178,9 @@ Layer 1: Environment     Local, Docker, Git, Remote, Cloud, PersistentShell
 - `chimera/auth/` — API key, OAuth device/browser flows (real stdlib HTTP impl), credential store (file-based, 0o600 perms)
 - `chimera/rpc/` — JSON-RPC server (stdin/stdout), RpcHandler (prompt/steer/cancel/get_state/compact), command/response/event types
 
+### Testing (`chimera/testing/`)
+- `harness.py` — hermetic agent-loop harness: `create_harness` (real AgentLoop) / `create_assembled_harness` (AgentDriver/CodingAgent) run FauxProvider scripts through the REAL loop with real tools in a temp workspace; `HarnessRun` exposes ordered LoopEvents, tool calls/results, file diffs, usage/cost, terminal reason. Regression locks live in `tests/regressions/` (commit-named, revert-verified). Complements — never replaces — real-LLM validation (guide: `docs/guides/testing-agents.md`).
+
 ### Assembly (`chimera/assembly/`)
 - `coding_agent.py` — CodingAgent, the assembled daily-driver stack behind `chimera code` (presets, conversation memory, loop postures via `LOOP_POSTURES`)
 - `driver.py` — AgentDriver: the one control surface a REPL/TUI drives (send/steer/cancel/clear/load_history + model/tools/cost/history)

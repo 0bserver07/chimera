@@ -41,6 +41,22 @@ commit receipts.
   `CodingAgent(interceptors=...)`, and `AgentDriver`. Guide:
   `docs/guides/interception.md` (+ site copy); proof plugin wiring all
   four seams in `tests/core/test_interception.py`.
+- **Hermetic agent-loop test harness** — `chimera.testing`
+  (`create_harness` / `AgentHarness`, `create_assembled_harness` /
+  `DriverHarness`, `HarnessRun`): scripted turns through the REAL
+  `AgentLoop` (and the assembled AgentDriver/CodingAgent path) over the
+  0.9.1 faux provider — real tool execution in a temp workspace, ordered
+  LoopEvent capture, file-diff bookkeeping, usage/cost accounting,
+  deterministic mid-stream steering/cancel via `on_event`, and provider
+  error injection. The faux provider additionally streams scripted
+  `thinking` as `thinking_delta` chunks (str or list-of-chunks). New
+  `tests/regressions/` locks replay shipped bugs through it, named for the
+  fixing commit and revert-verified: budget cost on the async + streaming
+  paths (`eb87310`), full tool output on the persistence render path
+  (`c4840a5`), errored/empty runs grading as pass (`0275ec3`), lint-loop
+  exit-code derailment (`9c19e7a`). Guide: `docs/guides/testing-agents.md`
+  (also on the site) — hermetic tests are for regressions/units; real-LLM
+  validation remains the bar for "done".
 
 ## 0.9.1 — 2026-07-11 — the honest harness
 
