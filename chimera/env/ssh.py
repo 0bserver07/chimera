@@ -64,15 +64,19 @@ if TYPE_CHECKING:
 # Optional asyncssh import (graceful — keeps subprocess path zero-dep)
 # ---------------------------------------------------------------------------
 
-try:
-    import asyncio
+# asyncio is stdlib and can never fail to import, so it lives OUTSIDE the
+# try: when it shared the block with asyncssh, a missing extra blanked it to
+# None too. That made the async backend untestable against a fake transport
+# (and would have surfaced as a confusing AttributeError had any code path
+# reached it without asyncssh).
+import asyncio
 
+try:
     import asyncssh  # type: ignore[import-not-found]
 
     _ASYNCSSH_AVAILABLE = True
 except ImportError:  # pragma: no cover — exercised in env without the extra
     asyncssh = None  # type: ignore[assignment]
-    asyncio = None  # type: ignore[assignment]
     _ASYNCSSH_AVAILABLE = False
 
 
