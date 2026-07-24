@@ -66,8 +66,44 @@ class LabelEntry:
     label: str = ""
 
 
+@dataclass
+class StateChangeEntry:
+    """A typed, non-message record of a session state change.
+
+    Captures scalar control-plane changes that are *not* conversation
+    messages — e.g. the active model or thinking level switching
+    mid-session. Stored inline on the branch like any other entry so a
+    resumed branch can reconstruct not just *what was said* but *how the
+    session was configured* at each point. :meth:`SessionTree.get_messages`
+    skips it, so it never pollutes the reconstructed conversation.
+
+    Attributes:
+        id: Unique entry id.
+        parent_id: Id of the parent entry (branch linkage), or ``None``.
+        timestamp: Unix timestamp when the change was recorded.
+        type: Discriminator; always ``"state_change"``.
+        kind: The state dimension that changed, e.g. ``"model"`` or
+            ``"thinking"``.
+        value: The new value, e.g. ``"glm-5"`` or ``"high"``.
+    """
+
+    id: str
+    parent_id: str | None
+    timestamp: float
+    type: str = "state_change"
+    kind: str = ""
+    value: str = ""
+
+
 # Union type for all entry kinds
-AnyEntry = SessionEntry | SessionHeader | MessageEntry | CompactionEntry | LabelEntry
+AnyEntry = (
+    SessionEntry
+    | SessionHeader
+    | MessageEntry
+    | CompactionEntry
+    | LabelEntry
+    | StateChangeEntry
+)
 
 
 class SessionTree:
@@ -123,6 +159,32 @@ class SessionTree:
         entry = LabelEntry(
             id=entry_id, parent_id=self._active_leaf, timestamp=time.time(),
             target_id=target_id, label=label,
+        )
+        self.append(entry)
+        return entry_id
+
+    def add_state_change(self, kind: str, value: str) -> str:
+        """Append a typed non-message ``state_change`` entry.
+
+        Records a control-plane change (model swap, thinking-level swap, or
+        any scalar session setting) as a first-class typed entry on the
+        active branch, rather than smuggling it into a message role. The
+        entry is skipped by :meth:`get_messages` so it never pollutes the
+        reconstructed conversation, yet it survives persistence and branch
+        navigation like every other entry.
+
+        Args:
+            kind: The state dimension that changed, e.g. ``"model"`` or
+                ``"thinking"``.
+            value: The new value, e.g. ``"glm-5"`` or ``"high"``.
+
+        Returns:
+            The id of the newly appended entry.
+        """
+        entry_id = self._generate_id()
+        entry = StateChangeEntry(
+            id=entry_id, parent_id=self._active_leaf, timestamp=time.time(),
+            kind=kind, value=value,
         )
         self.append(entry)
         return entry_id
@@ -294,6 +356,14 @@ class SessionTree:
         elif isinstance(entry, LabelEntry):
             d["target_id"] = entry.target_id
             d["label"] = entry.label
+        elif isinstance(entry, StateChangeEntry):
+            d["kind"] = entry.kind
+            d["value"] = entry.value
+        elif isinstance(entry, SessionEntry):
+            # Generic/extension entries round-trip their custom payload under
+            # a nested ``data`` key so it survives reload (previously dropped).
+            if entry.data:
+                d["data"] = entry.data
         return d
 
     def _deserialize(self, raw: dict[str, Any]) -> AnyEntry:
@@ -325,8 +395,15 @@ class SessionTree:
         elif entry_type == "label":
             return LabelEntry(**base, target_id=raw.get("target_id", ""),
                               label=raw.get("label", ""))
+        elif entry_type == "state_change":
+            return StateChangeEntry(**base, kind=raw.get("kind", ""),
+                                    value=raw.get("value", ""))
         else:
-            return SessionEntry(type=entry_type, **base, data=raw)
+            # Prefer the nested custom payload when present (faithful
+            # round-trip); fall back to the whole record for older / foreign
+            # entries that predate nested-``data`` serialization.
+            return SessionEntry(type=entry_type, **base,
+                                data=raw.get("data", raw))
 
     @staticmethod
     def _generate_id() -> str:

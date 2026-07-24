@@ -9,6 +9,21 @@ commit receipts.
 
 ### Added
 
+- **Compaction/session audit — reversibility, iterative-summary, and typed
+  non-message entries** (`docs/notes/compaction-audit.md`,
+  `tests/sessions/test_compaction_audit.py`): a verify-first Tier-2 audit of
+  three durable-log properties, each proven by probe before acting. Two
+  already held and are now regression-locked — compaction is *append-only*
+  (`SessionTree.add_compaction` appends a boundary entry; forking/switching to
+  the pre-compaction leaf recovers the full raw history with the summary
+  absent, on disk and across reload), and re-compacting an already-compacted
+  session *feeds the prior summary* back to the summarizer (both the
+  `SummaryCompaction` strategy and `SessionTree.summarize_branch`). The third
+  is enriched: a first-class `StateChangeEntry` + `SessionTree.add_state_change`
+  (`chimera/sessions/tree.py`) record model / thinking-level swaps as typed
+  non-message entries that persist, navigate, and are skipped by
+  `get_messages`. 9 hermetic pins (faux provider / fake summarizer, no real
+  LLM).
 - **External-agent lanes — race real third-party agent CLIs in the
   multiplexer** (`chimera/assembly/external_driver.py`, issue #169): a lane
   whose driver spawns a real external coding-agent CLI as a subprocess in the
@@ -107,6 +122,18 @@ commit receipts.
   `tests/scripts/`;
   `docs/progress/benchmark-matrix.md` now points here for display and stays
   the operational re-run guide.
+
+### Fixed
+
+- **Generic `SessionEntry` extension payloads now survive reload**
+  (`chimera/sessions/tree.py`): `SessionTree` serialized custom/extension
+  entries with only their base fields, silently dropping the `data` payload on
+  the append-to-disk path — so a reloaded extension entry came back empty. The
+  serializer now writes a nested `data` block and the loader reads it back
+  (falling back to the whole record for older logs), making the
+  extension/custom-state entry kind a faithful round-trip. Surfaced by the
+  compaction/session audit; pinned in
+  `tests/sessions/test_compaction_audit.py`.
 
 ## 0.9.1 — 2026-07-11 — the honest harness
 
