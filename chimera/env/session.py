@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import tempfile
 import time
 import uuid
 
@@ -26,17 +27,32 @@ class SessionMixin:
     """
 
     _session_name: str | None = None
+    _session_env_dir: str | None = None
 
     @property
     def has_session(self) -> bool:
         """Whether a persistent session is currently active."""
         return self._session_name is not None
 
-    def start_session(self, shell: str = "/bin/bash") -> None:
+    def start_session(
+        self,
+        shell: str = "/bin/bash",
+        isolate_history: bool = True,
+    ) -> None:
         """Start a tmux session with a 'main' window.
 
-        Raises RuntimeError if a session is already active.
-        Raises FileNotFoundError if tmux is not installed.
+        Args:
+            shell: The shell to run in the session's windows.
+            isolate_history: Point the spawned shells' ZDOTDIR/HISTFILE at
+                a throwaway temp dir so session commands never pollute the
+                user's real shell history (~/.zsh_history, ~/.bash_history).
+                The variables go into the tmux session environment, so
+                windows created later via create_shell() inherit them.
+                Requires tmux >= 3.2 (for new-session -e).
+
+        Raises:
+            RuntimeError: If a session is already active.
+            FileNotFoundError: If tmux is not installed.
         """
         if self.has_session:
             raise RuntimeError("Session already active")
@@ -44,17 +60,29 @@ class SessionMixin:
             raise FileNotFoundError("tmux is not installed")
 
         self._session_name = f"chimera-{uuid.uuid4().hex[:8]}"
-        subprocess.run(
-            [
-                "tmux", "new-session",
-                "-d",  # detached
-                "-s", self._session_name,
-                "-n", "main",  # first window name
-                shell,
-            ],
-            check=True,
-            capture_output=True,
-        )
+        cmd = [
+            "tmux", "new-session",
+            "-d",  # detached
+            "-s", self._session_name,
+        ]
+        if isolate_history:
+            self._session_env_dir = tempfile.mkdtemp(prefix="chimera-session-")
+            # ZDOTDIR redirects zsh's rc/history lookups (macOS /etc/zshrc
+            # derives HISTFILE from it); HISTFILE covers bash and plain zsh.
+            cmd += [
+                "-e", f"ZDOTDIR={self._session_env_dir}",
+                "-e", f"HISTFILE={self._session_env_dir}/shell_history",
+            ]
+        cmd += [
+            "-n", "main",  # first window name
+            shell,
+        ]
+        try:
+            subprocess.run(cmd, check=True, capture_output=True)
+        except BaseException:
+            self._session_name = None
+            self._cleanup_env_dir()
+            raise
 
     def end_session(self) -> None:
         """Kill the tmux session and all its windows."""
@@ -66,6 +94,13 @@ class SessionMixin:
             capture_output=True,
         )
         self._session_name = None
+        self._cleanup_env_dir()
+
+    def _cleanup_env_dir(self) -> None:
+        """Remove the throwaway history/rc dir, if one was created."""
+        if self._session_env_dir is not None:
+            shutil.rmtree(self._session_env_dir, ignore_errors=True)
+            self._session_env_dir = None
 
     def create_shell(self, name: str) -> None:
         """Create a new named shell (tmux window).
@@ -134,11 +169,15 @@ class SessionMixin:
         start_sentinel = f"__CHIMERA_START__{marker}"
         end_sentinel = f"__CHIMERA_END__{marker}"
 
-        # Wrap command with sentinels. The end sentinel includes the exit code.
+        # Wrap command with sentinels. The end sentinel includes the exit
+        # code. The quotes inside START/END are removed by the shell, so the
+        # *output* is a clean sentinel while the *typed* command echoed by
+        # the terminal can never match the parser's sentinel patterns — no
+        # matter how the pane wraps or redraws the input line.
         wrapped = (
-            f"echo {start_sentinel}; "
+            f'echo __CHIMERA_"START"__{marker}; '
             f"{{ {cmd} ; }}; "
-            f"echo {end_sentinel}_$?"
+            f'echo __CHIMERA_"END"__{marker}_$?'
         )
 
         target = f"{self._session_name}:{shell_name}"
@@ -162,6 +201,7 @@ class SessionMixin:
                     "tmux", "capture-pane",
                     "-t", target,
                     "-p",       # print to stdout
+                    "-J",       # join lines wrapped at pane width
                     "-S", "-",  # capture from start of scrollback
                 ],
                 capture_output=True,
