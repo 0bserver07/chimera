@@ -89,6 +89,23 @@ commit receipts.
   exit-code derailment (`9c19e7a`). Guide: `docs/guides/testing-agents.md`
   (also on the site) — hermetic tests are for regressions/units; real-LLM
   validation remains the bar for "done".
+- **The Observatory** — `docs/benchmarks/observatory.md` (+ byte-identical
+  site copy), the public agent × benchmark results page generated entirely
+  from committed `data/*.json` receipts by the new stdlib-only
+  `scripts/render_observatory.py`: flagship full-dataset scorecard with
+  EXACT / ~EXACT / lower-bound labels derived from per-task `status_counts`,
+  the multi-agent depth-matrix section (renders the `observatory1` n=50 grid
+  when its receipt lands; honest "in flight" block until then), the 13 × 7
+  n=1 breadth grid, per-cell provenance (every number names its receipt
+  file), and per-section uvx + detached-Modal reproduce commands. The
+  generator enforces build-time integrity (an `error`-status cell claiming
+  passes aborts, exit 2), `--check` exits 1 when the committed page is stale
+  vs `data/` (mtime-derived date line excluded, so the gate survives fresh
+  clones), and output is deterministic — the page date comes from the newest
+  receipt's mtime, never the wall clock. 17 unit tests in
+  `tests/scripts/`;
+  `docs/progress/benchmark-matrix.md` now points here for display and stays
+  the operational re-run guide.
 
 ## 0.9.1 — 2026-07-11 — the honest harness
 

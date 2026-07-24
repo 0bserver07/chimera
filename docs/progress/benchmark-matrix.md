@@ -10,6 +10,13 @@ Every number cites a `data/*.json`; run `uv run python scripts/verify_status.py`
 for the live 8-check state. Companion: [modal-cloud-benches](../benchmarks/modal-cloud-benches.md),
 [playbook 13](../playbooks/13-live-bench-runs.md).
 
+> **Display superseded by [the Observatory](../benchmarks/observatory.md)** —
+> the public results page, generated from the `data/*.json` receipts by
+> `scripts/render_observatory.py` (regenerate: `uv run python
+> scripts/render_observatory.py`; freshness gate: `--check`). The tables below
+> stay as the operational guide — how to re-run, extend, or troubleshoot any
+> column — but cite the Observatory, not this page, for numbers.
+
 ## 1. Flagship depth scorecard — `coding-agent`, FULL datasets
 
 The assembled `chimera code` stack over each benchmark's whole dataset, clean
