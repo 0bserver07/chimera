@@ -4,6 +4,11 @@ from chimera.core.compression import ContextCompressor
 from chimera.core.context import Context
 from chimera.core.demonstration import DemonstrationPrompt, Example
 from chimera.core.instruction import InstructionLayer
+from chimera.core.interception import (
+    InterceptDecision,
+    Interceptors,
+    ProviderRequest,
+)
 from chimera.core.loop import ReAct
 from chimera.core.loop_config import LoopConfig
 from chimera.core.middleware import (
@@ -37,7 +42,8 @@ __all__ = [
     "AGENT_TOOLS", "Agent", "ApprovalPolicy", "AutoApprove", "AlwaysDeny", "AllowList",
     "BaseTool", "CollectStreamHandler", "Context", "ContextAwareTool", "ContextCompressor",
     "DEFAULT_TOOLS", "DemonstrationPrompt", "EnsureToolCallMiddleware", "Example",
-    "InstructionLayer", "LoggingMiddleware", "LoopConfig", "LoopDetector",
+    "InstructionLayer", "InterceptDecision", "Interceptors", "LoggingMiddleware",
+    "LoopConfig", "LoopDetector", "ProviderRequest",
     "LoopMiddleware", "MiddlewareChain", "PrintStreamHandler", "Prompt", "ReAct",
     "SafetyNetMiddleware", "StreamHandler", "tool", "ToolGroup",
 ]

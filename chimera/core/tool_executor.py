@@ -194,6 +194,64 @@ def _apply_pre_tool_use_hook(
     return effective_tc, out, denial
 
 
+def _apply_tool_call_interceptors(
+    tc: ToolCall, config: LoopConfig | None,
+) -> tuple[ToolCall, str | None]:
+    """Run the ``tool_call`` interception seam for *tc*, if configured.
+
+    Ordering: runs BEFORE the PreToolUse hook and BEFORE the permission
+    check, so every downstream security decision evaluates the
+    interceptor-effective call — a replacement can never rewrite
+    arguments past a policy that already approved the originals.
+    Fail-closed: an interceptor exception blocks the call
+    (see :mod:`chimera.core.interception`).
+
+    Args:
+        tc: The tool call the model proposed.
+        config: The loop configuration carrying the interceptor chains.
+
+    Returns:
+        ``(effective_tc, block_reason)`` — *block_reason* non-``None``
+        means the call must surface as a denial-with-reason.
+    """
+    ic = config.interceptors if config else None
+    if not ic or not ic.tool_call:
+        return tc, None
+    from chimera.core.interception import intercept_tool_call
+
+    return intercept_tool_call(
+        ic.tool_call, tc, event_bus=config.event_bus if config else None,
+    )
+
+
+def _apply_tool_result_interceptors(
+    tc: ToolCall, result: ToolResult, config: LoopConfig | None,
+) -> ToolResult:
+    """Run the ``tool_result`` interception seam, if configured.
+
+    Fail-open: an interceptor exception is skipped and the original
+    result proceeds. A ``block(reason)`` decision withholds the output
+    (placeholder text names the reason). Runs on executed tools only —
+    synthetic denial messages never pass through this seam.
+
+    Args:
+        tc: The originating (interceptor-effective) tool call.
+        result: The result the tool produced.
+        config: The loop configuration carrying the interceptor chains.
+
+    Returns:
+        The effective :class:`~chimera.types.ToolResult`.
+    """
+    ic = config.interceptors if config else None
+    if not ic or not ic.tool_result:
+        return result
+    from chimera.core.interception import intercept_tool_result
+
+    return intercept_tool_result(
+        ic.tool_result, tc, result, event_bus=config.event_bus if config else None,
+    )
+
+
 class PermissionDenied(Exception):
     """Raised when a tool call is denied by the permission policy."""
 
@@ -237,6 +295,15 @@ def execute_tool_calls(
         # -- Cancellation check --
         if config and config.cancellation:
             config.cancellation.check()
+
+        # -- Interception seam: tool_call (block / mutate; before hooks
+        #    and permissions — downstream security sees the effective call) --
+        tc, intercept_block = _apply_tool_call_interceptors(tc, config)
+        if intercept_block is not None:
+            context.add(
+                Message.tool(tc.id, f"Blocked by interceptor: {intercept_block}")
+            )
+            continue
 
         # -- PreToolUse hook (may mutate input, deny, or override perms) --
         tc, hook_out, hook_denial = _apply_pre_tool_use_hook(tc, config)
@@ -304,6 +371,10 @@ def execute_tool_calls(
 
         # -- Execute --
         result = tool.execute(tc.arguments, env)
+
+        # -- Interception seam: tool_result (patch / withhold) --
+        result = _apply_tool_result_interceptors(tc, result, config)
+
         content = result.output if result.success else f"Error: {result.error}\n{result.output}"
 
         # -- Truncation --
@@ -441,6 +512,18 @@ def execute_tool_calls_incremental(
         if config and config.cancellation:
             config.cancellation.check()
 
+        # -- Interception seam: tool_call (block / mutate; before hooks
+        #    and permissions — downstream security sees the effective call) --
+        tc, intercept_block = _apply_tool_call_interceptors(tc, config)
+        if intercept_block is not None:
+            context.add(
+                Message.tool(tc.id, f"Blocked by interceptor: {intercept_block}")
+            )
+            result.results.append(
+                ToolResult(output="", error=f"Blocked by interceptor: {intercept_block}")
+            )
+            continue
+
         # -- PreToolUse hook (W13-G4: was missing on this code path) --
         # Without this, the canonical Claude-Code PreToolUse contract never
         # fires for the sync incremental executor used by ``ReAct.run`` —
@@ -525,6 +608,10 @@ def execute_tool_calls_incremental(
 
         # -- Execute --
         tr = tool.execute(tc.arguments, env)
+
+        # -- Interception seam: tool_result (patch / withhold) --
+        tr = _apply_tool_result_interceptors(tc, tr, config)
+
         content = tr.output if tr.success else f"Error: {tr.error}\n{tr.output}"
 
         # -- Truncation --
@@ -666,6 +753,18 @@ async def async_execute_tool_calls_incremental(
         if config and config.cancellation:
             config.cancellation.check()
 
+        # -- Interception seam: tool_call (block / mutate; before hooks
+        #    and permissions — downstream security sees the effective call) --
+        tc, intercept_block = _apply_tool_call_interceptors(tc, config)
+        if intercept_block is not None:
+            context.add(
+                Message.tool(tc.id, f"Blocked by interceptor: {intercept_block}")
+            )
+            ordered_results[i] = ToolResult(
+                output="", error=f"Blocked by interceptor: {intercept_block}",
+            )
+            continue
+
         # -- PreToolUse hook (W5 finishing-touch: mirror sync executor) --
         # Without this, .claude/settings.json hooks declared via the mink CLI
         # parse + thread into LoopConfig but never fire, because mink runs
@@ -795,6 +894,9 @@ async def async_execute_tool_calls_incremental(
     # Phase 3: post-process — add to context, emit events, detect loops
     # Walk tool_calls in order; for approved slots, run the full post-processing.
     approved_index_map = {idx for idx, _, _ in approved}
+    # Interceptor-effective calls (a tool_call replacement may have changed
+    # name/arguments); the result seam should see the call that actually ran.
+    effective_tc_by_index = {idx: etc for idx, etc, _ in approved}
     for i, tc in enumerate(tool_calls):
         tr_opt = ordered_results[i]
         if tr_opt is None:
@@ -805,6 +907,12 @@ async def async_execute_tool_calls_incremental(
             result.results.append(tr)
             continue
         # Proceed to full post-processing for this approved tool call.
+
+        # -- Interception seam: tool_result (patch / withhold) --
+        tr = _apply_tool_result_interceptors(
+            effective_tc_by_index.get(i, tc), tr, config,
+        )
+
         content = tr.output if tr.success else f"Error: {tr.error}\n{tr.output}"
 
         # -- Truncation --

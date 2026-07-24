@@ -239,6 +239,26 @@ class OpenAICompatibleProvider(Provider):
         return result
 
     @property
+    def request_headers(self) -> dict[str, str]:
+        """Per-request HTTP headers (a copy) sent with every API call.
+
+        This is the documented header-injection surface for the
+        ``provider_request`` interception seam
+        (:mod:`chimera.core.interception`): loops snapshot these headers
+        into the request envelope, apply an interceptor's replacement for
+        the duration of one call, and restore the snapshot afterwards.
+
+        Returns:
+            A copy of the current header map (mutating it does not
+            affect the provider — assign through the setter).
+        """
+        return dict(self._headers)
+
+    @request_headers.setter
+    def request_headers(self, value: dict[str, str]) -> None:
+        self._headers = dict(value)
+
+    @property
     def context_window(self) -> int:
         return self._context_length
 

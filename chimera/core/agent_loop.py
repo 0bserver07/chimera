@@ -38,6 +38,7 @@ from chimera.types import Message, ToolCall, ToolResult
 
 if TYPE_CHECKING:
     from chimera.core.compaction_integration import CompactionIntegration
+    from chimera.core.interception import Interceptors
     from chimera.hooks.executor import HookExecutor
     from chimera.hooks.hook_types import HookMatcher
 
@@ -80,6 +81,7 @@ class AgentLoop:
         enable_auto_continue: bool = True,
         env: Any = None,
         loop_detector: Any = None,
+        interceptors: "Interceptors | None" = None,
     ) -> AsyncGenerator[LoopEvent, None]:
         """Run the agent loop, yielding :class:`LoopEvent` instances.
 
@@ -114,6 +116,18 @@ class AgentLoop:
             stream: If ``True`` and provider has ``async_stream()``, use
                 streaming to get text deltas and yield ``assistant_chunk``
                 events.  Falls back to ``async_complete`` otherwise.
+            interceptors: Optional decision-capable seams
+                (:class:`~chimera.core.interception.Interceptors`) applied
+                at the same four points as the ``LoopConfig``-driven loops:
+                context rewrite + provider request before each model call,
+                tool_call before execution (runs before the permission
+                check), tool_result before it enters the conversation.  A
+                blocked provider call ends the run with reason
+                ``"interceptor_blocked: ..."``; a blocked tool call
+                surfaces as a denial-with-reason tool result.  This loop
+                has no event bus, so decisions surface through those
+                results rather than :class:`InterceptorEvent`.  ``None``
+                (default) leaves behavior unchanged.
 
         Yields:
             :class:`LoopEvent` instances for each significant loop step.
@@ -230,6 +244,31 @@ class AgentLoop:
             # ----- Phase B: Call provider -----
             api_messages = [Message.system(prompt_str)] + working_messages
 
+            # -- Interception seams: context rewrite + provider request --
+            # Ephemeral (per call); no-op when interceptors is None. A block
+            # ends the run with an "interceptor_blocked" result reason.
+            from chimera.core.interception import apply_pre_provider_seams
+
+            _seams = apply_pre_provider_seams(
+                interceptors, provider, api_messages, tool_schemas,
+            )
+            if _seams.block_reason is not None:
+                yield LoopEvent(
+                    type=LoopEventType.result,
+                    data=LoopResult(
+                        reason=f"interceptor_blocked: {_seams.block_reason}",
+                        messages=working_messages,
+                        usage=total_usage,
+                        cost_usd=total_cost,
+                        duration_ms=(time.time() - start_time) * 1000,
+                        turn_count=state.turn_count,
+                    ),
+                    turn=state.turn_count,
+                )
+                return
+            api_messages = _seams.messages
+            call_tool_schemas = _seams.tools
+
             try:
                 # Streaming path: use async_stream if available and requested
                 if stream and hasattr(provider, "async_stream"):
@@ -240,7 +279,7 @@ class AgentLoop:
                     accumulated_usage: dict[str, int] = {}
 
                     async for stream_event in provider.async_stream(
-                        api_messages, tools=tool_schemas,
+                        api_messages, tools=call_tool_schemas, **_seams.kwargs,
                     ):
                         if stream_event.type == "text_delta":
                             accumulated_content += stream_event.content
@@ -277,7 +316,7 @@ class AgentLoop:
                 else:
                     # Non-streaming path: use async_complete
                     response = await provider.async_complete(
-                        api_messages, tools=tool_schemas,
+                        api_messages, tools=call_tool_schemas, **_seams.kwargs,
                     )
             except Exception as exc:
                 # Attempt error recovery (CG-1)
@@ -299,6 +338,10 @@ class AgentLoop:
                         continue
                 # Unrecoverable — re-raise
                 raise
+            finally:
+                # Header injection is per-call: restore even on a raise.
+                if _seams.header_snapshot is not None:
+                    provider.request_headers = _seams.header_snapshot
 
             # Accumulate usage / cost
             _merge_usage(total_usage, response.usage)
@@ -482,8 +525,30 @@ class AgentLoop:
             # vs those that can be batched (CG-8)
             hook_blocked: set[str] = set()  # tc.id -> blocked by hook
             effective_args_map: dict[str, dict[str, Any]] = {}  # tc.id -> possibly modified args
+            effective_tc_map: dict[str, ToolCall] = {}  # tc.id -> interceptor-effective call
 
             for tc in response.tool_calls:
+                # --- Interception seam: tool_call (block / mutate) ---
+                # Runs BEFORE the permission check and hooks so every
+                # downstream security decision evaluates the
+                # interceptor-effective call (fail-closed; see
+                # chimera/core/interception.py).
+                if interceptors is not None and interceptors.tool_call:
+                    from chimera.core.interception import intercept_tool_call
+
+                    tc, _intercept_block = intercept_tool_call(
+                        interceptors.tool_call, tc,
+                    )
+                    if _intercept_block is not None:
+                        tool_call_results.append(
+                            (tc, ToolResult(
+                                output="",
+                                error=f"Blocked by interceptor: {_intercept_block}",
+                            )),
+                        )
+                        hook_blocked.add(tc.id)
+                        continue
+
                 effective_args = dict(tc.arguments)
                 skip_tool = False
 
@@ -559,6 +624,7 @@ class AgentLoop:
                     hook_blocked.add(tc.id)
                 else:
                     effective_args_map[tc.id] = effective_args
+                    effective_tc_map[tc.id] = tc
 
             # CG-8: Create ONE StreamingToolExecutor for ALL non-blocked tool calls
             non_blocked_tcs = [
@@ -568,10 +634,13 @@ class AgentLoop:
             if non_blocked_tcs:
                 executor = StreamingToolExecutor(tools, env=env)
                 for tc in non_blocked_tcs:
+                    # Dispatch the interceptor-effective call (name may have
+                    # been replaced) with the hook-effective arguments.
+                    base_tc = effective_tc_map.get(tc.id, tc)
                     modified_tc = ToolCall(
                         id=tc.id,
-                        name=tc.name,
-                        arguments=effective_args_map.get(tc.id, dict(tc.arguments)),
+                        name=base_tc.name,
+                        arguments=effective_args_map.get(tc.id, dict(base_tc.arguments)),
                     )
                     await executor.submit(modified_tc)
 
@@ -603,6 +672,20 @@ class AgentLoop:
                         exec_results = collect_task.result()
                 else:
                     exec_results = await executor.collect()
+
+                # --- Interception seam: tool_result (patch / withhold) ---
+                # Fail-open; applied before content replacement, post hooks,
+                # and the conversation append so downstream consumers see
+                # only the effective result.
+                if interceptors is not None and interceptors.tool_result:
+                    from chimera.core.interception import intercept_tool_result
+
+                    exec_results = [
+                        (stc, intercept_tool_result(
+                            interceptors.tool_result, stc, sresult,
+                        ))
+                        for stc, sresult in exec_results
+                    ]
 
                 for stc, sresult in exec_results:
                     # CG-4: Content replacement check

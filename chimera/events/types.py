@@ -38,6 +38,7 @@ __all__ = [
     "TaskCompletedEvent",
     "TeammateMessageEvent",
     "HookUpdatedInputEvent",
+    "InterceptorEvent",
 ]
 
 
@@ -369,3 +370,33 @@ class HookUpdatedInputEvent(Event):
     call_id: str = ""
     original: dict[str, Any] = field(default_factory=dict)
     updated: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class InterceptorEvent(Event):
+    """An interception seam made a decision (observational record).
+
+    Interceptors *decide* (block / replace); the event bus only *observes*.
+    This event is the observational shadow of those decisions, emitted by
+    :mod:`chimera.core.interception` so a TUI or audit trail can show
+    e.g. "tool X blocked by interceptor: reason" without being on the
+    decision path.
+
+    Attributes:
+        seam: Which seam decided — ``"provider_request"``,
+            ``"tool_call"``, ``"tool_result"``, or ``"context"``.
+        decision: What happened — ``"blocked"``, ``"replaced"``, or
+            ``"error"`` (an interceptor raised or returned a bad value).
+        reason: Block reason or error text (empty for ``"replaced"``).
+        tool_name: The tool involved, for the tool seams.
+        call_id: The tool call id, for the tool seams.
+        interceptor: Display name of the interceptor callable that decided.
+    """
+
+    type: str = field(default="interceptor", init=False)
+    seam: str = ""
+    decision: str = ""
+    reason: str = ""
+    tool_name: str = ""
+    call_id: str = ""
+    interceptor: str = ""

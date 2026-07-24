@@ -25,6 +25,22 @@ commit receipts.
   two red CI runs proved local-green ≠ CI-green (`1f8ace0`). Definition-of-
   done sweep added to CLAUDE.md; TUI + Modal-Endpoints guides propagated to
   the docs site.
+- **Interception seams** (`chimera/core/interception.py`): typed,
+  decision-capable hooks — `LoopConfig(interceptors=Interceptors(...))` —
+  that can block, mutate, and rewrite (not just observe) at the four
+  load-bearing points of a turn: the provider request (payload + headers
+  where the transport supports them, per-call apply/restore via
+  `OpenAICompatibleProvider.request_headers`), a tool call before
+  execution (runs BEFORE the permission check so policy always evaluates
+  the effective args; blocked calls surface as denial-with-reason), a
+  tool result before it enters the conversation (patch or withhold), and
+  the outgoing context list (ephemeral rewrite). First block wins,
+  replacements chain, `tool_call` fails closed / mutating seams fail
+  open, `None` config pinned byte-identical. Observational
+  `InterceptorEvent` on the bus; threaded through `AgentLoop`,
+  `CodingAgent(interceptors=...)`, and `AgentDriver`. Guide:
+  `docs/guides/interception.md` (+ site copy); proof plugin wiring all
+  four seams in `tests/core/test_interception.py`.
 
 ## 0.9.1 — 2026-07-11 — the honest harness
 

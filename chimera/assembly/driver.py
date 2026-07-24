@@ -52,7 +52,10 @@ class AgentDriver:
             not provoke "you didn't use any tools" rambling. Set ``False`` for
             unattended/print-mode runs that should push themselves to finish.
         **agent_kwargs: Forwarded to :class:`CodingAgent` (e.g. ``max_turns``,
-            ``provider``, ``tools_override``).
+            ``provider``, ``tools_override``, or ``interceptors=`` — a
+            :class:`~chimera.core.interception.Interceptors` instance whose
+            seams can block/mutate provider requests, tool calls, tool
+            results, and the outgoing context).
     """
 
     def __init__(

@@ -4,6 +4,7 @@ from collections.abc import AsyncGenerator, Generator
 from typing import Iterator, TYPE_CHECKING
 
 from chimera.core.context import Context
+from chimera.core.interception import apply_pre_provider_seams
 from chimera.core.tool import BaseTool
 from chimera.core.tool_executor import (
     LoopBreak,
@@ -231,33 +232,76 @@ class ReAct:
             # -- Lifecycle hook: PreTurn (before the model call) --
             _fire_loop_hook(self.config, _HE.PRE_TURN)
 
+            # -- Interception seams: context rewrite + provider request --
+            # Ephemeral: shapes only what this call sends; the durable
+            # Context is untouched. With no interceptors configured the
+            # outcome echoes the inputs and behavior is unchanged.
+            _seams = apply_pre_provider_seams(
+                self.config.interceptors if self.config else None,
+                provider,
+                context.to_messages(),
+                schemas if schemas else None,
+                event_bus=self.config.event_bus if self.config else None,
+            )
+            if _seams.block_reason is not None:
+                _blocked_msg = f"Blocked by interceptor: {_seams.block_reason}"
+                if handler:
+                    handler.on_done()
+                if wire:
+                    from chimera.wire.types import StepEnd
+                    wire.send(StepEnd(step=steps))
+                _fire_loop_hook(
+                    self.config, _HE.STOP_FAILURE, tool_error=_blocked_msg,
+                )
+                _fire_loop_hook(self.config, _HE.SESSION_END)
+                yield StepResult(
+                    message=Message.assistant(_blocked_msg),
+                    done=True, step=steps, cost=0.0,
+                )
+                if wire:
+                    from chimera.wire.types import TurnEnd
+                    wire.send(TurnEnd(turn_id=id(context), steps=steps, output=_blocked_msg))
+                return AgentResult(
+                    output=_blocked_msg, steps=steps,
+                    tool_calls_total=total_tool_calls, cost=total_cost,
+                    success=False, error=_blocked_msg,
+                )
+
             if self.config and self.config.event_bus:
                 from chimera.events.types import ModelRequestEvent
                 self.config.event_bus.publish(ModelRequestEvent(
                     model=provider.model_name,
-                    message_count=len(context.to_messages()),
+                    message_count=len(_seams.messages),
                     tool_count=len(schemas) if schemas else 0,
                 ))
 
-            if handler:
-                handler.on_step_start(steps)
-                events = provider.stream(
-                    context.to_messages(), tools=schemas if schemas else None,
-                )
-                cancel = self.config.cancellation if self.config else None
-                if self.config and self.config.event_bus:
-                    from chimera.events.types import StreamStartEvent
-                    self.config.event_bus.publish(StreamStartEvent(model=provider.model_name))
-                response = self._accumulate_stream(events, handler, cancellation=cancel)
-                if self.config and self.config.event_bus:
-                    from chimera.events.types import StreamEndEvent
-                    self.config.event_bus.publish(StreamEndEvent(
-                        total_tokens=response.usage.get("input_tokens", 0) + response.usage.get("output_tokens", 0),
-                    ))
-            else:
-                response = provider.complete(
-                    context.to_messages(), tools=schemas if schemas else None,
-                )
+            try:
+                if handler:
+                    handler.on_step_start(steps)
+                    events = provider.stream(
+                        _seams.messages, tools=_seams.tools, **_seams.kwargs,
+                    )
+                    cancel = self.config.cancellation if self.config else None
+                    if self.config and self.config.event_bus:
+                        from chimera.events.types import StreamStartEvent
+                        self.config.event_bus.publish(StreamStartEvent(model=provider.model_name))
+                    response = self._accumulate_stream(events, handler, cancellation=cancel)
+                    if self.config and self.config.event_bus:
+                        from chimera.events.types import StreamEndEvent
+                        self.config.event_bus.publish(StreamEndEvent(
+                            total_tokens=response.usage.get("input_tokens", 0) + response.usage.get("output_tokens", 0),
+                        ))
+                else:
+                    response = provider.complete(
+                        _seams.messages, tools=_seams.tools, **_seams.kwargs,
+                    )
+            finally:
+                # Header injection is per-call: restore the provider's
+                # original headers even if the request raised.
+                if _seams.header_snapshot is not None:
+                    provider.request_headers = (  # type: ignore[attr-defined]
+                        _seams.header_snapshot
+                    )
 
             response = mw_chain.run_after_model(response, context)
 
@@ -654,9 +698,42 @@ class ReAct:
             # -- Lifecycle hook: PreTurn (before the model call) --
             await _fire_loop_hook_async(self.config, _HE.PRE_TURN)
 
-            response = await provider.async_complete(
-                context.to_messages(), tools=schemas if schemas else None,
+            # -- Interception seams: context rewrite + provider request --
+            # (mirrors iter_steps; ephemeral, no-op when unconfigured)
+            _seams = apply_pre_provider_seams(
+                self.config.interceptors if self.config else None,
+                provider,
+                context.to_messages(),
+                schemas if schemas else None,
+                event_bus=self.config.event_bus if self.config else None,
             )
+            if _seams.block_reason is not None:
+                _blocked_msg = f"Blocked by interceptor: {_seams.block_reason}"
+                await _fire_loop_hook_async(
+                    self.config, _HE.STOP_FAILURE, tool_error=_blocked_msg,
+                )
+                await _fire_loop_hook_async(self.config, _HE.SESSION_END)
+                yield StepResult(
+                    message=Message.assistant(_blocked_msg),
+                    done=True, step=steps, cost=0.0,
+                )
+                self._async_result = AgentResult(
+                    output=_blocked_msg, steps=steps,
+                    tool_calls_total=total_tool_calls, cost=total_cost,
+                    success=False, error=_blocked_msg,
+                )
+                return
+
+            try:
+                response = await provider.async_complete(
+                    _seams.messages, tools=_seams.tools, **_seams.kwargs,
+                )
+            finally:
+                # Header injection is per-call: restore even on a raise.
+                if _seams.header_snapshot is not None:
+                    provider.request_headers = (  # type: ignore[attr-defined]
+                        _seams.header_snapshot
+                    )
 
             # -- Lifecycle hook: PostTurn (after the model responds) --
             await _fire_loop_hook_async(

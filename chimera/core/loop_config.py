@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from chimera.core.budget import BudgetEnforcer
     from chimera.core.cancellation import CancellationToken
     from chimera.core.file_tracker import FileTracker
+    from chimera.core.interception import Interceptors
     from chimera.core.message_queue import MessageQueues
     from chimera.core.middleware import LoopMiddleware
     from chimera.core.truncation import TruncationConfig
@@ -119,6 +120,15 @@ class LoopConfig:
     # via its existing cooperative-cancel path. None = unchanged behaviour.
     # See chimera/core/budget.py and docs/specs/comparative-bench-cli.md.
     budget_enforcer: BudgetEnforcer | None = None
+
+    # Typed, decision-capable interception seams (block / mutate / rewrite)
+    # for the four load-bearing points of a turn: provider_request,
+    # tool_call, tool_result, context. Unlike event_bus subscribers
+    # (observational), interceptors DECIDE. None = byte-identical behavior.
+    # See chimera/core/interception.py for the contract, the
+    # interceptors-before-permissions ordering rationale, and the per-seam
+    # failure policy (tool_call fail-closed, mutating seams fail-open).
+    interceptors: Interceptors | None = None
 
     # -- LLM-condensation (M11) --
     # When BOTH fields are set, ``ReAct.async_iter_steps`` will run the

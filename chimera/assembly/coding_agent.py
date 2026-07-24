@@ -94,6 +94,7 @@ class CodingAgent:
         max_turns: Any = _USE_CONFIG_MAX_TURNS,
         enable_nudges: bool = True,
         loop: str | None = None,
+        interceptors: Any = None,
     ) -> None:
         from chimera.assembly.presets import PRESETS
         from chimera.assembly.system_prompts import CODING_AGENT_PROMPT, PRESET_PROMPTS
@@ -130,6 +131,15 @@ class CodingAgent:
         # make interactive Q&A ramble ("you didn't use any tools"); a REPL/TUI
         # turns them off via enable_nudges=False.
         self._enable_nudges = enable_nudges
+
+        # Interception seams (T4, additive): a
+        # chimera.core.interception.Interceptors instance threaded into
+        # AgentLoop.run so embedders can block/mutate provider requests,
+        # tool calls, tool results, and the outgoing context without
+        # touching core. None (default) = unchanged behavior. Applies to
+        # the default AgentLoop path; strategy-loop lanes (plan-execute /
+        # reflexion / tot via loop_adapter) are not yet covered.
+        self._interceptors = interceptors
 
         # Feature flags
         FeatureFlags.from_env()
@@ -405,6 +415,7 @@ class CodingAgent:
             enable_auto_continue=getattr(self, "_enable_nudges", True),
             env=_tool_env,
             loop_detector=_loop_detector,
+            interceptors=getattr(self, "_interceptors", None),
         ):
             # Track modified files from tool_result events
             if event.type == LoopEventType.tool_result:
