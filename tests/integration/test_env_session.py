@@ -2,6 +2,7 @@
 """Tests for SessionMixin persistent shell."""
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 
@@ -181,3 +182,46 @@ class TestRunInSession:
             assert "line3" in result.stdout
         finally:
             s.end_session()
+
+
+class TestHistoryIsolation:
+    """Session shells must never write to the user's real shell history."""
+
+    def test_spawned_shell_has_isolated_histfile(self):
+        s = ConcreteSession()
+        s.start_session()
+        try:
+            assert s._session_env_dir is not None
+            result = s.run_in_session("echo HISTFILE=$HISTFILE")
+            assert s._session_env_dir in result.stdout
+        finally:
+            s.end_session()
+
+    def test_new_windows_inherit_isolation(self):
+        s = ConcreteSession()
+        s.start_session()
+        try:
+            s.create_shell("aux")
+            result = s.run_in_session("echo HISTFILE=$HISTFILE", shell_name="aux")
+            assert s._session_env_dir is not None
+            assert s._session_env_dir in result.stdout
+        finally:
+            s.end_session()
+
+    def test_isolation_can_be_disabled(self):
+        s = ConcreteSession()
+        s.start_session(isolate_history=False)
+        try:
+            assert s._session_env_dir is None
+        finally:
+            s.end_session()
+
+    def test_end_session_removes_env_dir(self):
+        s = ConcreteSession()
+        s.start_session()
+        env_dir = s._session_env_dir
+        assert env_dir is not None
+        assert os.path.isdir(env_dir)
+        s.end_session()
+        assert s._session_env_dir is None
+        assert not os.path.exists(env_dir)
