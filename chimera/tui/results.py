@@ -23,6 +23,9 @@ except ImportError as exc:  # pragma: no cover
         "  pip install 'chimera-run[tui]'   (or: pip install textual)"
     ) from exc
 
+from chimera.tui.theme import Palette
+from chimera.tui.worddiff import Span, pair_runs, word_spans
+
 if TYPE_CHECKING:
     from chimera.tui.cohort import Cohort
 
@@ -32,7 +35,12 @@ __all__ = [
     "render_diff",
     "split_diff_files",
     "split_rows",
+    "word_diff_lines",
 ]
+
+#: The unconfigured palette — its diff slots are the styles this module
+#: hardcoded before themes existed, so ``palette=None`` renders identically.
+_DEFAULT_PALETTE = Palette()
 
 
 def split_diff_files(diff: str) -> list[tuple[str, str]]:
@@ -131,20 +139,108 @@ def scoreboard_table(cohort: Cohort) -> Table:
     return table
 
 
-def render_diff(diff: str) -> list[Text]:
-    """Colorize a unified diff into per-line renderables (add/remove/hunk)."""
+def _spans_text(
+    marker: str, spans: list[Span], base_style: str, word_style: str,
+) -> Text:
+    """Render one diff line from its word spans (changed tokens highlighted)."""
+    text = Text()
+    text.append(marker, style=base_style)
+    for span in spans:
+        text.append(span.text, style=word_style if span.changed else base_style)
+    return text
+
+
+def word_diff_lines(
+    removes: list[str], adds: list[str], *, palette: Palette | None = None,
+) -> list[Text] | None:
+    """Render one removal/addition run with word-level highlights (R-REN-10).
+
+    Args:
+        removes: Consecutive removed lines, markers stripped.
+        adds: The consecutive added lines that follow them.
+        palette: Theme palette supplying the ``diff.*`` slots.
+
+    Returns:
+        The rendered lines (removals first, then additions, as in a unified
+        diff), or ``None`` when the run cannot be paired honestly — unbalanced
+        run lengths, or every pair too dissimilar to word-diff — so the caller
+        falls back to plain line colors.
+    """
+    pairs = pair_runs(removes, adds)
+    if pairs is None:
+        return None
+    diffed = [word_spans(old, new) for old, new in pairs]
+    if all(entry is None for entry in diffed):
+        return None
+    pal = palette if palette is not None else _DEFAULT_PALETTE
+    remove_style, add_style = pal.style("diff.remove"), pal.style("diff.add")
+    removed: list[Text] = []
+    added: list[Text] = []
+    for (old, new), entry in zip(pairs, diffed):
+        if entry is None:
+            removed.append(Text(f"-{old}", style=remove_style))
+            added.append(Text(f"+{new}", style=add_style))
+            continue
+        old_spans, new_spans = entry
+        removed.append(_spans_text(
+            "-", old_spans, remove_style, pal.style("diff.remove-word"),
+        ))
+        added.append(_spans_text(
+            "+", new_spans, add_style, pal.style("diff.add-word"),
+        ))
+    return removed + added
+
+
+def render_diff(diff: str, *, palette: Palette | None = None) -> list[Text]:
+    """Colorize a unified diff into per-line renderables (add/remove/hunk).
+
+    Removal/addition runs that pair 1↔1 are word-diffed and only the changed
+    tokens are inverse-highlighted (R-REN-10); indentation is never
+    highlighted, and a pair that is not really an edit of its partner falls
+    back to plain line color.
+
+    Args:
+        diff: A unified diff (one file or many).
+        palette: Theme palette supplying the ``diff.*`` slots; ``None`` uses
+            the default theme, whose values are the previously hardcoded ones.
+
+    Returns:
+        One renderable per diff line, in order.
+    """
+    pal = palette if palette is not None else _DEFAULT_PALETTE
     out: list[Text] = []
+    removes: list[str] = []
+    adds: list[str] = []
+
+    def flush() -> None:
+        if not removes and not adds:
+            return
+        paired = word_diff_lines(removes, adds, palette=pal)
+        if paired is not None:
+            out.extend(paired)
+        else:
+            out.extend(Text(f"-{line}", style=pal.style("diff.remove")) for line in removes)
+            out.extend(Text(f"+{line}", style=pal.style("diff.add")) for line in adds)
+        removes.clear()
+        adds.clear()
+
     for line in diff.splitlines():
         if line.startswith("+++") or line.startswith("---") or line.startswith(("diff ", "index ")):
-            out.append(Text(line, style="bold"))
+            flush()
+            out.append(Text(line, style=pal.style("diff.meta")))
         elif line.startswith("+"):
-            out.append(Text(line, style="green"))
+            adds.append(line[1:])
         elif line.startswith("-"):
-            out.append(Text(line, style="red"))
+            if adds:  # a new run starts once additions have been seen
+                flush()
+            removes.append(line[1:])
         elif line.startswith("@@"):
-            out.append(Text(line, style="cyan"))
+            flush()
+            out.append(Text(line, style=pal.style("diff.hunk")))
         else:
-            out.append(Text(line))
+            flush()
+            out.append(Text(line, style=pal.style("diff.context")))
+    flush()
     return out
 
 
@@ -170,12 +266,17 @@ class ResultsScreen(Screen):
     #diff-body { height: 1fr; padding: 0 1; }
     """
 
-    def __init__(self, cohort: Cohort, **kwargs: Any) -> None:
+    def __init__(
+        self, cohort: Cohort, *, palette: Palette | None = None, **kwargs: Any,
+    ) -> None:
         super().__init__(**kwargs)
         self._cohort = cohort
         self._idx = 0
         self._file_idx = 0
         self._split = False
+        #: Theme palette for the diff slots (R-THEME-1); the app passes its
+        #: live one so the comparison screen follows ``/theme``.
+        self._palette = palette if palette is not None else _DEFAULT_PALETTE
 
     def compose(self) -> ComposeResult:
         task = self._cohort.task or "—"
@@ -237,27 +338,47 @@ class ResultsScreen(Screen):
         if self._split:
             self._write_split(log, file_diff)
         else:
-            for line in render_diff(file_diff):
+            for line in render_diff(file_diff, palette=self._palette):
                 log.write(line)
 
     def _write_split(self, log: RichLog, file_diff: str) -> None:
-        """Side-by-side rendering: old text left, new text right (§13.8)."""
+        """Side-by-side rendering: old text left, new text right (§13.8).
+
+        Paired change rows carry the same word-level highlights as the unified
+        view (R-REN-10) — each side is built as spans, then truncated/padded to
+        the column so the highlight survives the fit.
+        """
+        pal = self._palette
         width = max((self.size.width or 120) // 2 - 3, 20)
 
         def clip(text: str) -> str:
             return text[: width - 1] + "…" if len(text) > width else text.ljust(width)
 
+        def cell(spans: list[Span] | None, raw: str, base: str, word: str) -> Text:
+            text = (
+                _spans_text("", spans, base, word) if spans is not None
+                else Text(raw, style=base if raw else "")
+            )
+            text.truncate(width, overflow="ellipsis", pad=True)
+            return text
+
         for kind, left, right in split_rows(file_diff):
             if kind == "meta":
-                log.write(Text(left, style="cyan" if left.startswith("@@") else "bold"))
+                style = pal.style("diff.hunk") if left.startswith("@@") else pal.style("diff.meta")
+                log.write(Text(left, style=style))
             elif kind == "ctx":
-                log.write(Text(f"{clip(left)} │ {clip(right)}"))
+                log.write(Text(f"{clip(left)} │ {clip(right)}", style=pal.style("diff.context")))
             else:
-                log.write(Text.assemble(
-                    (clip(left), "red" if left else ""),
-                    (" │ ", "dim"),
-                    (clip(right), "green" if right else ""),
+                entry = word_spans(left, right)
+                old_spans, new_spans = entry if entry is not None else (None, None)
+                row = cell(
+                    old_spans, left, pal.style("diff.remove"), pal.style("diff.remove-word"),
+                )
+                row.append(" │ ", style=pal.style("base.dim"))
+                row.append_text(cell(
+                    new_spans, right, pal.style("diff.add"), pal.style("diff.add-word"),
                 ))
+                log.write(row)
 
     def action_next_lane(self) -> None:
         self._idx += 1

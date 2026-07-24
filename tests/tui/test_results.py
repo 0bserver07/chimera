@@ -35,9 +35,14 @@ def _finish(lane, cost, steps, order, reason="completed"):
 
 
 # -- pure helpers -------------------------------------------------------
+def _styles(line) -> set[str]:
+    """Every style on a rendered line: the base plus each word-diff span."""
+    return {str(line.style)} | {str(span.style) for span in line.spans}
+
+
 def test_render_diff_colors_add_remove_hunk():
     lines = render_diff("diff --git a/f b/f\n@@ -1 +1 @@\n-old line\n+new line\n context")
-    styles = [str(line.style) for line in lines]
+    styles = [s for line in lines for s in _styles(line)]
     assert any("green" in s for s in styles)   # +new
     assert any("red" in s for s in styles)     # -old
     assert any("cyan" in s for s in styles)    # @@ hunk

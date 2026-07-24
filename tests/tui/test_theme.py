@@ -309,3 +309,14 @@ def test_load_theme_settings_degrades_when_nothing_is_configured(tmp_path):
     settings = load_theme_settings(project_dir=tmp_path, home=tmp_path, env={})
     assert settings.theme == DEFAULT_THEME
     assert settings.palette().style("tool.name") == "bold yellow"
+
+
+def test_compound_style_values_expand_their_var_tokens():
+    # A slot value is a *style*, not only a color: "bold $amber" must resolve.
+    theme = Theme.from_dict(
+        {"vars": {"amber": "#e5b567"}, "slots": {"tool.name": "bold $amber"}}, name="v",
+    )
+    assert theme.resolve("dark")["tool.name"] == "bold #e5b567"
+    chimera = Palette(BUILTIN_THEMES["chimera"])
+    assert chimera.style("diff.add-word") == "reverse #8fd67a"
+    assert "$" not in "".join(chimera.style(slot) for slot in slot_ids())

@@ -968,7 +968,7 @@ class MultiplexApp(App):
             return
         from chimera.tui.results import ResultsScreen
 
-        self.push_screen(ResultsScreen(self._cohort))
+        self.push_screen(ResultsScreen(self._cohort, palette=self._palette))
 
     def action_smart_tab(self) -> None:
         """Tab: complete a "/" command being typed, else cycle lane focus."""

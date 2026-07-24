@@ -314,6 +314,14 @@ it approaches a cap, and hides entirely when no budget is set.
 viewer — `n`/`p` cycles files, `s` toggles side-by-side, and each rebuilt
 view lands at the top. `/export` zips the cohort artifact.
 
+Diffs are **word-level**: when a removal run and the addition run after it
+have the same length, the lines pair up and only the changed *tokens* are
+inverse-highlighted, in both the unified and the split view. Three rules keep
+it honest — shared indentation is never highlighted (a re-indent doesn't light
+up the line), an unbalanced run (3 removed, 1 added) has no honest pairing and
+falls back to plain line colors, and a pair too dissimilar to be an edit of
+each other is left plain rather than highlighted end to end.
+
 ## Racing a real external agent
 
 A lane can wrap a *real third-party coding-agent CLI* instead of a Chimera

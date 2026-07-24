@@ -318,10 +318,21 @@ class Theme:
                 f"theme {self.name!r}: unknown var {ref!r} "
                 f"(defined: {', '.join(sorted(self.vars)) or 'none'})"
             )
-        value = _pick(self.vars[key], mode)
-        if value.startswith("$"):
-            return self._resolve_var(value, mode, (*seen, key))
-        return value
+        return self._expand(_pick(self.vars[key], mode), mode, (*seen, key))
+
+    def _expand(self, value: str, mode: str, seen: tuple[str, ...] = ()) -> str:
+        """Expand every ``$name`` token in a style string.
+
+        A slot value is a *style*, not just a color (``"bold $amber"``,
+        ``"reverse $leaf"``), so references are resolved token-by-token
+        rather than only when the whole value is one reference.
+        """
+        if "$" not in value:
+            return value
+        return " ".join(
+            self._resolve_var(token, mode, seen) if token.startswith("$") else token
+            for token in value.split()
+        )
 
     def resolve(self, mode: str = "dark") -> dict[str, str]:
         """Resolve every slot for *mode*, filling gaps from the schema defaults.
@@ -338,9 +349,7 @@ class Theme:
         resolved: dict[str, str] = {}
         for slot in SLOTS:
             if slot.slot_id in self.slots:
-                value = _pick(self.slots[slot.slot_id], mode)
-                if value.startswith("$"):
-                    value = self._resolve_var(value, mode, ())
+                value = self._expand(_pick(self.slots[slot.slot_id], mode), mode)
             else:
                 value = slot.default(mode)
             resolved[slot.slot_id] = value

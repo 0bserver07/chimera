@@ -81,6 +81,19 @@ commit receipts.
   `setup()`**, matching `AsyncSSHEnvironment`; `DaytonaEnvironment` does the
   same. `tests/env/test_e2b.py` adds 18 tests for the backend that previously
   had two.
+- **Word-level diff highlighting in the comparison screen** (R-REN-10):
+  `chimera/tui/worddiff.py` (stdlib `difflib` + `re`) pairs a removal run with
+  the addition run that follows it and inverse-highlights only the tokens that
+  actually changed — in both the unified and the side-by-side view, styled from
+  the `diff.add-word` / `diff.remove-word` theme slots. Three honesty rules:
+  **shared indentation is never highlighted** (the common leading whitespace is
+  emitted unchanged, and a whitespace-only change never flashes), an
+  **unbalanced run** (3 removed, 1 added) has no index-wise pairing and falls
+  back to plain line colors, and a pair below the **similarity floor**
+  (`MIN_RATIO = 0.4`) is left plain rather than lit up end to end. `render_diff`
+  and `ResultsScreen` also take the live palette now, so the comparison screen
+  follows `/theme`.
+
 - **Per-tool call rendering — a glyph, a verb, and a distilled summary per
   tool class** (R-REN-5): `chimera/tui/tool_render.py` (stdlib-only) replaces
   the single generic `⚙ name(k=v, k=v)` printer with a dispatch table — shell
