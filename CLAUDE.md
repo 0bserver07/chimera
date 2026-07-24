@@ -245,3 +245,10 @@ Interactive frontends over AgentDriver (spec: `docs/specs/interactive-frontends.
 - **LoopConfig pattern.** All loop-level features (permissions, detection, compaction, streaming, events, audit, checkpoints, git workflow, cancellation, message queues, file tracking) funnel through a single `LoopConfig` dataclass injected into loop constructors. When `None`, behavior is unchanged.
 - **Google-style docstrings.** Use Args/Returns/Raises sections.
 - **Tests mirror source.** `chimera/foo/bar.py` → `tests/test_bar.py` or `tests/test_foo.py`.
+- **Name-shaped guards must be tested against the name the LOOP sees, not the
+  name you wrote it for.** MCP tools arrive namespaced (`mcp__<server>__<tool>`),
+  so any allow/deny rule keyed on a tool-name prefix needs a case using the
+  namespaced spelling. A whole hermetic suite passed while a `team_` allowance
+  blocked every `mcp__chimera-team__team_*` call in production (#150/#151); only
+  the live run caught it. Corollary, and the reason the rule exists: **a feature
+  that runs external agents is not verified until a real model has run it.**

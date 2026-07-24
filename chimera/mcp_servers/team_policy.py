@@ -37,6 +37,13 @@ is not safe, it is broken — and broken in the confusing way, where
 tools fail with permission errors that look like the agent
 misbehaving. Every posture allows ``team_*`` unconditionally.
 
+That allowance matches the **namespaced** form too. A teammate reaches
+the coordination server over MCP, so the loop sees
+``mcp__chimera-team__team_claim_task``, not ``team_claim_task``; a
+prefix test against the bare name silently blocks every coordination
+call. A live run caught exactly that, and
+:func:`is_coordination_tool` exists so it stays caught.
+
 Nothing here changes behavior until a policy is configured: with no
 team policy and no ``--policy`` flag, teammates run exactly as before.
 """
@@ -65,7 +72,9 @@ __all__ = [
     "RuntimeAdapter",
     "WorkspaceWrite",
     "apply_policy_args",
+    "base_tool_name",
     "detect_runtime",
+    "is_coordination_tool",
     "parse_policy",
     "permission_policy_for",
     "resolve_runtime_adapter",
@@ -115,6 +124,39 @@ _PATH_WRITE_TOOLS: frozenset[str] = frozenset({
 
 #: Argument keys, in preference order, that carry the target path.
 _PATH_KEYS: tuple[str, ...] = ("path", "file_path", "filename", "target")
+
+
+def base_tool_name(tool_name: str) -> str:
+    """Strip an MCP namespace prefix, if the name carries one.
+
+    ``mcp__chimera-team__team_claim_task`` → ``team_claim_task``;
+    a plain name is returned unchanged.
+
+    Args:
+        tool_name: The tool name as the loop sees it.
+
+    Returns:
+        The bare tool name.
+    """
+    from chimera.mcp.tools import mcp_unprefix
+
+    _server, tool = mcp_unprefix(tool_name)
+    return tool
+
+
+def is_coordination_tool(tool_name: str) -> bool:
+    """Return True for team coordination tools, namespaced or not.
+
+    Args:
+        tool_name: The tool name as the loop sees it — bare
+            (``team_claim_task``) or MCP-namespaced
+            (``mcp__chimera-team__team_claim_task``).
+
+    Returns:
+        Whether the call is coordination rather than work, and so
+        allowed under every posture.
+    """
+    return base_tool_name(tool_name).startswith(COORDINATION_TOOL_PREFIX)
 
 
 def parse_policy(value: str) -> str:
@@ -280,7 +322,8 @@ def team_policy_interceptor(
         name = str(getattr(call, "name", ""))
         # Coordination is the substrate, never the work — see the module
         # docstring for why blocking it would be a footgun, not safety.
-        if name.startswith(COORDINATION_TOOL_PREFIX):
+        # The teammate reaches it over MCP, so the name arrives namespaced.
+        if is_coordination_tool(name):
             return None
         args = dict(getattr(call, "arguments", None) or {})
         action = permission.evaluate(name, args)

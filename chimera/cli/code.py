@@ -621,6 +621,50 @@ def _read_steering_input() -> str | None:
     return None
 
 
+def load_mcp_tools(workdir: str) -> list[Any]:
+    """Load MCP tools from the user and project config files.
+
+    Reads ``~/.chimera/mcp.json`` then ``<workdir>/.mcp.json`` (both
+    optional; the project file wins on a name clash) and connects every
+    declared server. Loading is best-effort: a malformed config is
+    reported and skipped rather than taking the run down with it.
+
+    Args:
+        workdir: Project directory whose ``.mcp.json`` to read.
+
+    Returns:
+        The loaded tools, or an empty list when nothing is configured.
+    """
+    try:
+        candidates = (
+            Path.home() / ".chimera" / "mcp.json",
+            Path(workdir) / ".mcp.json",
+        )
+        merged_config: dict[str, Any] = {"servers": {}}
+        for cand in candidates:
+            if not cand.exists():
+                continue
+            import json as _json
+            try:
+                data = _json.loads(cand.read_text())
+            except Exception as exc:  # noqa: BLE001
+                print(f"[mcp] could not parse {cand}: {exc}")
+                continue
+            servers = data.get("servers") or data.get("mcpServers") or {}
+            if isinstance(servers, dict):
+                merged_config["servers"].update(servers)
+        if not merged_config["servers"]:
+            return []
+        from chimera.mcp.tools import MCPToolSource
+
+        _client, loaded = MCPToolSource.from_config(merged_config)
+        return list(loaded)
+    except Exception as exc:  # noqa: BLE001
+        # Non-fatal; a broken MCP config must not crash the agent.
+        print(f"[mcp] load failed: {exc}")
+        return []
+
+
 def _team_policy_interceptors(workspace: str) -> Any:
     """Build agent-team policy interceptors for this process, if any.
 
@@ -801,10 +845,17 @@ def run_code(args: Any) -> int:
                 print(f"team policy error: {exc}", file=sys.stderr)
                 return 2
 
+            # MCP tools (~/.chimera/mcp.json, <workdir>/.mcp.json). The
+            # legacy stack has always loaded these; the assembled stack
+            # did not, which silently left `-p` teammates without the
+            # `team_*` tools their prompt told them to call (#151).
+            mcp_tools = load_mcp_tools(cwd)
+
             async def _print_run() -> None:
                 agent = CodingAgent(
                     model=model, preset=effective_preset, project_dir=cwd,
                     interceptors=team_interceptors,
+                    extra_tools=mcp_tools or None,
                     **agent_kwargs,
                 )
                 saw_chunk = False
@@ -844,35 +895,7 @@ def run_code(args: Any) -> int:
     env = LocalEnvironment(workdir=workdir)
     env.setup()
 
-    # Best-effort MCP tool loading
-    # WHY (audit B-6): previously the MCP tools were loaded then
-    # discarded with `# noqa: F841`. Now we surface them through a local
-    # variable consumed when building the tool list a few dozen lines down.
-    mcp_extra_tools: list[Any] = []
-    try:
-        mcp_config_path = Path.home() / ".chimera" / "mcp.json"
-        project_mcp_path = Path(workdir) / ".mcp.json"
-        merged_config: dict[str, Any] = {"servers": {}}
-        for cand in (mcp_config_path, project_mcp_path):
-            if not cand.exists():
-                continue
-            import json as _json
-            try:
-                data = _json.loads(cand.read_text())
-            except Exception as exc:  # noqa: BLE001
-                print(f"[mcp] could not parse {cand}: {exc}")
-                continue
-            servers = data.get("servers") or data.get("mcpServers") or {}
-            if isinstance(servers, dict):
-                merged_config["servers"].update(servers)
-        if merged_config["servers"]:
-            from chimera.mcp.tools import MCPToolSource
-            _mcp_client, _loaded_tools = MCPToolSource.from_config(merged_config)
-            mcp_extra_tools = list(_loaded_tools)
-    except Exception as exc:  # noqa: BLE001
-        # Non-fatal; user sees nothing if their MCP config is broken,
-        # so log it (but don't crash the REPL).
-        print(f"[mcp] load failed: {exc}")
+    mcp_extra_tools = load_mcp_tools(workdir)
 
     # Auto-discover project context
     # WHY (audit M-19): bare ``except: pass`` previously swallowed every

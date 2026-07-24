@@ -486,8 +486,11 @@ in issue [#151](https://github.com/0bserver07/chimera/issues/151).
 ```
 
 Then: `chimera code -p "<teammate prompt>"` (the `-p` / `--print`
-one-shot mode). Same MCP path as Codex / OpenCode, so the agent sees the
-same `team_*` tools.
+one-shot mode). Same MCP path as the other runtimes, so the agent sees
+the same `team_*` tools.
+
+Verified live end-to-end — see
+[Live verification](#live-verification) below.
 
 ## End-to-end example
 
@@ -519,7 +522,62 @@ A self-contained smoke test of this exact flow lives at
 [`examples/agent_teams/verify_integration.py`](https://github.com/0bserver07/chimera/blob/master/examples/agent_teams/verify_integration.py).
 It spawns two `chimera-team-run` subprocesses with a faithful
 protocol-mock agent and asserts 6 tasks completed, both agents claim at
-least one, no double-claims.
+least one, no double-claims. For real-model runs see
+[Live verification](#live-verification).
+
+## Live verification
+
+Three scripts in `examples/agent_teams/`. The first runs on every PR
+against a protocol-faithful mock; the other two are **opt-in** — they
+drive a real model and spend tokens.
+
+| Script | What it proves | Needs |
+|---|---|---|
+| `verify_integration.py` | Runner + MCP server + file-locked claims under two concurrent teammates | nothing (mock agent) |
+| `verify_chimera_native.py` | A real model claims → works → completes over MCP, and the team policy constrains it | a configured provider |
+| `verify_push_live.py` | Mail sent mid-turn reaches a real model and changes what it does | a configured provider |
+
+```bash
+set -a; source .env; set +a
+
+# a real teammate does the work
+python examples/agent_teams/verify_chimera_native.py --model 'glm-5.2[1m]'
+
+# the lead's posture actually bites
+python examples/agent_teams/verify_chimera_native.py --model 'glm-5.2[1m]' \
+    --policy read-only --expect-blocked
+
+# mid-turn mail lands
+python examples/agent_teams/verify_push_live.py --model 'glm-5.2[1m]'
+```
+
+Results on `glm-5.2[1m]` (2026-07-24):
+
+- **No policy** — claimed, wrote the file, completed. Task record shows
+  `status: completed`, `claimed_by: chimera-1`.
+- **`workspace-write`** — same, with zero denials: the write landed
+  inside the workspace, so the posture never had to intervene.
+- **`read-only`** — the teammate claimed the task (coordination is
+  always allowed), tried `write_file`, `bash`, `edit_file`,
+  `replace_in_file`, then **released the task back to the pool and
+  messaged the lead** that the policy blocks it. Ten denials in
+  `chimera team audit`; no file created. That is the designed failure
+  mode: refuse, hand back, say why.
+- **Mid-turn push** — the agent wrote `one.txt`, the lead sent
+  *"name the third file gamma.txt instead"*, and the run finished with
+  `['gamma.txt', 'one.txt', 'two.txt']`. No `three.txt`.
+
+> The `read-only` run is also how the MCP-namespacing bug was found:
+> the loop sees `mcp__chimera-team__team_claim_task`, so an allowance
+> written against the bare `team_` prefix blocked every coordination
+> call. Hermetic tests using bare names all passed. The fix and its
+> regression lock live in `chimera/mcp_servers/team_policy.py`
+> (`is_coordination_tool`).
+
+**Not verified:** the OpenCode arm. `opencode auth list` reports
+`0 credentials` in this environment, so it stays wired-but-unrun — the
+same status issue
+[#151](https://github.com/0bserver07/chimera/issues/151) recorded.
 
 ## Caveats / known limits
 
@@ -552,9 +610,10 @@ least one, no double-claims.
    but the agent's "I claimed it" intent is. Tune `--max-nudges` if
    you're seeing agents that need more time.
 7. **Codex sandbox-write requirement.** See the gotcha above.
-8. **Live verification.** Codex is verified end-to-end. OpenCode and
-   internal Chimera are wired but not yet live-verified — see issue
-   [#151](https://github.com/0bserver07/chimera/issues/151).
+8. **Live verification.** Codex and internal Chimera are verified
+   end-to-end on a real model (see
+   [Live verification](#live-verification)). OpenCode remains wired but
+   unrun here: `opencode auth list` reports `0 credentials`.
 
 ## Cross-references
 

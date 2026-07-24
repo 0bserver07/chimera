@@ -190,8 +190,44 @@ commit receipts.
   (`policy_decisions`) and a new `chimera team audit`. With no policy
   configured anywhere, behavior is unchanged. Docs:
   `docs/mink/agent-teams.md` ("Permission propagation"). Tests:
-  `tests/mcp/test_team_policy.py` (50, incl. a real-loop case proving a
+  `tests/mcp/test_team_policy.py` (56, incl. a real-loop case proving a
   blocked write never touches the filesystem) and eight runner cases.
+
+- **Live verification of the internal-Chimera teammate** (#151): two opt-in
+  scripts that drive a **real model** rather than a mock —
+  `examples/agent_teams/verify_chimera_native.py` (a teammate claims → works
+  → completes over MCP, with `--policy … --expect-blocked` inverting the
+  assertion so the posture is proven to *bite*) and
+  `examples/agent_teams/verify_push_live.py` (mail sent mid-turn reaches the
+  model and changes what it does). Results on `glm-5.2[1m]`, 2026-07-24, all
+  PASS: no-policy and `workspace-write` runs completed the task; the
+  `read-only` run refused, **released the task back to the pool, and messaged
+  the lead**, with 10 audited denials and no file written; the push run
+  finished with `['gamma.txt', 'one.txt', 'two.txt']` after a mid-turn
+  redirect. The OpenCode arm is **not** verified — `opencode auth list`
+  reports `0 credentials` here, the same status #151 recorded. Docs:
+  `docs/mink/agent-teams.md` ("Live verification").
+
+### Fixed
+
+- **`chimera code -p` now loads MCP tools** (#151): MCP servers from
+  `~/.chimera/mcp.json` / `<workdir>/.mcp.json` were loaded only on the
+  legacy ReAct path, so the assembled stack behind `-p` — the documented way
+  to run an internal Chimera teammate — silently had **no `team_*` tools**
+  while its prompt instructed it to call them. Extracted as
+  `chimera.cli.code.load_mcp_tools` and wired into the `-p` path via
+  `extra_tools`. Found by trying to run the thing the docs described.
+
+- **Team policy no longer blocks its own coordination tools** (#150/#151):
+  the `team_*` allowance was tested against the bare tool name, but a
+  teammate reaches the coordination server over MCP, so the loop sees
+  `mcp__chimera-team__team_claim_task`. Under `read-only` every coordination
+  call was denied and the teammate was stranded — the exact footgun the
+  allowance exists to prevent. Hermetic tests using bare names all passed;
+  the **live run caught it**. Fixed with `is_coordination_tool` /
+  `base_tool_name` in `chimera/mcp_servers/team_policy.py`, plus regression
+  locks for the namespaced spelling (and for a *non*-team MCP tool still
+  being governed).
 
 ## 0.9.2 — 2026-07-24 — the embeddable core
 

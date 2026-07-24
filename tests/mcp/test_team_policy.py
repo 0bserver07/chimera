@@ -27,7 +27,9 @@ from chimera.mcp_servers.team_policy import (
     RuntimeAdapter,
     WorkspaceWrite,
     apply_policy_args,
+    base_tool_name,
     detect_runtime,
+    is_coordination_tool,
     parse_policy,
     permission_policy_for,
     team_interceptors_from_env,
@@ -59,6 +61,24 @@ class TestParsing:
     def test_unknown_policy_is_loud(self) -> None:
         with pytest.raises(ValueError, match="unknown team policy"):
             parse_policy("mostly-safe")
+
+
+class TestToolNaming:
+    def test_base_tool_name_strips_the_mcp_namespace(self) -> None:
+        assert base_tool_name("mcp__chimera-team__team_claim_task") == (
+            "team_claim_task"
+        )
+
+    def test_base_tool_name_passes_a_plain_name_through(self) -> None:
+        assert base_tool_name("write_file") == "write_file"
+
+    def test_is_coordination_tool_matches_both_spellings(self) -> None:
+        assert is_coordination_tool("team_claim_task")
+        assert is_coordination_tool("mcp__chimera-team__team_claim_task")
+
+    def test_is_coordination_tool_rejects_other_tools(self) -> None:
+        assert not is_coordination_tool("write_file")
+        assert not is_coordination_tool("mcp__other__write_file")
 
 
 class TestTeamPolicyRecord:
@@ -301,6 +321,32 @@ class TestInterceptorEnforcement:
 
         assert intercept(self._call("team_claim_task", agent_id="w1")) is None
         assert intercept(self._call("team_complete_task", task_id="t1")) is None
+
+    def test_namespaced_coordination_tools_are_never_blocked(
+        self, tmp_path: Path,
+    ) -> None:
+        # REGRESSION (found by the live run in #151): a teammate reaches
+        # the coordination server over MCP, so the loop sees
+        # mcp__chimera-team__team_claim_task. Prefix-testing the bare
+        # name blocked every coordination call and stranded the teammate.
+        intercept = team_policy_interceptor(POLICY_READ_ONLY)
+
+        for tool in (
+            "mcp__chimera-team__team_recv_messages",
+            "mcp__chimera-team__team_claim_task",
+            "mcp__chimera-team__team_list_tasks",
+            "mcp__chimera-team__team_complete_task",
+        ):
+            assert intercept(self._call(tool)) is None, tool
+
+    def test_a_namespaced_non_team_tool_is_still_governed(
+        self, tmp_path: Path,
+    ) -> None:
+        # The allowance is for coordination, not for "anything over MCP".
+        intercept = team_policy_interceptor(POLICY_READ_ONLY)
+
+        decision = intercept(self._call("mcp__other__delete_everything"))
+        assert decision is not None and decision.kind == "block"
 
     def test_dangerous_blocks_nothing(self, tmp_path: Path) -> None:
         intercept = team_policy_interceptor(POLICY_DANGEROUS)
