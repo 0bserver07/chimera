@@ -34,6 +34,26 @@ freestyle live runs.
    ...::grid_detached --run-id <id>`; cells persist to the
    `chimera-bench-results` Volume; fetch with `::collect --run-id <id>`.
 
+
+## Before you blame Modal: the Python 3.12.8 trap
+
+Before blaming infrastructure: the venv's CPython **3.12.8** fails every
+`asyncio` TLS connect instantly (`OSError: [Errno 9] Connect call failed`),
+so the Modal client retries and reports *"Could not connect to the Modal
+server."* Verified 2026-07-24: status.modal.com fully green, `curl`/`nc`/
+system CPython 3.12.9 all reached the same IP:443, only the 3.12.8 venv
+failed. Cells already on the Volume were fine the whole time.
+
+Diagnostic order, cheapest first:
+
+1. <https://status.modal.com/> — is anything actually red?
+2. `curl -s -o /dev/null -w '%{http_code}' https://api.modal.com` → 200 means reachable.
+3. Retry pinned: `uv run --python 3.13 --extra modal-sandbox --extra anthropic modal volume ls chimera-bench-results <run-id>/`
+
+Never re-fire a paid run on the assumption that the previous one died to an
+outage until step 3 fails too — a detached grid's cells persist server-side
+and are collectible later.
+
 ## The sequence for any live run
 
 ```
