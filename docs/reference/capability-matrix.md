@@ -89,7 +89,7 @@ This is the honest current state (verified in `chimera/cli/main.py`,
 
 | Surface | Agents | Benches reachable | Status |
 |---|---|---|---|
-| `chimera bench` | `--agent react\|code` | **26 registered** (all built adapters, incl. senior-swe-bench — see the tasks backlog) | ✅ wired |
+| `chimera bench` | `--agent react\|code` | **27 registered** (all built adapters, incl. senior-swe-bench; 27 unique classes behind 46 CLI aliases in `_BENCHMARKS`) | ✅ wired |
 | `chimera bench-compare` | internal loop postures | any 1 registered bench | ✅ wired |
 | `chimera otter bench` | otter | HumanEval, MBPP, τ-bench | ✅ wired |
 | `chimera shrew bench` | shrew | aider-polyglot, GAIA, harbor, terminal-bench | ✅ wired |

@@ -8,7 +8,7 @@ Compose coding agents from modular primitives. Synthesize codebases from specifi
 - **Build:** hatchling + uv
 - **License:** MIT
 - **Setup:** `uv sync --extra dev --extra anthropic`
-- **Tests:** `uv run pytest` (8534 passing + 97 skipped locally, excluding the live-infra files `tests/integration/test_env_docker_integration.py`, `tests/env/test_modal_sandbox.py`, `tests/env/test_ssh_live.py`; one `tests/function_synthesis/test_validation_split.py` test is env-sensitive locally but green in CI)
+- **Tests:** `uv run pytest` (10319 passing + 93 skipped locally as of 2026-07-25, excluding the live-infra files `tests/integration/test_env_docker_integration.py`, `tests/env/test_modal_sandbox.py`, `tests/env/test_ssh_live.py`; one `tests/function_synthesis/test_validation_split.py` test is env-sensitive locally but green in CI)
 - **Lint:** `uv run ruff check chimera/`
 - **Types:** `uv run mypy chimera/`
 - **CI posture (run before pushing batches):** `bash scripts/ci_posture_check.sh` — CI installs NO `tui` extra, so a green local gate can still be a red CI. New modules importing textual/rich need the pyproject `[[tool.mypy.overrides]]` textual block; tests importing them need `pytest.importorskip`. mypy caches are posture-specific — trust only cold-cache runs when extras change.
@@ -66,7 +66,10 @@ Layer 1: Environment     Local, Docker, Git, Remote, Cloud, PersistentShell
 - `cost_tracker.py` — Granular token tracking (cache, reasoning, per-step breakdown)
 
 ### Tools (`chimera/tools/`)
-20 built-in tools: read, write, edit, bash, search, list_files, test, git, web_fetch, replace_in_file, verify, delegate, repo_map, image_read, browser, import_graph, think, ask_user, todo, dmail
+**49 tool modules ship**; two curated groups in `core/tool_group.py` decide what an agent actually gets (verify with `python -c "from chimera.core.tool_group import AGENT_TOOLS; print(len(AGENT_TOOLS.tools))"` — never quote a count from memory):
+- `DEFAULT_TOOLS` (**4**): bash, read_file, read_image, write_file
+- `AGENT_TOOLS` (**23**), the interactive set: apply_patch, bash, cron_create, cron_delete, cron_list, edit_file, enter_worktree, exit_worktree, git, list_files, notebook_edit, read_file, read_image, replace_in_file, repo_map, search, test, think, todo, verify_answer, web_search, write_file, write_guard
+- Shipped but outside both groups (opt-in via `create_default_tools(ops=…)`, presets, or plugins): browser, delegate, dmail, import_graph, ask_user, web_fetch, ipython, powershell, task_tool, and others under `chimera/tools/`
 
 ### Environments (`chimera/env/`)
 - `base.py` — Environment ABC + `glob_match` (the ONE definition of

@@ -97,6 +97,19 @@ commit receipts.
 
 ### Changed
 
+- **Documented counts now match the code they describe.** Four numbers had
+  drifted apart across README, `CLAUDE.md` and the capability matrix, each
+  re-measured rather than re-estimated: the test suite is **10319 passed /
+  93 skipped / 0 failed** (was 9974 in the README badge and status line, 8534
+  in `CLAUDE.md`); the tool inventory is **4** in `DEFAULT_TOOLS` and **23** in
+  `AGENT_TOOLS` out of **49 shipped modules** (the README said "24 built-in"
+  twice and "20+" once, `CLAUDE.md` said 20, and the README's mermaid node
+  listed `todo` twice and named `web_fetch`, which is not in `AGENT_TOOLS`);
+  and `chimera bench` reaches **27** registered adapters behind 46 CLI aliases
+  (the capability matrix said 26). `CLAUDE.md` now carries the one-line command
+  that reproduces the tool counts, so the next drift is a paste away from being
+  caught.
+
 - **The SSH remote-execution abstraction is pinned by tests that actually run
   in CI** (#127): `AsyncSSHEnvironment` (asyncssh + native SFTP + ProxyJump
   chains + connect retries, shipped in 0.5.0) had 12 tests, all behind
