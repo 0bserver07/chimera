@@ -25,6 +25,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from chimera.eval.benchmarks._code_extract import extract_code
 from chimera.eval.harness import Benchmark
 
 #: Languages exposed by the upstream HumanEval-X dataset.
@@ -185,27 +186,55 @@ class HumanEvalX(Benchmark):
     def _evaluate_python_in_process(
         task: dict[str, Any], agent_output: str
     ) -> bool:
-        """Best-effort Python check: ``exec(prompt + completion + test)``.
+        """Run the task's self-driving test harness against the agent's code.
 
-        The HumanEval-X Python test harness is expected to be self-driving
-        (it must call its own check function). This mirrors the upstream
-        evaluation script and the in-process path used by
-        :class:`~chimera.eval.benchmarks.human_eval.HumanEval`.
+        HumanEval-X is a *completion* dataset (the reference solution is a
+        bare, indented function body continuing ``task["prompt"]``) that is
+        scored here against *instructed chat agents*, which answer with a
+        whole function inside Markdown fences. Both shapes are therefore
+        accepted:
+
+        * bare body continuing the stub → graded as ``prompt + body + test``;
+        * full module redefining the entry point → graded as ``source + test``.
+
+        Neither shape can be graded before the reply is normalized through
+        :func:`~chimera.eval.benchmarks._code_extract.extract_code`: executing
+        a fenced answer's surrounding prose raises ``SyntaxError``, which
+        grades every correct solution as a miss and turns the whole column
+        into a uniform zero.
+
+        The dataset's ``test`` field both defines ``check(...)`` and calls it,
+        so a program that executes cleanly really did run the assertions.
+
+        Args:
+            task: Task dictionary returned by :meth:`tasks`.
+            agent_output: The agent's raw reply, fenced or bare.
+
+        Returns:
+            ``True`` when either shape executes the harness without raising.
         """
-        if not agent_output or not task.get("test"):
+        test = task.get("test", "")
+        if not test:
             return False
-        program = "\n".join(
-            [
-                task.get("prompt", ""),
-                agent_output,
-                task.get("test", ""),
-            ]
+        code = extract_code(agent_output)
+        if not code.strip():
+            # An errored or empty agent run leaves no solution to grade. Never
+            # let "nothing" reach exec(): a test harness that only *defines* a
+            # checker would execute cleanly and score the miss as a pass
+            # (measurement integrity — same guard as HumanEval/LiveCodeBench).
+            return False
+        prompt = task.get("prompt", "")
+        candidates = (
+            f"{prompt}\n{code}\n{test}",  # completion contract
+            f"{code}\n\n{test}",  # full-source contract
         )
-        try:
-            exec(program, {})  # noqa: S102 - sandbox is the caller's responsibility
-        except Exception:
-            return False
-        return True
+        for program in candidates:
+            try:
+                exec(program, {})  # noqa: S102 - sandbox is the caller's responsibility
+            except Exception:  # noqa: BLE001 - any failure is a graded miss
+                continue
+            return True
+        return False
 
     @property
     def instances(self) -> list[HumanEvalXTask]:

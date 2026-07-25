@@ -29,6 +29,22 @@ def test_extract_code_passthrough_and_fences() -> None:
     assert extract_code(fenced) == bare
 
 
+def test_extract_code_preserves_leading_indentation() -> None:
+    """A fenced *completion* keeps its indentation.
+
+    Completion-style datasets (HumanEval-X) grade ``prompt + answer``, so
+    dedenting the first line turns a correct body into an
+    ``IndentationError``. The fence regex used to consume the newline with a
+    greedy ``\\s*``, which ate the indentation too.
+    """
+    body = "    return sum(numbers)"
+    assert extract_code(f"```python\n{body}\n```") == body
+    assert extract_code(f"```\n{body}\n```") == body
+    assert extract_code(f"Sure:\n```py\n{body}\n```\nDone.") == body
+    # A whole module is unaffected — its first line starts at column 0.
+    assert extract_code("```python\ndef f():\n    return 1\n```") == "def f():\n    return 1"
+
+
 def test_mbpp_grades_fenced_answer() -> None:
     bench = MBPP()
     task = _task()

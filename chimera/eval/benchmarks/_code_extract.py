@@ -14,8 +14,17 @@ import re
 
 __all__ = ["CODE_FENCE", "extract_code"]
 
-#: ``` / ```python / ```py fenced block matcher (same pattern human_eval used).
-CODE_FENCE = re.compile(r"```(?:python|py)?\s*\n?(.*?)```", re.DOTALL | re.IGNORECASE)
+#: ``` / ```python / ```py fenced block matcher.
+#:
+#: Only horizontal whitespace (``[^\S\n]*``) is consumed after the info string,
+#: then at most one newline. A greedy ``\s*`` here would swallow the first
+#: line's *indentation* along with the newline, silently dedenting the block —
+#: harmless for a whole module (whose first line starts at column 0) but fatal
+#: for a completion-shaped answer, where ``    return x`` becomes an
+#: ``IndentationError`` and the correct solution grades as a miss.
+CODE_FENCE = re.compile(
+    r"```(?:python|py)?[^\S\n]*\n?(.*?)```", re.DOTALL | re.IGNORECASE
+)
 
 
 def extract_code(output: str) -> str:

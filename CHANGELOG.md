@@ -47,6 +47,40 @@ commit receipts.
 
 ### Fixed
 
+- **HumanEval-X graded every correct answer as a miss**: the adapter executed
+  `prompt + raw_reply + test`, so an agent's Markdown-fenced answer ("Here's
+  the solution: ```python …") was run as Python and died of `SyntaxError`
+  before a single assertion. A live Modal grid scored `coding-agent` **0/50
+  with `status_counts {completed: 50}`** — a fabricated zero. HumanEval-X is a
+  *completion* dataset (bare indented body) driven against *instructed chat*
+  agents (whole fenced function), and `_evaluate_python_in_process` honored
+  only the former. It now normalizes through the shared `extract_code`, refuses
+  an answer that extracts to nothing, and accepts both shapes. Verified over
+  all 164 staged tasks: a known-correct solution grades 164/164 in every answer
+  shape (was 0/164 for the shape agents actually send) while wrong, empty and
+  prose-only answers still grade 0/164. Re-running the **same 50 tasks** live
+  on Modal with the same agent, model and harness returns **50/50 (100%),
+  `{completed: 50}`, $0.3324** against the broken run's $0.3513 — within 5% on
+  cost, so the agent was always solving them and the grader was discarding
+  every answer (receipt `data/modal-grid-hexfix1-20260724-231500.json`). The
+  benchmark had no canary for this, so a green suite coexisted with a column
+  that could not score above zero — `TestKnownCorrectAnswerCanary` is now that
+  canary. Diagnosis: `docs/notes/bench-diagnosis-darklight1.md`.
+- **The shared fence extractor dedented the code it extracted**:
+  `extract_code("```python\n    return x\n```")` returned `"return x"`. The
+  regex skipped to the block with a greedy `\s*`, which eats the newline *and*
+  the following indentation. Invisible for a whole module (first line at column
+  0), fatal for a completion-shaped answer, which becomes an
+  `IndentationError`. It now consumes only horizontal whitespace plus at most
+  one newline. This was the second, deeper half of the HumanEval-X zero.
+- **The observatory generator would have published a fabricated zero**:
+  `scripts/render_observatory.py` aborted on an `error`-status cell claiming
+  passes, but a `0/50` cell with `{completed: 50}` rendered as a measured
+  **0.0%**. A uniform zero across 5+ cleanly-completed tasks is the harness-gap
+  signature (`docs/playbooks/13-live-bench-runs.md`), never a score, so it now
+  aborts generation with a diagnostic pointing at the playbook. Zeros explained
+  by errors or budget exhaustion still render as lower bounds, and cells under
+  5 tasks are exempt as sampling noise.
 - **Cloud backends selected nested files for top-level globs** (#144):
   `E2BEnvironment.list_files("*.py")` filtered with `fnmatch`, whose `*`
   crosses `/`, so it returned `sub/mod.py` where `LocalEnvironment` returned

@@ -1,0 +1,23 @@
+{
+  "run_id": "hexfix1",
+  "model": "glm-5.2[1m]",
+  "cells": [
+    {
+      "agent_id": "coding-agent",
+      "benchmark": "humaneval-x",
+      "total": 50,
+      "passed": 50,
+      "pass_rate": 1.0,
+      "cost_usd": 0.33242600000000005,
+      "tool_calls": 4,
+      "wall_clock_sec": 16.07727889900002,
+      "status": "completed",
+      "budget_honored": false,
+      "budget_note": "max_turns aligned to budget.max_llm_calls=10; tool-call budget not enforced (factory takes no loop_config)",
+      "category": "unknown",
+      "status_counts": {
+        "completed": 50
+      }
+    }
+  ]
+}

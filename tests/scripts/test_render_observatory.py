@@ -197,6 +197,66 @@ def test_status_counts_sum_mismatch_aborts(tmp_path: Path) -> None:
         obs.load_inputs(tmp_path)
 
 
+def test_uniform_zero_clean_cell_aborts(tmp_path: Path) -> None:
+    """0/50 with ``{completed: 50}`` is a harness gap, not a 0% score.
+
+    The exact shape of the ``coding-agent × humaneval-x`` cell on the
+    darklight1 Modal grid: every task ran to completion, none passed,
+    because the grader rejected correctly-shaped answers. Rendering it as
+    ``0.0%`` would publish a fabricated measurement.
+    """
+    _seed(tmp_path)
+    _write(
+        tmp_path,
+        "modal-grid-fullscore3-20990101-000000.json",
+        [_cell(bench="humaneval-x", total=50, passed=0, counts={"completed": 50})],
+        run_id="fullscore3",
+    )
+    with pytest.raises(obs.IntegrityError, match="harness-gap signature"):
+        obs.load_inputs(tmp_path)
+
+
+def test_uniform_zero_without_status_counts_aborts(tmp_path: Path) -> None:
+    """A pre-``status_counts`` run still aborts on a clean ``completed`` zero."""
+    _seed(tmp_path)
+    _write(
+        tmp_path,
+        "modal-grid-fullscore3-20990101-000000.json",
+        [_cell(bench="humaneval-x", total=20, passed=0, status="completed")],
+        run_id="fullscore3",
+    )
+    with pytest.raises(obs.IntegrityError, match="harness-gap signature"):
+        obs.load_inputs(tmp_path)
+
+
+def test_uniform_zero_gate_spares_honest_zeros(tmp_path: Path) -> None:
+    """The gate fires only on *clean* zeros of a meaningful size.
+
+    A zero explained by budget exhaustion or errors already renders as a
+    lower bound, and a 0/1 sample is noise — neither is the harness-gap
+    signature, so neither may block the build. ``lint-loop``'s honest
+    ``0/1 budget_exhausted`` rows in ``matrix-full-glm52.json`` are the
+    real-world case this protects.
+    """
+    _seed(tmp_path)
+    _write(
+        tmp_path,
+        "modal-grid-fullscore3-20990101-000000.json",
+        [
+            # zero, but the tasks did not complete cleanly
+            _cell(bench="mbpp-plus", total=50, passed=0, status="budget_exhausted",
+                  counts={"budget_exhausted": 50}),
+            _cell(bench="math500", total=50, passed=0, status="partial_error",
+                  counts={"completed": 30, "error": 20}),
+            # zero, clean, but too small a sample to be a signature
+            _cell(bench="human-eval", total=1, passed=0, counts={"completed": 1}),
+        ],
+        run_id="fullscore3",
+    )
+    inputs = obs.load_inputs(tmp_path)
+    assert inputs.files  # loaded without raising
+
+
 def test_pass_rate_mismatch_aborts(tmp_path: Path) -> None:
     _seed(tmp_path)
     _write(

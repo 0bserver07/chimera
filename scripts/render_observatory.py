@@ -3,9 +3,14 @@
 
 Every number on the page is generated from a JSON receipt committed under
 ``data/`` — nothing is hand-typed. The generator enforces the measurement-
-integrity discipline from ``scripts/verify_status.py`` at build time: a cell
-whose status is ``error`` yet claims passes ABORTS generation, because an
-errored run cannot have produced a graded pass.
+integrity discipline from ``scripts/verify_status.py`` at build time. Two
+patterns ABORT generation rather than render:
+
+* a cell whose status is ``error`` yet claims passes — an errored run cannot
+  have produced a graded pass;
+* a *uniform zero* — a cell of 5+ tasks that all reached ``completed`` and
+  none of which passed. Historically that is always a broken grading
+  contract, not a measured 0% (see :func:`_uniform_zero_note`).
 
 Usage::
 
@@ -113,6 +118,14 @@ class IntegrityError(Exception):
     """A data receipt violates the measurement-integrity invariants."""
 
 
+#: Smallest cell size at which "every task completed cleanly and nothing
+#: passed" stops being sampling noise and becomes the harness-gap signature
+#: (``docs/playbooks/13-live-bench-runs.md``). Below this a 0/n cell is
+#: unremarkable; at or above it, a real agent that never once satisfies the
+#: grader means the grader — not the agent — is broken.
+_UNIFORM_ZERO_MIN_TASKS = 5
+
+
 @dataclass(frozen=True)
 class Cell:
     """One (agent, benchmark) measurement read from a receipt file.
@@ -174,6 +187,48 @@ def _display_bench(raw: str) -> str:
     return _DISPLAY.get(raw, raw)
 
 
+def _uniform_zero_note(
+    status: str, passed: int, total: int, counts: dict | None
+) -> str:
+    """Describe a clean-status uniform-zero cell, or return ``""``.
+
+    A cell where every task reached a terminal ``completed`` status — no
+    errors, no budget exhaustion, no timeouts — and *nothing* passed is the
+    harness-gap signature this page exists to catch: the agent produced an
+    answer for every task and the grader accepted none of them. Historically
+    this has always been a broken grading contract (a checker defined but
+    never invoked, a prompt/grader answer-shape mismatch), never a measured
+    score, so it must abort generation rather than render as ``0.0%``.
+
+    Cells that ran fewer than :data:`_UNIFORM_ZERO_MIN_TASKS` tasks are
+    exempt: a 0/1 or 0/2 result is ordinary sampling noise. Cells whose tally
+    contains any non-``completed`` status are exempt too — those already
+    render as a lower bound, which is honest.
+
+    Args:
+        status: The cell's aggregate status.
+        passed: Tasks that passed.
+        total: Tasks graded.
+        counts: The per-task ``status_counts`` tally, if the run recorded one.
+
+    Returns:
+        A diagnostic sentence when the cell is a clean-status uniform zero,
+        otherwise the empty string.
+    """
+    if passed != 0 or total < _UNIFORM_ZERO_MIN_TASKS:
+        return ""
+    clean = set(counts) == {"completed"} if counts else status == "completed"
+    if not clean:
+        return ""
+    tally = f"status_counts={{{_split(counts)}}}" if counts else f"status={status}"
+    return (
+        f"0/{total} with {tally} — every task ran to completion and none "
+        "passed, the harness-gap signature (see "
+        "docs/playbooks/13-live-bench-runs.md). Diagnose the adapter with a "
+        "known-correct solution before publishing; a fake zero is not a score."
+    )
+
+
 def _validate_cell(raw: dict, source: str) -> None:
     """Enforce the verify_status.py integrity invariants on one raw cell.
 
@@ -184,8 +239,9 @@ def _validate_cell(raw: dict, source: str) -> None:
     Raises:
         IntegrityError: If the cell claims passes despite an ``error`` status,
             reports more passes than tasks, carries a ``status_counts`` tally
-            that does not sum to ``total``, or a ``pass_rate`` inconsistent
-            with ``passed / total``.
+            that does not sum to ``total``, a ``pass_rate`` inconsistent with
+            ``passed / total``, or is a clean-status uniform zero (see
+            :func:`_uniform_zero_note`).
     """
     status = raw.get("status", "")
     passed = int(raw.get("passed", 0))
@@ -205,6 +261,9 @@ def _validate_cell(raw: dict, source: str) -> None:
             raise IntegrityError(
                 f"{where}: status_counts sums to {tally} but total={total}"
             )
+    uniform_zero = _uniform_zero_note(status, passed, total, counts)
+    if uniform_zero:
+        raise IntegrityError(f"{where}: {uniform_zero}")
     rate = float(raw.get("pass_rate", 0.0))
     expect = (passed / total) if total else 0.0
     if not math.isclose(rate, expect, rel_tol=1e-6, abs_tol=1e-9):
@@ -719,7 +778,10 @@ def render(inputs: Inputs) -> str:
         " HumanEval+ output, and every number measured under it was invalidated"
         " and re-measured rather than kept. The same discipline gates this very"
         " page: a receipt containing an `error`-status cell that claims passes"
-        " **aborts generation**.",
+        " **aborts generation**. So does a *uniform zero* — a cell of 5+ tasks"
+        " that all reached `completed` yet passed none. That pattern has always"
+        " been a broken grading contract rather than a measured 0%, so it must"
+        " be diagnosed against a known-correct solution before anything ships.",
         "",
     ]
     lines.extend(_render_flagship(flagship_rows))
