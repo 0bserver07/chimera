@@ -72,6 +72,7 @@ binding's source (default / user / migrated). Defaults:
 | Ctrl+E | toggle reasoning | |
 | Ctrl+X | expand/collapse tool output | |
 | Ctrl+Y | copy selection to clipboard (OSC 52) | |
+| Ctrl+F | full transcript overlay (untruncated) | |
 | Ctrl+R | comparison screen (scoreboard + diffs) | |
 | Ctrl+L | clear conversation | single-lane |
 | Tab / Shift+Tab | complete `/command`, else cycle lanes | |
@@ -99,6 +100,35 @@ That hands the mouse back to the terminal (native select / copy / scroll all
 work) at the cost of Textual's in-app mouse features. Ctrl+Y still copies either
 way. OSC-52 copy needs a terminal that permits it (iTerm2, kitty, WezTerm, or
 tmux with `set -g set-clipboard on`); macOS Terminal.app does not.
+
+## The transcript overlay — everything, untruncated
+
+Long tool output is elided in the panes (`… +37 lines … (Ctrl+X expands ·
+Ctrl+F full transcript)`). That truncation is **display-only**: the session
+record always kept the whole thing. **Ctrl+F** opens the full transcript of the
+focused lane as a full-screen pager:
+
+| Key | In the overlay |
+|---|---|
+| ↑ ↓ PgUp PgDn Home End | scroll |
+| `/` | focus the search filter (type to narrow to matching lines) |
+| `p` | toggle **plain mode** — no gutter, no color, no padding |
+| Esc / `q` | leave the filter, then leave the overlay |
+
+Rich mode prefixes each row with its transcript line number, so a filtered hit
+keeps its place in the record. Plain mode is the copy surface: select and paste
+and you get exactly the transcript text, with nothing of the frame in it.
+
+Every key here is registry-owned, so `tui.keybinds` rebinds them like any
+other — and the elision markers name whatever key is *currently* bound, never a
+stale default:
+
+```toml
+[tui.keybinds]
+show_transcript = "f9"        # the overlay key the markers advertise
+plain_mode = "ctrl+p"         # inside the overlay
+search = "s"
+```
 
 ## Configuration
 

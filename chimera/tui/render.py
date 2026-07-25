@@ -406,8 +406,8 @@ class LaneTranscript:
         #: Display-only tool-output elision (R-FOLD-2), on by default. Mutable:
         #: the global expand toggle flips it live. Flipping affects tool
         #: results rendered *afterwards* — the sink is append-only, so already
-        #: committed output re-renders only via the transcript overlay
-        #: (R-FOLD-7, a later wave).
+        #: committed output is read untruncated in the transcript overlay
+        #: instead (:mod:`chimera.tui.transcript_view`, R-FOLD-7).
         self.elide = True
         #: Key hint appended to elision markers (``… +37 lines … (<key>
         #: expands)``). Injected by the frontend from its keybinding registry

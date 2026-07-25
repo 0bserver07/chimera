@@ -125,9 +125,19 @@ KEY_ACTIONS: tuple[ActionDef, ...] = (
     # priority so it fires even while the composer is focused, since a selection
     # is screen-level and persists across focus.
     ActionDef("copy_selection", ("ctrl+y",), "Copy selection", priority=True),
+    # R-FOLD-7: open the full, untruncated transcript overlay — the universal
+    # fold target every elision marker points at. priority: the composer's
+    # editor binds ctrl+f (delete word right) and would otherwise swallow the
+    # key the markers advertise.
+    ActionDef("show_transcript", ("ctrl+f",), "Full transcript", priority=True),
     # Pager context: the cohort picker's dismiss keys ("q" is safe here —
-    # no text input has focus on a pager screen).
+    # no text input has focus on a pager screen; the transcript overlay's
+    # search box takes printable keys before screen bindings see them).
     ActionDef("close", ("escape", "q"), "Back", context="pager"),
+    # The transcript overlay's own keys (R-FOLD-7 / R-VIEW-4), registry-owned
+    # so they rebind and appear in /keys like everything else.
+    ActionDef("plain_mode", ("p",), "Plain/rich", context="pager"),
+    ActionDef("search", ("/",), "Search", context="pager"),
 )
 
 #: Renamed actions (R-KEY-2 migration): configs written against the retired

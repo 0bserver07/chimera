@@ -115,6 +115,29 @@ commit receipts.
   `setup()`**, matching `AsyncSSHEnvironment`; `DaytonaEnvironment` does the
   same. `tests/env/test_e2b.py` adds 18 tests for the backend that previously
   had two.
+- **The transcript overlay — the universal fold target** (R-FOLD-7 /
+  R-VIEW-4): `chimera/tui/transcript_view.py` adds `TranscriptScreen`, a
+  full-screen pager over one lane's **complete, untruncated** transcript.
+  Elision in the panes was always display-only — the session record kept
+  everything (R-FOLD-3) — and this is where that record is read: the pager
+  reads `Lane.transcript_lines` (written with elision *off*), snapshotted at
+  open time so a streaming turn cannot shift rows under the reader, and
+  without mutating the lane. Navigation is the framework's own scroll
+  bindings on the focused log (↑/↓/PgUp/PgDn/Home/End) plus a live
+  case-insensitive **search filter** (`/`) that narrows to matching lines
+  while keeping their original line numbers. **`p` toggles plain mode**
+  (R-VIEW-4): no gutter, no color, no padding — a select-and-paste surface
+  whose selection is exactly the transcript text. The opening key is a new
+  **registry-owned** action, `show_transcript` (default **Ctrl+F**, priority
+  so the composer's editor cannot swallow it), and the overlay's own keys
+  (`close`, `plain_mode`, `search`) are registry-owned in the `pager`
+  context — all rebindable via `tui.keybinds`, all listed by `/keys` and
+  `/help`. The `full_hint` seam built into `render._elision_marker` is now
+  wired: every `… +N lines …` marker names the **currently bound** overlay
+  key (`… +37 lines … (ctrl+x expands · ctrl+f full transcript)`), and
+  follows a rebind — pinned by a test that rebinds it to `f9` and asserts the
+  stale default never appears.
+
 - **Word-level diff highlighting in the comparison screen** (R-REN-10):
   `chimera/tui/worddiff.py` (stdlib `difflib` + `re`) pairs a removal run with
   the addition run that follows it and inverse-highlights only the tokens that

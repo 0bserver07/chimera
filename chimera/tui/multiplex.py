@@ -468,12 +468,17 @@ class MultiplexApp(App):
         yield Static("", id="tabstrip")
         pane_classes = "lane-pane single" if self._single else "lane-pane"
         expand_hint = key_for("toggle_expand", self._keybinds)
+        # R-FOLD-7: every elision marker names the *currently bound* key that
+        # opens the untruncated transcript overlay (R-KEY-3 — empty when the
+        # user unbound it, and then simply not advertised).
+        full_hint = key_for("show_transcript", self._keybinds)
         with Horizontal(id="lanes"):
             for lane in self._cohort.lanes:
                 pane = LanePane(
                     lane,
                     classes=pane_classes,
                     expand_hint=expand_hint,
+                    full_hint=full_hint,
                     palette=self._palette,
                     animations=self._theme_settings.animations,
                 )
@@ -970,6 +975,25 @@ class MultiplexApp(App):
 
         self.push_screen(ResultsScreen(self._cohort, palette=self._palette))
 
+    def action_show_transcript(self) -> None:
+        """R-FOLD-7: open the focused lane's full, untruncated transcript.
+
+        The panes elide tool output for display only — the lane's record kept
+        everything (R-FOLD-3), and this overlay is where it is read. Ignored
+        while another overlay is on the stack (a picker/approval modal owns
+        the screen; the same key would otherwise stack a second pager over it).
+        """
+        if len(self.screen_stack) > 1:
+            return
+        lane = self._focused_lane()
+        if lane is None:
+            return
+        from chimera.tui.transcript_view import TranscriptScreen
+
+        self.push_screen(TranscriptScreen(
+            lane, palette=self._palette, keymap=self._keybinds,
+        ))
+
     def action_smart_tab(self) -> None:
         """Tab: complete a "/" command being typed, else cycle lane focus."""
         prompt = self.query_one("#prompt", PromptArea)
@@ -1004,8 +1028,9 @@ class MultiplexApp(App):
 
         Display-only (the session record always keeps full output, R-FOLD-3)
         and forward-looking: it changes how tool results render from now on.
-        Re-rendering already-committed output arrives with the transcript
-        overlay (R-FOLD-7, a later wave) — the panes' sinks are append-only.
+        The panes' sinks are append-only, so already-committed output is read
+        untruncated in the transcript overlay instead
+        (:meth:`action_show_transcript`, R-FOLD-7).
         """
         self._tools_expanded = not self._tools_expanded
         for pane in self._panes:

@@ -283,6 +283,7 @@ def test_build_bindings_matches_previous_bindings_exactly():
     assert extras == [
         ("ctrl+x", "toggle_expand", True),
         ("ctrl+y", "copy_selection", True),
+        ("ctrl+f", "show_transcript", True),
     ]
 
 
@@ -290,8 +291,10 @@ def test_build_bindings_pager_context():
     pytest.importorskip("textual")
     from chimera.tui.keys import build_bindings
 
+    # The pager context is the picker's dismiss keys plus the transcript
+    # overlay's own registry-owned keys (R-FOLD-7 / R-VIEW-4).
     assert [(b.key, b.action) for b in build_bindings(context="pager")] == \
-        PREVIOUS_PAGER_BINDINGS
+        PREVIOUS_PAGER_BINDINGS + [("p", "plain_mode"), ("/", "search")]
 
 
 def test_build_bindings_honors_keymap_overrides():
@@ -465,7 +468,7 @@ async def test_expand_hint_reaches_the_elision_marker():
             (ToolCall(id="1", name="bash", arguments={}), _Res()), 0,
         ))
         [r] = sink
-        assert "(f8 expands)" in plain(r)               # currently-bound key
+        assert "(f8 expands · " in plain(r)             # currently-bound key
         assert "ctrl+x" not in plain(r)                 # not the stale default
 
 
