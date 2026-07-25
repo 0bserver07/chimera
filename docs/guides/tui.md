@@ -101,6 +101,25 @@ work) at the cost of Textual's in-app mouse features. Ctrl+Y still copies either
 way. OSC-52 copy needs a terminal that permits it (iTerm2, kitty, WezTerm, or
 tmux with `set -g set-clipboard on`); macOS Terminal.app does not.
 
+## Pasting a wall of text
+
+Paste something big — a stack trace, a file, a log — and the composer collapses
+it to a chip instead of burying itself:
+
+```
+› here's the failure: [Pasted #1 ~420 lines] what broke?
+```
+
+The chip is an **atomic edit unit**. Left/right and word-nav hop it whole,
+Backspace/Delete remove it whole, and there is no way to land the cursor inside
+it. On submit, the chip expands: the agent receives the full text, exactly as
+pasted. Up-arrow history recalls the **chip**, not the wall of text — so a
+recalled prompt stays readable and still submits the full paste.
+
+Thresholds are configurable (`tui.paste_chip_lines`, `tui.paste_chip_chars` —
+see [Configuration](#configuration)); pastes under them are inserted verbatim,
+exactly as before.
+
 ## The transcript overlay — everything, untruncated
 
 Long tool output is elided in the panes (`… +37 lines … (Ctrl+X expands ·
@@ -172,6 +191,16 @@ see [Themes](#themes) below:
 theme = "chimera"      # default | chimera | mono | <your theme file's stem>
 theme_mode = "auto"    # auto | dark | light | lock
 animations = true      # false → static spinners (NO_COLOR forces this off)
+```
+
+**Paste chips** — `tui.paste_chip_lines` / `tui.paste_chip_chars`. Both caps
+bind, whichever hits first; `0` on a cap disables it, and `0` on both means
+pastes always land verbatim:
+
+```toml
+[tui]
+paste_chip_lines = 8      # collapse a paste over 8 lines
+paste_chip_chars = 1000   # …or over 1000 characters (one huge line counts)
 ```
 
 **Cohort retention** — `tui.cohorts`. Bare `--tui` sessions persist one

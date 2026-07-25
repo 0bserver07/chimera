@@ -137,7 +137,7 @@ class ChimeraTUI(App):
     @on(PromptArea.Submitted, "#prompt")
     def _on_submit(self, event: PromptArea.Submitted) -> None:
         text = event.value.strip()
-        event.prompt.remember(event.value)
+        event.prompt.remember(event.raw)  # chips stay chips in history (R-FOLD-6)
         event.prompt.value = ""
         self.query_one("#hint", Static).display = False
         if not text:

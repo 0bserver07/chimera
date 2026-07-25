@@ -749,8 +749,12 @@ class MultiplexApp(App):
     # -- input ----------------------------------------------------------
     @on(PromptArea.Submitted, "#prompt")
     def _on_input(self, event: PromptArea.Submitted) -> None:
+        # ``value`` is what gets sent (paste chips expanded, R-FOLD-6);
+        # ``raw`` is what was on screen — history recalls the chip, not the
+        # wall of text it stands for. They are the same string when nothing
+        # was collapsed.
         text = event.value.strip()
-        event.prompt.remember(event.value)
+        event.prompt.remember(event.raw)
         event.prompt.value = ""
         self._hide_hint()
         self._submit_text(text)

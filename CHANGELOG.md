@@ -115,6 +115,33 @@ commit receipts.
   `setup()`**, matching `AsyncSSHEnvironment`; `DaytonaEnvironment` does the
   same. `tests/env/test_e2b.py` adds 18 tests for the backend that previously
   had two.
+- **Paste chips in the composer** (R-FOLD-6): a paste over the configured
+  size collapses to `[Pasted #1 ~420 lines]` instead of burying the composer,
+  and the chip is an **atomic edit unit** — left/right and word-nav hop it
+  whole, Backspace/Delete take it whole, and the cursor can never come to rest
+  inside it (a cursor that starts inside, from a click or a recalled draft,
+  snaps out). On submit the chip expands: `Submitted.value` carries the full
+  text to the agent while the new `Submitted.raw` carries the chip form, which
+  is what history recall stores — so Up-arrow gives back a readable prompt that
+  still submits the whole paste. The `#N` in the label is identity, not
+  decoration: two same-shaped pastes must not expand to each other's text, and
+  a chip the store never saw (or a mangled one) is left alone rather than
+  half-expanded. Thresholds come from the unified config chain — `[tui]
+  paste_chip_lines` (default 8) and `paste_chip_chars` (default 1000), both
+  binding, `0` disabling either or both. **Additive**: a paste under the
+  thresholds is inserted by the editor's own handler untouched, and a
+  chip-free submission is byte-identical to before (`raw` defaults to
+  `value`).
+  Also de-flakes a **pre-existing** race in `tests/tui/test_approvals.py`
+  (verified pre-existing: the suite failed 2 of 4 runs at the parent commit,
+  and 8 of 8 pass after). The `_modal_ready` helper treated "the title widget
+  exists" as "the dialog is ready", but children mount progressively: the
+  buttons could still be missing and the modal's `on_mount` focus had not
+  necessarily landed, so the test's focus on the note field was taken back and
+  the space in "not now" *pressed the focused Allow button* — approving the
+  request it meant to deny. Readiness now keys off the focused Allow button,
+  which is the last thing that happens.
+
 - **The transcript overlay — the universal fold target** (R-FOLD-7 /
   R-VIEW-4): `chimera/tui/transcript_view.py` adds `TranscriptScreen`, a
   full-screen pager over one lane's **complete, untruncated** transcript.

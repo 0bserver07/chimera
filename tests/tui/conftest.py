@@ -61,6 +61,23 @@ def _no_machine_theme(monkeypatch: pytest.MonkeyPatch):
     )
 
 
+@pytest.fixture(autouse=True)
+def _no_machine_paste_config(monkeypatch: pytest.MonkeyPatch):
+    """Use the default paste-chip thresholds regardless of this machine's config.
+
+    ``PromptArea`` reads ``[tui] paste_chip_lines/chars`` from the same chain
+    at construction; tests that exercise the thresholds pass
+    ``PromptArea(paste=...)`` or call the loader with an explicit ``home=``.
+    """
+    try:
+        import chimera.tui.prompt as _prompt
+    except ImportError:  # pragma: no cover - no tui extra
+        return
+    monkeypatch.setattr(
+        _prompt, "load_paste_settings", lambda *a, **k: _prompt.PasteSettings(),
+    )
+
+
 @pytest.fixture
 def real_load_tui_config():
     """The unstubbed loader, for tests that exercise config discovery."""

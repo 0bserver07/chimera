@@ -422,8 +422,19 @@ async def _until(pilot, predicate, tries=100):
 
 
 def _modal_ready(app):
-    """The approval modal is up AND composed (children queryable)."""
-    return isinstance(app.screen, ApprovalModal) and bool(app.screen.query("#approval-title"))
+    """The approval modal is up, **fully** composed, and settled.
+
+    Children mount progressively, so "the title exists" is not "the dialog is
+    ready": the buttons (mounted last, inside the button row) can still be
+    missing, and the modal's ``on_mount`` focus has not necessarily landed.
+    Keying off the focused Allow button covers both — it is the last thing
+    that happens — and keeps the tests off a race that made the
+    deny-with-feedback case fail ~1 run in 3 under suite load.
+    """
+    if not isinstance(app.screen, ApprovalModal):
+        return False
+    allow = app.screen.query("#approval-allow")
+    return bool(allow) and allow.first().has_focus
 
 
 @pytest.mark.asyncio
@@ -480,8 +491,13 @@ async def test_deny_with_feedback_becomes_the_denial_reason():
     async with app.run_test() as pilot:
         await _submit_no_wait(app, pilot, "clean the tmp dir")
         assert await _until(pilot, lambda: _modal_ready(app))
-        app.screen.query_one("#approval-feedback", Input).focus()
-        await pilot.pause()
+        # _modal_ready now means "settled" (see its docstring), so moving the
+        # focus here sticks: nothing takes it back. Without that, the modal's
+        # own on_mount re-focused the Allow button, "not now" reached the
+        # button — whose space key presses it — and the request was APPROVED.
+        feedback = app.screen.query_one("#approval-feedback", Input)
+        feedback.focus()
+        assert await _until(pilot, lambda: feedback.has_focus)
         await pilot.press(*"not now")
         await pilot.press("enter")   # Enter in the note field = deny with reason
         await pilot.pause()
