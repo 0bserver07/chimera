@@ -45,6 +45,7 @@ from rich.text import Text
 
 from chimera.tui.render import LaneTranscript
 from chimera.tui.scrollback import HybridScreen, strip_ansi
+from chimera.tui.shell_marks import ShellMarks
 
 if TYPE_CHECKING:
     from chimera.tui.lane import Lane
@@ -305,6 +306,10 @@ class InlineFrontend:
             theme, whose slots reproduce the pre-theme styles exactly.
         animations: R-THEME-4 motion gate; False freezes the spinner and the
             reasoning heartbeat to static glyphs.
+        shell_marks: Emit OSC 133 shell-integration zone marks around each
+            committed turn (``[tui] shell_integration``), so the terminal can
+            jump prompt-to-prompt through the transcript in its own
+            scrollback. Off by default; see :mod:`chimera.tui.shell_marks`.
     """
 
     def __init__(
@@ -317,12 +322,16 @@ class InlineFrontend:
         clock: Any = None,
         palette: Any = None,
         animations: bool = True,
+        shell_marks: bool = False,
     ) -> None:
         self.lane = lane
         self.driver = lane.driver
         self.screen = HybridScreen(out if out is not None else sys.stdout, band_height=band_height)
         self.transcript = LaneTranscript(self._sink, markdown=markdown, palette=palette)
         self._animations = bool(animations)
+        #: Pending OSC 133 marks, drained onto the next committed row. Inert
+        #: (and byte-identical to before) unless the knob is on.
+        self.marks = ShellMarks(enabled=shell_marks)
         self.composer = ""
         self._model = str(getattr(lane.config, "model", "?"))
         self._clock = clock if clock is not None else time.monotonic
@@ -343,9 +352,14 @@ class InlineFrontend:
         A renderable that renders to nothing (the blank spacer the transcript
         writes between markdown blocks) still commits one blank row, so
         block spacing survives into scrollback.
+
+        Any pending OSC 133 zone mark rides along as the row's prefix — that
+        is the only way a mark attaches to a *transcript* row rather than to
+        the band the cursor rests in. The marks are zero-width, so nothing
+        about the row's width accounting changes.
         """
         lines = render_ansi_lines(renderable, self.screen.geom.cols)
-        self.screen.commit(lines if lines else [""])
+        self.screen.commit(lines if lines else [""], prefix=self.marks.take())
 
     def _emit(self, text: str, style: str = "dim") -> None:
         """Commit a frontend-originated line (display only, not persisted)."""
@@ -409,11 +423,20 @@ class InlineFrontend:
         )
 
     async def _run_turn(self, text: str) -> None:
-        """Stream one turn, committing events to scrollback and persisting them."""
+        """Stream one turn, committing events to scrollback and persisting them.
+
+        The turn is bracketed by OSC 133 zone marks when shell integration is
+        on: prompt-start/input-start ride the echoed prompt row, output-start
+        rides the first row the turn produces, and command-end is queued at
+        the end for the next committed row (the next turn's prompt row —
+        exactly the ``D`` then ``A`` pairing a shell emits at its prompt).
+        """
         self._running = True
         self._turn_started = self._clock()
         self.lane.on_turn_begin()
+        self.marks.turn_start()
         self._sink(Text.assemble(("› ", "bold cyan"), (text, "bold")))
+        self.marks.output_start()
         self.lane.note(f"› {text}")
         self._repaint()
         try:
@@ -428,6 +451,7 @@ class InlineFrontend:
             self.transcript.commit()
             self._turn_order += 1
             self.lane.on_turn_end(order=self._turn_order)
+            self.marks.turn_end(ok=self.lane.telemetry.terminal_reason != "error")
             self._running = False
             self._turn_started = None
             self._repaint()
@@ -541,6 +565,7 @@ def run_inline(
     out: IO[str] | None = None,
     palette: Any = None,
     animations: bool = True,
+    shell_marks: bool = False,
 ) -> None:
     """Run the inline daily driver for one lane (blocking).
 
@@ -557,9 +582,11 @@ def run_inline(
         out: Output stream (defaults to ``sys.stdout``).
         palette: Semantic slot colors (R-THEME-1); ``None`` = default theme.
         animations: R-THEME-4 motion gate (False → static spinner).
+        shell_marks: Emit OSC 133 zone marks around committed turns
+            (``[tui] shell_integration``); off by default.
     """
     frontend = InlineFrontend(
         lane, out=out, band_height=band_height, markdown=markdown,
-        palette=palette, animations=animations,
+        palette=palette, animations=animations, shell_marks=shell_marks,
     )
     asyncio.run(frontend.run(initial_task=initial_task))

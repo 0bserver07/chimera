@@ -1709,10 +1709,15 @@ def _run_inline_single(
     crash still captures the artifact and tears down the workspaces.
     """
     from chimera.tui.inline_frontend import run_inline
+    from chimera.tui.shell_marks import load_shell_integration
 
     # Same theme chain as the full-screen app (R-THEME-1..4); best-effort, so a
     # broken theme file never blocks an inline launch.
     settings = load_theme_settings(cohort.source or None)
+    # OSC 133 zone marks are an inline-only affordance (the full-screen app
+    # runs in the alternate screen, where there is no scrollback to navigate)
+    # and opt-in: [tui] shell_integration.
+    marks = load_shell_integration(cohort.source or None)
     cohort_dir = None
     try:
         run_inline(
@@ -1720,6 +1725,7 @@ def _run_inline_single(
             initial_task=initial_task,
             palette=settings.palette(),
             animations=settings.animations,
+            shell_marks=marks,
         )
     finally:
         cohort_dir = _finalize_cohort(

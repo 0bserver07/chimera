@@ -115,6 +115,28 @@ commit receipts.
   `setup()`**, matching `AsyncSSHEnvironment`; `DaytonaEnvironment` does the
   same. `tests/env/test_e2b.py` adds 18 tests for the backend that previously
   had two.
+- **OSC 133 shell-integration zone marks around committed turns** (opt-in):
+  `chimera/tui/shell_marks.py` (stdlib-only) adds the four standard
+  shell-integration marks — prompt-start / input-start on the echoed `› …`
+  row, output-start on the first row a turn produces, command-end (with an
+  exit status) queued for the next committed row, exactly the `D` then `A`
+  pairing a shell emits at its next prompt. A terminal that implements the
+  protocol then gives turn-to-turn navigation, "select this turn's output",
+  and output folding **for free**, using the rows it already owns. Emitted
+  **only in inline mode**, where the transcript lives in the terminal's own
+  scrollback; the full-screen frontend runs in the alternate screen, has no
+  scrollback to navigate, and emits nothing. Safety, since this writes raw
+  escapes into the transcript stream: an unimplementing terminal consumes the
+  sequence and draws nothing; the marks are zero-width, so
+  `commit_lines`' "every line fits the screen" accounting cannot be broken by
+  one (pinned by a test asserting the stripped output is identical with and
+  without marks); and they ride as the **prefix of a committed row** inside
+  the same scroll-region batch — the only way a mark attaches to a transcript
+  row instead of the pinned band the cursor rests in. `commit_lines` /
+  `HybridScreen.commit` grew a `prefix=""` parameter for that seam, and off
+  by default means byte-identical bytes (also pinned). Knob: `[tui]
+  shell_integration` (default `false`).
+
 - **Paste chips in the composer** (R-FOLD-6): a paste over the configured
   size collapses to `[Pasted #1 ~420 lines]` instead of burying the composer,
   and the chip is an **atomic edit unit** — left/right and word-nav hop it

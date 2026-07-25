@@ -90,6 +90,41 @@ Chimera detects its session environment variable and refuses rather than lose
 transcript. (Other classic multiplexers retain partial-region evictions and
 work.)
 
+## Shell integration — jump turn to turn (opt-in)
+
+Because the transcript lives in the normal buffer, your terminal can treat each
+turn the way it treats a shell command — *if* something marks the zones. Turn
+that on and Chimera emits the standard OSC 133 marks around every committed
+turn:
+
+```toml
+[tui]
+shell_integration = true      # default: false
+```
+
+What you get in a terminal that implements the protocol: jump to the previous /
+next prompt, select "the output of that turn", and fold long output — all with
+the terminal's own keybindings, on the rows it already owns.
+
+The marks are four zero-width escape sequences: prompt-start and input-start
+ride the echoed `› your prompt` row, output-start rides the first row the turn
+produces, and command-end (with an exit status) is queued for the next
+committed row — the same `D` then `A` pairing a shell emits at its next prompt.
+
+Safety, since this writes raw escapes into the same stream as the transcript:
+
+- A terminal that does not implement OSC 133 **consumes the sequence and draws
+  nothing** — there is no fallback rendering to go wrong.
+- The marks are zero-width, so the hybrid's "every committed line fits the
+  screen" accounting is untouched; a mark can never push a row into a wrap.
+- They ride as the *prefix of a committed row*, inside the same scroll-region
+  batch, so a mark attaches to the transcript row it describes and never to the
+  pinned band (where the cursor actually rests).
+- Off by default, and off means **byte-identical** output — the frontend writes
+  exactly what it wrote before the feature existed.
+- Full-screen mode emits nothing: it runs in the alternate screen, where there
+  is no scrollback to navigate.
+
 ## Scope and known limitations (v1)
 
 Honest boundaries, documented rather than surprising:
@@ -155,5 +190,7 @@ the default (or a per-project `[tui] inline = true` be recommended broadly).
 - `chimera/tui/inline_frontend.py` — the async frontend that drives an
   `AgentDriver`'s event stream through `HybridScreen`, reusing the shared
   `LaneTranscript` renderer so committed prose matches the full-screen frontend.
+- `chimera/tui/shell_marks.py` — the OSC 133 vocabulary and the queue that
+  drains marks onto the next committed row (stdlib-only, off by default).
 - Design and evidence: the spike report `docs/specs/tui-scrollback-hybrid.md`
   (the mechanism, the terminal-emulator failure matrix, and the GO conditions).

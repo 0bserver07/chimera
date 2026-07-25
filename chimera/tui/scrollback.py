@@ -219,7 +219,13 @@ class Geometry:
         return self.rows - self.band_height
 
 
-def commit_lines(lines: Sequence[str], *, history_bottom: int, start_row: int) -> str:
+def commit_lines(
+    lines: Sequence[str],
+    *,
+    history_bottom: int,
+    start_row: int,
+    prefix: str = "",
+) -> str:
     """Build the batch that pushes finished lines into native scrollback.
 
     Sets the scroll region to everything above the band, parks the cursor on
@@ -238,6 +244,12 @@ def commit_lines(lines: Sequence[str], *, history_bottom: int, start_row: int) -
         start_row: 1-based row writing starts *below* (usually equal to
             ``history_bottom``; smaller right after :func:`make_room` freed
             blank rows).
+        prefix: Zero-width sequence to emit at column 1 of the **first**
+            committed row, after its erase and before its content — the seam
+            :mod:`chimera.tui.shell_marks` uses to attach an OSC 133 zone mark
+            to the row it describes. It must add no visible width (the
+            width contract above is the caller's, and a prefix cannot help
+            with it). Empty by default, so the emitted bytes are unchanged.
 
     Returns:
         The escape/byte sequence, or ``""`` when there is nothing to commit
@@ -253,8 +265,11 @@ def commit_lines(lines: Sequence[str], *, history_bottom: int, start_row: int) -
         region_setup(1, history_bottom),
         cup(start_row, 1),
     ]
-    for line in lines:
-        parts += ["\r\n", CLEAR_TO_EOL, line, SGR_RESET]
+    for index, line in enumerate(lines):
+        parts += ["\r\n", CLEAR_TO_EOL]
+        if prefix and index == 0:
+            parts.append(prefix)
+        parts += [line, SGR_RESET]
     parts += [region_reset(), DECRC, SYNC_END]
     return "".join(parts)
 
@@ -702,7 +717,7 @@ class HybridScreen:
 
     # -- the three verbs -----------------------------------------------------
 
-    def commit(self, lines: Sequence[str]) -> None:
+    def commit(self, lines: Sequence[str], *, prefix: str = "") -> None:
         """Push finished lines above the band into native scrollback.
 
         When the band is mid-screen, first reverse-index it toward the bottom
@@ -711,6 +726,11 @@ class HybridScreen:
 
         Args:
             lines: Pre-wrapped lines (each visible width <= ``geom.cols``).
+            prefix: Zero-width sequence for column 1 of the first committed
+                row (see :func:`commit_lines`) — how
+                :mod:`chimera.tui.shell_marks` attaches an OSC 133 zone mark
+                to a transcript row rather than to the band the cursor rests
+                in. Empty by default.
         """
         if not lines:
             return
@@ -722,6 +742,7 @@ class HybridScreen:
             lines,
             history_bottom=self.band_top - 1,
             start_row=max(1, old_top - 1),
+            prefix=prefix,
         )
         self._write(room_seq + seq)
         self.committed += len(lines)

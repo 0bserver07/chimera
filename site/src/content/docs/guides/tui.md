@@ -203,6 +203,18 @@ paste_chip_lines = 8      # collapse a paste over 8 lines
 paste_chip_chars = 1000   # …or over 1000 characters (one huge line counts)
 ```
 
+**Shell integration** — `tui.shell_integration`. Emits OSC 133 zone marks
+around committed turns so the terminal can jump turn-to-turn in its own
+scrollback. **Inline mode only** (the full-screen app owns the alternate
+screen, which has no scrollback), off by default; see
+[Inline mode](./inline-mode):
+
+```toml
+[tui]
+inline = true
+shell_integration = true   # default: false
+```
+
 **Cohort retention** — `tui.cohorts`. Bare `--tui` sessions persist one
 cohort each under `~/.chimera/cohorts/`; a retention policy caps them. **OFF
 by default** (nothing is ever pruned without a policy); the cohort being run
