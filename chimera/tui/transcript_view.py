@@ -203,6 +203,11 @@ class TranscriptScreen(Screen):
             style="bold",
         )
 
+    # NOTE: ``_rebuild``, NOT ``_render`` — the framework's ``Widget._render``
+    # is what produces a widget's own visual, and shadowing it makes the
+    # screen render itself by querying its children (which raises during the
+    # first paint). Same trap as shadowing ``COMMANDS`` on the app or
+    # ``Changed`` on the composer; the picker screens use this name too.
     def _rebuild(self) -> None:
         """Rebuild the pager body for the current filter and rendering mode."""
         log = self.query_one("#transcript-body", RichLog)
