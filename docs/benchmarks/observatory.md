@@ -26,7 +26,7 @@ Every grid cell records a per-task terminal-status tally (`status_counts`, e.g. 
 
 When a cell mixes clean runs with infrastructure errors, its status is `partial_error` and every errored task counts as a **miss, never a pass**. The resulting number is a **lower bound** (written `≥`): the agent's true rate is at least that high, and the cell is not citable as a score. Runs that predate `status_counts` can only ever be lower bounds, however clean they look.
 
-The graders are hardened so failure cannot masquerade as success: empty output grades False, wrong output grades False, and the checker is actually invoked — an earlier grader bug silently passed *any* HumanEval+ output, and every number measured under it was invalidated and re-measured rather than kept. The same discipline gates this very page: a receipt containing an `error`-status cell that claims passes **aborts generation**.
+The graders are hardened so failure cannot masquerade as success: empty output grades False, wrong output grades False, and the checker is actually invoked — an earlier grader bug silently passed *any* HumanEval+ output, and every number measured under it was invalidated and re-measured rather than kept. The same discipline gates this very page: a receipt containing an `error`-status cell that claims passes **aborts generation**. So does a *uniform zero* — a cell of 5+ tasks that all reached `completed` yet passed none. That pattern has always been a broken grading contract rather than a measured 0%, so it must be diagnosed against a known-correct solution before anything ships.
 
 ## 1. Flagship full-dataset scorecard — `coding-agent`
 
