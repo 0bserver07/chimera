@@ -35,19 +35,28 @@ freestyle live runs.
    `chimera-bench-results` Volume; fetch with `::collect --run-id <id>`.
 
 
-## Before you blame Modal: the Python 3.12.8 trap
+## Before you blame Modal: the interpreter trap
 
-Before blaming infrastructure: the venv's CPython **3.12.8** fails every
-`asyncio` TLS connect instantly (`OSError: [Errno 9] Connect call failed`),
-so the Modal client retries and reports *"Could not connect to the Modal
-server."* Verified 2026-07-24: status.modal.com fully green, `curl`/`nc`/
-system CPython 3.12.9 all reached the same IP:443, only the 3.12.8 venv
-failed. Cells already on the Volume were fine the whole time.
+The Modal client reporting *"Could not connect to the Modal server"* is
+usually **not** an outage. Under this repo's default venv interpreter
+(CPython 3.12.8) every connect to Modal's API fails instantly with
+`OSError: [Errno 9] Connect call failed`, the client retries 8x, and the
+message it prints is indistinguishable from infrastructure being down.
+Verified 2026-07-24: status.modal.com fully green, `curl`/`nc`/other
+interpreters reached the same IP:443 fine, and the detached grid's cells
+were sitting complete on the Volume the entire time.
+
+**Root cause is unknown.** It is not asyncio-specific (blocking sockets fail
+identically), not TLS-specific (plain TCP fails), and not uv-vs-system (uv's
+own 3.11.7 works); the same 3.12.8 reaches unrelated hosts fine. That
+destination-*and*-interpreter specificity points at environmental
+interposition, not a CPython defect — so do **not** repin `.python-version`
+on this evidence. Cheap next probe: `uv python install --reinstall 3.12`.
 
 Diagnostic order, cheapest first:
 
 1. <https://status.modal.com/> — is anything actually red?
-2. `curl -s -o /dev/null -w '%{http_code}' https://api.modal.com` → 200 means reachable.
+2. `curl -s -o /dev/null -w '%{http_code}' https://api.modal.com` -> 200 means reachable.
 3. Retry pinned: `uv run --python 3.13 --extra modal-sandbox --extra anthropic modal volume ls chimera-bench-results <run-id>/`
 
 Never re-fire a paid run on the assumption that the previous one died to an
