@@ -3,6 +3,11 @@ title: "Inline mode (native terminal scrollback)"
 description: "An opt-in single-agent frontend that renders the transcript into the terminal's own scrollback with the composer/status band pinned below — mouse selection, copy, wheel-scroll, and after-exit persistence all work. POSIX-only, off by default, with a multiplexer fallback."
 ---
 
+---
+title: "Inline mode (native terminal scrollback)"
+description: "An opt-in single-agent frontend that renders the transcript into the terminal's own scrollback with the composer/status band pinned below — mouse selection, copy, wheel-scroll, and after-exit persistence all work. POSIX-only, off by default, with a multiplexer fallback."
+---
+
 # Inline mode — the transcript lives in your terminal's scrollback
 
 The full-screen TUI owns the whole screen (the alternate screen buffer) and
@@ -180,6 +185,39 @@ any daily driver — kitty / WezTerm / Alacritty / GNOME Terminal), plus tmux:
 
 Only after all of the above pass on your target emulators should a change flip
 the default (or a per-project `[tui] inline = true` be recommended broadly).
+
+### Run log — 2026-07-25, macOS Terminal.app (partial: 4 of 9)
+
+**The default stays OFF.** Four steps pass with evidence; the rest need a human
+at a mouse and are genuinely untested. Recorded here so the next person starts
+from what is already known rather than re-running it.
+
+| Step | Result |
+|---|---|
+| 1. Launch mid-screen | ✅ band appeared at the bottom; 14 lines of prior shell output above it were untouched |
+| 2. Stream a turn | ✅ real `glm-5.2` turn (2 steps, $0.0184). Tool output rendered incrementally with `│` gutters and `… +37 lines …` elision; the band stayed pinned throughout |
+| 7. Clean exit | ✅ `/exit` erased the band, the shell prompt resumed directly under the last transcript line, the transcript stayed in scrollback, and a subsequent `seq` scrolled the whole screen normally — **the DECSTBM scroll region was fully released** |
+| 9. Multiplexer refusal | ✅ in a real PTY with `$ZELLIJ` set: `InlineDecision(use_inline=False, reason='multiplexer:ZELLIJ')`. tmux is correctly *allowed* (`use_inline=True`) — it is not a scrollback-hostile host |
+
+**Not verified — do not assume these pass:**
+
+- **3 (native selection & copy)** and **4 (wheel-scroll)** need real mouse input.
+- **5 (resize)** needs visual judgement of the band re-gluing.
+- **6 (Ctrl+C cancels a turn)** is **untested, and a signal is not a substitute.**
+  Sending `SIGINT` to the process is *not* equivalent to pressing Ctrl+C here:
+  the hybrid runs the terminal in raw mode with `ISIG` disabled, so Ctrl+C
+  arrives as byte `0x03` in the input stream and is handled by the key loop,
+  never as a signal. A `kill -INT` test exercises a completely different path
+  and proves nothing about the keybinding.
+- **8 (crash safety)** — not attempted.
+- **Only Terminal.app was covered.** iTerm2, kitty, WezTerm, Alacritty and
+  GNOME Terminal remain untested, and step 7 is exactly the kind of thing that
+  differs between emulators.
+
+Automation note for whoever picks this up: macOS `osascript` keystroke
+injection needs Accessibility permission and was unavailable, but Terminal's
+own `do script "…" in front window` **does** reach a running TUI's stdin — that
+is how the step-2 prompt and the `/exit` above were delivered.
 
 ## How it works (pointers)
 

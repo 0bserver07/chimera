@@ -87,6 +87,25 @@ commit receipts.
 
 ### Changed
 
+- **Inline mode: partial manual smoke recorded; the default stays OFF.** Four
+  of the nine checklist steps now pass with evidence on macOS Terminal.app
+  (`docs/guides/inline-mode.md` → *Run log*): launch mid-screen leaves prior
+  shell output untouched; a real `glm-5.2` turn (2 steps, $0.0184) streams with
+  `│`-guttered tool output, `… +37 lines …` elision and a band that stays
+  pinned; `/exit` erases the band, resumes the shell prompt directly under the
+  last transcript line, and **fully releases the DECSTBM scroll region** (a
+  following `seq` scrolls the whole screen); and the hostile-multiplexer gate
+  refuses correctly in a real PTY (`multiplexer:ZELLIJ`), while tmux is
+  correctly allowed. Selection, wheel-scroll, resize, Ctrl+C-cancel and crash
+  safety remain **untested**, as does every emulator other than Terminal.app,
+  so the flag stays opt-in. Recorded rather than left implicit so the next
+  person starts from what is known.
+  - Methodology note now in the guide: **sending `SIGINT` is not a test of
+    Ctrl+C here.** The hybrid runs the terminal raw with `ISIG` disabled, so
+    Ctrl+C arrives as byte `0x03` in the input stream and is handled by the key
+    loop, never as a signal — a `kill -INT` exercises a different path entirely
+    and proves nothing about the keybinding.
+
 - **The published LiveCodeBench score is RETRACTED** (owner-approved
   2026-07-25). `≥18.9% (33/175)` is withdrawn from the observatory (+ site
   mirror), `docs/progress/benchmark-matrix.md`,
