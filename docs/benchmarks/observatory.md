@@ -38,9 +38,9 @@ The assembled `chimera code` stack (`coding-agent`) over each benchmark's **whol
 | mbpp | 427 | **99.1%** (423/427) | EXACT — 0 errors (`{completed: 427}`) | `data/modal-grid-fullscore2-20260709-154339.json` |
 | humaneval-plus | 164 | **92.1%** (151/164) | EXACT — 0 errors (`{completed: 164}`) | `data/modal-grid-fullscore2-20260709-154339.json` |
 | math500 | 500 | **77.6%** (388/500) | ~EXACT — `{completed: 496, budget_exhausted: 4}` (≤0.8% margin) | `data/modal-grid-fullscore3-20260709-234842.json` |
-| livecodebench | 175 | ≥ 18.9% (33/175) | lower bound — status `partial_error`, errored tasks count as misses (run predates `status_counts`)* | `data/modal-grid-fullscore1-20260709-105308.json` |
+| livecodebench | 175 | ⊘ **RETRACTED** | see the retraction note below | `data/modal-grid-fullscore1-20260709-105308.json` |
 
-*livecodebench is a floor, not a score: its 175 contest-codegen tasks need ~14.5 h sequentially and the Modal cell timeout is 12 h, so the clean full-column re-run cannot finish in one container — errored tasks count as misses. A smaller-n run (e.g. n=50, ~4 h) would give an exact number; expected low either way (hard contest codegen).
+⊘ **livecodebench** — **RETRACTED — the adapter does not measure LiveCodeBench.** Three independent defects, any one of which invalidates the column: 63 of the 175 staged tasks are `functional` + `starter_code` while the runner executes `python solution.py < stdin`, so **36% of the denominator cannot pass under any answer**; the staged file is platform-blocked (AtCoder 0–111, LeetCode 112–174) so any contiguous `--limit` slice is single-platform and not a sample; and only public sample tests are staged, with every graded assertion visible in the prompt for 24 of 50 tasks in the slice. The previously published ≥18.9% (33/175) is withdrawn — a floor computed over a denominator that is 36% unpassable is not a floor. A later 88% (44/50) run is likewise not a score: it is an AtCoder-only head slice graded on public samples. Diagnosis: `docs/notes/bench-diagnosis-darklight1.md`.
 
 Receipts: 5 cells, **$22.91** total model spend (sum of the source cells' `cost_usd`).
 
@@ -50,33 +50,25 @@ Receipts: 5 cells, **$22.91** total model spend (sum of the source cells' `cost_
 # small-n smoke of the same cells (any machine; model creds required;
 # drop --limit to run each full dataset):
 uvx --from chimera-run chimera bench-matrix --agents coding-agent \
-  --benchmarks mbpp,humaneval-plus,mbpp-plus,math500,livecodebench \
+  --benchmarks mbpp-plus,mbpp,humaneval-plus,math500 \
   --limit 5 --model "glm-5.2[1m]"
 
 # how this data was actually produced — detached Modal grid
 # (survives disconnects; cells persist to a Volume):
 modal run --detach scripts/modal_bench_app.py::grid_detached \
   --run-id myscore --agents coding-agent \
-  --benches mbpp,humaneval-plus,mbpp-plus,math500,livecodebench --limit 500
+  --benches mbpp-plus,mbpp,humaneval-plus,math500 --limit 500
 modal run scripts/modal_bench_app.py::collect --run-id myscore
 ```
 
-## 2. Depth matrix — 4 agents × 4 benchmarks (`observatory` runs)
+## 2. Depth matrix — 5 agents × 4 benchmarks, n=50 (`observatory1`)
 
-Every architecture below raced the same benchmarks under the same budget, model `glm-5.2[1m]`, on Modal. `≥` marks lower-bound cells (errors counted as misses); clean cells are exact at their n (shown per cell as passed/n).
+**Run `observatory1` is in flight — no number appears here until its receipt lands.** The depth grid — agents `coding-agent,react,plan-execute,reflexion,tree-of-thought` × benchmarks `mbpp,humaneval-plus,mbpp-plus,math500` at n=50, model `glm-5.2[1m]` — is running detached on Modal; cells persist to the `chimera-bench-results` Volume as they finish. When `data/modal-grid-observatory1-<ts>.json` exists, this section regenerates from it:
 
-| Agent | humaneval-plus | mbpp | mbpp-plus | math500 |
-|---|---|---|---|---|
-| **coding-agent** ★ | 48/50 (96.0%) | 50/50 (100.0%) | 50/50 (100.0%) | 40/50 (80.0%) |
-| react | 48/50 (96.0%) | 49/50 (98.0%) | 50/50 (100.0%) | 42/50 (84.0%) |
-| plan-execute | 48/50 (96.0%) | 50/50 (100.0%) | 50/50 (100.0%) | 41/50 (82.0%) |
-| reflexion | 47/50 (94.0%) | 50/50 (100.0%) | 50/50 (100.0%) | error |
-
-Cells not fully clean: `reflexion × math500` — no result (status error, provider_error).
-
-**Incomplete run.** requested but absent entirely: `tree-of-thought`. Those cells produced no receipt (failure or timeout) and are excluded from the table rather than scored — the grid above is what landed, not what was requested.
-
-Receipts: 16 cells, **$4.34** total model spend. Source: `data/modal-grid-observatory1-20260723-234334.json`.
+```bash
+modal run scripts/modal_bench_app.py::collect --run-id observatory1
+uv run python scripts/render_observatory.py
+```
 
 **Reproduce:**
 
@@ -115,7 +107,7 @@ The instrument demonstration: **every** replicated architecture against **every*
 
 Legend: HE=humaneval · HE+=humaneval-plus · mbpp+=mbpp-plus · math=math500 · lcb=livecodebench · tau=tau-bench.
 
-12/13 agents solve 7/7 at n=1. `lint-loop`'s zero row is honest — it writes no solution file on from-scratch codegen (a known agent-behavior gap, not a grading bug).
+12/13 agents solve 7/7 at n=1. A ✓ under `livecodebench` means only that the harness ran and the adapter's grader accepted an answer — that adapter is under retraction (see §1) and its ticks carry no benchmark claim. `lint-loop`'s zero row is honest — it writes no solution file on from-scratch codegen (a known agent-behavior gap, not a grading bug).
 
 Receipts: 91 cells, **$0.78** total model spend. Source: `data/matrix-full-glm52.json`.
 
@@ -130,6 +122,6 @@ uvx --from chimera-run chimera bench-matrix \
 
 ---
 
-*Generated by `scripts/render_observatory.py` from 5 data receipts: `data/matrix-full-glm52.json` · `data/modal-grid-fullscore1-20260709-105308.json` · `data/modal-grid-fullscore2-20260709-154339.json` · `data/modal-grid-fullscore3-20260709-234842.json` · `data/modal-grid-observatory1-20260723-234334.json`.*
+*Generated by `scripts/render_observatory.py` from 4 data receipts: `data/matrix-full-glm52.json` · `data/modal-grid-fullscore1-20260709-105308.json` · `data/modal-grid-fullscore2-20260709-154339.json` · `data/modal-grid-fullscore3-20260709-234842.json`.*
 
-*Data date: 2026-07-24 (newest receipt's mtime — the generator never reads the wall clock, so regenerating over unchanged inputs is byte-identical).*
+*Data date: 2026-07-26 (newest receipt's mtime — the generator never reads the wall clock, so regenerating over unchanged inputs is byte-identical).*

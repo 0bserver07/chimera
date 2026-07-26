@@ -265,12 +265,19 @@ for real generation.
   be labelled in full: *LiveCodeBench v6 codegeneration, AtCoder subset,
   first-50 contiguous slice, graded on public sample tests only, n=50* — and
   even then it is a harness-local metric, not a benchmark result.
-- **Retire ≥18.9% rather than keep citing it.** It is currently on
-  `docs/benchmarks/observatory.md`, `docs/progress/benchmark-matrix.md` and the
-  0.9.1 release notes as a lower bound. It is worse than a lower bound: 36% of
-  its denominator could not pass under any answer. *(Left in place by this pass —
-  changing published release-note numbers is an owner decision, not a
-  diagnostic one.)*
+- **Retire ≥18.9% rather than keep citing it.** It is worse than a lower bound:
+  36% of its denominator could not pass under any answer. **DONE 2026-07-25 —
+  the owner approved the retraction.** The figure is withdrawn from
+  `docs/benchmarks/observatory.md` (+ site mirror),
+  `docs/progress/benchmark-matrix.md`, `docs/benchmarks/modal-cloud-benches.md`
+  and the 0.9.1 release notes. It is not merely deleted: `RETRACTED` in
+  `scripts/render_observatory.py` is a registry keyed by benchmark, so the
+  generator renders `⊘ RETRACTED` plus the reason instead of any score, drops
+  the benchmark from the "reproduce this page" commands, and annotates its ✓
+  marks in the n=1 breadth grid. **A future run of this adapter therefore
+  cannot republish a number** — removing the registry entry is the deliberate
+  act that re-enables it, and must not happen before the adapter is fixed
+  *and* re-canaried.
 - **The blocking work before any LiveCodeBench number is citable:** wire a
   functional-test path for `testtype: "functional"` (instantiate the starter
   class and call the method with the parsed args), and stage the private test

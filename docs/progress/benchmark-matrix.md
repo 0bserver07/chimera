@@ -28,11 +28,13 @@ grader. `EXACT` = `status_counts`-verified, zero infra errors.
 | mbpp | 427 | **99.1%** (423) | ✅ exact | `fullscore2-*.json` |
 | human-eval-plus | 164 | **92.1%** (151) | ✅ exact | `fullscore2-*.json` |
 | math500 | 500 | **77.6%** (388) | ✅ ~exact (4 budget-exh) | `fullscore3-*.json` |
-| livecodebench | 175 | ≥18.9% (33) | ⚠️ lower bound* | `fullscore1-*.json` |
+| livecodebench | 175 | ⊘ **RETRACTED** | ⊘ not a measurement* | `fullscore1-*.json` |
 
-*livecodebench: 175 slow contest-codegen tasks need ~14.5h sequentially, but the
-Modal cell timeout is 12h → it can't complete in one container. Fix = `n=50`
-run (~4h, exact), a longer timeout, or column chunking.
+*livecodebench: the previously published ≥18.9% (33/175) is **withdrawn**. The
+original caveat (175 slow tasks need ~14.5h vs a 12h cell timeout, so the column
+could not complete) was real but not the main problem — the adapter grades 36% of
+the dataset against the wrong contract, so no run of it produces a LiveCodeBench
+score. Detail: 63 of the 175 staged tasks are `functional` + `starter_code` while the runner executes `python solution.py < stdin`, so 36% of the denominator cannot pass under any answer; the staged file is platform-blocked (AtCoder 0–111, LeetCode 112–174) so a contiguous `--limit` slice is single-platform; and only public sample tests are staged. A floor over a 36%-unpassable denominator is not a floor. See `docs/notes/bench-diagnosis-darklight1.md`.
 
 ## 2. Breadth matrix — 13 agents × 7 benches (n=1, `data/matrix-full-glm52.json`)
 

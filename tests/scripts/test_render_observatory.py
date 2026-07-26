@@ -96,6 +96,27 @@ def test_exact_label_for_clean_status_counts(tmp_path: Path) -> None:
 
 
 def test_partial_error_renders_lower_bound(tmp_path: Path) -> None:
+    # Uses a NON-retracted benchmark: the lower-bound rendering is still the
+    # right treatment for a partial run whose unmeasured tasks could have
+    # passed. (livecodebench used to be this fixture; it is now retracted, and
+    # a retraction outranks a lower bound — see the tests below.)
+    _seed(tmp_path)
+    _write(
+        tmp_path,
+        "modal-grid-fullscore1-20990101-000000.json",
+        [_cell(bench="math500", total=175, passed=33, status="partial_error")],
+        run_id="fullscore1",
+    )
+    page = _render(tmp_path)
+    assert "≥ 18.9% (33/175)" in page
+    assert "lower bound — status `partial_error`" in page
+
+
+def test_retracted_benchmark_never_renders_a_score(tmp_path: Path) -> None:
+    # The withdrawal of livecodebench's ≥18.9%: a lower bound is still a claim
+    # ("at least this good"), and it is only honest when the unmeasured
+    # remainder COULD have passed. 36% of this denominator cannot pass under any
+    # answer, so the floor is fiction with an inequality in front of it.
     _seed(tmp_path)
     _write(
         tmp_path,
@@ -104,8 +125,35 @@ def test_partial_error_renders_lower_bound(tmp_path: Path) -> None:
         run_id="fullscore1",
     )
     page = _render(tmp_path)
-    assert "≥ 18.9% (33/175)" in page
-    assert "lower bound — status `partial_error`" in page
+    assert "RETRACTED" in page
+    assert "≥ 18.9% (33/175)" not in page
+    assert "**18.9%**" not in page
+    # The reason travels with the retraction — a reader never has to go dig.
+    assert "36% of the denominator cannot pass" in page
+    assert "bench-diagnosis-darklight1.md" in page
+
+
+def test_retracted_benchmark_is_not_offered_for_reproduction(tmp_path: Path) -> None:
+    # Don't invite the reader to re-run and re-quote a number we just withdrew.
+    _seed(tmp_path)
+    _write(
+        tmp_path,
+        "modal-grid-fullscore1-20990101-000000.json",
+        [_cell(bench="livecodebench-codegeneration", total=175, passed=33, status="partial_error")],
+        run_id="fullscore1",
+    )
+    page = _render(tmp_path)
+    repro = [ln for ln in page.splitlines() if "--benchmarks" in ln or "--benches" in ln]
+    assert repro, "reproduce block missing — the assertion would be vacuous"
+    assert all("livecodebench" not in ln for ln in repro)
+
+
+def test_retraction_registry_reasons_are_substantive() -> None:
+    # A retraction with a thin reason is how a retraction quietly gets reverted.
+    assert obs.RETRACTED, "registry emptied — was a fix verified?"
+    for bench, reason in obs.RETRACTED.items():
+        assert len(reason) > 200, f"{bench}: reason too thin to act on"
+        assert "docs/notes/" in reason, f"{bench}: reason cites no diagnosis"
 
 
 def test_near_exact_budget_split_labeled(tmp_path: Path) -> None:

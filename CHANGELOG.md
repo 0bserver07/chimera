@@ -45,6 +45,40 @@ commit receipts.
   asyncssh comparison, and the exact opt-in live-smoke commands. Mirrored into
   the docs site.
 
+### Changed
+
+- **The published LiveCodeBench score is RETRACTED** (owner-approved
+  2026-07-25). `≥18.9% (33/175)` is withdrawn from the observatory (+ site
+  mirror), `docs/progress/benchmark-matrix.md`,
+  `docs/benchmarks/modal-cloud-benches.md` and the v0.9.1 release notes. The
+  adapter does not measure LiveCodeBench: 63 of 175 staged tasks are
+  `functional` + `starter_code` while the runner executes `python solution.py <
+  stdin`, so 36% of the denominator cannot pass under any answer; the staged
+  file is platform-blocked (AtCoder 0–111 / LeetCode 112–174) so a contiguous
+  `--limit` slice is single-platform, not a sample; and only public sample tests
+  are staged. **A lower bound is only honest when the unmeasured remainder could
+  have passed** — over a 36%-unpassable denominator it is not a conservative
+  floor but a fabricated number with an inequality in front of it, which is why
+  this is a retraction rather than a stronger caveat. The later 88% (44/50) is
+  likewise not a replacement: it is an AtCoder-only head slice on public
+  samples.
+  - Not a one-off edit: `RETRACTED` in `scripts/render_observatory.py` is a
+    registry keyed by benchmark. A retracted adapter renders `⊘ RETRACTED` plus
+    the full reason instead of *any* score, is dropped from the page's
+    "reproduce" commands, and has its ✓ marks in the n=1 breadth grid annotated
+    as harness-smoke rather than benchmark claims. **A future run cannot
+    republish the number** — removing the entry is the deliberate act that
+    re-enables it, and is gated on the adapter being fixed *and* re-canaried.
+  - The v0.9.1 release note is struck through with a dated correction rather
+    than rewritten. A release note is a historical record; silently editing a
+    published number is the same class of dishonesty as publishing a wrong one.
+  - `docs/benchmarks/modal-cloud-benches.md` keeps its original
+    cost-share argument verbatim as a worked example of a *plausible wrong
+    conclusion*: it reasoned that $9.93 of spend (5.68¢/task) proved the agent
+    did real work, so the low score had to be genuine. The spend was real and
+    the inference was still wrong — cost measures effort expended, never
+    whether the grader evaluated the right contract.
+
 ### Fixed
 
 - **DeepSeek was billed at up to 3.9x the published rate, and a "correction"

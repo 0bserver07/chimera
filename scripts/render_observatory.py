@@ -126,6 +126,44 @@ class IntegrityError(Exception):
 _UNIFORM_ZERO_MIN_TASKS = 5
 
 
+#: Benchmarks whose scores are **retracted**: the adapter is known to measure
+#: something other than what the benchmark's name claims, so *no* number it
+#: produces is citable — not the measured value, and not a "lower bound" either.
+#:
+#: A lower bound is still a claim ("at least this good"), and it is only honest
+#: when the unmeasured remainder *could* have passed. When part of the
+#: denominator cannot pass by construction, the floor is not conservative — it
+#: is fiction with an inequality sign in front of it. Retraction is therefore
+#: not a stronger caveat on the same row; it removes the number entirely.
+#:
+#: Keyed by display benchmark name; the value is the reason, rendered verbatim
+#: on the page so a reader never has to go find out why. Deleting an entry
+#: re-publishes that benchmark, so an entry may only be removed once the adapter
+#: is fixed *and* re-canaried.
+RETRACTED: dict[str, str] = {
+    "livecodebench": (
+        "**RETRACTED — the adapter does not measure LiveCodeBench.** Three "
+        "independent defects, any one of which invalidates the column: 63 of "
+        "the 175 staged tasks are `functional` + `starter_code` while the "
+        "runner executes `python solution.py < stdin`, so **36% of the "
+        "denominator cannot pass under any answer**; the staged file is "
+        "platform-blocked (AtCoder 0–111, LeetCode 112–174) so any contiguous "
+        "`--limit` slice is single-platform and not a sample; and only public "
+        "sample tests are staged, with every graded assertion visible in the "
+        "prompt for 24 of 50 tasks in the slice. The previously published "
+        "≥18.9% (33/175) is withdrawn — a floor computed over a denominator "
+        "that is 36% unpassable is not a floor. A later 88% (44/50) run is "
+        "likewise not a score: it is an AtCoder-only head slice graded on "
+        "public samples. Diagnosis: `docs/notes/bench-diagnosis-darklight1.md`."
+    ),
+}
+
+
+def _is_retracted(bench: str) -> bool:
+    """Whether *bench* is under retraction and must not render a score."""
+    return bench in RETRACTED
+
+
 @dataclass(frozen=True)
 class Cell:
     """One (agent, benchmark) measurement read from a receipt file.
@@ -436,51 +474,48 @@ def _render_flagship(rows: list[Cell]) -> list[str]:
         "| Benchmark | n | Score | Basis | Source |",
         "|---|---:|---|---|---|",
     ]
-    lcb_lower = False
+    retracted_seen: list[str] = []
     total_cost = 0.0
     for cell in rows:
         rank, _marker, basis = _quality(cell)
         total_cost += cell.cost_usd
-        if rank >= 3:
+        if _is_retracted(cell.bench):
+            # The number is withdrawn, but the row stays: silently dropping it
+            # would leave a reader of the old page wondering where it went, and
+            # would hide that the spend was real.
+            retracted_seen.append(cell.bench)
+            score = "⊘ **RETRACTED**"
+            basis = "see the retraction note below"
+        elif rank >= 3:
             score = f"≥ {_pct(cell)} ({cell.passed}/{cell.total})"
         else:
             score = f"**{_pct(cell)}** ({cell.passed}/{cell.total})"
-        if cell.bench == "livecodebench" and rank >= 3:
-            lcb_lower = True
-            basis += "*"
         out.append(f"| {cell.bench} | {cell.total} | {score} | {basis} | `data/{cell.source}` |")
     out.append("")
-    if lcb_lower:
-        out.extend(
-            [
-                "*livecodebench is a floor, not a score: its 175 contest-codegen"
-                " tasks need ~14.5 h sequentially and the Modal cell timeout is"
-                " 12 h, so the clean full-column re-run cannot finish in one"
-                " container — errored tasks count as misses. A smaller-n run"
-                " (e.g. n=50, ~4 h) would give an exact number; expected low"
-                " either way (hard contest codegen).",
-                "",
-            ]
-        )
+    for bench in retracted_seen:
+        out.extend([f"⊘ **{bench}** — {RETRACTED[bench]}", ""])
     out.append(
         f"Receipts: {len(rows)} cells, **${total_cost:.2f}** total model spend"
         " (sum of the source cells' `cost_usd`)."
     )
     out.append("")
+    # Reproduce only what this page still stands behind — a retracted benchmark
+    # is not something to invite the reader to re-run and re-quote.
+    citable = ",".join(c.bench for c in rows if not _is_retracted(c.bench))
     out.extend(
         _reproduce_block(
             [
                 "# small-n smoke of the same cells (any machine; model creds required;",
                 "# drop --limit to run each full dataset):",
                 "uvx --from chimera-run chimera bench-matrix --agents coding-agent \\",
-                "  --benchmarks mbpp,humaneval-plus,mbpp-plus,math500,livecodebench \\",
+                f"  --benchmarks {citable} \\",
                 f'  --limit 5 --model "{_MODEL}"',
                 "",
                 "# how this data was actually produced — detached Modal grid",
                 "# (survives disconnects; cells persist to a Volume):",
                 "modal run --detach scripts/modal_bench_app.py::grid_detached \\",
                 "  --run-id myscore --agents coding-agent \\",
-                "  --benches mbpp,humaneval-plus,mbpp-plus,math500,livecodebench --limit 500",
+                f"  --benches {citable} --limit 500",
                 "modal run scripts/modal_bench_app.py::collect --run-id myscore",
             ]
         )
@@ -563,6 +598,11 @@ def _render_depth(cells: list[Cell]) -> list[str]:
                     split = _split(counts) if counts else f"status {cell.status}"
                     why = f", {cell.category}" if cell.category else ""
                     dirty.append(f"`{agent} × {bench}` — no result ({split}{why})")
+                    continue
+                if _is_retracted(bench):
+                    # Same rule as the flagship table: a retracted adapter's
+                    # cell is not a weaker number, it is not a number.
+                    row.append("⊘")
                     continue
                 text = f"{cell.passed}/{cell.total} ({_pct(cell)})"
                 if rank >= 3:
@@ -678,6 +718,17 @@ def _render_breadth(cells: list[Cell], model: str) -> list[str]:
     summary = (
         f"{solved_all}/{len(agents)} agents solve {len(benches)}/{len(benches)} at n=1."
     )
+    retracted_here = [b for b in benches if _is_retracted(b)]
+    if retracted_here:
+        # This grid is a ✓/· harness smoke, not a score — but a ✓ under a
+        # retracted adapter would still read as "this agent can do that
+        # benchmark", so name it rather than let the tick speak for itself.
+        names = ", ".join(f"`{b}`" for b in retracted_here)
+        summary += (
+            f" A ✓ under {names} means only that the harness ran and the"
+            " adapter's grader accepted an answer — that adapter is under"
+            " retraction (see §1) and its ticks carry no benchmark claim."
+        )
     if wins_by_agent.get("lint-loop") == 0:
         summary += (
             " `lint-loop`'s zero row is honest — it writes no solution file on"

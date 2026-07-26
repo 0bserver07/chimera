@@ -170,7 +170,7 @@ these are real pass rates, not the fullscore1 lower bounds:
 | **mbpp** (427) | **99.1%** (423/427) | ✅ EXACT — 0 errors (`{'completed':427}`) |
 | **human-eval-plus** (164) | **92.1%** (151/164) | ✅ EXACT — 0 errors (`{'completed':164}`) |
 | **math500** (500) | **77.6%** (388/500) | ~EXACT — 496 clean + 4 budget_exhausted (≤0.8% margin) |
-| livecodebench (175) | ≥ 18.9% (33/175) | lower bound — the clean n=175 re-run needs ~14.5h (175 slow contest-codegen tasks) but the cell timeout is 12h, so it can't complete. A smaller-n run (e.g. n=50, ~4h) would yield an exact number; expected low regardless. |
+| livecodebench (175) | ⊘ **RETRACTED** | ⊘ **RETRACTED** — the adapter does not measure LiveCodeBench: 63 of the 175 staged tasks are `functional` + `starter_code` while the runner executes `python solution.py < stdin`, so 36% of the denominator cannot pass under any answer; the staged file is platform-blocked (AtCoder 0–111, LeetCode 112–174) so a contiguous `--limit` slice is single-platform; and only public sample tests are staged. A floor over a 36%-unpassable denominator is not a floor. See `docs/notes/bench-diagnosis-darklight1.md`. |
 
 **This vindicates the integrity work spectacularly.** Every column fullscore1
 rated as garbage was harness noise, not agent weakness — the clean re-runs
@@ -203,14 +203,19 @@ generations)** so its ¢/task is not comparable to the others.
 |---|---|---|---|
 | mbpp-plus (378) | **≥ 91.0%** (344/378) | 0.89 | full-work cost — the one near-citable number |
 | math500 (500) | ≥ 43.2% (216/500) | 0.85 | full-work cost; misses look real — investigate before citing |
-| livecodebench (175) | ≥ 18.9% (33/175) | 5.68 | HIGH full-work cost ($9.93) ⇒ low error share, so ~real — but hard contest codegen, expect low |
+| livecodebench (175) | ⊘ **RETRACTED** | 5.68 | the cost-share reasoning below was sound and still reached a wrong conclusion — spend proves the agent worked, never that the grader graded the right thing |
 | mbpp (427) | ≥ 35.4% (151/427) | 0.41 | half-cost ⇒ likely error-dominated — DO NOT CITE |
 | human-eval-plus (164) | ≥ 31.7% (52/164) | 0.39 | half-cost ⇒ likely error-dominated — DO NOT CITE |
 
 **Verdict: not a publishable scorecard, but three of five are real signal.**
-mbpp-plus ≥91% and math500 ≥43% ran at full-work cost; livecodebench ≥18.9% cost
-$9.93 (5.68¢/task — the flagship did substantial work on nearly every task, so
-its low score is a genuine result, not an artifact: LiveCodeBench is hard
+mbpp-plus ≥91% and math500 ≥43% ran at full-work cost. **The livecodebench
+reasoning in this section is retained as a worked example of a plausible wrong
+conclusion.** It argued that $9.93 of spend (5.68¢/task) proved the flagship did
+substantial work on nearly every task, so the low score had to be a genuine
+result rather than an artifact. The spend was real and the inference was still
+wrong: cost measures effort expended, never whether the grader evaluated the
+right contract. 36% of those tasks could not have passed no matter what the
+agent wrote. Original text: LiveCodeBench is hard
 contest codegen). The two half-cost columns (mbpp, human-eval-plus) are
 error-dominated and must NOT be cited — they need a re-run now that cells carry
 `status_counts` (exact failure-vs-error split, ~$3). math500's 43% is worth its
