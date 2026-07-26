@@ -42,6 +42,8 @@ The assembled `chimera code` stack (`coding-agent`) over each benchmark's **whol
 
 ⊘ **livecodebench** — **RETRACTED — the adapter does not measure LiveCodeBench.** Three independent defects, any one of which invalidates the column: 63 of the 175 staged tasks are `functional` + `starter_code` while the runner executes `python solution.py < stdin`, so **36% of the denominator cannot pass under any answer**; the staged file is platform-blocked (AtCoder 0–111, LeetCode 112–174) so any contiguous `--limit` slice is single-platform and not a sample; and only public sample tests are staged, with every graded assertion visible in the prompt for 24 of 50 tasks in the slice. The previously published ≥18.9% (33/175) is withdrawn — a floor computed over a denominator that is 36% unpassable is not a floor. A later 88% (44/50) run is likewise not a score: it is an AtCoder-only head slice graded on public samples. Diagnosis: `docs/notes/bench-diagnosis-darklight1.md`.
 
+† **humaneval-plus** — 1 of 164 tasks (`HumanEval/32`) is unpassable by construction — its upstream EvalPlus assertion `_poly(*candidate(*inp), inp)` splats the float `find_zero` returns and dies of `TypeError` before comparing anything, so the achievable maximum is **163/164 = 99.4%**, not 100%.
+
 Receipts: 5 cells, **$22.91** total model spend (sum of the source cells' `cost_usd`).
 
 **Reproduce:**

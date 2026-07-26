@@ -159,6 +159,21 @@ RETRACTED: dict[str, str] = {
 }
 
 
+#: Benchmarks with a task that cannot pass under any answer, because the staged
+#: dataset's own reference solution fails its own test. Unlike RETRACTED this
+#: does NOT invalidate the column — it caps it, and the cap is published with
+#: the score so a reader is not left to assume 100% was reachable. Verified by
+#: ``scripts/canary_benchmarks.py`` (``KNOWN_UNPASSABLE``).
+CEILINGS: dict[str, str] = {
+    "humaneval-plus": (
+        "1 of 164 tasks (`HumanEval/32`) is unpassable by construction — its "
+        "upstream EvalPlus assertion `_poly(*candidate(*inp), inp)` splats the "
+        "float `find_zero` returns and dies of `TypeError` before comparing "
+        "anything, so the achievable maximum is **163/164 = 99.4%**, not 100%."
+    ),
+}
+
+
 def _is_retracted(bench: str) -> bool:
     """Whether *bench* is under retraction and must not render a score."""
     return bench in RETRACTED
@@ -494,6 +509,9 @@ def _render_flagship(rows: list[Cell]) -> list[str]:
     out.append("")
     for bench in retracted_seen:
         out.extend([f"⊘ **{bench}** — {RETRACTED[bench]}", ""])
+    for cell in rows:
+        if cell.bench in CEILINGS and not _is_retracted(cell.bench):
+            out.extend([f"† **{cell.bench}** — {CEILINGS[cell.bench]}", ""])
     out.append(
         f"Receipts: {len(rows)} cells, **${total_cost:.2f}** total model spend"
         " (sum of the source cells' `cost_usd`)."

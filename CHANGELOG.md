@@ -45,6 +45,46 @@ commit receipts.
   asyncssh comparison, and the exact opt-in live-smoke commands. Mirrored into
   the docs site.
 
+### Added
+
+- **`scripts/canary_benchmarks.py` — the known-correct-answer canary, now run
+  across every registered adapter.** It feeds each benchmark its own canonical
+  solution and requires a pass: if a dataset's own reference answer cannot
+  score, nothing an agent writes will either, and every number that adapter ever
+  produced is fiction. This generalizes the one-off `TestKnownCorrectAnswerCanary`
+  written after the HumanEval-X fabricated zero into a check that covers the
+  whole roster. Guide: `docs/guides/benchmark-canary.md`.
+  - **The inverse is checked too.** A grader hardwired to return `True` would
+    sail through a positive-only canary with a perfect score, so every adapter
+    is also fed wrong, empty and prose-only answers and must reject all three.
+    A canary that cannot fail is not a canary.
+  - **Answers go in the shapes agents actually send** — dataset-native, fenced,
+    and fenced-wrapped-in-prose. The HumanEval-X zero hid for a release
+    precisely because the old tests only fed the first shape, the one an
+    instructed chat agent never produces. Adapters are constructed through
+    `_load_benchmark`, the same call `bench-matrix` makes, so the canary
+    exercises the configuration that actually runs.
+  - **Result of the first full sweep (`--limit 200`): 7 pass, 0 broken, 1 not
+    staged, 19 exempt.** `human-eval`, `humaneval-plus`, `humaneval-x`, `mbpp`,
+    `mbpp-plus`, `aimo` and `bigcodebench` grade their own canonical answers
+    correctly across the full dataset and reject wrong ones — those are the
+    adapters behind the published flagship scorecard. The 19 exempt adapters
+    (SWE-family, agentic benches) are **unverified, not healthy**.
+  - **`ENV-MISSING` and `NOT-STAGED` are reported, never skipped**, so an
+    unaudited adapter stays visible rather than being mistaken for a passing
+    one. A test enforces that every registered benchmark has either a recipe or
+    an explicit exemption, so a benchmark added later cannot be silently
+    unaudited while the canary still reports all-green.
+- **`KNOWN_UNPASSABLE` — disclosed dataset defects.** One entry:
+  `humaneval-plus` / `HumanEval/32`, whose final assertion is
+  `_poly(*candidate(*inp), inp)` — it splats the float `find_zero` returns and
+  dies of `TypeError` before comparing anything. Verified present verbatim in
+  the raw upstream rows (`evalplus/humanevalplus`), so it is not a staging
+  artifact. **It caps humaneval-plus at 163/164 = 99.4%**, and that cap now
+  travels with the number. Listing a task is a disclosure, not a dismissal;
+  entries require evidence, because "known bad" is exactly the label a real bug
+  would hide behind.
+
 ### Changed
 
 - **The published LiveCodeBench score is RETRACTED** (owner-approved
