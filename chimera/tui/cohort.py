@@ -336,7 +336,14 @@ class Cohort:
                 json.loads(hist_path.read_text(encoding="utf-8")) if hist_path.is_file() else []
             )
             diff = diff_path.read_text(encoding="utf-8") if diff_path.is_file() else ""
-            lanes.append({**entry, "history": history, "diff": diff})
+            transcript_path = cohort_dir / f"lane-{lane_id}.transcript.txt"
+            transcript = (
+                transcript_path.read_text(encoding="utf-8")
+                if transcript_path.is_file() else ""
+            )
+            lanes.append(
+                {**entry, "history": history, "diff": diff, "transcript": transcript},
+            )
         return {"manifest": manifest, "cohort_dir": str(cohort_dir), "lanes": lanes}
 
 

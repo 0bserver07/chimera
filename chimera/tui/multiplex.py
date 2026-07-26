@@ -212,6 +212,13 @@ class LanePane(Vertical):
             palette=self._palette,
         )
         self._live_region = self.query_one(LiveRegion)
+        # Resumed lane: replay its saved conversation so the pane shows where it
+        # left off instead of a blank log. A fresh lane's history is empty, so
+        # this writes nothing.
+        history = getattr(self._lane.driver, "history", None) or []
+        if history:
+            from chimera.tui.render import replay_history
+            replay_history(history, self.query_one(RichLog).write)
 
     # -- rendering ------------------------------------------------------
     def _header_text(self) -> Text:
@@ -2034,6 +2041,12 @@ def _load_saved_cohort(
         lane.telemetry.turns = int(tel.get("turns", 0) or 0)
         lane.telemetry.tokens_in = int(tel.get("tokens_in", 0) or 0)
         lane.telemetry.tokens_out = int(tel.get("tokens_out", 0) or 0)
+        # Reseed the visible transcript so a resumed lane shows its prior
+        # conversation instead of a blank pane (the driver's context is seeded
+        # separately via load_history above).
+        saved_transcript = spec.get("transcript") or ""
+        if saved_transcript:
+            lane.transcript_lines.extend(saved_transcript.splitlines())
         lanes.append(lane)
 
     try:
