@@ -124,14 +124,52 @@ python scripts/audit_model_pricing.py --include-resellers  # also compare resell
 For each hand prefix it finds the models.dev record under the same id and
 compares the input/output rate. It **reports only** — it never rewrites a price,
 because hand corrections always win over upstream (that is the whole point of the
-two-source design). It exits non-zero when any drift is found, so it is CI-able;
+two-source design). It exits non-zero when it finds anything, so it is CI-able;
 it is intentionally **not** wired into CI — run it by hand when refreshing prices.
 
-The default run is high-signal: it compares only against **first-party**
-(manufacturer / lab) figures, since a hand rate disagreeing with a reseller's
-markup is margin, not drift. Reseller-only ids are surfaced separately for
-eyeballing; `--include-resellers` compares those too. The offline default reads
-the committed snapshot and touches no network.
+### Authority is per model, not per provider
+
+models.dev lists a model under **every** provider that serves it, so "this
+provider is first-party" is not the same claim as "this provider is
+authoritative for *this model*". `alibaba-cn` manufactures Qwen but merely
+resells GLM; taking its GLM row as authoritative compares Zhipu's rate against
+Alibaba's markup and calls the difference drift.
+
+The auditor therefore resolves authority through `MODEL_VENDORS` — a
+(model family → vendor) map, longest-prefix matched, mirroring `PRICING`
+resolution. A family with no known vendor is reported as *not authoritatively
+comparable* rather than compared against whoever happens to list it.
+`--include-resellers` disables the gate entirely when you want the wider view.
+
+### Placeholders expire
+
+An override in `PRICING_OVERRIDES` silences a prefix. That is right for a
+**permanent** reason (a local model billed `$0`, a cross-endpoint billing
+nuance) and wrong for a **temporary** one — "placeholder until the vendor
+publishes" is a promise to revisit, and nothing was checking it.
+
+List temporary ones in `PRICING_PLACEHOLDERS` (a subset of the overrides). When
+upstream starts publishing a first-party rate for one, the auditor reports it as
+a **stale placeholder** and fails — *even if the rates agree*, because the
+finding is the expired reason, not the number. Resolve it by correcting the rate
+if it disagrees, then dropping the prefix from `PRICING_PLACEHOLDERS` (and from
+`PRICING_OVERRIDES`, unless a separate permanent reason still applies).
+
+This is not theoretical: `deepseek-v4-pro` sat at a `deepseek-reasoner`-derived
+placeholder ($0.55 / $2.19) for a release after DeepSeek published
+$0.435 / $0.87 — 152% high on output — because the override kept the audit
+quiet, and the drift was eventually found by hand rather than by the tool built
+to find it.
+
+### Two tables, one price
+
+`PRICING` is not the only source. Every `ModelConfig` in
+`chimera/providers/catalog.py` carries a `cost=`, and registering a catalog
+pushes it through `register_model_cost`, which **writes into `PRICING` at
+runtime**. A correction applied to only one table is not applied at all — the
+catalog may *add* rates the hand table has no opinion on (`bedrock/…`,
+`azure/…`), but it must never *move* one the hand table already resolves.
+`tests/providers/test_catalog_pricing_parity.py` enforces exactly that.
 
 ### The override convention
 

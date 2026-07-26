@@ -132,7 +132,17 @@ chimera code --models deepseek-v4-pro,glm-5
 
 ## Pricing notes
 
-The cost catalog ships placeholder pricing copied from `deepseek-reasoner` ($0.55 / $2.19 per Mtok) for every V4 variant. DeepSeek had not published a V4 list at the time of writing — refresh `chimera/providers/cost.py` once the official rate card lands.
+The cost catalog carries DeepSeek's published V4 rates, verified 2026-07-25 against
+the [pricing page](https://api-docs.deepseek.com/quick_start/pricing): **`deepseek-v4-flash`
+$0.14 / $0.28** and **`deepseek-v4-pro` $0.435 / $0.87** per Mtok (cache-miss input;
+DeepSeek's cache-hit input rate is ~50x lower and is not modelled, so cache-heavy
+workloads are over-billed here, never under). `deepseek-chat` and `deepseek-reasoner`
+are deprecated aliases for v4-flash's non-thinking and thinking modes and share its rate.
+
+> These were previously placeholders copied from `deepseek-reasoner` ($0.55 / $2.19).
+> The placeholder outlived DeepSeek's rate-card publication because the entries were
+> marked as deliberate overrides, which silenced the pricing auditor — see
+> `PRICING_PLACEHOLDERS` in `chimera/providers/cost.py`.
 
 ## Troubleshooting
 

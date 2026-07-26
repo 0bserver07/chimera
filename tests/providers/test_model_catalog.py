@@ -102,12 +102,24 @@ class TestGeneratedModule:
 # ---------------------------------------------------------------------------
 class TestPricingResolution:
     def test_hand_dict_override_takes_precedence(self) -> None:
-        # deepseek-chat exists in BOTH the hand table ($0.27/$1.10) and the
-        # generated catalog (first-party deepseek at $0.14/$0.28). The hand
-        # value must win — this is the z.ai/ollama-nuance guarantee.
-        assert MODEL_CATALOG["deepseek-chat"]["input"] == 0.14  # catalog value...
-        assert PRICING["deepseek-chat"] == (0.27, 1.10)  # ...hand value differs
-        assert get_model_pricing("deepseek-chat") == (0.27, 1.10)
+        # glm-5.2 exists in BOTH the hand table ($2.00/$8.00, Zhipu's own rate)
+        # and the generated catalog — but the catalog row comes from alibaba-cn,
+        # which RESELLS GLM at its own markup ($1.10/$3.851). The hand value
+        # must win: this is the whole reason hand entries exist, and copying the
+        # catalog figure in would replace the vendor's rate with a reseller's.
+        assert MODEL_CATALOG["glm-5.2"]["provider"] == "alibaba-cn"
+        assert MODEL_CATALOG["glm-5.2"]["input"] == 1.10  # reseller value...
+        assert PRICING["glm-5.2"] == (2.0, 8.0)  # ...hand value differs
+        assert get_model_pricing("glm-5.2") == (2.0, 8.0)
+
+    def test_hand_and_catalog_agree_where_both_are_first_party(self) -> None:
+        # The complement: where the catalog row IS the vendor's own, the two
+        # sources must not disagree. deepseek-chat was $0.27/$1.10 by hand
+        # against DeepSeek's published $0.14/$0.28 until 2026-07-25.
+        assert MODEL_CATALOG["deepseek-chat"]["provider"] == "deepseek"
+        assert MODEL_CATALOG["deepseek-chat"]["input"] == 0.14
+        assert PRICING["deepseek-chat"] == (0.14, 0.28)
+        assert get_model_pricing("deepseek-chat") == (0.14, 0.28)
 
     def test_hand_dict_models_unchanged(self) -> None:
         # A representative hand-table model resolves exactly as before.

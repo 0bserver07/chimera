@@ -45,9 +45,20 @@ Usage::
     python scripts/audit_model_pricing.py --include-resellers  # also compare reseller ids
     python scripts/audit_model_pricing.py --url URL       # override the source (implies --live)
 
-Exit code is ``1`` when any drift is found (so the audit is CI-able) and ``0``
-when the hand table is clean. It is intentionally **not** wired into CI: run it
-by hand when refreshing prices, or adopt it as a scheduled guard later.
+Exit code is ``1`` when there is anything to resolve — a drifted rate **or an
+expired placeholder** — and ``0`` when the hand table is clean. It is
+intentionally **not** wired into CI: run it by hand when refreshing prices, or
+adopt it as a scheduled guard later.
+
+Two design points that are easy to get wrong, both learned the hard way:
+
+* **Authority is per model, not per provider.** models.dev lists a model under
+  every provider that serves it, so a first-party provider of *something* is not
+  an authority on *this* model — ``alibaba-cn`` makes Qwen and resells GLM. See
+  :data:`MODEL_VENDORS`.
+* **A placeholder override must expire.** An override silences a prefix forever;
+  that is correct for a permanent reason and wrong for "until the vendor
+  publishes". See ``PRICING_PLACEHOLDERS`` in ``chimera.providers.cost``.
 
 The default (offline) mode reconciles against the committed
 ``chimera/providers/model_catalog.py`` snapshot and touches no network, so it is
@@ -117,6 +128,11 @@ class AuditReport:
     Attributes:
         drifts: Prefixes whose audited hand rate disagrees with a first-party
             upstream figure.
+        stale_placeholders: Prefixes marked as *temporary* placeholders
+            (``PRICING_PLACEHOLDERS``) for which upstream has since published a
+            first-party rate. The override is silencing a comparison that can
+            now be made, so the reason has expired — whether or not the rates
+            happen to agree.
         skipped_overrides: Prefixes skipped because they are marked as
             deliberate overrides (``PRICING_OVERRIDES``).
         reseller_only: Prefixes whose only exact upstream id is reseller-sourced
@@ -127,6 +143,7 @@ class AuditReport:
     """
 
     drifts: list[Drift] = field(default_factory=list)
+    stale_placeholders: list[Drift] = field(default_factory=list)
     skipped_overrides: list[str] = field(default_factory=list)
     reseller_only: list[str] = field(default_factory=list)
     no_upstream: list[str] = field(default_factory=list)
@@ -136,6 +153,15 @@ class AuditReport:
     def has_drift(self) -> bool:
         """True when at least one audited prefix drifted from upstream."""
         return bool(self.drifts)
+
+    @property
+    def has_findings(self) -> bool:
+        """True when anything needs resolving — drift or an expired placeholder.
+
+        A stale placeholder counts: it is the failure mode that hid a real
+        26%/152% DeepSeek overcharge behind a silenced comparison.
+        """
+        return bool(self.drifts) or bool(self.stale_placeholders)
 
 
 def _round(value: float) -> float:
@@ -154,12 +180,148 @@ def _as_price(value: Any) -> float | None:
     return float(value)
 
 
+# models.dev lists a model under *every* provider that serves it, so "first
+# party" cannot be a property of the provider alone. ``alibaba-cn`` is the
+# vendor of Qwen but merely a reseller of GLM; ``zai`` is the vendor of GLM and
+# serves nothing else here. Authority is therefore a (model family, provider)
+# relationship, and comparing a hand rate against whichever provider happens to
+# publish the id will hand back a resale price as if it were the vendor's.
+#
+# This is not hypothetical. ``alibaba-cn`` lists ``glm-5.2`` at $1.10 / $3.851
+# while the hand table carries Zhipu's $2.00 / $8.00, and with a provider-global
+# authority test the auditor reported that as drift — instructing us to write
+# Alibaba's markup into the table as a "correction" to Zhipu's own rate.
+#
+# Longest matching prefix wins, mirroring ``PRICING`` resolution. A family that
+# is absent here is deliberately treated as *not* authoritatively comparable
+# (bucketed ``reseller_only``) rather than falling back to the provider-global
+# test, because that fallback is precisely the unsound comparison.
+MODEL_VENDORS: dict[str, frozenset[str]] = {
+    "claude": frozenset({"anthropic"}),
+    "gpt-oss": frozenset({"openai"}),
+    "gpt": frozenset({"openai"}),
+    "o1": frozenset({"openai"}),
+    "gemini": frozenset({"google"}),
+    "gemma": frozenset({"google"}),
+    "glm": frozenset({"zai", "zhipuai"}),
+    "deepseek": frozenset({"deepseek"}),
+    "grok": frozenset({"xai"}),
+    "kimi": frozenset({"moonshotai", "moonshotai-cn"}),
+    "qwen": frozenset({"alibaba", "alibaba-cn"}),
+    "mistral": frozenset({"mistral"}),
+}
+
+
+def vendors_for(model: str) -> frozenset[str] | None:
+    """The providers that are first-party *for this model*, or ``None``.
+
+    Args:
+        model: A hand-table prefix or full model id.
+
+    Returns:
+        The authoritative provider ids for the model's family under the longest
+        matching :data:`MODEL_VENDORS` prefix, or ``None`` when the family is
+        unmapped (no provider can be treated as authoritative for it).
+    """
+    best: str | None = None
+    for prefix in MODEL_VENDORS:
+        if model.startswith(prefix) and (best is None or len(prefix) > len(best)):
+            best = prefix
+    return MODEL_VENDORS[best] if best is not None else None
+
+
+def _is_authoritative(
+    prefix: str, provider: str | None, first_party: Collection[str] | None
+) -> bool:
+    """Whether *provider*'s rate for *prefix* may be treated as the vendor's.
+
+    Args:
+        prefix: The hand-table prefix being audited.
+        provider: The upstream record's provider id, if any.
+        first_party: ``None`` disables the gate entirely (``--include-resellers``),
+            in which case every provider is accepted.
+
+    Returns:
+        ``True`` when the comparison is sound. With the gate enabled this
+        requires *provider* to be a vendor of the model's family
+        (:func:`vendors_for`), not merely a first-party vendor of something.
+    """
+    if first_party is None:
+        return True
+    if provider is None:
+        return False
+    vendors = vendors_for(prefix)
+    if vendors is None:
+        return False
+    return provider in vendors
+
+
+def _stale_placeholder(
+    prefix: str,
+    pricing: Mapping[str, tuple[float, float]],
+    upstream: Mapping[str, Mapping[str, Any]],
+    placeholders: Collection[str],
+    first_party: Collection[str] | None,
+) -> Drift | None:
+    """Return a :class:`Drift` when a temporary placeholder has expired.
+
+    A placeholder override is a promise to revisit: the hand rate is a stand-in
+    "until the vendor publishes". This detects that the vendor *has* published,
+    which retires the reason regardless of whether the numbers agree — an
+    override that silences a comparison now available is the exact mechanism
+    that hid a 26%/152% DeepSeek overcharge behind a green audit.
+
+    Args:
+        prefix: The hand-table prefix, already known to be in the override set.
+        pricing: The hand table, for reporting the current stand-in rate.
+        upstream: Model id -> record.
+        placeholders: Prefixes whose override reason is temporary.
+        first_party: Authoritative provider ids, or ``None`` to accept any.
+
+    Returns:
+        A :class:`Drift` describing hand-vs-upstream, or ``None`` when the
+        prefix is not a placeholder or upstream still does not publish it.
+    """
+    if prefix not in placeholders:
+        return None
+    record = upstream.get(prefix)
+    if record is None:
+        return None
+    up_in = _as_price(record.get("input"))
+    if up_in is None:
+        return None
+    provider_raw = record.get("provider")
+    provider = provider_raw if isinstance(provider_raw, str) else None
+    if not _is_authoritative(prefix, provider, first_party):
+        # Only a reseller lists it — not authoritative enough to retire a
+        # placeholder that is waiting on the vendor's own rate sheet.
+        return None
+    up_out = _as_price(record.get("output"))
+    hand_in, hand_out = pricing[prefix]
+    fields = tuple(
+        name
+        for name, hand, up in (
+            ("input", hand_in, up_in),
+            ("output", hand_out, up_out),
+        )
+        if up is not None and _round(hand) != _round(up)
+    )
+    return Drift(
+        prefix=prefix,
+        hand=(hand_in, hand_out),
+        upstream=(up_in, up_out),
+        provider=provider,
+        fields=fields,
+    )
+
+
 def audit_pricing(
     pricing: Mapping[str, tuple[float, float]],
     overrides: Collection[str],
     upstream: Mapping[str, Mapping[str, Any]],
     *,
     first_party: Collection[str] | None = None,
+    placeholders: Collection[str] | None = None,
 ) -> AuditReport:
     """Reconcile a hand pricing table against an upstream catalog.
 
@@ -183,15 +345,26 @@ def audit_pricing(
             Both the committed ``MODEL_CATALOG`` and a freshly built catalog fit.
         first_party: Provider ids treated as authoritative. When ``None``, every
             provider is compared (reseller markups included).
+        placeholders: Prefixes whose override reason is *temporary*. Pass
+            :data:`chimera.providers.cost.PRICING_PLACEHOLDERS`. Any of these
+            that upstream now publishes first-party is reported as a stale
+            placeholder instead of being silently skipped.
 
     Returns:
-        An :class:`AuditReport` partitioning every prefix into drifted,
-        override-skipped, reseller-only, or upstream-unmatched.
+        An :class:`AuditReport` partitioning every prefix into drifted, stale
+        placeholder, override-skipped, reseller-only, or upstream-unmatched.
     """
+    placeholder_set = frozenset(placeholders or ())
     report = AuditReport()
     for prefix in sorted(pricing):
         if prefix in overrides:
-            report.skipped_overrides.append(prefix)
+            stale = _stale_placeholder(
+                prefix, pricing, upstream, placeholder_set, first_party
+            )
+            if stale is not None:
+                report.stale_placeholders.append(stale)
+            else:
+                report.skipped_overrides.append(prefix)
             continue
         record = upstream.get(prefix)
         if record is None:
@@ -205,7 +378,7 @@ def audit_pricing(
             continue
         provider_raw = record.get("provider")
         provider = provider_raw if isinstance(provider_raw, str) else None
-        if first_party is not None and (provider is None or provider not in first_party):
+        if not _is_authoritative(prefix, provider, first_party):
             report.reseller_only.append(prefix)
             continue
         report.checked += 1
@@ -270,9 +443,34 @@ def format_text(report: AuditReport, *, source: str) -> str:
             "if the divergence is deliberate add the prefix to PRICING_OVERRIDES "
             "with a reason."
         )
-    else:
+    elif not report.stale_placeholders:
         lines.append("")
         lines.append("OK: every audited hand price matches first-party upstream.")
+    if report.stale_placeholders:
+        lines.append("")
+        lines.append(
+            f"STALE PLACEHOLDER — {len(report.stale_placeholders)} override(s) are "
+            "waiting on a rate\nthe vendor has since published:"
+        )
+        for d in report.stale_placeholders:
+            prov = f" [{d.provider}]" if d.provider else ""
+            verdict = (
+                "rates agree — just retire the marker"
+                if not d.fields
+                else f"AND the rate is wrong ({'+'.join(d.fields)})"
+            )
+            lines.append(
+                f"  {d.prefix}{prov}  {verdict}\n"
+                f"      hand     in {_price_str(d.hand[0])}  out {_price_str(d.hand[1])}\n"
+                f"      upstream in {_price_str(d.upstream[0])}  out {_price_str(d.upstream[1])}"
+            )
+        lines.append("")
+        lines.append(
+            "A placeholder silences the audit. Once upstream publishes, the reason\n"
+            "has expired: correct the hand rate if it disagrees, then drop the prefix\n"
+            "from PRICING_PLACEHOLDERS (and from PRICING_OVERRIDES unless a separate,\n"
+            "permanent reason applies) so the entry is compared from now on."
+        )
     if report.reseller_only:
         lines.append("")
         lines.append(
@@ -302,6 +500,7 @@ def format_json(report: AuditReport, *, source: str) -> str:
         "summary": {
             "checked": report.checked,
             "drift": len(report.drifts),
+            "stale_placeholders": len(report.stale_placeholders),
             "skipped_overrides": len(report.skipped_overrides),
             "reseller_only": len(report.reseller_only),
             "no_upstream": len(report.no_upstream),
@@ -315,6 +514,16 @@ def format_json(report: AuditReport, *, source: str) -> str:
                 "provider": d.provider,
             }
             for d in report.drifts
+        ],
+        "stale_placeholders": [
+            {
+                "prefix": d.prefix,
+                "fields": list(d.fields),
+                "hand": {"input": d.hand[0], "output": d.hand[1]},
+                "upstream": {"input": d.upstream[0], "output": d.upstream[1]},
+                "provider": d.provider,
+            }
+            for d in report.stale_placeholders
         ],
         "reseller_only": list(report.reseller_only),
         "no_upstream": list(report.no_upstream),
@@ -401,7 +610,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--json", action="store_true", help="emit a JSON report")
     args = parser.parse_args(argv)
 
-    from chimera.providers.cost import PRICING, PRICING_OVERRIDES
+    from chimera.providers.cost import (
+        PRICING,
+        PRICING_OVERRIDES,
+        PRICING_PLACEHOLDERS,
+    )
 
     if args.live or args.url:
         source = args.url or MODELS_DEV_URL
@@ -415,14 +628,20 @@ def main(argv: list[str] | None = None) -> int:
         upstream = load_offline_upstream()
 
     first_party = None if args.include_resellers else _first_party_set()
-    report = audit_pricing(PRICING, PRICING_OVERRIDES, upstream, first_party=first_party)
+    report = audit_pricing(
+        PRICING,
+        PRICING_OVERRIDES,
+        upstream,
+        first_party=first_party,
+        placeholders=PRICING_PLACEHOLDERS,
+    )
 
     if args.json:
         print(format_json(report, source=source))
     else:
         print(format_text(report, source=source))
 
-    return 1 if report.has_drift else 0
+    return 1 if report.has_findings else 0
 
 
 if __name__ == "__main__":

@@ -68,27 +68,38 @@ _BUILTIN_ENTRIES: list[ModelConfig] = [
     # Groq
     ModelConfig("groq/llama-3.3-70b", "compatible", base_url="https://api.groq.com/openai/v1",
                 api_key_env="GROQ_API_KEY", context_window=128_000, cost=(0.59, 0.79)),
-    # DeepSeek
+    # DeepSeek. Every ``cost=`` below MUST equal the matching prefix in
+    # ``chimera.providers.cost.PRICING`` — :meth:`ProviderCatalog.register`
+    # feeds these through ``register_model_cost``, so a divergence here silently
+    # OVERWRITES the hand table at runtime and bills at this number instead
+    # (that is how the stale $0.55/$2.19 V4 rate survived a correction to
+    # ``cost.py`` and kept billing). Rates verified
+    # 2026-07-25 against https://api-docs.deepseek.com/quick_start/pricing;
+    # ``tests/providers/test_catalog_pricing_parity.py`` pins the agreement.
+    #
+    # ``deepseek-chat`` / ``deepseek-reasoner`` are deprecated aliases for the
+    # non-thinking / thinking modes of ``deepseek-v4-flash`` and share its rate.
     ModelConfig("deepseek-chat", "compatible", base_url="https://api.deepseek.com/v1",
-                api_key_env="DEEPSEEK_API_KEY", context_window=64_000, cost=(0.27, 1.10)),
+                api_key_env="DEEPSEEK_API_KEY", context_window=64_000, cost=(0.14, 0.28)),
     ModelConfig("deepseek-reasoner", "compatible", base_url="https://api.deepseek.com/v1",
-                api_key_env="DEEPSEEK_API_KEY", context_window=64_000, cost=(0.55, 2.19)),
+                api_key_env="DEEPSEEK_API_KEY", context_window=64_000, cost=(0.14, 0.28)),
     # DeepSeek-V4 family. Bare ids hit DeepSeek's hosted OpenAI-compatible
     # API; the ``:cloud``-tagged variant is served via the local Ollama
-    # daemon's cloud passthrough (``ollama run deepseek-v4-pro:cloud``).
-    # Pricing is a placeholder copying the deepseek-reasoner numbers
-    # (input $0.55 / output $2.19 per Mtok); refresh once DeepSeek
-    # publishes the V4 list. Context window mirrors DeepSeek-V3's
-    # documented 128k window.
+    # daemon's cloud passthrough (``ollama run deepseek-v4-pro:cloud``), whose
+    # true billing is Ollama's — approximated at the first-party rate. Bare
+    # ``deepseek-v4`` is a catch-all pinned to the dearer Pro tier so an
+    # unrecognized SKU over-bills rather than under-bills.
+    ModelConfig("deepseek-v4-flash", "compatible", base_url="https://api.deepseek.com/v1",
+                api_key_env="DEEPSEEK_API_KEY", context_window=128_000, cost=(0.14, 0.28)),
     ModelConfig("deepseek-v4", "compatible", base_url="https://api.deepseek.com/v1",
-                api_key_env="DEEPSEEK_API_KEY", context_window=128_000, cost=(0.55, 2.19)),
+                api_key_env="DEEPSEEK_API_KEY", context_window=128_000, cost=(0.435, 0.87)),
     ModelConfig("deepseek-v4-pro", "compatible", base_url="https://api.deepseek.com/v1",
-                api_key_env="DEEPSEEK_API_KEY", context_window=128_000, cost=(0.55, 2.19)),
+                api_key_env="DEEPSEEK_API_KEY", context_window=128_000, cost=(0.435, 0.87)),
     ModelConfig("deepseek-v4-pro:cloud", "ollama", base_url_env="OLLAMA_HOST",
-                context_window=262_144, cost=(0.55, 2.19)),
+                context_window=262_144, cost=(0.435, 0.87)),
     # DeepSeek-V3.1 terminus + V3 coder. Both speak DeepSeek's hosted
-    # OpenAI-compatible API. Pricing inherits from deepseek-chat ($0.27 /
-    # $1.10 per Mtok); refresh once DeepSeek publishes per-SKU rates.
+    # OpenAI-compatible API, and keep V3.1's own published $0.27 / $1.10 —
+    # deliberately NOT re-based onto the V4 rates above.
     # Source: https://api-docs.deepseek.com/quick_start/pricing.
     ModelConfig("deepseek-v3.1-terminus", "compatible",
                 base_url="https://api.deepseek.com/v1",

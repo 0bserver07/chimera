@@ -96,8 +96,19 @@ class TestRegisterModelCost:
         assert abs(cost - 2.0) < 1e-9
 
     def test_deepseek_pricing_exists(self):
+        # $0.14/Mtok in — DeepSeek's published v4-flash rate, which deprecated
+        # ``deepseek-chat`` aliases into. Was $0.27 (stale) until 2026-07-25.
         cost = calculate_cost("deepseek-chat", {"input_tokens": 1_000_000, "output_tokens": 0})
-        assert abs(cost - 0.27) < 1e-9
+        assert abs(cost - 0.14) < 1e-9
+
+    def test_deepseek_v4_variants_resolve_to_their_own_tier(self):
+        # Longest-prefix resolution must keep the two V4 tiers apart: flash is
+        # 3x cheaper than pro, and a bare ``deepseek-v4`` catch-all bills at the
+        # dearer tier so an unknown SKU over-bills rather than under-bills.
+        mtok = {"input_tokens": 1_000_000, "output_tokens": 1_000_000}
+        assert abs(calculate_cost("deepseek-v4-flash", mtok) - (0.14 + 0.28)) < 1e-9
+        assert abs(calculate_cost("deepseek-v4-pro", mtok) - (0.435 + 0.87)) < 1e-9
+        assert abs(calculate_cost("deepseek-v4", mtok) - (0.435 + 0.87)) < 1e-9
 
 
 class TestRefreshedCatalog:

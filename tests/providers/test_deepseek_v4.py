@@ -140,7 +140,7 @@ def test_catalog_deepseek_v4_targets_hosted_api() -> None:
     assert cfg.base_url == "https://api.deepseek.com/v1"
     assert cfg.api_key_env == "DEEPSEEK_API_KEY"
     assert cfg.context_window == 128_000
-    assert cfg.cost == (0.55, 2.19)
+    assert cfg.cost == (0.435, 0.87)
 
 
 def test_catalog_deepseek_v4_pro_cloud_targets_ollama(
@@ -169,22 +169,29 @@ def test_pricing_table_contains_deepseek_v4() -> None:
     assert "deepseek-v4-pro:cloud" in PRICING
 
 
-def test_calculate_cost_deepseek_v4_uses_placeholder_pricing() -> None:
-    """Until DeepSeek publishes V4 rates we bill at the reasoner level."""
+def test_calculate_cost_deepseek_v4_uses_the_published_pro_rate() -> None:
+    """Bare ``deepseek-v4`` bills at the dearer of the two published V4 tiers.
+
+    It is not a real SKU — it catches any future V4 id that is neither -flash
+    nor -pro, and is pinned high deliberately so an unknown SKU over-bills a
+    budget rather than under-billing it. Was a $0.55/$2.19 placeholder copied
+    from deepseek-reasoner until DeepSeek published the V4 sheet.
+    """
     cost = calculate_cost(
         "deepseek-v4",
         {"input_tokens": 1_000_000, "output_tokens": 1_000_000},
     )
-    # 0.55 + 2.19 == 2.74 USD per 1M+1M.
-    assert cost == pytest.approx(2.74)
+    # 0.435 + 0.87 == 1.305 USD per 1M+1M.
+    assert cost == pytest.approx(1.305)
 
 
 def test_calculate_cost_deepseek_v4_pro_longest_prefix() -> None:
     """``deepseek-v4-pro`` matches its own entry, not ``deepseek-v4``.
 
-    Both share the placeholder ``(0.55, 2.19)`` for now, but the test
-    pins the longest-prefix behaviour so a future split (e.g. pro at a
-    higher tier) doesn't silently fall back to the cheaper bucket.
+    Both carry the published Pro rate, but the test pins the longest-prefix
+    behaviour so a future split doesn't silently fall back to another bucket —
+    notably ``deepseek-v4-flash``, which is 3x cheaper and must never be
+    reached by a ``deepseek-v4-pro`` id.
     """
     pro_input = PRICING["deepseek-v4-pro"][0]
     v4_input = PRICING["deepseek-v4"][0]
@@ -198,8 +205,9 @@ def test_calculate_cost_deepseek_v4_pro_longest_prefix() -> None:
     )
     assert cost_pro == pytest.approx(pro_input)
     assert cost_v4 == pytest.approx(v4_input)
-    # Reasoner never bills the V4 rates and vice versa.
-    assert PRICING["deepseek-reasoner"] == (0.55, 2.19)
+    # Reasoner is an alias of the cheaper v4-flash tier, never the Pro rate.
+    assert PRICING["deepseek-reasoner"] == (0.14, 0.28)
+    assert PRICING["deepseek-v4-flash"] == (0.14, 0.28)
 
 
 def test_calculate_cost_deepseek_v4_cloud_resolves() -> None:
@@ -208,7 +216,9 @@ def test_calculate_cost_deepseek_v4_cloud_resolves() -> None:
         "deepseek-v4-pro:cloud",
         {"input_tokens": 1_000_000, "output_tokens": 1_000_000},
     )
-    assert cost == pytest.approx(2.74)
+    # Approximated at the first-party Pro rate; true billing is Ollama's, which
+    # is why the prefix stays a deliberate PRICING_OVERRIDES entry.
+    assert cost == pytest.approx(1.305)
 
 
 # ---------------------------------------------------------------------------

@@ -60,26 +60,37 @@ PRICING: dict[str, tuple[float, float]] = {
     "glm-4.6": (0.6, 2.2),
     "glm-4-plus": (1.0, 4.0),
     "glm-4-flash": (0.04, 0.04),
-    # DeepSeek
-    "deepseek-chat": (0.27, 1.10),
-    "deepseek-reasoner": (0.55, 2.19),
-    # DeepSeek-V3.1 terminus + V3 coder. Both billed at deepseek-chat
-    # placeholder rates ($0.27 / $1.10) until V3.1/coder per-SKU rates
-    # are published. Longer prefixes ensure these match before
-    # ``deepseek-chat`` / ``deepseek-reasoner``. Source: DeepSeek pricing
-    # page — refresh on next release.
+    # DeepSeek — first-party rates verified 2026-07-25 against
+    # https://api-docs.deepseek.com/quick_start/pricing, corroborated by the
+    # generated catalog (first-party ``deepseek-chat``/``deepseek-reasoner``
+    # rows and the ``deepseek-ai/deepseek-v4-*`` mirrors, which carry the
+    # identical figures). These are cache-MISS input rates: DeepSeek publishes
+    # a ~50x cheaper cache-hit input rate that this two-number table cannot
+    # express, so cache-heavy workloads are over-billed here, never under.
+    #
+    # ``deepseek-chat`` and ``deepseek-reasoner`` are deprecated aliases for the
+    # non-thinking and thinking modes of ``deepseek-v4-flash`` (deprecation
+    # 2026-07-24 15:59 UTC), so all three share one rate.
+    "deepseek-chat": (0.14, 0.28),
+    "deepseek-reasoner": (0.14, 0.28),
+    "deepseek-v4-flash": (0.14, 0.28),
+    # V3-era SKUs, deliberately NOT re-based onto the V4 rates above:
+    # $0.27 / $1.10 was V3.1's own published rate and these ids bill as their
+    # own generation. Longer prefixes ensure they match before
+    # ``deepseek-chat`` / ``deepseek-reasoner``. No upstream row exists for
+    # either, so they stay in PRICING_OVERRIDES.
     "deepseek-v3.1-terminus": (0.27, 1.10),
     "deepseek-coder-v3": (0.27, 1.10),
-    # DeepSeek-V4 family — pricing TODO. DeepSeek had not published a V4
-    # rate sheet at integration time, so we copy the deepseek-reasoner
-    # numbers ($0.55 / $2.19 per Mtok) as a placeholder. Longer prefixes
-    # (``deepseek-v4-pro``, ``deepseek-v4-pro:cloud``) are matched first by
-    # ``calculate_cost`` so a future split is straightforward. Source:
-    # DeepSeek API pricing page (https://api-docs.deepseek.com/quick_start/pricing)
-    # — refresh once V4 SKUs ship.
-    "deepseek-v4-pro:cloud": (0.55, 2.19),
-    "deepseek-v4-pro": (0.55, 2.19),
-    "deepseek-v4": (0.55, 2.19),
+    # V4 Pro. ``:cloud`` is served through the Ollama-Cloud bridge, where true
+    # billing is Ollama's and not DeepSeek's — approximated at the first-party
+    # rate, which is the (now accurate) reason it stays in PRICING_OVERRIDES.
+    "deepseek-v4-pro:cloud": (0.435, 0.87),
+    "deepseek-v4-pro": (0.435, 0.87),
+    # Bare ``deepseek-v4`` is not a real SKU — it is the catch-all for a future
+    # V4 id that is neither ``-flash`` nor ``-pro`` (both matched above by
+    # longer prefix). Deliberately pinned to the DEARER of the two known tiers
+    # so an unrecognized SKU over-bills a budget rather than under-billing it.
+    "deepseek-v4": (0.435, 0.87),
     # xAI / Grok — public pricing (verify against console.x.ai before billing).
     # Longer prefixes (grok-3-mini) are matched first by ``calculate_cost``.
     "grok-3-mini": (0.30, 0.50),
@@ -111,7 +122,9 @@ PRICING: dict[str, tuple[float, float]] = {
 # is a conscious override, for one of three reasons documented inline above:
 #
 #   * a **placeholder** pending a vendor's public rate sheet (the GLM family,
-#     the DeepSeek V3.1/coder/V4 SKUs, the Kimi preview line);
+#     the DeepSeek V3-era SKUs, the Kimi preview line) — these are additionally
+#     listed in :data:`PRICING_PLACEHOLDERS` so the auditor can tell a
+#     *temporary* reason from a permanent one;
 #   * a **cross-endpoint billing nuance** upstream can't express (a model whose
 #     true billing depends on which endpoint or local bridge served it);
 #   * a **local / open-weight** family billed at ``$0`` because the serving
@@ -124,16 +137,53 @@ PRICING: dict[str, tuple[float, float]] = {
 # :func:`get_model_pricing` always prefers the hand table regardless; hand
 # corrections always win. Removing a prefix here re-arms the audit for it.
 PRICING_OVERRIDES: frozenset[str] = frozenset({
-    # GLM — placeholders + z.ai-vs-Ollama-bridge billing nuance.
-    "glm-5.2", "glm-5.1", "glm-5", "glm-4.6", "glm-4-plus", "glm-4-flash",
-    # DeepSeek V3.1 / coder / V4 — explicit placeholders pending per-SKU rates.
+    # GLM — placeholders + z.ai-vs-Ollama-bridge billing nuance. ``glm-4.6`` is
+    # deliberately absent: z.ai now publishes it first-party at exactly the hand
+    # rate, so the placeholder expired and the entry is armed for audit.
+    "glm-5.2", "glm-5.1", "glm-5", "glm-4-plus", "glm-4-flash",
+    # DeepSeek V3-era SKUs — no upstream row publishes them, and the rates are
+    # V3.1's own generation rate rather than a stand-in for a newer SKU.
     "deepseek-v3.1-terminus", "deepseek-coder-v3",
-    "deepseek-v4-pro:cloud", "deepseek-v4-pro", "deepseek-v4",
+    # ``:cloud`` bills through the Ollama-Cloud bridge, not DeepSeek; bare
+    # ``deepseek-v4`` is a deliberate over-billing catch-all for unknown SKUs.
+    # ``deepseek-v4-pro`` and ``deepseek-v4-flash`` are deliberately NOT here —
+    # both now carry verified first-party rates and must stay armed for audit.
+    "deepseek-v4-pro:cloud", "deepseek-v4",
     # Kimi (Moonshot) — $0.6/$2.5 placeholder pending per-SKU rates.
-    "kimi-k2-0905-preview", "kimi-k2.5",
+    # ``kimi-k2-0905-preview`` is deliberately absent: Moonshot now publishes it
+    # first-party at exactly the hand rate, so it is armed for audit.
+    "kimi-k2.5",
     # Local / open-weight — billed $0 (no price field on the serving daemon).
     "qwen3-coder-30b", "qwen3-coder", "qwen3-32b",
     "gpt-oss-120b", "gpt-oss-20b", "mistral-codestral-2511", "gemma3-27b-instruct",
+})
+
+# The subset of :data:`PRICING_OVERRIDES` whose reason is **temporary** — a
+# stand-in rate held only until the vendor publishes a real one. The distinction
+# matters because an override silences the auditor: a *permanent* override (a
+# local model billed ``$0``, a cross-endpoint billing nuance) should stay silent
+# forever, but a placeholder must stop being silent the moment upstream
+# publishes. ``scripts/audit_model_pricing.py`` reports any prefix listed here
+# that has since gained a first-party upstream record as a **stale placeholder**
+# and exits non-zero, so the marker cannot quietly become permanent.
+#
+# This exists because it already failed once: ``deepseek-v4-pro`` was pinned to
+# a copy of the ``deepseek-reasoner`` rate ("DeepSeek had not published a V4
+# rate sheet at integration time") and listed as an override. DeepSeek then
+# published $0.435 / $0.87 — but the override kept the auditor quiet, so the
+# table went on billing $0.55 / $2.19 (26% high on input, 152% high on output)
+# through a release, and the drift was found by hand rather than by the tool
+# built to find exactly this.
+PRICING_PLACEHOLDERS: frozenset[str] = frozenset({
+    # GLM — pending Zhipu's own rate sheet. Only resellers list the 5.x line
+    # today (``alibaba-cn`` at $1.10/$3.851 for glm-5.2), which is a markup on
+    # someone else's model and must never be copied in as a "correction".
+    "glm-5.2", "glm-5.1", "glm-5", "glm-4-plus", "glm-4-flash",
+    # DeepSeek V3-era — no first-party row publishes these ids today.
+    "deepseek-v3.1-terminus", "deepseek-coder-v3",
+    # Kimi (Moonshot) — k2.5 is reseller-listed only, still pending Moonshot's
+    # own per-SKU rate.
+    "kimi-k2.5",
 })
 
 _pricing_lock = threading.Lock()

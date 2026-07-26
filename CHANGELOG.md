@@ -47,6 +47,53 @@ commit receipts.
 
 ### Fixed
 
+- **DeepSeek was billed at up to 3.9x the published rate, and a "correction"
+  to the pricing table would not have fixed it.** Three compounding defects,
+  all now closed:
+  1. **The hand rates were stale.** `deepseek-chat` billed $0.27/$1.10 and
+     `deepseek-reasoner` $0.55/$2.19 against DeepSeek's published $0.14/$0.28 —
+     both are deprecated aliases for the non-thinking / thinking modes of
+     `deepseek-v4-flash` and share its rate. `deepseek-v4-pro` billed
+     $0.55/$2.19 against the published $0.435/$0.87 (26% high on input, **152%
+     high on output**), and `deepseek-v4-flash` was missing entirely, so it fell
+     through to the bare `deepseek-v4` catch-all and billed 3.9x its real output
+     rate. Verified against DeepSeek's pricing page and corroborated by the
+     committed first-party catalog rows. **No published benchmark figure used
+     DeepSeek**, so no result is affected — this is forward-looking.
+  2. **A second pricing table silently overrode the first.** Every
+     `ModelConfig` in `chimera/providers/catalog.py` carries its own `cost=`,
+     and `ProviderCatalog.register` pushes it through `register_model_cost`,
+     which *writes into* `PRICING` at runtime. Correcting `cost.py` alone left
+     `catalog.py` reinstating the stale number, so `calculate_cost` returned the
+     right rate before a catalog existed and the wrong one after — in the same
+     process. `tests/providers/test_catalog_pricing_parity.py` now pins that the
+     catalog may *add* rates the hand table has no opinion on (`bedrock/…`,
+     `azure/…`) but may never *move* one it already resolves.
+  3. **The auditor built to catch exactly this was structurally unable to.**
+     Two independent holes: an override marked "placeholder pending the vendor's
+     rate sheet" stayed silent forever once the vendor published, and
+     `first_party` was a flat provider set, so authority was not model-scoped.
+- **The pricing auditor treated a reseller's markup as the vendor's rate.**
+  models.dev lists a model under every provider that serves it, so
+  "provider is first-party" is not "provider is authoritative for this model":
+  `alibaba-cn` makes Qwen but merely *resells* GLM. Against a provider-global
+  test the auditor reported `glm-5.2` as drift and instructed the reader to
+  replace Zhipu's $2.00/$8.00 with Alibaba's $1.10/$3.851 — a confidently wrong
+  correction to our headline model. Authority is now the (model family,
+  provider) relationship `MODEL_VENDORS`, longest-prefix matched; a family with
+  no known vendor is reported as not-comparable rather than compared against
+  whoever happens to list it. This demoted four bogus findings and left two real
+  ones.
+- **A placeholder override could never expire.** `PRICING_OVERRIDES` silences a
+  prefix, which is correct for a permanent reason (a local model billed `$0`, a
+  cross-endpoint billing nuance) and wrong for a temporary one. The new
+  `PRICING_PLACEHOLDERS` marks the temporary subset; `audit_model_pricing.py`
+  reports any placeholder upstream has since published as a **stale
+  placeholder** and exits non-zero *even when the rates agree*, because the
+  finding is the expired reason, not the number. It immediately retired two
+  markers (`glm-4.6`, `kimi-k2-0905-preview`, both confirmed correct at the
+  vendor's own rate) and would have caught the DeepSeek V4 overcharge the day
+  DeepSeek published.
 - **HumanEval-X graded every correct answer as a miss**: the adapter executed
   `prompt + raw_reply + test`, so an agent's Markdown-fenced answer ("Here's
   the solution: ```python …") was run as Python and died of `SyntaxError`

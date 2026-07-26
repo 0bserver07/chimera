@@ -80,9 +80,10 @@ surface eagerly.
 
 | Model id | Routes to | Endpoint / `base_url` | API-key env | Context | Cost ($/Mtok in/out) | Notes |
 |---|---|---|---|---|---|---|
-| `deepseek-v4` | `compatible` | `https://api.deepseek.com/v1` | `DEEPSEEK_API_KEY` | 128k | 0.55 / 2.19 | Placeholder pricing; copies `deepseek-reasoner` until DeepSeek publishes V4 rates. |
-| `deepseek-v4-pro` | `compatible` | `https://api.deepseek.com/v1` | `DEEPSEEK_API_KEY` | 128k | 0.55 / 2.19 | Same family; pro tier. |
-| `deepseek-v4-pro:cloud` | `ollama` | `$OLLAMA_HOST` | — | 262k | 0.55 / 2.19 | Local Ollama daemon's cloud passthrough (`ollama run deepseek-v4-pro:cloud`). |
+| `deepseek-v4` | `compatible` | `https://api.deepseek.com/v1` | `DEEPSEEK_API_KEY` | 128k | 0.435 / 0.87 | Not a real SKU — catch-all for a future V4 id that is neither `-flash` nor `-pro`, pinned to the dearer Pro tier so an unknown SKU over-bills rather than under-bills. |
+| `deepseek-v4-flash` | `compatible` | `https://api.deepseek.com/v1` | `DEEPSEEK_API_KEY` | 128k | 0.14 / 0.28 | The current primary SKU; `deepseek-chat` / `deepseek-reasoner` are deprecated aliases for its non-thinking / thinking modes. |
+| `deepseek-v4-pro` | `compatible` | `https://api.deepseek.com/v1` | `DEEPSEEK_API_KEY` | 128k | 0.435 / 0.87 | Same family; pro tier. |
+| `deepseek-v4-pro:cloud` | `ollama` | `$OLLAMA_HOST` | — | 262k | 0.435 / 0.87 | Local Ollama daemon's cloud passthrough (`ollama run deepseek-v4-pro:cloud`). True billing is Ollama's; approximated at the first-party rate. |
 | `deepseek-v3.1-terminus` | `compatible` | `https://api.deepseek.com/v1` | `DEEPSEEK_API_KEY` | 128k | 0.27 / 1.10 | Hosted V3 line. |
 | `deepseek-coder-v3` | `compatible` | `https://api.deepseek.com/v1` | `DEEPSEEK_API_KEY` | 128k | 0.27 / 1.10 | Hosted V3 coder SKU. |
 | `qwen3-coder` / `qwen3-coder-30b` / `qwen3-32b` | `ollama` | `$OLLAMA_HOST` | — | 131k | 0.0 / 0.0 | Local-only via the `qwen` prefix; DashScope users register a `compatible` factory explicitly. |
