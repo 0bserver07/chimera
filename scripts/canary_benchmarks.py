@@ -215,9 +215,16 @@ RECIPES: dict[str, Recipe] = {
     ),
     "swe-lancer": Recipe(exempt="gold patch needs a checked-out repo + test runner"),
     # --- exempt: no reference answer exists in the dataset ------------------
+    # The grading contract was fixed 2026-07-25 (functional tasks are now
+    # called, not piped), but the dataset stages no canonical solution, so
+    # there is no reference answer to canary against. Covered instead by
+    # tests/eval/benchmarks/test_livecodebench.py, which drives a known-correct
+    # Solution through a real LocalEnvironment. Still RETRACTED for a separate
+    # reason: only public sample tests are staged.
     "livecodebench": Recipe(
-        exempt="dataset stages no canonical solution; adapter is RETRACTED "
-        "(see scripts/render_observatory.py RETRACTED)"
+        exempt="dataset stages no canonical solution — grading contract covered "
+        "by test_livecodebench.py instead; adapter remains RETRACTED because "
+        "only public sample tests are staged"
     ),
     "tau-bench": Recipe(exempt="agentic — grading replays actions against a sim env"),
     "webarena": Recipe(exempt="agentic — grading needs a live browser environment"),

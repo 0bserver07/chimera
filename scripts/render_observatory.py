@@ -142,19 +142,24 @@ _UNIFORM_ZERO_MIN_TASKS = 5
 #: is fixed *and* re-canaried.
 RETRACTED: dict[str, str] = {
     "livecodebench": (
-        "**RETRACTED — the adapter does not measure LiveCodeBench.** Three "
-        "independent defects, any one of which invalidates the column: 63 of "
-        "the 175 staged tasks are `functional` + `starter_code` while the "
-        "runner executes `python solution.py < stdin`, so **36% of the "
-        "denominator cannot pass under any answer**; the staged file is "
-        "platform-blocked (AtCoder 0–111, LeetCode 112–174) so any contiguous "
-        "`--limit` slice is single-platform and not a sample; and only public "
-        "sample tests are staged, with every graded assertion visible in the "
-        "prompt for 24 of 50 tasks in the slice. The previously published "
-        "≥18.9% (33/175) is withdrawn — a floor computed over a denominator "
-        "that is 36% unpassable is not a floor. A later 88% (44/50) run is "
-        "likewise not a score: it is an AtCoder-only head slice graded on "
-        "public samples. Diagnosis: `docs/notes/bench-diagnosis-darklight1.md`."
+        "**RETRACTED — still not a LiveCodeBench score.** The previously "
+        "published ≥18.9% (33/175) and the later 88% (44/50) are both "
+        "withdrawn. Three defects; **two are now fixed, the third is not, and "
+        "it alone is disqualifying**.\n\n"
+        "*Fixed (2026-07-25):* 63 of the 175 tasks are `functional` + "
+        "`starter_code` but were run as `python solution.py < stdin`, so 36% "
+        "of the denominator could not pass under any answer — the adapter now "
+        "grades them by calling the `Solution` method with decoded arguments. "
+        "And the staged file is platform-blocked (AtCoder 0–111, LeetCode "
+        "112–174), so a contiguous `--limit` slice was single-platform; "
+        "slicing is now stratified (`--limit 50` → 25 AtCoder + 25 LeetCode, "
+        "was 50 + 0).\n\n"
+        "*Not fixed:* **only public sample tests are staged.** For 24 of 50 "
+        "tasks in one slice, every graded assertion is printed in the prompt, "
+        "so the number measures copying at least as much as solving. Private "
+        "tests must be staged before any figure from this adapter is citable, "
+        "regardless of how correct the grading contract now is. Diagnosis: "
+        "`docs/notes/bench-diagnosis-darklight1.md`."
     ),
 }
 

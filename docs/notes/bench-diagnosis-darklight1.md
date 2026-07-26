@@ -281,10 +281,17 @@ for real generation.
 - **The blocking work before any LiveCodeBench number is citable:** wire a
   functional-test path for `testtype: "functional"` (instantiate the starter
   class and call the method with the parsed args), and stage the private test
-  cases. Until then the adapter should be treated as AtCoder-only.
+  cases. **DONE 2026-07-25 for the functional path** — `evaluate()` dispatches
+  on the task's own `testtype` and grades LeetCode tasks by calling the entry
+  point named in `starter_code`; all 63 now have a derivable entry point and
+  are gradeable. **STILL OPEN: staging the private tests.** That one is
+  disqualifying on its own — with only public samples staged, the score
+  measures copying as much as solving — so the column remains RETRACTED.
 - **`--limit` on this dataset is unsound** and should shuffle with a fixed seed
   or stratify by platform. A contiguous head slice of a platform-blocked file is
-  not a sample.
+  not a sample. **DONE 2026-07-25** — `_stratified_head` round-robins across
+  platforms, deterministically (no RNG, so a run is reproducible from its
+  arguments): `--limit 50` is now 25 AtCoder + 25 LeetCode, was 50 + 0.
 
 ---
 

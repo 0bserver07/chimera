@@ -129,7 +129,9 @@ def test_retracted_benchmark_never_renders_a_score(tmp_path: Path) -> None:
     assert "≥ 18.9% (33/175)" not in page
     assert "**18.9%**" not in page
     # The reason travels with the retraction — a reader never has to go dig.
-    assert "36% of the denominator cannot pass" in page
+    # Asserted on durable facts, not phrasing, so improving the wording does
+    # not require editing this test (which is how a reason quietly gets thinned).
+    assert "public sample tests" in page
     assert "bench-diagnosis-darklight1.md" in page
 
 

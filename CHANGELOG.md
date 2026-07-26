@@ -85,6 +85,45 @@ commit receipts.
   entries require evidence, because "known bad" is exactly the label a real bug
   would hide behind.
 
+### Fixed (LiveCodeBench grading contract)
+
+- **LiveCodeBench graded 36% of its dataset against a contract it could not
+  satisfy.** The benchmark mixes two contracts and each task says which:
+  `testtype: "stdin"` (AtCoder, 112 tasks) is a whole program read from stdin,
+  while `testtype: "functional"` (LeetCode, 63 tasks) is a `Solution` class
+  whose method must be **called** with decoded arguments. Everything ran
+  through `python solution.py < _stdin.txt`, so the functional half defined a
+  class, printed nothing, and scored 0 however correct it was — 63 of 175
+  tasks unpassable by construction. `evaluate()` now dispatches on the task's
+  own `testtype` and grades functional tasks through a driver that calls the
+  entry point named by the task's `starter_code` (not guessed, so an agent's
+  helper functions cannot be graded by mistake), comparing **decoded values**
+  rather than text so `[1,4]` and `[1, 4]` agree.
+  - The driver `exec`s the solution into a namespace pre-populated with
+    `typing` names rather than importing it. LeetCode stubs annotate with bare
+    `List`/`Optional`, and those annotations evaluate while the class body
+    runs — patching the names on after import is too late, and a *correct*
+    solution dies of `NameError` and scores 0. A test caught this exact
+    fabricated zero during development.
+  - The verdict is an explicit printed token, not exit status, so a solution
+    that crashes the driver or never reaches the comparison cannot pass by
+    accident. A solution that *prints* the right answer still fails — printing
+    is not this contract.
+- **`--limit` on LiveCodeBench was not a sample.** The staged file is
+  platform-blocked (AtCoder rows 0–111, LeetCode 112–174), so a contiguous head
+  slice was single-platform for any `limit <= 112`: `--limit 50` graded AtCoder
+  exclusively while reporting itself as "livecodebench". Slicing is now
+  stratified round-robin across platforms and deterministic (no RNG, so a run
+  is reproducible from its arguments) — `--limit 50` is now 25 AtCoder + 25
+  LeetCode, and `--limit 10` is 5 + 5.
+- **The LiveCodeBench column stays RETRACTED regardless.** Two of the three
+  defects are fixed; the third is not and is disqualifying on its own: **only
+  public sample tests are staged**, and for 24 of 50 tasks in one slice every
+  graded assertion is printed in the prompt, so the number measures copying at
+  least as much as solving. The retraction note on the observatory now states
+  exactly which defects are fixed and which is not, so the remaining blocker is
+  legible instead of the entry reading as a blanket "broken".
+
 ### Changed
 
 - **Inline mode: partial manual smoke recorded; the default stays OFF.** Four
