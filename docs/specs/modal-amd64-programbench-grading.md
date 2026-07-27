@@ -2,7 +2,7 @@
 
 **Status:** Proposal — unblocks the first live agentic ProgramBench numbers
 (issue #160; cloud-sandbox track #144). Prior art already on disk in
-`scratch_modal_grade.py`.
+`scripts/experiments/scratch_modal_grade.py`.
 
 ## Problem
 
@@ -48,7 +48,7 @@ by amd64 infrastructure** — not the framework, not the agent.
 
 ## Design Sketch
 
-### `ModalContainerEnvironment` (exists — `scratch_modal_grade.py`)
+### `ModalContainerEnvironment` (exists — `scripts/experiments/scratch_modal_grade.py`)
 
 A drop-in for upstream `programbench.container.ContainerEnvironment`, backed by a
 `modal.Sandbox` (amd64, no QEMU). Implements exactly the methods the upstream
@@ -86,7 +86,7 @@ ProgramBench(..., grader="modal", modal_app=app)   # default "local"
 ```
 
 Exposed on the CLI as `chimera eval --benchmark programbench --agent code
---grader modal`, and used by the `pb_agentic.py` sweep driver.
+--grader modal`, and used by the `scripts/experiments/pb_agentic.py` sweep driver.
 
 ### Image availability (resolve first — see Open Questions)
 
@@ -103,7 +103,7 @@ Dockerfiles. A one-time `chimera pb-images push` helper may be warranted.
   `ModalEvaluator` wiring (or a sibling `programbench_modal.py`).
 - `tests/eval/test_modal_container.py` — mocked-Sandbox unit tests + a
   `modal`-gated live test.
-- Promote `pb_agentic.py` (currently scratch) into the repo as the reference
+- Promote `scripts/experiments/pb_agentic.py` (currently scratch) into the repo as the reference
   sweep driver, or fold it into `chimera bench-compare`.
 
 ## Wiring
@@ -136,7 +136,7 @@ Dockerfiles. A one-time `chimera pb-images push` helper may be warranted.
 
 1. **Registry reachability** — are the `programbench/…:task_cleanroom` images on
    a registry Modal can pull, or local-only (needing push/build)? *Verify first,
-   cheaply, via `scratch_modal_grade.py`'s self-check.*
+   cheaply, via `scripts/experiments/scratch_modal_grade.py`'s self-check.*
 2. **`commit`/snapshot semantics** — does the upstream `Evaluator` rely on a
    `docker commit` between compile and run phases? `ModalContainerEnvironment.
    commit` returns a `modal.Image` snapshot; confirm the evaluator threads it
@@ -159,8 +159,8 @@ Dockerfiles. A one-time `chimera pb-images push` helper may be warranted.
 
 - Issue #160 (agentic-benchmark goal + full blocker diagnosis), #144 (cloud
   sandboxes).
-- `scratch_modal_grade.py` — the existing `ModalContainerEnvironment`.
-- `pb_agentic.py` — the agent-run recipe (`run_instance` + `CodingAgentAdapter`
+- `scripts/experiments/scratch_modal_grade.py` — the existing `ModalContainerEnvironment`.
+- `scripts/experiments/pb_agentic.py` — the agent-run recipe (`run_instance` + `CodingAgentAdapter`
   + clean packager).
 - [coding-agent-harness-integration](coding-agent-harness-integration.md) — the
   shipped adapter/harness/`--agent` work this builds on.
