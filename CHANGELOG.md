@@ -7,6 +7,10 @@ commit receipts.
 
 ## Unreleased
 
+_Nothing yet._
+
+## 0.9.2.1 — 2026-07-27 — the verified grader
+
 ### Added
 
 - **Daytona cloud sandbox backend** (#144): `chimera/env/daytona.py` adds

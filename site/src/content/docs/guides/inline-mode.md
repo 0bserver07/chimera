@@ -3,11 +3,6 @@ title: "Inline mode (native terminal scrollback)"
 description: "An opt-in single-agent frontend that renders the transcript into the terminal's own scrollback with the composer/status band pinned below — mouse selection, copy, wheel-scroll, and after-exit persistence all work. POSIX-only, off by default, with a multiplexer fallback."
 ---
 
----
-title: "Inline mode (native terminal scrollback)"
-description: "An opt-in single-agent frontend that renders the transcript into the terminal's own scrollback with the composer/status band pinned below — mouse selection, copy, wheel-scroll, and after-exit persistence all work. POSIX-only, off by default, with a multiplexer fallback."
----
-
 # Inline mode — the transcript lives in your terminal's scrollback
 
 The full-screen TUI owns the whole screen (the alternate screen buffer) and
