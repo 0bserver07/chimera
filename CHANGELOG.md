@@ -45,8 +45,6 @@ commit receipts.
   asyncssh comparison, and the exact opt-in live-smoke commands. Mirrored into
   the docs site.
 
-### Added
-
 - **`scripts/canary_benchmarks.py` — the known-correct-answer canary, now run
   across every registered adapter.** It feeds each benchmark its own canonical
   solution and requires a pass: if a dataset's own reference answer cannot
@@ -84,45 +82,6 @@ commit receipts.
   travels with the number. Listing a task is a disclosure, not a dismissal;
   entries require evidence, because "known bad" is exactly the label a real bug
   would hide behind.
-
-### Fixed (LiveCodeBench grading contract)
-
-- **LiveCodeBench graded 36% of its dataset against a contract it could not
-  satisfy.** The benchmark mixes two contracts and each task says which:
-  `testtype: "stdin"` (AtCoder, 112 tasks) is a whole program read from stdin,
-  while `testtype: "functional"` (LeetCode, 63 tasks) is a `Solution` class
-  whose method must be **called** with decoded arguments. Everything ran
-  through `python solution.py < _stdin.txt`, so the functional half defined a
-  class, printed nothing, and scored 0 however correct it was — 63 of 175
-  tasks unpassable by construction. `evaluate()` now dispatches on the task's
-  own `testtype` and grades functional tasks through a driver that calls the
-  entry point named by the task's `starter_code` (not guessed, so an agent's
-  helper functions cannot be graded by mistake), comparing **decoded values**
-  rather than text so `[1,4]` and `[1, 4]` agree.
-  - The driver `exec`s the solution into a namespace pre-populated with
-    `typing` names rather than importing it. LeetCode stubs annotate with bare
-    `List`/`Optional`, and those annotations evaluate while the class body
-    runs — patching the names on after import is too late, and a *correct*
-    solution dies of `NameError` and scores 0. A test caught this exact
-    fabricated zero during development.
-  - The verdict is an explicit printed token, not exit status, so a solution
-    that crashes the driver or never reaches the comparison cannot pass by
-    accident. A solution that *prints* the right answer still fails — printing
-    is not this contract.
-- **`--limit` on LiveCodeBench was not a sample.** The staged file is
-  platform-blocked (AtCoder rows 0–111, LeetCode 112–174), so a contiguous head
-  slice was single-platform for any `limit <= 112`: `--limit 50` graded AtCoder
-  exclusively while reporting itself as "livecodebench". Slicing is now
-  stratified round-robin across platforms and deterministic (no RNG, so a run
-  is reproducible from its arguments) — `--limit 50` is now 25 AtCoder + 25
-  LeetCode, and `--limit 10` is 5 + 5.
-- **The LiveCodeBench column stays RETRACTED regardless.** Two of the three
-  defects are fixed; the third is not and is disqualifying on its own: **only
-  public sample tests are staged**, and for 24 of 50 tasks in one slice every
-  graded assertion is printed in the prompt, so the number measures copying at
-  least as much as solving. The retraction note on the observatory now states
-  exactly which defects are fixed and which is not, so the remaining blocker is
-  legible instead of the entry reading as a blanket "broken".
 
 ### Changed
 
@@ -176,105 +135,6 @@ commit receipts.
     did real work, so the low score had to be genuine. The spend was real and
     the inference was still wrong — cost measures effort expended, never
     whether the grader evaluated the right contract.
-
-### Fixed
-
-- **DeepSeek was billed at up to 3.9x the published rate, and a "correction"
-  to the pricing table would not have fixed it.** Three compounding defects,
-  all now closed:
-  1. **The hand rates were stale.** `deepseek-chat` billed $0.27/$1.10 and
-     `deepseek-reasoner` $0.55/$2.19 against DeepSeek's published $0.14/$0.28 —
-     both are deprecated aliases for the non-thinking / thinking modes of
-     `deepseek-v4-flash` and share its rate. `deepseek-v4-pro` billed
-     $0.55/$2.19 against the published $0.435/$0.87 (26% high on input, **152%
-     high on output**), and `deepseek-v4-flash` was missing entirely, so it fell
-     through to the bare `deepseek-v4` catch-all and billed 3.9x its real output
-     rate. Verified against DeepSeek's pricing page and corroborated by the
-     committed first-party catalog rows. **No published benchmark figure used
-     DeepSeek**, so no result is affected — this is forward-looking.
-  2. **A second pricing table silently overrode the first.** Every
-     `ModelConfig` in `chimera/providers/catalog.py` carries its own `cost=`,
-     and `ProviderCatalog.register` pushes it through `register_model_cost`,
-     which *writes into* `PRICING` at runtime. Correcting `cost.py` alone left
-     `catalog.py` reinstating the stale number, so `calculate_cost` returned the
-     right rate before a catalog existed and the wrong one after — in the same
-     process. `tests/providers/test_catalog_pricing_parity.py` now pins that the
-     catalog may *add* rates the hand table has no opinion on (`bedrock/…`,
-     `azure/…`) but may never *move* one it already resolves.
-  3. **The auditor built to catch exactly this was structurally unable to.**
-     Two independent holes: an override marked "placeholder pending the vendor's
-     rate sheet" stayed silent forever once the vendor published, and
-     `first_party` was a flat provider set, so authority was not model-scoped.
-- **The pricing auditor treated a reseller's markup as the vendor's rate.**
-  models.dev lists a model under every provider that serves it, so
-  "provider is first-party" is not "provider is authoritative for this model":
-  `alibaba-cn` makes Qwen but merely *resells* GLM. Against a provider-global
-  test the auditor reported `glm-5.2` as drift and instructed the reader to
-  replace Zhipu's $2.00/$8.00 with Alibaba's $1.10/$3.851 — a confidently wrong
-  correction to our headline model. Authority is now the (model family,
-  provider) relationship `MODEL_VENDORS`, longest-prefix matched; a family with
-  no known vendor is reported as not-comparable rather than compared against
-  whoever happens to list it. This demoted four bogus findings and left two real
-  ones.
-- **A placeholder override could never expire.** `PRICING_OVERRIDES` silences a
-  prefix, which is correct for a permanent reason (a local model billed `$0`, a
-  cross-endpoint billing nuance) and wrong for a temporary one. The new
-  `PRICING_PLACEHOLDERS` marks the temporary subset; `audit_model_pricing.py`
-  reports any placeholder upstream has since published as a **stale
-  placeholder** and exits non-zero *even when the rates agree*, because the
-  finding is the expired reason, not the number. It immediately retired two
-  markers (`glm-4.6`, `kimi-k2-0905-preview`, both confirmed correct at the
-  vendor's own rate) and would have caught the DeepSeek V4 overcharge the day
-  DeepSeek published.
-- **HumanEval-X graded every correct answer as a miss**: the adapter executed
-  `prompt + raw_reply + test`, so an agent's Markdown-fenced answer ("Here's
-  the solution: ```python …") was run as Python and died of `SyntaxError`
-  before a single assertion. A live Modal grid scored `coding-agent` **0/50
-  with `status_counts {completed: 50}`** — a fabricated zero. HumanEval-X is a
-  *completion* dataset (bare indented body) driven against *instructed chat*
-  agents (whole fenced function), and `_evaluate_python_in_process` honored
-  only the former. It now normalizes through the shared `extract_code`, refuses
-  an answer that extracts to nothing, and accepts both shapes. Verified over
-  all 164 staged tasks: a known-correct solution grades 164/164 in every answer
-  shape (was 0/164 for the shape agents actually send) while wrong, empty and
-  prose-only answers still grade 0/164. Re-running the **same 50 tasks** live
-  on Modal with the same agent, model and harness returns **50/50 (100%),
-  `{completed: 50}`, $0.3324** against the broken run's $0.3513 — within 5% on
-  cost, so the agent was always solving them and the grader was discarding
-  every answer (receipt `data/modal-grid-hexfix1-20260724-231500.json`). The
-  benchmark had no canary for this, so a green suite coexisted with a column
-  that could not score above zero — `TestKnownCorrectAnswerCanary` is now that
-  canary. Diagnosis: `docs/notes/bench-diagnosis-darklight1.md`.
-- **The shared fence extractor dedented the code it extracted**:
-  `extract_code("```python\n    return x\n```")` returned `"return x"`. The
-  regex skipped to the block with a greedy `\s*`, which eats the newline *and*
-  the following indentation. Invisible for a whole module (first line at column
-  0), fatal for a completion-shaped answer, which becomes an
-  `IndentationError`. It now consumes only horizontal whitespace plus at most
-  one newline. This was the second, deeper half of the HumanEval-X zero.
-- **The observatory generator would have published a fabricated zero**:
-  `scripts/render_observatory.py` aborted on an `error`-status cell claiming
-  passes, but a `0/50` cell with `{completed: 50}` rendered as a measured
-  **0.0%**. A uniform zero across 5+ cleanly-completed tasks is the harness-gap
-  signature (`docs/playbooks/13-live-bench-runs.md`), never a score, so it now
-  aborts generation with a diagnostic pointing at the playbook. Zeros explained
-  by errors or budget exhaustion still render as lower bounds, and cells under
-  5 tasks are exempt as sampling noise.
-- **Cloud backends selected nested files for top-level globs** (#144):
-  `E2BEnvironment.list_files("*.py")` filtered with `fnmatch`, whose `*`
-  crosses `/`, so it returned `sub/mod.py` where `LocalEnvironment` returned
-  only `mod.py` — the same benchmark would see different file sets depending
-  on which sandbox it ran in. Both cloud backends now filter through
-  `glob_match`. `"*"` consequently means top-level-only (it was previously
-  short-circuited to "everything"); `"**/*"` and `""` still mean everything.
-- **A missing `[ssh]` extra blanked out `asyncio`** (#127):
-  `chimera/env/ssh.py` imported `asyncio` inside the same `try` as `asyncssh`,
-  so an `ImportError` from the optional package set the stdlib module to `None`
-  too. Harmless in production (the async backend refuses to construct without
-  `asyncssh`) but it made the backend impossible to drive against a fake
-  transport. `asyncio` now imports unconditionally.
-
-### Changed
 
 - **The SSH remote-execution abstraction is pinned by tests that actually run
   in CI** (#127): `AsyncSSHEnvironment` (asyncssh + native SFTP + ProxyJump
@@ -494,6 +354,138 @@ commit receipts.
   `docs/mink/agent-teams.md` ("Live verification").
 
 ### Fixed
+
+- **LiveCodeBench graded 36% of its dataset against a contract it could not
+  satisfy.** The benchmark mixes two contracts and each task says which:
+  `testtype: "stdin"` (AtCoder, 112 tasks) is a whole program read from stdin,
+  while `testtype: "functional"` (LeetCode, 63 tasks) is a `Solution` class
+  whose method must be **called** with decoded arguments. Everything ran
+  through `python solution.py < _stdin.txt`, so the functional half defined a
+  class, printed nothing, and scored 0 however correct it was — 63 of 175
+  tasks unpassable by construction. `evaluate()` now dispatches on the task's
+  own `testtype` and grades functional tasks through a driver that calls the
+  entry point named by the task's `starter_code` (not guessed, so an agent's
+  helper functions cannot be graded by mistake), comparing **decoded values**
+  rather than text so `[1,4]` and `[1, 4]` agree.
+  - The driver `exec`s the solution into a namespace pre-populated with
+    `typing` names rather than importing it. LeetCode stubs annotate with bare
+    `List`/`Optional`, and those annotations evaluate while the class body
+    runs — patching the names on after import is too late, and a *correct*
+    solution dies of `NameError` and scores 0. A test caught this exact
+    fabricated zero during development.
+  - The verdict is an explicit printed token, not exit status, so a solution
+    that crashes the driver or never reaches the comparison cannot pass by
+    accident. A solution that *prints* the right answer still fails — printing
+    is not this contract.
+- **`--limit` on LiveCodeBench was not a sample.** The staged file is
+  platform-blocked (AtCoder rows 0–111, LeetCode 112–174), so a contiguous head
+  slice was single-platform for any `limit <= 112`: `--limit 50` graded AtCoder
+  exclusively while reporting itself as "livecodebench". Slicing is now
+  stratified round-robin across platforms and deterministic (no RNG, so a run
+  is reproducible from its arguments) — `--limit 50` is now 25 AtCoder + 25
+  LeetCode, and `--limit 10` is 5 + 5.
+- **The LiveCodeBench column stays RETRACTED regardless.** Two of the three
+  defects are fixed; the third is not and is disqualifying on its own: **only
+  public sample tests are staged**, and for 24 of 50 tasks in one slice every
+  graded assertion is printed in the prompt, so the number measures copying at
+  least as much as solving. The retraction note on the observatory now states
+  exactly which defects are fixed and which is not, so the remaining blocker is
+  legible instead of the entry reading as a blanket "broken".
+
+- **DeepSeek was billed at up to 3.9x the published rate, and a "correction"
+  to the pricing table would not have fixed it.** Three compounding defects,
+  all now closed:
+  1. **The hand rates were stale.** `deepseek-chat` billed $0.27/$1.10 and
+     `deepseek-reasoner` $0.55/$2.19 against DeepSeek's published $0.14/$0.28 —
+     both are deprecated aliases for the non-thinking / thinking modes of
+     `deepseek-v4-flash` and share its rate. `deepseek-v4-pro` billed
+     $0.55/$2.19 against the published $0.435/$0.87 (26% high on input, **152%
+     high on output**), and `deepseek-v4-flash` was missing entirely, so it fell
+     through to the bare `deepseek-v4` catch-all and billed 3.9x its real output
+     rate. Verified against DeepSeek's pricing page and corroborated by the
+     committed first-party catalog rows. **No published benchmark figure used
+     DeepSeek**, so no result is affected — this is forward-looking.
+  2. **A second pricing table silently overrode the first.** Every
+     `ModelConfig` in `chimera/providers/catalog.py` carries its own `cost=`,
+     and `ProviderCatalog.register` pushes it through `register_model_cost`,
+     which *writes into* `PRICING` at runtime. Correcting `cost.py` alone left
+     `catalog.py` reinstating the stale number, so `calculate_cost` returned the
+     right rate before a catalog existed and the wrong one after — in the same
+     process. `tests/providers/test_catalog_pricing_parity.py` now pins that the
+     catalog may *add* rates the hand table has no opinion on (`bedrock/…`,
+     `azure/…`) but may never *move* one it already resolves.
+  3. **The auditor built to catch exactly this was structurally unable to.**
+     Two independent holes: an override marked "placeholder pending the vendor's
+     rate sheet" stayed silent forever once the vendor published, and
+     `first_party` was a flat provider set, so authority was not model-scoped.
+- **The pricing auditor treated a reseller's markup as the vendor's rate.**
+  models.dev lists a model under every provider that serves it, so
+  "provider is first-party" is not "provider is authoritative for this model":
+  `alibaba-cn` makes Qwen but merely *resells* GLM. Against a provider-global
+  test the auditor reported `glm-5.2` as drift and instructed the reader to
+  replace Zhipu's $2.00/$8.00 with Alibaba's $1.10/$3.851 — a confidently wrong
+  correction to our headline model. Authority is now the (model family,
+  provider) relationship `MODEL_VENDORS`, longest-prefix matched; a family with
+  no known vendor is reported as not-comparable rather than compared against
+  whoever happens to list it. This demoted four bogus findings and left two real
+  ones.
+- **A placeholder override could never expire.** `PRICING_OVERRIDES` silences a
+  prefix, which is correct for a permanent reason (a local model billed `$0`, a
+  cross-endpoint billing nuance) and wrong for a temporary one. The new
+  `PRICING_PLACEHOLDERS` marks the temporary subset; `audit_model_pricing.py`
+  reports any placeholder upstream has since published as a **stale
+  placeholder** and exits non-zero *even when the rates agree*, because the
+  finding is the expired reason, not the number. It immediately retired two
+  markers (`glm-4.6`, `kimi-k2-0905-preview`, both confirmed correct at the
+  vendor's own rate) and would have caught the DeepSeek V4 overcharge the day
+  DeepSeek published.
+- **HumanEval-X graded every correct answer as a miss**: the adapter executed
+  `prompt + raw_reply + test`, so an agent's Markdown-fenced answer ("Here's
+  the solution: ```python …") was run as Python and died of `SyntaxError`
+  before a single assertion. A live Modal grid scored `coding-agent` **0/50
+  with `status_counts {completed: 50}`** — a fabricated zero. HumanEval-X is a
+  *completion* dataset (bare indented body) driven against *instructed chat*
+  agents (whole fenced function), and `_evaluate_python_in_process` honored
+  only the former. It now normalizes through the shared `extract_code`, refuses
+  an answer that extracts to nothing, and accepts both shapes. Verified over
+  all 164 staged tasks: a known-correct solution grades 164/164 in every answer
+  shape (was 0/164 for the shape agents actually send) while wrong, empty and
+  prose-only answers still grade 0/164. Re-running the **same 50 tasks** live
+  on Modal with the same agent, model and harness returns **50/50 (100%),
+  `{completed: 50}`, $0.3324** against the broken run's $0.3513 — within 5% on
+  cost, so the agent was always solving them and the grader was discarding
+  every answer (receipt `data/modal-grid-hexfix1-20260724-231500.json`). The
+  benchmark had no canary for this, so a green suite coexisted with a column
+  that could not score above zero — `TestKnownCorrectAnswerCanary` is now that
+  canary. Diagnosis: `docs/notes/bench-diagnosis-darklight1.md`.
+- **The shared fence extractor dedented the code it extracted**:
+  `extract_code("```python\n    return x\n```")` returned `"return x"`. The
+  regex skipped to the block with a greedy `\s*`, which eats the newline *and*
+  the following indentation. Invisible for a whole module (first line at column
+  0), fatal for a completion-shaped answer, which becomes an
+  `IndentationError`. It now consumes only horizontal whitespace plus at most
+  one newline. This was the second, deeper half of the HumanEval-X zero.
+- **The observatory generator would have published a fabricated zero**:
+  `scripts/render_observatory.py` aborted on an `error`-status cell claiming
+  passes, but a `0/50` cell with `{completed: 50}` rendered as a measured
+  **0.0%**. A uniform zero across 5+ cleanly-completed tasks is the harness-gap
+  signature (`docs/playbooks/13-live-bench-runs.md`), never a score, so it now
+  aborts generation with a diagnostic pointing at the playbook. Zeros explained
+  by errors or budget exhaustion still render as lower bounds, and cells under
+  5 tasks are exempt as sampling noise.
+- **Cloud backends selected nested files for top-level globs** (#144):
+  `E2BEnvironment.list_files("*.py")` filtered with `fnmatch`, whose `*`
+  crosses `/`, so it returned `sub/mod.py` where `LocalEnvironment` returned
+  only `mod.py` — the same benchmark would see different file sets depending
+  on which sandbox it ran in. Both cloud backends now filter through
+  `glob_match`. `"*"` consequently means top-level-only (it was previously
+  short-circuited to "everything"); `"**/*"` and `""` still mean everything.
+- **A missing `[ssh]` extra blanked out `asyncio`** (#127):
+  `chimera/env/ssh.py` imported `asyncio` inside the same `try` as `asyncssh`,
+  so an `ImportError` from the optional package set the stdlib module to `None`
+  too. Harmless in production (the async backend refuses to construct without
+  `asyncssh`) but it made the backend impossible to drive against a fake
+  transport. `asyncio` now imports unconditionally.
 
 - **`chimera code -p` now loads MCP tools** (#151): MCP servers from
   `~/.chimera/mcp.json` / `<workdir>/.mcp.json` were loaded only on the

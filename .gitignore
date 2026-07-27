@@ -36,3 +36,9 @@ pb_repair.py
 pb_matrix.py
 scratch_modal_smoke.py
 scratch_modal_grade.py
+
+# Editor/sed backups — a stray `sed -i.bak` once shipped a 362-line
+# scripts/*.py.bak to master (c72f8c53).
+*.bak
+*.orig
+*.rej
