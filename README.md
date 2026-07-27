@@ -1,6 +1,6 @@
 # Chimera
 
-[![PyPI](https://img.shields.io/pypi/v/chimera-run.svg)](https://pypi.org/project/chimera-run/) [![Python](https://img.shields.io/pypi/pyversions/chimera-run.svg)](https://pypi.org/project/chimera-run/) [![License](https://img.shields.io/github/license/0bserver07/chimera.svg)](LICENSE) [![CI](https://github.com/0bserver07/chimera/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/0bserver07/chimera/actions/workflows/ci.yml) [![Tests](https://img.shields.io/badge/tests-9974%20passing-brightgreen)](https://github.com/0bserver07/chimera/actions) [![Docs](https://img.shields.io/badge/docs-0bserver07.github.io%2Fchimera-blue)](https://0bserver07.github.io/chimera/)
+[![PyPI](https://img.shields.io/pypi/v/chimera-run.svg)](https://pypi.org/project/chimera-run/) [![Python](https://img.shields.io/pypi/pyversions/chimera-run.svg)](https://pypi.org/project/chimera-run/) [![License](https://img.shields.io/github/license/0bserver07/chimera.svg)](LICENSE) [![CI](https://github.com/0bserver07/chimera/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/0bserver07/chimera/actions/workflows/ci.yml) [![Tests](https://img.shields.io/badge/tests-10323%20passing-brightgreen)](https://github.com/0bserver07/chimera/actions) [![Docs](https://img.shields.io/badge/docs-0bserver07.github.io%2Fchimera-blue)](https://0bserver07.github.io/chimera/)
 
 **An open-source Python framework for building coding agents.** Pick your provider, pick your tools, pick your loop. Chimera wires them together. Recreate SWE-Agent, Aider, Cline, or Codex in a few lines, or design something entirely new.
 
@@ -10,7 +10,7 @@ chimera mink                        # TUI-first coding agent
 chimera agents                      # list all 7 CLIs with one-line pitches
 ```
 
-**v0.9.2 status** — 9974 passing tests, 93 skipped, 0 failed (9594 in CI's no-extras posture). ruff + mypy (716 modules, both postures) + 7 trademark scrubs all green. Flagship full-dataset scorecard on glm-5.2 (status_counts-verified): mbpp-plus 99.7%, mbpp 99.1%, human-eval-plus 92.1%, math500 77.6% — plus the first multi-agent depth matrix (4 architectures × 4 benchmarks at n=50). New in 0.9.2 — **the embeddable core**: a stable SDK surface (`chimera.AgentSession`), the receipt-generated [observatory](docs/benchmarks/observatory.md), external-agent lanes (race third-party CLIs beside Chimera agents), a declarative provider capability matrix, interception seams, a hermetic loop-test harness, one config chain, lane/cohort budgets, and opt-in native-scrollback inline mode ([release notes](docs/releases/0.9.2.md), [embed guide](docs/guides/embed.md)). Raw results in `data/`.
+**Status** (master, 2026-07-25) — 10323 passing tests, 93 skipped, 0 failed locally, excluding the three live-infra files; CI's no-extras posture is the badge above. Released as **v0.9.2**. Flagship full-dataset scorecard on glm-5.2 (status_counts-verified): mbpp-plus 99.7%, mbpp 99.1%, human-eval-plus 92.1%, math500 77.6% — plus the first multi-agent depth matrix (4 architectures × 4 benchmarks at n=50). New in 0.9.2 — **the embeddable core**: a stable SDK surface (`chimera.AgentSession`), the receipt-generated [observatory](docs/benchmarks/observatory.md), external-agent lanes (race third-party CLIs beside Chimera agents), a declarative provider capability matrix, interception seams, a hermetic loop-test harness, one config chain, lane/cohort budgets, and opt-in native-scrollback inline mode ([release notes](docs/releases/0.9.2.md), [embed guide](docs/guides/embed.md)). Raw results in `data/`.
 
 ## New in 0.9.0 — the multiplexer: race N agents on one task
 
@@ -75,7 +75,7 @@ graph TD
     Provider -- "qwen-* / llama-* / *:cloud" --> Oll["Ollama"]
     Provider -- "grok-*" --> X["xAI"]
 
-    Tools["24 built-in tools<br/>read · write · edit · bash · search · git · test ·<br/>web_fetch · apply_patch · think · todo · todo · …"]
+    Tools["23 tools in the default agent set<br/>read · write · edit · bash · search · git · test ·<br/>web_search · apply_patch · think · todo · …"]
     AgentLoop -.uses.-> Tools
 
     classDef loop fill:#352b5e,stroke:#7c3aed,color:#fff
@@ -172,7 +172,7 @@ Chimera is modular — every component is replaceable:
 ```
 CodingAgent
 ├── Provider (Anthropic, OpenAI, Google, Ollama, or any compatible API)
-├── Tools (20+ built-in, plus custom tools, MCP servers, skills)
+├── Tools (23 in the default agent set, 49 shipped, plus custom tools, MCP servers, skills)
 ├── AgentLoop (async generator with streaming, error recovery, abort)
 ├── Permissions (multi-source rules, 6 modes, interactive prompts)
 ├── Hooks (27 lifecycle events, shell/LLM/function hooks)
@@ -354,8 +354,8 @@ Measuring quality   Run benchmarks (HumanEval, SWE-bench, AIMO, custom), collect
                     pass rates and costs, compare agent configurations
                     ─────────────────────────────────────────────────────────────────
 The agent itself    An LLM in a loop: think, call a tool, observe the result,
-                    repeat. 24 built-in tools (read, write, edit, bash, search,
-                    git, test, web fetch, etc). 4 loop strategies.
+                    repeat. 23 tools in the default agent set (read, write, edit,
+                    bash, search, git, test, web search, etc). 4 loop strategies.
                     ─────────────────────────────────────────────────────────────────
 LLM providers       Anthropic, OpenAI, Google, Ollama, Modal, or any
                     OpenAI-compatible API. Streaming, async, cost tracking.

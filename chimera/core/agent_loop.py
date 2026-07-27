@@ -556,6 +556,13 @@ class AgentLoop:
                         hook_matchers, abort_signal,
                     )
 
+                # Persist the terminal assistant answer. Every other exit path
+                # (hook-stop, follow-up, nudge) appends it; the completed path
+                # must too, or the model's final reply is dropped from history —
+                # invisible to save/resume (the reply is only emitted as an
+                # event + recorded in the transcript, not the message list).
+                working_messages.append(Message.assistant(response.content))
+
                 yield LoopEvent(
                     type=LoopEventType.result,
                     data=LoopResult(

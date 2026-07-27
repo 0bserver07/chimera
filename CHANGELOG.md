@@ -355,6 +355,23 @@ commit receipts.
 
 ### Fixed
 
+- **`list_files` is now bounded**: it skips vendored/generated dirs (`.git`,
+  `.venv`, `node_modules`, `__pycache__`, `dist`, `build`, `.chimera`, …) when
+  listing a parent and caps output at 1000 entries with a truncation note. An
+  unfiltered `list_files(".")` in a repo with a `.venv`/`node_modules` returned
+  the whole tree as one tool result (millions of tokens), busting the model
+  prompt limit and stalling the agent loop after its first tool call; an
+  explicit `path` into an ignored dir still lists it (`1e21bfc`).
+- **The agent loop dropped the final answer**: on the completed path (no tool
+  calls) it returned its result without appending the terminal
+  `Message.assistant(...)`, so the model's reply was rendered live and recorded
+  to the transcript but absent from history — invisible to session save/resume.
+  Now persisted like every other exit path (`1e21bfc`).
+- **TUI resume rendered a blank pane**: resume seeded the driver context but
+  never replayed the conversation into the pane's log. New
+  `render.replay_history` redraws a resumed lane's prior turns — prompts, prose,
+  tool calls, results (`1e21bfc`).
+
 - **LiveCodeBench graded 36% of its dataset against a contract it could not
   satisfy.** The benchmark mixes two contracts and each task says which:
   `testtype: "stdin"` (AtCoder, 112 tasks) is a whole program read from stdin,

@@ -61,6 +61,7 @@ __all__ = [
     "format_event",
     "heartbeat_line",
     "plain",
+    "replay_history",
     "short",
 ]
 
@@ -341,6 +342,68 @@ def format_event(
     elif t == LoopEventType.system and ev.data:
         out.append(Text(str(ev.data), style=pal.style("chrome.rule")))
     return out
+
+
+def replay_history(
+    messages: list[Any], sink: Callable[[Any], object], *, markdown: bool = True,
+) -> int:
+    """Render a saved conversation into a transcript *sink* (for session resume).
+
+    A resumed lane's pane is otherwise blank: the live path only writes as events
+    arrive, and a restored session has none. This reproduces the transcript look
+    from the persisted messages — user echoes, assistant prose (markdown), tool
+    calls, and tool results — so the pane shows the conversation it left off at.
+
+    Args:
+        messages: The lane's history — :class:`~chimera.types.Message` objects or
+            their serialized dict rows (``role`` / ``content`` / ``tool_calls``).
+        sink: Callable receiving each renderable (e.g. ``RichLog.write``).
+        markdown: Render assistant prose as rich Markdown, matching live panes.
+
+    Returns:
+        The number of renderables written. ``0`` for empty/fresh history, so
+        callers can invoke it unconditionally on mount (a fresh lane is a no-op).
+    """
+    def field(m: Any, name: str) -> Any:
+        return m.get(name) if isinstance(m, dict) else getattr(m, name, None)
+
+    written = 0
+    for m in messages:
+        role = field(m, "role")
+        content = field(m, "content")
+        if role == "user":
+            sink(Text.assemble(("› ", "bold cyan"), (str(content or ""), "bold")))
+            written += 1
+        elif role == "assistant":
+            if content and str(content).strip():
+                sink(assistant_renderable(str(content), markdown=markdown))
+                written += 1
+            for tc in field(m, "tool_calls") or []:
+                name = tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", "?")
+                args = (
+                    tc.get("arguments") if isinstance(tc, dict)
+                    else getattr(tc, "arguments", {})
+                ) or {}
+                preview = ", ".join(
+                    f"{k}={short(v)}" for k, v in list(args.items())[:3]
+                )
+                sink(Text.assemble(
+                    ("⚙ ", "yellow"), (str(name or "?"), "bold yellow"),
+                    (f"({preview})", "dim"),
+                ))
+                written += 1
+        elif role == "tool":
+            text = str(content or "").rstrip()
+            if text:
+                shown = (
+                    text if len(text) <= 2000
+                    else text[:1000] + "\n… [truncated on resume] …\n" + text[-500:]
+                )
+                sink(Text(shown, style="green"))
+                written += 1
+    if written:
+        sink(Text("── resumed ──", style="dim"))
+    return written
 
 
 class LaneTranscript:
