@@ -89,6 +89,24 @@ _Nothing yet._
 
 ### Changed
 
+- **Disclosed: `mbpp-plus` is graded at base strength** — found by this
+  release's own pre-release review (claim-vs-code audit, the #159 class).
+  `MBPPPlus` inherits MBPP's `test_list` grading; its own docstring records
+  that the EvalPlus expanded `test` harness is "preserved verbatim in every
+  staged row but not yet executed". So the published **99.7% (377/378)** is the
+  MBPP+ *task set* graded with *base* asserts — real, but weaker than the name
+  implies, and until now nothing user-facing said so. The observatory's
+  mbpp-plus row now carries the note. The canary cannot catch this class (a
+  weaker suite still passes correct answers and rejects wrong ones); wiring the
+  plus harness and re-running the 378-task column is tracked follow-up work.
+- **Experiment drivers moved out of the repo root** (`f22c11fd`): the seven
+  ProgramBench/Modal one-off harnesses (`pb_*.py`, `scratch_*.py`) — the only
+  root-level Python files — now live in `scripts/experiments/` with a README.
+  Pure renames, nothing deleted. Six of them were listed in `.gitignore` while
+  *tracked*, which asserted something false (`.gitignore` only affects
+  untracked files); the dead rules are removed. They never shipped in the wheel
+  (`packages = ["chimera"]`) and still don't.
+
 - **Inline mode: partial manual smoke recorded; the default stays OFF.** Four
   of the nine checklist steps now pass with evidence on macOS Terminal.app
   (`docs/guides/inline-mode.md` → *Run log*): launch mid-screen leaves prior

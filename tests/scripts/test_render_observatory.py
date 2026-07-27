@@ -150,6 +150,31 @@ def test_retracted_benchmark_is_not_offered_for_reproduction(tmp_path: Path) -> 
     assert all("livecodebench" not in ln for ln in repro)
 
 
+def test_grading_strength_note_travels_with_the_score(tmp_path: Path) -> None:
+    # mbpp-plus is graded with base test_list asserts, not the EvalPlus plus
+    # harness. The number is real for what was executed, but a reader assumes
+    # the name's full contract — so the note must render next to the score and
+    # survive regeneration. (The canary cannot catch this class: a weaker
+    # suite still passes correct answers and rejects wrong ones.)
+    _seed(tmp_path)
+    _write(
+        tmp_path,
+        "modal-grid-fullscore3-20990101-000000.json",
+        [_cell(bench="mbpp-plus", total=378, passed=377, counts={"completed": 378})],
+        run_id="fullscore3",
+    )
+    page = _render(tmp_path)
+    assert "‡ **mbpp-plus**" in page
+    assert "base strength" in page
+    assert "never executed" in page
+
+
+def test_grading_notes_registry_reasons_are_substantive() -> None:
+    assert obs.GRADING_NOTES, "registry emptied — was the plus harness wired?"
+    for bench, reason in obs.GRADING_NOTES.items():
+        assert len(reason) > 120, f"{bench}: note too thin to act on"
+
+
 def test_retraction_registry_reasons_are_substantive() -> None:
     # A retraction with a thin reason is how a retraction quietly gets reverted.
     assert obs.RETRACTED, "registry emptied — was a fix verified?"

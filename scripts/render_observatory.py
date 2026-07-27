@@ -179,6 +179,23 @@ CEILINGS: dict[str, str] = {
 }
 
 
+#: Benchmarks whose grader is WEAKER than the benchmark's name implies. Unlike
+#: RETRACTED (no number is real) or CEILINGS (the max is capped), the number is
+#: real for what was executed — but a reader assumes the name's full contract,
+#: so the gap must travel with the score. The canary cannot catch this class: a
+#: weaker test suite still passes correct answers and rejects wrong ones.
+GRADING_NOTES: dict[str, str] = {
+    "mbpp-plus": (
+        "graded at **base strength**: the adapter runs the dataset's original "
+        "`test_list` asserts, not the EvalPlus expanded `test` harness (staged "
+        "verbatim in every row, never executed — `MBPPPlus` docstring). The "
+        "MBPP+ task set under base grading scores higher than true MBPP+ "
+        "would; treat this column as *MBPP+ tasks / base-graded* until the "
+        "plus harness is wired and the column re-run."
+    ),
+}
+
+
 def _is_retracted(bench: str) -> bool:
     """Whether *bench* is under retraction and must not render a score."""
     return bench in RETRACTED
@@ -517,6 +534,9 @@ def _render_flagship(rows: list[Cell]) -> list[str]:
     for cell in rows:
         if cell.bench in CEILINGS and not _is_retracted(cell.bench):
             out.extend([f"† **{cell.bench}** — {CEILINGS[cell.bench]}", ""])
+    for cell in rows:
+        if cell.bench in GRADING_NOTES and not _is_retracted(cell.bench):
+            out.extend([f"‡ **{cell.bench}** — {GRADING_NOTES[cell.bench]}", ""])
     out.append(
         f"Receipts: {len(rows)} cells, **${total_cost:.2f}** total model spend"
         " (sum of the source cells' `cost_usd`)."

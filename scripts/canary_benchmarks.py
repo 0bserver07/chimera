@@ -194,6 +194,10 @@ RECIPES: dict[str, Recipe] = {
     # NOT "prompt" — that is BigCodeBench's natural-language instruct prompt.
     "bigcodebench": Recipe(answer=_joined("code_prompt")),
     "mbpp": Recipe(answer=_field("code"), test_fields=("test_list",)),
+    # mbpp-plus: test_fields matches what MBPPPlus.evaluate ACTUALLY executes —
+    # the base `test_list` asserts. The EvalPlus `test` harness is staged but
+    # never run (base-strength grading, disclosed on the observatory), so
+    # scanning it here would invent a numpy dependency the grader never imports.
     "mbpp-plus": Recipe(answer=_field("code"), test_fields=("test_list",)),
     # --- natural-language answer graders -----------------------------------
     "aimo": Recipe(answer=_field("answer"), wrong=lambda t: "-99999", code_like=False),
