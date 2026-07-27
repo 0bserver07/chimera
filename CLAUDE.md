@@ -8,7 +8,7 @@ Compose coding agents from modular primitives. Synthesize codebases from specifi
 - **Build:** hatchling + uv
 - **License:** MIT
 - **Setup:** `uv sync --extra dev --extra anthropic`
-- **Tests:** `uv run pytest` (10419 passing + 98 skipped locally as of 2026-07-27, excluding the live-infra files `tests/integration/test_env_docker_integration.py`, `tests/env/test_modal_sandbox.py`, `tests/env/test_ssh_live.py`; one `tests/function_synthesis/test_validation_split.py` test is env-sensitive locally but green in CI)
+- **Tests:** `uv run pytest` (10421 passing + 98 skipped locally as of 2026-07-27, excluding the live-infra files `tests/integration/test_env_docker_integration.py`, `tests/env/test_modal_sandbox.py`, `tests/env/test_ssh_live.py`; one `tests/function_synthesis/test_validation_split.py` test is env-sensitive locally but green in CI)
 - **Lint:** `uv run ruff check chimera/`
 - **Types:** `uv run mypy chimera/`
 - **CI posture (run before pushing batches):** `bash scripts/ci_posture_check.sh` — CI installs NO `tui` extra, so a green local gate can still be a red CI. New modules importing textual/rich need the pyproject `[[tool.mypy.overrides]]` textual block; tests importing them need `pytest.importorskip`. mypy caches are posture-specific — trust only cold-cache runs when extras change.
@@ -243,6 +243,15 @@ Interactive frontends over AgentDriver (spec: `docs/specs/interactive-frontends.
 
 ## Key Conventions
 
+- **The repo root is a guarded interface** (`tests/test_repo_hygiene.py`): no
+  loose `.py` files at the root, and no new top-level entries without extending
+  that test's allowlist in the same commit. Run outputs never live in the repo:
+  datasets stage to `~/.chimera/datasets`, results are explicit `--output`
+  files with curated receipts committed under `data/`, one-off drivers go in
+  `scripts/experiments/`, raw run dirs belong outside the repo. Why: `pb_*.py`
+  scratch drivers + 1.3 GB of `pb-runs/`/`runs/` output accumulated at the
+  root, six of the files gitignored *while tracked* — invisible to every gate
+  until an owner audit found them.
 - **Zero-dependency core.** Only stdlib in main package. Providers and tools like browser (playwright), remote env (httpx) are optional extras.
 - **TYPE_CHECKING imports.** Use `if TYPE_CHECKING:` for cross-module type hints to avoid circular imports.
 - **3-tier API.** Every feature has: one-liner convenience, developer configuration, framework-author subclassing.

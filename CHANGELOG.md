@@ -13,6 +13,19 @@ _Nothing yet._
 
 ### Added
 
+- **The repo root is now a gated interface** (`tests/test_repo_hygiene.py`):
+  no loose `.py` files at the root, and any new tracked top-level entry fails
+  the suite until the test's allowlist is extended in the same commit — making
+  root additions a deliberate act instead of an accretion. Prompted by the
+  owner's audit: one-off benchmark drivers and 1.3 GB of their run output
+  (`pb-runs/`, plus the external Terminal-Bench harness's `runs/` from the
+  March baseline) had accumulated at the root, invisible to every existing
+  gate because nothing gated the working tree. The registered benchmark stack
+  was verified clean in the same audit: datasets stage to
+  `~/.chimera/datasets`, results are explicit `--output` files with curated
+  receipts under `data/`, and nothing in `chimera/` writes a cwd-relative
+  directory.
+
 - **Daytona cloud sandbox backend** (#144): `chimera/env/daytona.py` adds
   `DaytonaEnvironment`, a third managed-sandbox backend beside Modal and E2B,
   behind the same `Environment` ABC and the same `create_environment("daytona",
