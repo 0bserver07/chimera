@@ -7,7 +7,19 @@ commit receipts.
 
 ## Unreleased
 
-_Nothing yet._
+### Added
+
+- **A static gate on cwd-relative writes** (`tests/test_repo_hygiene.py`, spec
+  M5): an `ast` walk of every `chimera/**/*.py` fails the suite when package
+  code writes to a literal relative path — `os.makedirs("runs")`,
+  `Path("runs").mkdir()`, `open("out/x", "w")`, `Path(…).write_text/…`,
+  `shutil.copytree/move(…, "runs")` — alias-aware (`import os as _os`) and
+  able to follow single-assignment locals, `/` joins and f-string prefixes.
+  Absolute, `~`, `Path.home()`, `tempfile` and caller-supplied paths are not
+  flagged. Clean on the current tree with an empty allowlist; a seeded
+  violation is proven to go red. The gate's limits are documented in the
+  module docstring — it cannot see external harnesses (the source of the
+  944 MB root `runs/`), dynamic paths, or non-`chimera/` code.
 
 ## 0.9.2.1 — 2026-07-27 — the verified grader
 
