@@ -242,7 +242,7 @@ class CodingAgent:
                 self._permission_checker = PermissionChecker()
                 loader = PermissionRuleLoader(
                     project_dir=str(self._project_dir),
-                    user_dir=str(chimera_home()),
+                    user_dir=str(chimera_home().parent),  # loaders append .chimera themselves
                 )
                 self._permission_context = loader.load()
 
@@ -274,7 +274,7 @@ class CodingAgent:
                 self._hook_executor = HookExecutor()
                 HookLoader(
                     project_dir=str(self._project_dir),
-                    user_dir=str(chimera_home()),
+                    user_dir=str(chimera_home().parent),  # loaders append .chimera themselves
                 )
                 self._hook_matchers = []
             except Exception:

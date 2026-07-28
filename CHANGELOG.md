@@ -9,6 +9,23 @@ commit receipts.
 
 ### Fixed
 
+- **User-scope permission rules were silently ignored.** `CodingAgent` — the
+  stack behind `chimera code` — passed `user_dir=~/.chimera` into
+  `PermissionRuleLoader`, which appends `.chimera` itself, so every user-scope
+  lookup resolved to `~/.chimera/.chimera/settings.json`: a path nothing
+  writes. A `deny` rule you put in `~/.chimera/settings.json` never applied.
+  Demonstrated directly — the same rule loads as
+  `deny_rules {USER: ['Bash(rm -rf *)']}` under the loader's real contract and
+  as nothing under the one being passed. **This is the worst shape a safety
+  control can fail in**: the file exists, the syntax is valid, nothing warns,
+  and the rule simply does not apply. Dating to the original assembly commit
+  (`a5213636`); a later refactor only renamed the expression. The identical
+  call site for `HookLoader` is corrected with it — though note the hooks half
+  is *not* claimed as a proven user-visible bug, because a fixture reproducing
+  it loads zero matchers under both scopes; the reasoning is recorded in
+  `tests/assembly/test_user_scope_settings.py` rather than asserted.
+  Found while fixing a *latent* double-join with no callers.
+
 - **`mbpp-plus` now grades with the EvalPlus expanded harness, closing the
   base-strength gap disclosed in 0.9.2.1.** `MBPPPlus` inherited MBPP's
   `test_list` path — three or four assertions against a suite designed to have
