@@ -175,6 +175,13 @@ Layer 1: Environment     Local, Docker, Git, Remote, Cloud, PersistentShell
   `project_state_dir()`, `store_path()`, `all_stores()`, `store_retention()`.
   Root precedence: `$CHIMERA_HOME` → `[storage] root` → `~/.chimera`. Guide:
   `docs/guides/storage-and-paths.md`
+- `storage.py` — the inspection + retention engine over that registry:
+  `report_stores()` / `find_orphans()` (orphan scan covers project-root
+  `.chimera*` **siblings**, not just the two scope roots) feed `chimera doctor
+  --section storage`; `plan_gc()` / `apply_prune()` feed `chimera gc` (dry-run
+  default, `--apply`/`--archive` opt-in). `select_for_prune` is the ONE
+  retention implementation — the cohort pruner calls it. Guide:
+  `docs/guides/storage-inspection-and-gc.md`
 - `user_config.py` — the ONE config chain (XDG < user < project), any of
   `config.{toml,yaml,yml,json}`; `load_section` / `load_tui_config` /
   `load_storage_config`

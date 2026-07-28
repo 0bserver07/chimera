@@ -468,5 +468,195 @@ def test_doctor_main_invocation_smoke(monkeypatch, tmp_path: Path) -> None:
     assert "checks" in parsed
 
 
+# ---------------------------------------------------------------------------
+# Storage section (M2 of docs/specs/storage-and-experiments.md)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def _storage_home(tmp_path, monkeypatch):
+    """A hermetic storage root + project root for the storage probe."""
+    for var in (
+        "CHIMERA_HOME",
+        "CHIMERA_CONFIG_HOME",
+        "CHIMERA_DATASETS_DIR",
+        "CHIMERA_FS_HOME",
+        "CHIMERA_CRON_DIR",
+        "CHIMERA_TEAMS_HOME",
+    ):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path / "home"))
+    project = tmp_path / "proj"
+    project.mkdir(parents=True, exist_ok=True)
+    monkeypatch.chdir(project)
+    home = tmp_path / "home" / ".chimera"
+    home.mkdir(parents=True, exist_ok=True)
+    return home, project
+
+
+def test_check_storage_emits_one_row_per_registry_store(_storage_home) -> None:
+    """Both scopes, present or absent — the inventory must be complete.
+
+    An absent store is reported as absent rather than omitted: only a report
+    that distinguishes "declared and empty" from "not declared at all" can be
+    trusted when it calls something an orphan.
+    """
+    from chimera.config.paths import all_stores
+
+    _home, project = _storage_home
+    checks = doctor.check_storage(project)
+    names = {c.name for c in checks}
+    for store in all_stores():
+        assert f"storage.{store.name}" in names
+    assert "storage.root" in names
+    assert all(c.section == doctor.STORAGE_SECTION for c in checks)
+
+
+def test_check_storage_reports_size_entries_ages_and_retention(
+    _storage_home,
+) -> None:
+    home, project = _storage_home
+    (home / "sessions").mkdir(parents=True)
+    (home / "sessions" / "a.jsonl").write_text("x" * 1200, encoding="utf-8")
+    (project / ".chimera").mkdir(parents=True)
+    (project / ".chimera" / "config.toml").write_text(
+        "[storage.sessions]\nretain = 3\n", encoding="utf-8"
+    )
+
+    row = next(
+        c for c in doctor.check_storage(project) if c.name == "storage.sessions"
+    )
+    assert "1.2 kB" in row.detail
+    assert "1 entry" in row.detail
+    assert "newest" in row.detail and "oldest" in row.detail
+    assert "retain=3" in row.detail
+    assert row.data is not None
+    assert row.data["size_bytes"] == 1200
+    assert row.data["retention"]["retain"] == 3
+
+
+def test_doctor_reports_a_checkpoints_position_orphan(_storage_home) -> None:
+    """The spec's original blind spot, pinned at the CLI boundary.
+
+    ``<workdir>/.chimera_checkpoints`` sits *beside* ``<proj>/.chimera``. A
+    scan of the two scope roots — which is what the spec first asked for —
+    would print nothing here, which is precisely how a 2.0 GB tree went
+    unreported for four months.
+    """
+    _home, project = _storage_home
+    (project / ".chimera").mkdir(parents=True)
+    blob = project / ".chimera_checkpoints" / "0" / ".venv"
+    blob.mkdir(parents=True)
+    (blob / "lib.bin").write_bytes(b"x" * 8192)
+
+    checks = doctor.check_storage(project)
+    orphans = [c for c in checks if c.name.startswith("storage.orphan.")]
+    assert len(orphans) == 1
+    assert orphans[0].status == doctor.WARN
+    assert ".chimera_checkpoints" in orphans[0].detail
+    assert "8.2 kB" in orphans[0].detail
+    assert orphans[0].hint
+
+
+def test_doctor_says_so_when_nothing_is_orphaned(_storage_home) -> None:
+    _home, project = _storage_home
+    checks = doctor.check_storage(project)
+    row = next(c for c in checks if c.name == "storage.orphans")
+    assert row.status == doctor.OK
+    assert "none" in row.detail
+
+
+def test_an_orphan_warns_but_does_not_fail_the_run(_storage_home) -> None:
+    """An orphan is a finding to act on, not a broken install."""
+    home, project = _storage_home
+    (home / "mystery").mkdir(parents=True)
+    checks = doctor.check_storage(project)
+    assert any(c.status == doctor.WARN for c in checks)
+    assert not any(c.status == doctor.FAIL for c in checks)
+
+
+def test_section_storage_skips_the_network_and_subprocess_probes(
+    _storage_home,
+) -> None:
+    """What makes the storage view cheap enough to script against."""
+    _home, project = _storage_home
+    checks = doctor.collect_checks("storage", project)
+    assert checks
+    assert all(c.name.startswith("storage.") for c in checks)
+
+
+def test_section_providers_omits_storage(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "chimera.cli.doctor.urllib.request.urlopen",
+        lambda *a, **k: (_ for _ in ()).throw(urllib.error.URLError("no net")),
+    )
+    monkeypatch.setattr(
+        "chimera.cli.doctor.subprocess.run",
+        lambda *a, **k: _fake_completed(0, "stub 0.0.1\n"),
+    )
+    checks = doctor.collect_checks("providers")
+    assert not any(c.name.startswith("storage.") for c in checks)
+
+
+def test_json_flag_is_shorthand_for_format_json(_storage_home) -> None:
+    _home, project = _storage_home
+    args = argparse.Namespace(
+        format="text", json=True, section="storage", project=str(project),
+        no_color=True,
+    )
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        rc = doctor.run(args)
+    assert rc == 0
+    payload = json.loads(buf.getvalue())
+    by_name = {c["name"]: c for c in payload["checks"]}
+    assert by_name["storage.root"]["section"] == "storage"
+    assert "data" in by_name["storage.sessions"]
+
+
+def test_json_shape_is_unchanged_for_pre_existing_probes() -> None:
+    """Adding ``section``/``data`` must not reshape rows that carry neither."""
+    payload = doctor.Check(name="env.X", status=doctor.OK, detail="set").to_dict()
+    assert payload == {
+        "name": "env.X",
+        "status": doctor.OK,
+        "detail": "set",
+        "hint": "",
+    }
+
+
+def test_format_text_prints_a_heading_per_section() -> None:
+    checks = [
+        doctor.Check(name="env.X", status=doctor.OK, detail="set"),
+        doctor.Check(
+            name="storage.root",
+            status=doctor.OK,
+            detail="/tmp/x",
+            section=doctor.STORAGE_SECTION,
+        ),
+    ]
+    out = doctor.format_text(checks, color=False)
+    assert "[storage]" in out
+    # The unsectioned group keeps its original, heading-free shape.
+    assert out.index("env.X") < out.index("[storage]")
+
+
+def test_doctor_storage_via_main(_storage_home) -> None:
+    _home, project = _storage_home
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        rc = main_module_main(["doctor", "--section", "storage", "--json"])
+    assert rc == 0
+    payload = json.loads(buf.getvalue())
+    assert any(c["name"] == "storage.root" for c in payload["checks"])
+
+
+def main_module_main(argv: list[str]) -> int:
+    from chimera.cli.main import main
+
+    return main(argv)
+
+
 # Ensure stdlib-only-ness: no network/subprocess actually invoked here.
 assert sys.version_info >= (3, 11)

@@ -15,9 +15,20 @@ The probes are intentionally fast and stdlib-only:
 * CLI versions: ``chimera <cli> --version`` for the 7 codenames.
 * Eventlog dir: ``~/.chimera/eventlog/`` exists + writable.
 * Plugin index: ``$CHIMERA_PLUGIN_INDEX`` set OR default URL reachable.
+* **Storage**: one row per declared store (path, size, entries, newest/oldest
+  age, retention) for both scopes, plus every directory on disk the registry
+  does *not* claim.
+
+The storage section is the surface a 2.0 GB checkpoint tree needed and did not
+have: it sat undetected for four months because nothing was in a position to
+notice it. Its orphan scan deliberately covers project-root ``.chimera*``
+*siblings* as well as the two scope roots — ``<workdir>/.chimera_checkpoints``
+lives beside ``<proj>/.chimera``, not inside it, so a scan of the roots alone
+walks straight past exactly the tree that motivated the check.
 
 Output formats: ``--format text`` (default, optionally colored) or
-``--format json``.
+``--format json`` (``--json`` is the short spelling). ``--section storage``
+prints the storage rows alone, skipping the network and subprocess probes.
 """
 
 from __future__ import annotations
@@ -49,20 +60,43 @@ _HTTP_TIMEOUT = 0.25
 
 @dataclasses.dataclass
 class Check:
-    """One row in the diagnostics output."""
+    """One row in the diagnostics output.
+
+    Attributes:
+        name: Row key, dot-namespaced (``env.``, ``daemon.``, ``storage.``).
+        status: One of :data:`OK`, :data:`WARN`, :data:`FAIL`.
+        detail: The human-readable finding.
+        hint: What to do about it; rendered only for non-OK rows.
+        section: Optional group heading. Rows with the default empty section
+            render exactly as they always have, so adding a section to one
+            probe does not reformat the others.
+        data: Structured payload for ``--json`` consumers. Present only where
+            a flat ``detail`` string would lose information a script needs —
+            storage rows carry byte counts and retention here rather than
+            forcing a caller to parse the rendered cell.
+    """
 
     name: str
     status: str  # one of OK, WARN, FAIL
     detail: str
     hint: str = ""
+    section: str = ""
+    data: dict[str, Any] | None = None
 
-    def to_dict(self) -> dict[str, str]:
-        return {
+    def to_dict(self) -> dict[str, Any]:
+        out: dict[str, Any] = {
             "name": self.name,
             "status": self.status,
             "detail": self.detail,
             "hint": self.hint,
         }
+        # WHY conditional: keeps the JSON shape byte-identical for every
+        # pre-existing probe, so scripts reading it keep working.
+        if self.section:
+            out["section"] = self.section
+        if self.data is not None:
+            out["data"] = self.data
+        return out
 
 
 # ---------------------------------------------------------------------------
@@ -498,23 +532,171 @@ def check_plugin_index(
 
 
 # ---------------------------------------------------------------------------
+# Storage
+# ---------------------------------------------------------------------------
+
+#: The heading the storage rows render under.
+STORAGE_SECTION = "storage"
+
+
+def check_storage(project: Path | None = None) -> list[Check]:
+    """Inventory every declared store, then report what nothing declares.
+
+    Emits, in order:
+
+    * ``storage.root`` — the resolved storage root and its total size.
+    * ``storage.<name>`` — one row per registry store, both scopes, present or
+      not. An absent store is reported as absent rather than omitted: "declared
+      and empty" and "not declared at all" are different facts, and only a
+      report that states both can be trusted about orphans.
+    * ``storage.orphans`` — a WARN row per unclaimed directory, or a single OK
+      row when everything on disk is accounted for.
+
+    Args:
+        project: Project root for project-scope stores (default: cwd).
+
+    Returns:
+        The storage rows. Never raises: a diagnostic that dies on one
+        unreadable directory reports nothing about the rest.
+    """
+    from chimera.config.paths import chimera_home
+    from chimera.config.storage import (
+        find_orphans,
+        format_age,
+        format_size,
+        report_stores,
+        tree_size,
+    )
+
+    root = Path(project) if project is not None else Path.cwd()
+    out: list[Check] = []
+
+    home = chimera_home()
+    home_bytes, home_files = tree_size(home)
+    out.append(
+        Check(
+            name="storage.root",
+            status=OK,
+            detail=(
+                f"{home} · {format_size(home_bytes)} · {home_files} files"
+                if home.exists()
+                else f"{home} · absent"
+            ),
+            section=STORAGE_SECTION,
+            data={
+                "path": str(home),
+                "exists": home.exists(),
+                "size_bytes": home_bytes,
+                "file_count": home_files,
+                "project": str(root),
+            },
+        )
+    )
+
+    for report in report_stores(project=root):
+        if not report.exists:
+            detail = f"{report.path} · absent"
+            status = OK
+        elif report.error:
+            detail = f"{report.path} · unreadable: {report.error}"
+            status = WARN
+        else:
+            unit = (
+                "file"
+                if report.is_file
+                else ("entry" if report.entries == 1 else "entries")
+            )
+            detail = (
+                f"{report.path} · {format_size(report.size_bytes)} · "
+                f"{report.entries} {unit} · "
+                f"newest {format_age(report.newest_age_days)} / "
+                f"oldest {format_age(report.oldest_age_days)} · "
+                f"{report.retention_label}"
+            )
+            status = OK
+        out.append(
+            Check(
+                name=f"storage.{report.store.name}",
+                status=status,
+                detail=detail,
+                hint=(
+                    f"chmod u+rx {report.path}" if status == WARN else ""
+                ),
+                section=STORAGE_SECTION,
+                data=report.to_dict(),
+            )
+        )
+
+    orphans = find_orphans(project=root)
+    if not orphans:
+        out.append(
+            Check(
+                name="storage.orphans",
+                status=OK,
+                detail="none — every directory on disk is declared",
+                section=STORAGE_SECTION,
+                data={"orphans": []},
+            )
+        )
+    else:
+        for orphan in orphans:
+            # Leading dot stripped so `.chimera_checkpoints` reads as
+            # `storage.orphan.chimera_checkpoints`, not `...orphan..chimera…`.
+            key = orphan.path.name.lstrip(".") or orphan.path.name
+            out.append(
+                Check(
+                    name=f"storage.orphan.{key}",
+                    status=WARN,
+                    detail=(
+                        f"{orphan.path} · {format_size(orphan.size_bytes)} · "
+                        f"{orphan.file_count} files · {orphan.reason}"
+                    ),
+                    hint=(
+                        "archive or relocate it, or declare it in "
+                        "chimera/config/paths.py — `chimera gc` cannot touch "
+                        "what the registry does not name"
+                    ),
+                    section=STORAGE_SECTION,
+                    data=orphan.to_dict(),
+                )
+            )
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Aggregator + rendering
 # ---------------------------------------------------------------------------
 
+#: Selectable probe groups for ``--section``.
+SECTIONS: tuple[str, ...] = ("all", "providers", "storage")
 
-def collect_checks() -> list[Check]:
-    """Run every probe and return the flat list of :class:`Check`."""
+
+def collect_checks(section: str = "all", project: Path | None = None) -> list[Check]:
+    """Run the requested probes and return the flat list of :class:`Check`.
+
+    Args:
+        section: One of :data:`SECTIONS`. ``"storage"`` skips every network and
+            subprocess probe, which is what makes the storage report cheap
+            enough to script against.
+        project: Project root for the storage section (default: cwd).
+
+    Returns:
+        The checks, providers first.
+    """
     checks: list[Check] = []
-    checks.extend(check_api_keys())
-    checks.append(check_ollama())
-    checks.append(check_llamacpp())
-    checks.append(check_vllm())
-    checks.append(check_sglang())
-    checks.append(check_docker())
-    checks.extend(check_optional_extras())
-    checks.extend(check_cli_versions())
-    checks.append(check_eventlog_dir())
-    checks.append(check_plugin_index())
+    if section in ("all", "providers"):
+        checks.extend(check_api_keys())
+        checks.append(check_ollama())
+        checks.append(check_llamacpp())
+        checks.append(check_vllm())
+        checks.append(check_sglang())
+        checks.append(check_docker())
+        checks.extend(check_optional_extras())
+        checks.extend(check_cli_versions())
+        checks.append(check_eventlog_dir())
+        checks.append(check_plugin_index())
+    if section in ("all", "storage"):
+        checks.extend(check_storage(project))
     return checks
 
 
@@ -552,21 +734,44 @@ def _color_supported() -> bool:
 
 
 def format_text(checks: list[Check], color: bool | None = None) -> str:
-    """Render checks as an aligned text block."""
+    """Render checks as an aligned text block, grouped by section.
+
+    Rows are emitted in order; a heading is printed whenever the section
+    changes, and column widths are computed per group so a long storage path
+    does not stretch the provider table. Checks with the default empty section
+    render exactly as before.
+
+    Args:
+        checks: The rows to render.
+        color: Force ANSI color on/off; ``None`` auto-detects.
+
+    Returns:
+        The rendered block.
+    """
     use_color = _color_supported() if color is None else color
-    name_w = max(len("CHECK"), max((len(c.name) for c in checks), default=5))
     status_w = max(len("STATUS"), 4)
     lines: list[str] = []
     lines.append("chimera doctor:")
-    lines.append("")
-    lines.append(f"  {'CHECK':<{name_w}}  {'STATUS':<{status_w}}  DETAIL")
-    lines.append("  " + "-" * name_w + "  " + "-" * status_w + "  " + "-" * 6)
+
+    groups: list[tuple[str, list[Check]]] = []
     for c in checks:
-        prefix, suffix = _color_for(c.status, use_color)
-        status_cell = f"{prefix}{c.status:<{status_w}}{suffix}"
-        lines.append(f"  {c.name:<{name_w}}  {status_cell}  {c.detail}")
-        if c.hint and c.status != OK:
-            lines.append(f"  {' ' * name_w}  {' ' * status_w}  hint: {c.hint}")
+        if not groups or groups[-1][0] != c.section:
+            groups.append((c.section, []))
+        groups[-1][1].append(c)
+
+    for section, rows in groups:
+        name_w = max(len("CHECK"), max((len(c.name) for c in rows), default=5))
+        lines.append("")
+        if section:
+            lines.append(f"  [{section}]")
+        lines.append(f"  {'CHECK':<{name_w}}  {'STATUS':<{status_w}}  DETAIL")
+        lines.append("  " + "-" * name_w + "  " + "-" * status_w + "  " + "-" * 6)
+        for c in rows:
+            prefix, suffix = _color_for(c.status, use_color)
+            status_cell = f"{prefix}{c.status:<{status_w}}{suffix}"
+            lines.append(f"  {c.name:<{name_w}}  {status_cell}  {c.detail}")
+            if c.hint and c.status != OK:
+                lines.append(f"  {' ' * name_w}  {' ' * status_w}  hint: {c.hint}")
     lines.append("")
     summary = {
         OK: sum(1 for c in checks if c.status == OK),
@@ -606,6 +811,25 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         help="Output format (default: text).",
     )
     parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Shorthand for --format json.",
+    )
+    parser.add_argument(
+        "--section",
+        choices=SECTIONS,
+        default="all",
+        help=(
+            "Which probes to run: all (default), providers, or storage "
+            "(storage skips every network and subprocess probe)."
+        ),
+    )
+    parser.add_argument(
+        "--project",
+        default=None,
+        help="Project root for the storage section (default: cwd).",
+    )
+    parser.add_argument(
         "--no-color",
         action="store_true",
         help="Disable ANSI colors in text output.",
@@ -613,23 +837,31 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
 
 
 def run(args: argparse.Namespace) -> int:
-    """Run all probes and print the report."""
-    checks = collect_checks()
+    """Run the requested probes and print the report."""
+    section = getattr(args, "section", "all")
+    raw_project = getattr(args, "project", None)
+    project = Path(raw_project) if raw_project else None
+    checks = collect_checks(section, project)
     fmt = getattr(args, "format", "text")
+    if getattr(args, "json", False):
+        fmt = "json"
     if fmt == "json":
         print(format_json(checks))
     else:
         color: bool | None = False if getattr(args, "no_color", False) else None
         print(format_text(checks, color=color))
-    # Exit 0 if no FAILs (warns are informational).
+    # Exit 0 if no FAILs (warns are informational — an orphan is a finding to
+    # act on, not a broken install, so it must not fail a CI health check).
     return 0 if not any(c.status == FAIL for c in checks) else 1
 
 
 __all__ = [
     "Check",
-    "OK",
-    "WARN",
     "FAIL",
+    "OK",
+    "SECTIONS",
+    "STORAGE_SECTION",
+    "WARN",
     "add_arguments",
     "check_api_keys",
     "check_cli_versions",
@@ -640,6 +872,7 @@ __all__ = [
     "check_optional_extras",
     "check_plugin_index",
     "check_sglang",
+    "check_storage",
     "check_vllm",
     "collect_checks",
     "format_json",
