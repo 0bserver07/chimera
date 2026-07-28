@@ -113,6 +113,54 @@ commit receipts.
   module docstring — it cannot see external harnesses (the source of the
   944 MB root `runs/`), dynamic paths, or non-`chimera/` code.
 
+### Fixed
+
+- **Published claims now cite receipts a reader can actually open**
+  (`tests/scripts/test_published_claims.py`). The gate checked
+  `Path.exists()`; `data/` is gitignored and receipts go in one at a time with
+  `git add -f`, so it returned a different verdict per checkout — and returned
+  **green on the one machine where the untracked file lived**. Measured at the
+  start of the pass: **63** files in `data/`, **34** in the repo. Four
+  published citations pointed into that gap. The check is now `git ls-files`,
+  held up by a test that writes a real file into `data/` (landing untracked)
+  and asserts a citation of it is reported unbacked *while the file sits
+  there* — plus that the old filesystem check would have passed it, so the
+  regression stays pinned.
+- **Two of those four receipts are now committed, each verified against the
+  claim before committing**: `data/modal-grid-20260708-232643.json`
+  (`6126aba8`) whose `coding-agent`/`human-eval-plus` cell reads
+  `total: 5, passed: 5`, exactly the "5/5 on the honest grader" it backs; and
+  `data/swe-modal-smoke.json` (`adc75b5e`), the only evidence anywhere that
+  `--env swe-modal` has run, whose `0.023248`/`55.08s` match the prose. The
+  latter is annotated at its citation (`0cc239f6`) because its `passed: 1,
+  total: 1` is the **vacuous pass** that run exposed, not a resolve.
+- **The remaining unbacked claims are disclosed, not deleted**, via the
+  greppable `⊘ NO RECEIPT` marker (`grep -rn '⊘ NO RECEIPT'`).
+  `data/depth-lcb-coding-agent-glm52.json` was located holding exactly
+  `passed: 21, total: 25` — the 84% was real but is in no commit on any branch,
+  and is deliberately **not** committed because `livecodebench` is retracted
+  (`acaf6b1e`, `160f8efc`). Three others are absent from disk entirely.
+- **Retraction reached the hand-written pages it had never reached**: the
+  LiveCodeBench figures in the 2026-05-26 fan-out report (`f4fde393`), the
+  benchmark index row, `PARTIAL` → `RETRACTED` (`660ea529`), and every
+  LiveCodeBench figure in the Modal page including the "flagship earns
+  premiere" conclusion built on it — strike the retracted column and MBPP at
+  n=5 is a four-way tie (`d4a1d5d6`). Struck in place with dated corrections
+  per `docs/releases/0.9.1.md`; costs, wall-clocks and non-LiveCodeBench
+  columns stand.
+- **The receipt audit in `docs/reference/capability-matrix.md` is reconciled**
+  (`37c8be2a`) — including one finding that was a false positive produced by
+  the audit's own regex: `(?:json|jsonl)` is first-match-wins in Python, so it
+  truncated `.jsonl` citations to `.json` and reported the truncation as three
+  missing files. `git log -S` confirms no commit ever wrote the `.json` form.
+- **The last unproven matcher exemption is paired with a proof**
+  (`b4a814e6`). `_WITHDRAWN` — the exemption every retraction in the repo
+  leans on — had none. It is line-scoped, and a `~~` strike spanning lines
+  renders struck while leaving the middle line live; that exact bug occurred
+  during this pass and is now a test. A second test pins the known hole
+  (a withdrawal word anywhere on a line clears the whole line) rather than
+  hiding it.
+
 ## 0.9.2.1 — 2026-07-27 — the verified grader
 
 ### Added
