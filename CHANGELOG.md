@@ -72,6 +72,15 @@ commit receipts.
     through the `datasets` store. Per-benchmark `CHIMERA_*_PATH` overrides are
     unaffected and still win.
 
+- **Correction to the spec, recorded on the `project-checkpoints` row and
+  pinned by a test:** the spec states the checkpoint writer "was deleted
+  months ago". It is live and unconditional — `LocalEnvironment.setup()`
+  creates `<workdir>/.chimera_checkpoints` on every setup and
+  `CheckpointManager.create()` fills it with full tree copies. That path sits
+  *beside* `<project>/.chimera`, not inside it, so it falls outside both scope
+  roots: M2's orphan scan as specified would have missed the 2.0 GB tree
+  again. M3 must move the writer; M2 must scan the legacy name explicitly.
+
 - **Known, deliberately not fixed here:** `CommandRegistry.load_all` joins a
   second `.chimera` onto the `user_dir` its callers already pass as
   `~/.chimera`, so user-scope skills have never loaded from

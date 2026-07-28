@@ -325,7 +325,7 @@ def test_registry_rows_are_well_formed():
     for store in all_stores():
         assert isinstance(store, Store)
         assert store.scope in paths.SCOPES
-        assert store.writer, f"{store.name} must declare a writer"
+        assert store.writer, f"{store.name} must declare a writer (or say it has none)"
         assert not store.rel.startswith("/"), f"{store.name} rel must be relative"
         if store.scope == "project":
             assert store.name.startswith("project-")
@@ -361,6 +361,24 @@ def test_the_spec_migration_table_is_fully_declared():
     assert declared["function_synthesis"].prunable is False
     # ...and `history`, which the M1 sweep found is a file, not a directory.
     assert declared["history"].prunable is False
+
+
+def test_the_live_checkpoint_writer_is_recorded_not_assumed_gone():
+    """The spec says the checkpoint writer was deleted. It was not.
+
+    ``LocalEnvironment.setup`` creates ``<workdir>/.chimera_checkpoints`` on
+    every setup — *beside* ``<project>/.chimera``, so outside both scope roots.
+    Pinned here so M2/M3 cannot inherit the spec's false premise: an orphan
+    scan restricted to the two roots would miss the 2.0 GB tree again.
+    """
+    import inspect
+
+    from chimera.env.local import LocalEnvironment
+
+    assert ".chimera_checkpoints" in inspect.getsource(LocalEnvironment.setup)
+    note = get_store("project-checkpoints").note
+    assert ".chimera_checkpoints" in note
+    assert get_store("project-checkpoints").rel == "checkpoints"
 
 
 def test_state_dirname_is_the_one_definition():

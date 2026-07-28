@@ -420,12 +420,19 @@ _STORES: tuple[Store, ...] = (
         name="project-checkpoints",
         scope="project",
         rel="checkpoints",
-        writer="chimera/checkpoints.py",
+        writer="(none yet — chimera/env/local.py writes elsewhere)",
         prunable=True,
         note=(
-            "No writer as of 2026-07-27: CheckpointManager still takes an "
-            "explicit directory and the orphaned .chimera_checkpoints/ tree "
-            "was archived out. M3 points the writer here with retain-N."
+            "Nothing writes here yet; M3 points the writer at it. CORRECTION "
+            "to the spec, which says the checkpoint writer 'was deleted months "
+            "ago': it is live and unconditional. LocalEnvironment.setup() "
+            "creates <workdir>/.chimera_checkpoints on every setup and "
+            "CheckpointManager.create() -> env.checkpoint() fills it with full "
+            "tree copies. That path sits BESIDE <project>/.chimera, not inside "
+            "it, so it is outside both scope roots — M2's orphan scan as "
+            "specified would not have found the 2.0 GB tree either. M3 must "
+            "move the writer here; M2 should scan for the legacy name "
+            "explicitly."
         ),
     ),
     Store(
