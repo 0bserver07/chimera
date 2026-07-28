@@ -25,7 +25,6 @@ We exercise three layers:
 from __future__ import annotations
 
 import argparse
-import os
 import queue as _queue
 from typing import Any
 
