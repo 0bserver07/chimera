@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
+from chimera.config.ignore import is_not_source
 from chimera.tools.codebase_index import CodebaseIndex, SearchResult
 
 try:
@@ -115,7 +116,7 @@ class EmbeddingIndex:
             if not path.is_file() or path.suffix not in _CODE_EXTENSIONS:
                 continue
             parts = path.relative_to(root).parts
-            if any(p.startswith(".") or p in ("node_modules", "__pycache__") for p in parts):
+            if any(p.startswith(".") or is_not_source(p) for p in parts):
                 continue
             try:
                 content = path.read_text(encoding="utf-8", errors="ignore")

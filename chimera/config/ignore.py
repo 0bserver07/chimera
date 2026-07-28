@@ -70,8 +70,10 @@ NOT_SOURCE_DIRS: frozenset[str] = frozenset({
     # Agent state, including the pre-M3 checkpoint location that is still on
     # disk wherever a checkpoint was ever taken.
     ".chimera", ".chimera_checkpoints", ".antigravitycli",
-    # Framework build output.
-    ".next", ".nuxt", ".svelte-kit", ".gradle",
+    # Framework build output. `.astro` came from chimera/context/repo_map.py,
+    # which was the only copy that had it — and this repo's own docs site is
+    # Astro, so it was the copy that mattered here.
+    ".next", ".nuxt", ".svelte-kit", ".gradle", ".astro",
     # Generic build output.
     "dist", "build", "target",
 })

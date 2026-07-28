@@ -5,6 +5,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from chimera.config.ignore import is_not_source
+
 
 @dataclass
 class DocSection:
@@ -46,7 +48,7 @@ class DocGenerator:
         for filepath in sorted(self._root.rglob("*")):
             if filepath.suffix not in extensions:
                 continue
-            if any(part.startswith(".") or part in ("__pycache__", "node_modules", "venv", ".git")
+            if any(part.startswith(".") or is_not_source(part)
                    for part in filepath.parts):
                 continue
 

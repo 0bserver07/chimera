@@ -18,27 +18,105 @@ from chimera.config.ignore import (
 )
 
 
-def test_the_three_tools_share_one_set():
-    """list_files, repo_map and definition_lookup resolve to the same object.
+def test_every_module_level_copy_resolves_to_the_one_set():
+    """Identity, not equality, for every named copy the sweep found.
 
-    Identity, not equality: two equal-but-separate frozensets are exactly the
-    state this module was written to end, and they would drift apart again the
-    first time someone edited one of them.
+    Two equal-but-separate frozensets are exactly the state this module was
+    written to end: they would drift apart again the first time someone edited
+    one of them. ``is`` is therefore the assertion, and a new copy appearing
+    anywhere is a new name that has to be added here to pass.
+
+    The audit named three copies. A grep for ``node_modules`` across
+    ``chimera/`` found **seven** module-level sets plus five inline tuples; this
+    is all of the former except the one documented exception below.
     """
+    from chimera.badger import slash  # noqa: F401 — imported for the sweep below
+    from chimera.context.repo_map import _SKIP_DIRS as context_repo_map_dirs
+    from chimera.mcp_servers.rag_server import _IGNORE_DIRS as rag_dirs
     from chimera.tools.definition_lookup import _IGNORE_DIRS as definition_dirs
     from chimera.tools.list_files import _IGNORED_DIRS as list_files_dirs
     from chimera.tools.repo_map import IGNORE_DIRS as repo_map_dirs
+    from chimera.tui.workspace import _SKIP_DIRS as workspace_dirs
 
-    assert list_files_dirs is NOT_SOURCE_DIRS
-    assert repo_map_dirs is NOT_SOURCE_DIRS
-    assert definition_dirs is NOT_SOURCE_DIRS
+    for name, value in (
+        ("tools/list_files", list_files_dirs),
+        ("tools/repo_map", repo_map_dirs),
+        ("tools/definition_lookup", definition_dirs),
+        ("mcp_servers/rag_server", rag_dirs),
+        ("context/repo_map", context_repo_map_dirs),
+        ("tui/workspace", workspace_dirs),
+    ):
+        assert value is NOT_SOURCE_DIRS, name
 
 
 def test_the_checkpoint_writer_consumes_it_too():
-    """The consumer that had no list at all is now the fourth caller."""
+    """The consumer that had no list at all — and whose absence cost 2.0 GB."""
     from chimera.env.local import CHECKPOINT_EXCLUDED_DIRS
 
     assert NOT_SOURCE_DIRS <= CHECKPOINT_EXCLUDED_DIRS
+
+
+def test_the_standalone_hook_copy_can_age_but_never_contradict():
+    """``chimera/hooks/validate_path.py`` is the one deliberate copy.
+
+    It is invoked as a bare script path by ``chimera/hooks/hooks.json``, which
+    puts ``chimera/hooks/`` on ``sys.path[0]`` instead of the repo root, so a
+    ``chimera.*`` import is not guaranteed to resolve — and a hook that fails to
+    import blocks every Write and Edit. Drift is bounded rather than prevented:
+    the copy may lack newer entries, but it may never name a directory the
+    shared set does not, which is the assertion that catches a contradiction.
+    """
+    from chimera.hooks.validate_path import _IGNORE_DIRS as hook_dirs
+
+    assert hook_dirs is not NOT_SOURCE_DIRS  # the exception is real, not stale
+    assert set(hook_dirs) <= set(NOT_SOURCE_DIRS)
+
+
+def test_no_new_hand_rolled_copy_appears_in_the_package():
+    """A static sweep, so the next copy fails here instead of drifting quietly.
+
+    Any module that writes ``node_modules`` as a string literal *beside another*
+    non-source name is spelling out a collection — which is answering the
+    question this module owns. New hits must either consume
+    :data:`NOT_SOURCE_DIRS` or be added to the allowlist with a reason.
+
+    A lone ``plugin_dir / "node_modules"`` is a path, not a list, so a single
+    quoted name never trips this.
+    """
+    from pathlib import Path
+
+    package = Path(__import__("chimera").__file__).parent
+    # Modules allowed to spell the set out, with why.
+    allowed = {
+        "config/ignore.py",         # the definition itself
+        "hooks/validate_path.py",   # standalone-stdlib hook; see the test above
+        "env/watcher.py",           # glob *patterns* for change events, not a
+                                    # directory-name set, and a caller-supplied
+                                    # default the `ignore=` argument overrides
+    }
+    others = {n for n in NOT_SOURCE_DIRS if n != "node_modules"}
+    offenders = []
+    for path in sorted(package.rglob("*.py")):
+        rel = path.relative_to(package).as_posix()
+        if rel in allowed:
+            continue
+        text = path.read_text(encoding="utf-8")
+        # Join continuations so a set literal split over two lines still reads
+        # as one collection.
+        flat = text.replace("\n", " ")
+        for quote in ('"', "'"):
+            token = f"{quote}node_modules{quote}"
+            if token not in flat:
+                continue
+            for chunk in flat.split(token)[1:]:
+                window = chunk[:200]
+                if any(f"{quote}{n}{quote}" in window for n in others):
+                    offenders.append(f"{rel}: {token} beside a sibling entry")
+                    break
+    assert offenders == [], (
+        "hand-rolled non-source list(s) found; consume NOT_SOURCE_DIRS or "
+        "extend the allowlist with a reason:\n" + "\n".join(sorted(set(offenders)))
+    )
 
 
 def test_no_consumer_lost_an_entry_it_used_to_have():

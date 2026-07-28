@@ -40,6 +40,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from chimera.config.ignore import NOT_SOURCE_DIRS
 from chimera.tools.codebase_index import CodebaseIndex
 from chimera.tools.definition_lookup import DefinitionFinder
 

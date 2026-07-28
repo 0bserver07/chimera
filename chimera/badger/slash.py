@@ -65,6 +65,7 @@ from chimera.cli.slash_commands import (  # noqa: E402
     cmd_status as _cmd_status,
 )
 
+from chimera.config.ignore import prune_dirnames  # noqa: E402
 from chimera.config.paths import store_path  # noqa: E402
 from chimera.cli.code import (  # noqa: E402
     cmd_agent as _cmd_agent,
@@ -597,12 +598,11 @@ def _teleport_resolve(target: str, cwd: str | None) -> list[tuple[str, str]]:
     py_pat = (f"def {target}", f"class {target}")
     js_pat = (f"function {target}(", f"function {target} ", f"const {target} =")
     rs_pat = (f"fn {target}",)
-    skip_dirs = {".git", "node_modules", "__pycache__", ".venv", "dist", "build"}
     hits: list[tuple[str, str]] = []
     max_hits = 25
 
     for root, dirs, files in os.walk(base):
-        dirs[:] = [d for d in dirs if d not in skip_dirs]
+        prune_dirnames(dirs)
         for fname in files:
             if len(hits) >= max_hits:
                 break

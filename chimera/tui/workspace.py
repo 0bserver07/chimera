@@ -30,6 +30,8 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from chimera.config.ignore import NOT_SOURCE_DIRS
+
 __all__ = [
     "LaneWorkspace",
     "WorkspaceSet",
@@ -41,10 +43,10 @@ __all__ = [
 ]
 
 _SNAPSHOT_MAX_BYTES = 1_000_000
-_SKIP_DIRS = frozenset({
-    ".git", ".chimera", "__pycache__", ".venv", "venv", "node_modules",
-    ".mypy_cache", ".pytest_cache", ".ruff_cache",
-})
+# The shared non-source set (`chimera/config/ignore.py`). A lane snapshot exists
+# to diff what the agent changed, so vendored and generated trees are noise in
+# it by the same reasoning that keeps them out of a checkpoint.
+_SKIP_DIRS = NOT_SOURCE_DIRS
 
 
 class WorkspaceError(RuntimeError):
