@@ -1,0 +1,22 @@
+{
+  "model": "glm-5.2[1m]",
+  "cells": [
+    {
+      "agent_id": "react",
+      "benchmark": "swe-bench",
+      "total": 1,
+      "passed": 1,
+      "pass_rate": 1.0,
+      "cost_usd": 0.023248,
+      "tool_calls": 10,
+      "wall_clock_sec": 55.0813552079926,
+      "status": "budget_exhausted",
+      "budget_honored": true,
+      "budget_note": "",
+      "category": "budget_exhausted"
+    }
+  ],
+  "best_per_benchmark": {
+    "swe-bench": "react"
+  }
+}
