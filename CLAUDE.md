@@ -251,7 +251,11 @@ Interactive frontends over AgentDriver (spec: `docs/specs/interactive-frontends.
   `scripts/experiments/`, raw run dirs belong outside the repo. Why: `pb_*.py`
   scratch drivers + 1.3 GB of `pb-runs/`/`runs/` output accumulated at the
   root, six of the files gitignored *while tracked* — invisible to every gate
-  until an owner audit found them.
+  until an owner audit found them. The claim that package code writes no
+  cwd-relative directory is now **enforced**, not asserted: a static `ast`
+  scan in the same test file fails the suite on a literal relative write
+  (`os.makedirs("runs")`, `Path("out").mkdir()`, …). Caller-supplied,
+  temp-, and home-rooted paths are deliberately not flagged.
 - **Zero-dependency core.** Only stdlib in main package. Providers and tools like browser (playwright), remote env (httpx) are optional extras.
 - **TYPE_CHECKING imports.** Use `if TYPE_CHECKING:` for cross-module type hints to avoid circular imports.
 - **3-tier API.** Every feature has: one-liner convenience, developer configuration, framework-author subclassing.
