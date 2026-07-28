@@ -146,8 +146,9 @@ livecodebench-codegeneration, math500, and tau-bench:airline.
 **Depth — LiveCodeBench at n=25. ⊘ RETRACTED, do not cite.** This guide
 previously reported "84% on LiveCodeBench code-generation — 21 of 25 tasks
 passed, the best of any agent on that benchmark," citing
-`data/depth-lcb-coding-agent-glm52.json`. **That is withdrawn on two
-independent grounds**, either of which is sufficient.
+⊘ NO RECEIPT — `data/depth-lcb-coding-agent-glm52.json`, detailed below.
+**That is withdrawn on two independent grounds**, either of which is
+sufficient.
 
 *First, nothing published has ever backed it.*
 ⊘ NO RECEIPT — `data/depth-lcb-coding-agent-glm52.json` is in no commit on any branch and is not tracked (verified 2026-07-28: `git log --all -- <path>` and `git ls-files --error-unmatch <path>` both come back empty).
