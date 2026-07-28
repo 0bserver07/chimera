@@ -38,6 +38,7 @@ import sys
 import tempfile
 from pathlib import Path
 from typing import Any, Iterator
+from chimera.config.paths import store_path
 
 __all__ = [
     "find_latest_diff",
@@ -107,7 +108,7 @@ def extract_diff_from_event(event: dict[str, Any]) -> str | None:
 
 def _ferret_eventlog_root() -> Path:
     """Return ``~/.chimera/eventlog`` honoring ``Path.home()`` patches."""
-    return Path.home() / ".chimera" / "eventlog"
+    return store_path("eventlog")
 
 
 def _iter_ferret_sessions(

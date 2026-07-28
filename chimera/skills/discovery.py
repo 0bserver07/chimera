@@ -31,6 +31,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from chimera.config.paths import store_path
 
 
 @dataclass
@@ -209,8 +210,8 @@ def default_search_paths(workdir: str = ".") -> list[Path]:
     """
     return [
         bundled_algorithms_path(),
-        Path(workdir) / ".chimera" / "skills",
-        Path.home() / ".chimera" / "skills",
+        store_path("project-skills", workdir),
+        store_path("skills"),
     ]
 
 
@@ -437,7 +438,7 @@ def default_remote_cache() -> Path:
     user can blow away a misbehaving cache with
     ``rm -rf ~/.chimera/cache``.
     """
-    return Path.home() / ".chimera" / "cache" / "skills"
+    return store_path("cache") / "skills"
 
 
 def _http_get(url: str, *, timeout: float = 10.0) -> bytes:

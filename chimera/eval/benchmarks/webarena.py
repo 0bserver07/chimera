@@ -41,8 +41,9 @@ from typing import Any
 from urllib.parse import urlparse
 
 from chimera.eval.harness import Benchmark
+from chimera.config.paths import STATE_DIRNAME, store_path
 
-DEFAULT_DATASET_DIR = "~/.chimera/datasets/webarena"
+DEFAULT_DATASET_DIR = f"~/{STATE_DIRNAME}/datasets/webarena"
 ENV_DATASET_PATH = "CHIMERA_WEBARENA_PATH"
 
 #: Eval-type tags WebArena uses on each task.
@@ -60,8 +61,10 @@ def default_dataset_path() -> Path:
     otherwise falls back to ``~/.chimera/datasets/webarena/``. The path
     may or may not exist; callers are expected to check.
     """
-    raw = os.environ.get(ENV_DATASET_PATH) or DEFAULT_DATASET_DIR
-    return Path(raw).expanduser()
+    raw = os.environ.get(ENV_DATASET_PATH)
+    if raw:
+        return Path(raw).expanduser()
+    return store_path("datasets") / "webarena"
 
 
 def dataset_available(path: Path | None = None) -> bool:

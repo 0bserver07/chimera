@@ -35,6 +35,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from chimera.sessions.eventlog.session import EventSourcedSession
+from chimera.config.paths import store_path
 
 if TYPE_CHECKING:
     from chimera.sessions.session import SessionResumeAgent
@@ -92,7 +93,7 @@ def default_eventlog_root() -> Path:
     Returns:
         ``~/.chimera/eventlog/`` honoring the current ``Path.home()``.
     """
-    return Path.home() / ".chimera" / "eventlog"
+    return store_path("eventlog")
 
 
 def _read_summary(session_dir: Path) -> dict[str, Any] | None:

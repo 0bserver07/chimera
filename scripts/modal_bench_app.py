@@ -23,10 +23,11 @@ import json
 from pathlib import Path
 
 import modal
+from chimera.config.paths import store_path
 
 _REPO = Path(__file__).resolve().parent.parent
 _CHIMERA_PKG = _REPO / "chimera"
-_DATASETS = Path.home() / ".chimera" / "datasets"
+_DATASETS = store_path("datasets")
 
 # Chimera (local source, with the Modal fixes) + staged datasets baked in.
 # HOME=/root so the benches' ~/.chimera/datasets lookup resolves to the copy.

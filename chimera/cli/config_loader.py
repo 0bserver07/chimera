@@ -28,6 +28,7 @@ import os
 import tomllib
 from pathlib import Path
 from typing import Any
+from chimera.config.paths import user_scope_dir
 
 #: Default path to the chimera config file. Honors ``$CHIMERA_CONFIG_HOME``
 #: (a directory) and ``$HOME`` so tests can redirect both. Tests that set
@@ -41,13 +42,17 @@ def config_path() -> Path:
        ``config.toml``). Useful in tests and CI sandboxes.
     2. ``$HOME/.chimera/config.toml`` — the canonical location.
 
+    Anchored on :func:`chimera.config.paths.user_scope_dir`, *not* the
+    (relocatable) storage root: this file is where ``[storage] root`` is
+    declared, so reading it through that setting would be circular.
+
     The path is **not** required to exist; callers that read should treat a
     missing file as "no defaults configured".
     """
     override = os.environ.get("CHIMERA_CONFIG_HOME")
     if override:
         return Path(override) / "config.toml"
-    return Path(os.path.expanduser("~")) / ".chimera" / "config.toml"
+    return user_scope_dir() / "config.toml"
 
 
 def load_config() -> dict[str, Any]:

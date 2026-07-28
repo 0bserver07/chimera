@@ -352,7 +352,13 @@ def test_repl_run_plan_turn_persists_plan(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ) -> None:
-    """``run_plan_turn`` persists a Plan to ``$CHIMERA_HOME/.chimera/plans``."""
+    """``run_plan_turn`` persists a Plan to ``$CHIMERA_HOME/plans``.
+
+    ``$CHIMERA_HOME`` is the storage *root* (``chimera.config.paths``), so the
+    plans store is ``$CHIMERA_HOME/plans``. This module used to read it as a
+    home directory (``$CHIMERA_HOME/.chimera/plans``) — the only place in the
+    codebase that did. Unset, the resolved path is unchanged: ``~/.chimera/plans``.
+    """
     monkeypatch.setenv("CHIMERA_HOME", str(tmp_path))
     repl, _ = _repl([])
 
@@ -384,7 +390,7 @@ def test_repl_run_plan_turn_persists_plan(
     assert "1. write tests" in text
     assert "[plan saved:" in text
 
-    plans_dir = tmp_path / ".chimera" / "plans"
+    plans_dir = tmp_path / "plans"
     saved = list(plans_dir.glob("plan-*.json"))
     assert len(saved) == 1
     plan = load_plan(saved[0].stem, root=plans_dir)

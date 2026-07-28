@@ -65,6 +65,7 @@ from pathlib import Path
 from typing import Any
 
 from chimera.eval.harness import Benchmark
+from chimera.config.paths import store_path
 
 
 __all__ = [
@@ -99,7 +100,7 @@ def default_dataset_path() -> Path:
     env = os.environ.get("CHIMERA_MBPP_PATH")
     if env:
         return Path(env).expanduser()
-    base = Path.home() / ".chimera" / "datasets" / "mbpp"
+    base = store_path("datasets") / "mbpp"
     sanitized = base / "sanitized-mbpp.json"
     if sanitized.exists():
         return sanitized

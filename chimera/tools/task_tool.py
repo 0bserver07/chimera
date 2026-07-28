@@ -25,6 +25,7 @@ from chimera.core.tool import BaseTool
 from chimera.env.base import Environment
 from chimera.permissions.presets import AllowList, AutoApprove
 from chimera.types import AgentResult, Message, ToolResult
+from chimera.config.paths import store_path
 
 if TYPE_CHECKING:
     from chimera.agents.loader import AgentLoader
@@ -38,7 +39,7 @@ __all__ = [
     "TaskNotFinished", "TaskNotFound", "ISOLATION_TIERS",
 ]
 
-DEFAULT_TASK_DIR = Path.home() / ".chimera" / "tasks"
+DEFAULT_TASK_DIR = store_path("tasks")
 ISOLATION_TIERS = ("full", "selective", "shared")
 
 

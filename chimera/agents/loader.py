@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 
 from chimera.agents.config import AgentConfig, _parse_frontmatter
 from chimera.agents.registry import AgentRegistry
+from chimera.config.paths import STATE_DIRNAME, store_path
 
 if TYPE_CHECKING:
     from chimera.config.skills import SkillRegistry
@@ -227,8 +228,8 @@ class AgentLoader:
         ```
     """
 
-    PROJECT_DIR = ".chimera/agents"
-    USER_DIR = "~/.chimera/agents"
+    PROJECT_DIR = f"{STATE_DIRNAME}/agents"
+    USER_DIR = f"~/{STATE_DIRNAME}/agents"
 
     def __init__(self, project_root: str | None = None) -> None:
         self.project_root = Path(project_root) if project_root else Path.cwd()
@@ -241,7 +242,7 @@ class AgentLoader:
             Dictionary of agent name to FileAgentDef.
         """
         self._load_from_dir(self._builtin_dir(), "builtin")
-        self._load_from_dir(Path(self.USER_DIR).expanduser(), "user")
+        self._load_from_dir(self._user_dir(), "user")
         self._load_from_dir(self.project_root / self.PROJECT_DIR, "project")
         return dict(self._agents)
 
@@ -282,6 +283,18 @@ class AgentLoader:
             agent for agent in self.list_agents()
             if any(keyword in t.lower() for t in agent.triggers)
         ]
+
+    def _user_dir(self) -> Path:
+        """Return the user-scope agent directory.
+
+        Resolves through the path registry (so ``$CHIMERA_HOME`` /
+        ``[storage] root`` relocate it) unless :attr:`USER_DIR` has been
+        reassigned, which stays the documented override seam for tests and
+        embedders. Unset, both spellings are ``~/.chimera/agents``.
+        """
+        if self.USER_DIR != AgentLoader.USER_DIR:
+            return Path(self.USER_DIR).expanduser()
+        return store_path("agents")
 
     def _load_from_dir(self, directory: Path | None, source: str) -> None:
         if not directory or not directory.exists():

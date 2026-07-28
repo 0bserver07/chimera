@@ -15,11 +15,11 @@ from pathlib import Path
 
 from chimera.function_synthesis.bundle import ChiBundle
 from chimera.function_synthesis.errors import CacheMissError, OfflineError
+from chimera.config.paths import store_path
 
 
 DEFAULT_HOME_ENV = "CHIMERA_FS_HOME"
 OFFLINE_ENV = "CHIMERA_FS_OFFLINE"
-_DEFAULT_SUBPATH = ".chimera/function_synthesis"
 
 
 def _offline() -> bool:
@@ -39,11 +39,12 @@ class CacheDirs:
 
     @classmethod
     def default(cls) -> CacheDirs:
-        env = os.environ.get(DEFAULT_HOME_ENV)
-        if env:
-            return cls(root=Path(env))
-        home = Path(os.environ.get("HOME") or Path.home())
-        return cls(root=home / _DEFAULT_SUBPATH)
+        """Resolve the cache root through the path registry.
+
+        ``$CHIMERA_FS_HOME`` is the ``function_synthesis`` store's declared
+        per-store override, so this keeps its exact prior meaning.
+        """
+        return cls(root=store_path("function_synthesis"))
 
     @property
     def models(self) -> Path:

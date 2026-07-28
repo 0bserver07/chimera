@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from chimera.auth.base import Credential
+from chimera.config.paths import chimera_home
 
 __all__ = ["CredentialStore"]
 
@@ -13,8 +14,12 @@ __all__ = ["CredentialStore"]
 class CredentialStore:
     """File-based credential storage with restrictive permissions."""
 
-    def __init__(self, path: str = "~/.chimera/credentials.json") -> None:
-        self._path = Path(path).expanduser()
+    def __init__(self, path: str | None = None) -> None:
+        self._path = (
+            Path(path).expanduser()
+            if path is not None
+            else chimera_home() / "credentials.json"
+        )
 
     def get(self, provider: str) -> Credential | None:
         """Return the stored credential for *provider*, or ``None``."""

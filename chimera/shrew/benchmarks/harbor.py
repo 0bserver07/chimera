@@ -48,6 +48,7 @@ from typing import Any
 
 from chimera.eval.harness import Benchmark
 from chimera.shrew.benchmarks.gaia import extract_final_answer, score_answer
+from chimera.config.paths import STATE_DIRNAME, store_path
 
 __all__ = [
     "HarborBench",
@@ -59,7 +60,7 @@ __all__ = [
 ]
 
 
-DEFAULT_DATASET_DIR = "~/.chimera/datasets/harbor"
+DEFAULT_DATASET_DIR = f"~/{STATE_DIRNAME}/datasets/harbor"
 """Default on-disk location for the staged Harbor dataset."""
 
 ENV_DATASET_PATH = "CHIMERA_HARBOR_PATH"
@@ -78,8 +79,10 @@ def default_dataset_path() -> Path:
         Absolute :class:`Path` to the dataset root (existence not
         guaranteed).
     """
-    raw = os.environ.get(ENV_DATASET_PATH) or DEFAULT_DATASET_DIR
-    return Path(raw).expanduser()
+    raw = os.environ.get(ENV_DATASET_PATH)
+    if raw:
+        return Path(raw).expanduser()
+    return store_path("datasets") / "harbor"
 
 
 def dataset_available(path: Path | None = None) -> bool:

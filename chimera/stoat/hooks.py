@@ -37,13 +37,13 @@ Trademark hygiene: the file path is a filesystem fact (we own the
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 from typing import Any
 
 from chimera.hooks.emitter import HookEmitter
 from chimera.hooks.events import HookEvent
 from chimera.hooks.executor import HookExecutor
+from chimera.config.paths import store_path
 from chimera.hooks.hook_types import (
     CommandHook,
     HookMatcher,
@@ -80,12 +80,7 @@ def default_hooks_path() -> Path:
         Absolute path to the stoat-scoped hooks JSON file. The file does
         not need to exist; callers must handle ``FileNotFoundError``.
     """
-    chimera_home = os.environ.get("CHIMERA_HOME")
-    if chimera_home:
-        root = Path(chimera_home)
-    else:
-        root = Path.home() / ".chimera"
-    return root / "stoat" / HOOKS_FILENAME
+    return store_path("stoat") / HOOKS_FILENAME
 
 
 def load_hooks_config(

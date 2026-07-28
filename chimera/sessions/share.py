@@ -29,6 +29,7 @@ import tarfile
 import tempfile
 import urllib.request
 from pathlib import Path
+from chimera.config.paths import store_path
 
 __all__ = [
     "DATA_URI_PREFIX",
@@ -59,12 +60,12 @@ def _default_eventlog_root() -> Path:
     :mod:`chimera.mink.runs` rather than importing it so this module can
     stand on its own when ``mink`` is not installed.
     """
-    return Path.home() / ".chimera" / "eventlog"
+    return store_path("eventlog")
 
 
 def _default_export_dir() -> Path:
     """Return ``~/.chimera/exports/`` (created lazily by callers)."""
-    return Path.home() / ".chimera" / "exports"
+    return store_path("exports")
 
 
 # ---------------------------------------------------------------------------

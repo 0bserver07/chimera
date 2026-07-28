@@ -30,18 +30,20 @@ are intentionally absent — staging those stays a manual, documented step.
 from __future__ import annotations
 
 import json
-import os
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from chimera.config.paths import get_store, store_path
+
 __all__ = ["FetchSpec", "FETCHES", "available", "fetch", "staged_path", "staging_dir"]
 
 #: Environment override for the staging root (used by tests; respected
-#: everywhere so users can relocate the cache).
-_ENV_DIR = "CHIMERA_DATASETS_DIR"
+#: everywhere so users can relocate the cache). Sourced from the registry so
+#: the variable is declared exactly once.
+_ENV_DIR = get_store("datasets").env
 
 #: Rows per datasets-server page (the API maximum).
 _HF_PAGE = 100
@@ -51,11 +53,14 @@ _urlopen = urllib.request.urlopen
 
 
 def staging_dir() -> Path:
-    """Return the dataset staging root (``~/.chimera/datasets`` by default)."""
-    override = os.environ.get(_ENV_DIR)
-    if override:
-        return Path(override).expanduser()
-    return Path.home() / ".chimera" / "datasets"
+    """Return the dataset staging root (``~/.chimera/datasets`` by default).
+
+    Resolved through the path registry, which honors ``$CHIMERA_DATASETS_DIR``
+    as this store's per-store override — the same variable, the same
+    precedence, now declared in one place
+    (:mod:`chimera.config.paths`).
+    """
+    return store_path("datasets")
 
 
 @dataclass(frozen=True)

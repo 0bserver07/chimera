@@ -8,6 +8,8 @@ import json
 import os
 from pathlib import Path
 
+from chimera.config.paths import store_path
+
 # --- env: load .env, configure the Claude-Code-style bridge + live gate ---
 # Repo root (this file lives at scripts/experiments/): the .env lookup broke
 # when the script moved off the root — resolve it explicitly.
@@ -27,7 +29,7 @@ os.environ["CHIMERA_PROGRAMBENCH_LIVE"] = "1"  # arm64 host: force-run under QEM
 # root, which is gated (tests/test_repo_hygiene.py). Override for relocation.
 PB_RUNS = Path(
     os.environ.get("CHIMERA_PB_RUNS")
-    or Path.home() / ".chimera" / "experiment-runs" / "pb-runs"
+    or store_path("experiment-runs") / "pb-runs"
 )
 
 from chimera.agents.config import AgentConfig  # noqa: E402

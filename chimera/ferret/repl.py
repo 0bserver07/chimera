@@ -41,6 +41,7 @@ import sys
 import uuid
 from pathlib import Path
 from typing import Any
+from chimera.config.paths import store_path
 
 __all__ = [
     "build_ferret_agent",
@@ -66,7 +67,7 @@ def ferret_eventlog_root() -> Path:
         :mod:`chimera.ferret.sessions` owns the listing surface; we
         just mint ``ferret-*`` run directories underneath this root.
     """
-    return Path.home() / ".chimera" / "eventlog"
+    return store_path("eventlog")
 
 
 def make_run_id() -> str:

@@ -25,6 +25,7 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterator
+from chimera.config.paths import store_path
 
 __all__ = [
     "SessionRecord",
@@ -124,12 +125,12 @@ class SessionDetail:
 
 def default_eventlog_root() -> Path:
     """Return ``~/.chimera/eventlog/`` honoring the current ``Path.home()``."""
-    return Path.home() / ".chimera" / "eventlog"
+    return store_path("eventlog")
 
 
 def default_shares_dir() -> Path:
     """Return ``~/.chimera/shares/`` (created lazily by :func:`write_share_file`)."""
-    return Path.home() / ".chimera" / "shares"
+    return store_path("shares")
 
 
 def _read_summary(session_dir: Path) -> dict[str, Any] | None:

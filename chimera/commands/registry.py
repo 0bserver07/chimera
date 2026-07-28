@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from chimera.commands.types import Command, PromptCommand
+from chimera.config.paths import STATE_DIRNAME, store_path
 
 if TYPE_CHECKING:
     pass
@@ -91,9 +92,14 @@ class CommandRegistry:
         # Skills
         from chimera.skills.loader import SkillLoader
 
-        search_paths: list[Path] = [project_dir / ".chimera" / "skills"]
+        search_paths: list[Path] = [store_path("project-skills", project_dir)]
         if user_dir is not None:
-            search_paths.append(user_dir / ".chimera" / "skills")
+            # NOTE (M1 storage sweep): every caller passes ``~/.chimera``
+            # here, so this joins a *second* ``.chimera`` and user skills
+            # have never actually loaded. Preserved verbatim — fixing it
+            # would change skill resolution, which a path-plumbing change
+            # has no business doing silently.
+            search_paths.append(Path(user_dir) / STATE_DIRNAME / "skills")
 
         loader = SkillLoader(search_paths)
         definitions = await loader.load_all()

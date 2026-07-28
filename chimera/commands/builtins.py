@@ -6,6 +6,7 @@ import subprocess
 from typing import Any
 
 from chimera.commands.types import LocalCommand
+from chimera.config.paths import project_state_dir, store_path
 
 
 # ---------------------------------------------------------------------------
@@ -68,9 +69,8 @@ def _compact_handler(args: str) -> str:
 def _cost_handler(args: str) -> str:
     """Show cost from the most-recent session file on disk, if any."""
     import json
-    from pathlib import Path
 
-    session_dir = Path.home() / ".chimera" / "sessions"
+    session_dir = store_path("sessions")
     if not session_dir.exists():
         return "No cost data: no session files yet. Cost is tracked per session."
     files = sorted(
@@ -184,7 +184,7 @@ def _undo_handler(args: str) -> str:
     """
     from pathlib import Path
 
-    snapshot_dir = Path.cwd() / ".chimera" / "snapshots"
+    snapshot_dir = store_path("project-snapshots", Path.cwd())
     if snapshot_dir.exists():
         snapshots = sorted(snapshot_dir.glob("*.json"))
         if snapshots:
@@ -266,8 +266,6 @@ def _session_handler(args: str) -> str:
     contract doesn't expose. Use the rich REPL (`chimera code` without
     `--preset`) or `Session.save()` directly for those.
     """
-    from pathlib import Path
-
     parts = args.strip().split()
     sub = parts[0] if parts else "info"
 
@@ -278,7 +276,7 @@ def _session_handler(args: str) -> str:
         )
 
     if sub == "list":
-        session_dir = Path.home() / ".chimera" / "sessions"
+        session_dir = store_path("sessions")
         if not session_dir.exists():
             return "No sessions found (~/.chimera/sessions/ does not exist)."
         files = sorted(session_dir.glob("*.jsonl"))
@@ -419,7 +417,7 @@ def _context_handler(args: str) -> str:
     ]
     # If a .chimera project exists, show loaded config summary
     from pathlib import Path
-    dotdir = Path.cwd() / ".chimera"
+    dotdir = project_state_dir(Path.cwd())
     if dotdir.exists():
         entries = sorted(dotdir.iterdir())
         lines.append(f".chimera/: {len(entries)} entries")
@@ -481,7 +479,7 @@ def _permissions_handler(args: str) -> str:
     import json
     from pathlib import Path
 
-    settings = Path.cwd() / ".chimera" / "settings.json"
+    settings = project_state_dir(Path.cwd()) / "settings.json"
     if not settings.exists():
         return (
             "No .chimera/settings.json in the current directory.\n"
@@ -503,7 +501,7 @@ def _hooks_handler(args: str) -> str:
     import json
     from pathlib import Path
 
-    settings = Path.cwd() / ".chimera" / "settings.json"
+    settings = project_state_dir(Path.cwd()) / "settings.json"
     if not settings.exists():
         return (
             "No .chimera/settings.json in the current directory.\n"
@@ -547,7 +545,7 @@ def _snapshot_handler(args: str) -> str:
     """List snapshots under .chimera/snapshots/ if present."""
     from pathlib import Path
 
-    snap_dir = Path.cwd() / ".chimera" / "snapshots"
+    snap_dir = store_path("project-snapshots", Path.cwd())
     if not snap_dir.exists():
         return (
             "No snapshots: .chimera/snapshots/ does not exist.\n"
@@ -611,7 +609,7 @@ def _export_handler(args: str) -> str:
     from chimera.core.html_export import export_session_html
 
     parts = args.split()
-    session_dir = Path.home() / ".chimera" / "sessions"
+    session_dir = store_path("sessions")
 
     if not session_dir.exists():
         return (

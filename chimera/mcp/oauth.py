@@ -26,6 +26,7 @@ import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from chimera.config.paths import store_path
 
 
 KEYCHAIN_SERVICE = "chimera-mcp-oauth"
@@ -96,7 +97,7 @@ class TokenStore:
         prefer_keychain: If False, always use file storage (useful for tests).
     """
 
-    base_dir: Path = field(default_factory=lambda: Path.home() / ".chimera" / "tokens")
+    base_dir: Path = field(default_factory=lambda: store_path("tokens"))
     prefer_keychain: bool = True
 
     def __post_init__(self) -> None:

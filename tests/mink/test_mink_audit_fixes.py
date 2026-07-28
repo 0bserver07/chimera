@@ -10,7 +10,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
 
 
 # --- B-3: stream-json must emit at least one JSON object on stdout ---

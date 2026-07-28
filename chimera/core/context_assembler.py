@@ -13,6 +13,7 @@ from typing import Any
 
 from chimera.core.system_prompt import SystemPrompt, SystemPromptBuilder
 from chimera.core.tool import BaseTool
+from chimera.config.paths import project_state_dir
 
 
 class ContextAssembler:
@@ -130,7 +131,7 @@ class ContextAssembler:
         candidates = [
             self._project_dir / "CHIMERA.md",
             self._project_dir / "CLAUDE.md",
-            self._project_dir / ".chimera" / "instructions.md",
+            project_state_dir(self._project_dir) / "instructions.md",
         ]
         for path in candidates:
             if path.is_file():

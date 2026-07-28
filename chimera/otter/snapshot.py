@@ -43,6 +43,7 @@ import time
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
+from chimera.config.paths import store_path
 
 __all__ = [
     "FileSnapshot",
@@ -61,7 +62,7 @@ def default_snapshot_root() -> Path:
     override = os.environ.get("CHIMERA_SNAPSHOT_ROOT")
     if override:
         return Path(override)
-    return Path.home() / ".chimera" / "snapshots"
+    return store_path("snapshots")
 
 
 @dataclass

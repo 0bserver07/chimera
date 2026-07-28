@@ -12,10 +12,16 @@ An owner audit (2026-07-27) found the state story was accretion, not design:
   drivers, `runs/` (944 MB) from the external Terminal-Bench harness — plus the
   drivers themselves as the root's only loose `.py` files, six of them
   gitignored *while tracked*.
-- **A 2.0 GB orphaned checkpoint** (`.chimera_checkpoints/0`): a full tree copy
+- **A 2.0 GB checkpoint tree** (`.chimera_checkpoints/0`): a full tree copy
   including `.venv`, `site/node_modules` (759 MB) and a duplicate of `runs/`.
-  Its writer was deleted months ago; nothing surfaced the orphan until a human
-  got angry.
+  Nothing surfaced it until a human got angry.
+  > **Correction (M1, 2026-07-27):** this document originally said "its writer
+  > was deleted months ago." **That was wrong.** The writer is *live* —
+  > `LocalEnvironment.setup()` creates `<workdir>/.chimera_checkpoints` on
+  > every setup and `CheckpointManager.create()` fills it with full tree
+  > copies. Verified by running `setup()` and watching the directory appear.
+  > This makes M3 *more* urgent, not less: the problem is an active unbounded
+  > writer, not dead residue, so the tree regenerates.
 - **Retention exists for exactly one store** (cohorts: `[tui.cohorts]`
   retain / max-age-days). Sessions, eventlog, history, checkpoints,
   experiment runs: fire-and-forget.
@@ -89,6 +95,14 @@ the one config chain (`chimera/config/user_config.py`, T13) → `~/.chimera`.
 | project state | `<proj>/.chimera` — `sessions/`, `todo.json` (39 MB here) | `chimera/cli/code.py`, todo tool | `project:state` | yes |
 | checkpoints | *(orphan archived out)* future writes | `chimera/checkpoints.py` after M3 | `project:checkpoints` (under `<proj>/.chimera/checkpoints`) | yes, retain-N |
 
+> **Reality check (M1):** the table above lists 11 stores; the sweep found
+> **36** (28 user-scope, 8 project-scope; 19 never-prunable). The other 25 were
+> not optional detail — each would have surfaced as a false orphan in M2.
+> `history` is a **file**, not a directory, so entry-count retention cannot
+> apply to it; project-scope `sessions` is written by
+> `assembly/coding_agent.py`, not `cli/code.py` as claimed. See
+> `chimera/config/paths.py` for the authoritative set.
+
 M1 ends with a grep-audit: **zero** `Path.home() / ".chimera"` constructions
 outside `paths.py`. Existing env vars (`CHIMERA_DATASETS_DIR`,
 `CHIMERA_PB_RUNS`) keep working as per-store overrides.
@@ -113,8 +127,13 @@ retain = 5
 one row per registry store — path, size, entry count, newest/oldest age,
 retention config if any — for both scopes, plus an **orphans** subsection: any
 directory under `chimera_home()` or `<proj>/.chimera` not claimed by the
-registry, with its size. The 2 GB checkpoint would have printed itself here for
-four months. `--json` for scripting.
+registry, with its size.
+
+> **Scope fix (M1, 2026-07-27):** as first written this scan covered
+> `chimera_home()` and `<proj>/.chimera` — and would have **walked straight
+> past** `<workdir>/.chimera_checkpoints`, which sits *beside* `<proj>/.chimera`
+> rather than inside it. The scan must cover project-root `.chimera*` siblings,
+> or it misses the exact 2 GB tree that motivated this spec. `--json` for scripting.
 
 **`chimera gc`**: iterates registry stores that are `prunable` *and* have
 retention configured. Dry-run is the default and prints every candidate with

@@ -23,6 +23,7 @@ import shutil
 import subprocess
 from pathlib import Path
 from typing import Any, Callable
+from chimera.config.paths import chimera_home, project_state_dir, store_path
 
 # NOTE: Handlers defined in :mod:`chimera.cli.code` (cmd_help, cmd_model, ...)
 # are imported lazily inside :func:`_build_default_registry` to avoid a
@@ -211,7 +212,7 @@ def cmd_doctor(_session: Any, env: Any, _args: str, out: PrintFn) -> None:
     # than the legacy Chimera path. Check both the project-level
     # `.mcp.json` (CC-style) and the user-level `~/.chimera/mcp.json`
     # (legacy Chimera) so the doctor reflects what the live CLI loads.
-    mcp_user = Path.home() / ".chimera" / "mcp.json"
+    mcp_user = chimera_home() / "mcp.json"
     mcp_project = Path(workdir) / ".mcp.json"
     mcp_project_alt = Path(workdir) / ".claude" / ".mcp.json"
     sources_present: list[tuple[Path, int | str]] = []
@@ -326,7 +327,7 @@ def cmd_mcp(_session: Any, env: Any, _args: str, out: PrintFn) -> None:
     candidates = [
         ("project (.mcp.json)", Path(workdir) / ".mcp.json"),
         ("project (.claude/.mcp.json)", Path(workdir) / ".claude" / ".mcp.json"),
-        ("user (~/.chimera/mcp.json)", Path.home() / ".chimera" / "mcp.json"),
+        ("user (~/.chimera/mcp.json)", chimera_home() / "mcp.json"),
     ]
     found_any = False
     merged_servers: dict[str, Any] = {}
@@ -436,7 +437,7 @@ def _list_resumable_sessions(limit: int = 10) -> list[tuple[str, float, str]]:
     """
     rows: dict[str, tuple[float, str]] = {}
 
-    eventlog_root = Path.home() / ".chimera" / "eventlog"
+    eventlog_root = store_path("eventlog")
     if eventlog_root.is_dir():
         for child in eventlog_root.iterdir():
             if not child.is_dir():
@@ -447,7 +448,7 @@ def _list_resumable_sessions(limit: int = 10) -> list[tuple[str, float, str]]:
                 continue
             rows[child.name] = (mtime, "eventlog")
 
-    sessions_root = Path.home() / ".chimera" / "sessions"
+    sessions_root = store_path("sessions")
     if sessions_root.is_dir():
         for child in sessions_root.iterdir():
             if not child.is_file() or child.suffix not in (".json", ".jsonl"):
@@ -523,7 +524,7 @@ def cmd_resume(session: Any, _env: Any, args: str, out: PrintFn) -> None:
     agent = _cast(_Agent, raw_agent)
 
     # Path 1: EventSourcedSession (preferred — full event replay).
-    eventlog_root = Path.home() / ".chimera" / "eventlog"
+    eventlog_root = store_path("eventlog")
     eventlog_dir = eventlog_root / sid
     if eventlog_dir.exists():
         try:
@@ -1091,9 +1092,9 @@ def cmd_config(_session: Any, env: Any, _args: str, out: PrintFn) -> None:
 
     workdir = getattr(env, "workdir", None) or os.getcwd()
     candidates = [
-        Path(workdir) / ".chimera" / "settings.json",
+        project_state_dir(workdir) / "settings.json",
         Path(workdir) / ".claude" / "settings.json",
-        Path.home() / ".chimera" / "settings.json",
+        chimera_home() / "settings.json",
     ]
     found = False
     for path in candidates:

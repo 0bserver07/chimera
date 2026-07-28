@@ -26,6 +26,7 @@ from chimera.tui.budget import budget_to_dict
 from chimera.tui.history_io import serialize_history
 from chimera.tui.lane import Lane
 from chimera.tui.routing import RoutingMode
+from chimera.config.paths import store_path
 
 if TYPE_CHECKING:
     from chimera.core.budget import BudgetSpec
@@ -43,7 +44,7 @@ __all__ = [
 
 def default_cohort_root() -> Path:
     """The default parent dir for persisted cohorts (``~/.chimera/cohorts``)."""
-    return Path.home() / ".chimera" / "cohorts"
+    return store_path("cohorts")
 
 
 def _atomic_write_text(path: Path, text: str) -> None:
@@ -389,11 +390,15 @@ class CohortRetention:
     Both knobs are optional and **OFF by default**, so no configuration means
     no pruning — persisted cohorts accumulate exactly as before (the
     data-preserving default: nobody loses work they did not ask to discard).
-    Configure under ``[tui.cohorts]`` in ``~/.chimera/config.toml``::
+    Configure under ``[storage.cohorts]`` in ``~/.chimera/config.toml``::
 
-        [tui.cohorts]
+        [storage.cohorts]
         retain = 20            # keep only the newest 20 cohorts
         max-age-days = 30      # also drop cohorts older than 30 days
+
+    ``[tui.cohorts]`` — the spelling that shipped first — is still read as a
+    legacy alias when ``[storage.cohorts]`` is absent, so existing configs keep
+    working untouched.
 
     Args:
         retain: Keep at most this many of the newest cohorts; ``None`` keeps
@@ -439,11 +444,13 @@ def load_cohort_retention(
 ) -> CohortRetention:
     """Resolve the cohort-retention policy from the unified config chain.
 
-    Reads the ``tui`` section across the standard scopes (XDG < user <
-    project) via :func:`chimera.config.user_config.load_tui_config`, so a global
-    cap in ``~/.chimera/config.toml`` or a per-project override both apply. Any
-    failure yields the inactive (prune-nothing) default — config discovery must
-    never block a TUI launch.
+    Delegates to :func:`chimera.config.paths.store_retention` — the one
+    retention reader every store shares — which reads ``[storage.cohorts]``
+    across the standard scopes (XDG < user < project) and falls back to the
+    legacy ``[tui.cohorts]`` table when the new spelling is absent. A global
+    cap in ``~/.chimera/config.toml`` or a per-project override both apply.
+    Any failure yields the inactive (prune-nothing) default — config discovery
+    must never block a TUI launch.
 
     Args:
         project_dir: Project root for the project-scope lookup (default: cwd).
@@ -452,11 +459,14 @@ def load_cohort_retention(
         The resolved :class:`CohortRetention`.
     """
     try:
-        from chimera.config.user_config import load_tui_config
+        from chimera.config.paths import store_retention
 
-        return CohortRetention.from_tui_config(load_tui_config(project_dir))
+        resolved = store_retention("cohorts", project_dir)
     except Exception:  # noqa: BLE001 — config discovery is best-effort.
         return CohortRetention()
+    return CohortRetention(
+        retain=resolved.retain, max_age_days=resolved.max_age_days
+    )
 
 
 def _cohort_age_days(manifest_path: Path, entry: Path, ref: datetime) -> float:

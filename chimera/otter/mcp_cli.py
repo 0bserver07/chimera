@@ -39,6 +39,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from chimera.otter.mcp import MCPServerConfig, load_mcp_servers
+from chimera.config.paths import chimera_home, user_scope_dir
 
 __all__ = [
     "cmd_mcp_add",
@@ -457,8 +458,8 @@ def _default_store(home: Path | None) -> Any:
     """Build a :class:`CredentialStore` rooted under the resolved home."""
     from chimera.auth.store import CredentialStore
 
-    store_path = _resolve_home(home) / ".chimera" / "credentials.json"
-    return CredentialStore(str(store_path))
+    root = user_scope_dir(home) if home is not None else chimera_home()
+    return CredentialStore(str(root / "credentials.json"))
 
 
 def _run_device_flow(

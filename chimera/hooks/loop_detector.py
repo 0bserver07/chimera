@@ -15,6 +15,7 @@ Exit codes (hook mode):
 Output on stdout is relayed to the agent so it receives the nudge.
 """
 from __future__ import annotations
+from chimera.config.paths import chimera_home
 
 import json
 import os
@@ -203,7 +204,7 @@ class LoopDetectorHook:
 # Hook entry point (invoked by a compatible coding-agent harness)
 # ---------------------------------------------------------------------------
 
-_STATE_FILE = os.path.expanduser("~/.chimera/loop_detector_state.json")
+_STATE_FILE = str(chimera_home() / "loop_detector_state.json")
 
 
 def _load_state() -> list[dict[str, Any]]:

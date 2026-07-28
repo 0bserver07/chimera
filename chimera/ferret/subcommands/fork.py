@@ -32,6 +32,7 @@ import sys
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from chimera.config.paths import store_path
 
 __all__ = [
     "fork_session",
@@ -42,7 +43,7 @@ __all__ = [
 
 def _ferret_eventlog_root() -> Path:
     """Return ``~/.chimera/eventlog`` honoring ``Path.home()`` patches."""
-    return Path.home() / ".chimera" / "eventlog"
+    return store_path("eventlog")
 
 
 def _new_session_id(prefix: str = "ferret-") -> str:

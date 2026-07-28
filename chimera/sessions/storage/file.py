@@ -7,6 +7,7 @@ from typing import Any
 
 from chimera.sessions.base import SessionData, SessionID, Storage
 from chimera.types import Message, ToolCall
+from chimera.config.paths import store_path
 
 __all__ = ["FileStorage"]
 
@@ -18,8 +19,12 @@ class FileStorage(Storage):
     *directory*.
     """
 
-    def __init__(self, directory: str = "~/.chimera/sessions/") -> None:
-        self._directory = Path(os.path.expanduser(directory))
+    def __init__(self, directory: str | None = None) -> None:
+        self._directory = (
+            Path(os.path.expanduser(directory))
+            if directory is not None
+            else store_path("sessions")
+        )
 
     # ------------------------------------------------------------------
     # Storage interface

@@ -30,6 +30,7 @@ from typing import Any
 
 from chimera.cli.help_long import register_argument
 from chimera.errors import friendly_errors
+from chimera.config.paths import chimera_home, store_path
 
 # WHY: only stdlib + chimera at import time so `from chimera.cli import cc`
 # stays cheap; httpx is pulled in lazily inside ``_build_provider``.
@@ -672,7 +673,7 @@ def _build_provider(model: str) -> Any:
 
 def _resume_path(session_id: str) -> Path | None:
     """Resolve a ``--resume`` argument to an existing session file."""
-    candidate = Path.home() / ".chimera" / "sessions" / f"{session_id}.jsonl"
+    candidate = store_path("sessions") / f"{session_id}.jsonl"
     return candidate if candidate.exists() else None
 
 
@@ -950,7 +951,7 @@ def _load_mcp_tools(cwd: str) -> list[Any]:
     an Agent's tool list. Empty list when no config or all loads fail.
     """
     candidates: list[Path] = [
-        Path.home() / ".chimera" / "mcp.json",
+        chimera_home() / "mcp.json",
         Path(cwd) / ".mcp.json",
     ]
     merged: dict[str, Any] = {"servers": {}}
@@ -1013,7 +1014,7 @@ def _eventlog_root() -> Path:
     Returns:
         ``~/.chimera/eventlog/`` honoring the current ``Path.home()``.
     """
-    return Path.home() / ".chimera" / "eventlog"
+    return store_path("eventlog")
 
 
 def _open_run_log(run_id: str | None) -> tuple[Any, Path]:
@@ -1831,7 +1832,7 @@ def _resolve_resume_workdir(args: argparse.Namespace) -> None:
     if path is None:
         print(
             f"[warn] no saved session matches id '{args.resume}' "
-            f"(looked at {Path.home() / '.chimera' / 'sessions'})",
+            f"(looked at {store_path('sessions')})",
             file=sys.stderr,
         )
 
@@ -1875,7 +1876,7 @@ def _apply_launch_resume(args: argparse.Namespace) -> int:
         messages = list(restored.messages)
     except ValueError:
         # Try EventSourcedSession path before giving up.
-        eventlog_root = Path.home() / ".chimera" / "eventlog"
+        eventlog_root = store_path("eventlog")
         if not (eventlog_root / sid).exists():
             print(f"[resume] session '{sid}' not found", file=sys.stderr)
             return 0
@@ -1902,7 +1903,7 @@ def _apply_launch_resume(args: argparse.Namespace) -> int:
     # Replay restored messages into the SessionTree JSONL the REPL reads.
     cwd = os.path.abspath(args.cwd or os.getcwd())
     tree_path = (
-        Path.home() / ".chimera" / "sessions"
+        store_path("sessions")
         / f"{_workdir_hash(cwd)}.jsonl"
     )
     tree_path.parent.mkdir(parents=True, exist_ok=True)
