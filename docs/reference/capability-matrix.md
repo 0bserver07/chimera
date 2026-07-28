@@ -340,7 +340,7 @@ four remain unbacked and are marked `⊘ NO RECEIPT` so
 | ⊘ NO RECEIPT — `data/modal-grid-darklight1-20260724-195209.json` | `docs/notes/bench-diagnosis-darklight1.md` | the darklight1 diagnosis run | **Still unbacked.** Absent from the repo *and* from the author's disk |
 | ⊘ NO RECEIPT — `data/programbench-glm-5.2-code-results.json` | `docs/specs/modal-amd64-programbench-grading.md` | a ProgramBench result | **Still unbacked.** Absent from the repo *and* from the author's disk |
 
-~~Plus one extension mismatch: `README.md`, `docs/benchmarks/2026-03-30-swebench-lite-glm51.md` and `docs/mink/benchmarks.md` cite `data/swebench-lite-glm51-results.json`; the file is `.jsonl`.~~
+~~Plus one extension mismatch: `README.md`, `docs/benchmarks/2026-03-30-swebench-lite-glm51.md` and `docs/mink/benchmarks.md` cite `data/swebench-lite-glm51-results.json`; the file is `.jsonl`.~~ ⊘ NO RECEIPT — and there never was one: that `.json` spelling is the audit tool's own truncation, not a string any document contains. Retained, struck, so the false finding stays on the record rather than vanishing from it.
 
 **Correction, 2026-07-28 — that seventh finding was wrong, and the audit's own
 tooling produced it.** All three documents cite `data/swebench-lite-glm51-results.jsonl`
@@ -350,8 +350,10 @@ first-match-wins in Python, so it truncated every `.jsonl` citation to `.json`
 and then reported the truncation as a missing file. Fixed in
 `tests/scripts/test_published_claims.py` by putting `jsonl` first and pinning
 the extension with `(?![A-Za-z0-9])`; the dangerous direction of the same bug —
-a genuinely missing `data/x.jsonl` passing whenever `data/x.json` happened to
-exist — is covered by a test there.
+a genuinely missing `data/⟨run⟩.jsonl` passing whenever `data/⟨run⟩.json`
+happened to exist — is covered by a test there. (Metasyntactic brackets on
+purpose: written with a plain name, this sentence is itself scanned as two
+citations of receipts that were never meant to exist.)
 
 **Method note.** This sweep tested filename *existence*. That is not the right
 question for `data/`, which is gitignored: a receipt on the author's disk but
