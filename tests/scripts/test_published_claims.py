@@ -242,12 +242,88 @@ class TestRetractedBenchmarksAreNotQuoted:
 
     def test_a_seeded_violation_is_caught(self) -> None:
         # Proof the matcher can fail — a gate that cannot fail is not a gate.
-        obs = _load_observatory()
-        bench = sorted(obs.RETRACTED)[0]
-        line = f"the agent scored **84% on {bench}**, the best of any agent"
-        assert any(b in line.lower() for b in obs.RETRACTED)
-        assert re.search(r"\b\d{1,3}(?:\.\d+)?\s*%", line)
-        assert not re.search(r"retract|withdraw|previously reported|⊘", line, re.I)
+        # This is the exact sentence the site guide shipped.
+        retracted, known = _registries()
+        bench = sorted(retracted)[0]
+        text = f"the agent scored **84% on {bench}**, the best of any agent"
+        assert _retracted_score_offenders(text, retracted, known) == [(1, text)]
+
+
+class TestTheExemptionsStillCatchRealViolations:
+    """Every exemption below narrows the gate, so each needs a paired proof.
+
+    An exemption without one is how a gate quietly stops gating: the suite
+    stays green and nobody can tell whether that is because the docs are clean
+    or because the matcher went blind.
+    """
+
+    def test_attribution_clears_only_a_number_another_benchmark_owns(self) -> None:
+        retracted, known = _registries()
+        bench = sorted(retracted)[0]
+
+        # Cleared: both percentages are explicitly owned by other benchmarks,
+        # and the retracted name is only the subject of the sentence after.
+        owned = f"mbpp-plus ≥91% and math500 ≥43% ran at cost. The {bench} run"
+        assert _retracted_score_offenders(owned, retracted, known) == []
+
+        # NOT cleared: naming another benchmark somewhere on the line does not
+        # launder a percentage that the retracted one owns.
+        laundered = f"mbpp 99% and {bench} 84% both ran to completion"
+        assert _retracted_score_offenders(laundered, retracted, known)
+
+        # NOT cleared: an unowned percentage stays attributed to the retracted
+        # benchmark — this is the real modal-cloud-benches.md:77 shape.
+        unowned = f"100% on both — the gap is on the harder column ({bench})"
+        assert _retracted_score_offenders(unowned, retracted, known)
+
+    def test_correction_table_exemption_requires_the_contrast_header(self) -> None:
+        retracted, known = _registries()
+        bench = sorted(retracted)[0]
+        row = f"| `{bench}` grades via stdin | a lower bound of ≥18.9% | 36% cannot pass |"
+
+        # Cleared: the header declares the columns as claim-versus-truth, so
+        # the row prints the withdrawn number beside its correction.
+        corrected = "| What broke | What it looked like | What was true |\n|---|---|---|\n" + row
+        assert _retracted_score_offenders(corrected, retracted, known) == []
+
+        # NOT cleared: the same row under an ordinary results header. The
+        # exemption is the header's doing, not the row's.
+        scoreboard = "| Task | Benchmark | Result |\n|---|---|---|\n" + row
+        assert _retracted_score_offenders(scoreboard, retracted, known)
+
+        # NOT cleared: a scoreboard row that merely follows a correction table
+        # once the table has ended.
+        after = corrected + f"\n\nThe agent scored 84% on {bench}.\n"
+        assert _retracted_score_offenders(after, retracted, known)
+
+    def test_a_results_table_header_cannot_match_the_contrast_pattern(self) -> None:
+        for header in (
+            "| Task | Benchmark | Model | Result | Cost | Wall time | Commit |",
+            "| Benchmark | Result | n |",
+            "| Column (full n) | Result (lower bound) | ¢/task | Read |",
+        ):
+            assert not _CORRECTION_TABLE_HEADER.search(header), header
+
+
+class TestTheReceiptRegexReadsWholePaths:
+    """Both bugs below made the gate report the wrong file, not just over-fire."""
+
+    def test_a_jsonl_receipt_is_matched_whole(self) -> None:
+        # `(?:json|jsonl)` is first-match-wins, so this used to yield
+        # `data/x.json` — a file that does not exist — for a citation of a
+        # receipt that does. The dangerous direction: a doc citing a MISSING
+        # `data/x.jsonl` would pass whenever `data/x.json` happened to exist.
+        line = "Raw data: `data/swebench-lite-glm51-results.jsonl`"
+        assert _RECEIPT.findall(line) == ["data/swebench-lite-glm51-results.jsonl"]
+
+    def test_a_url_path_is_not_read_as_a_repo_citation(self) -> None:
+        url = "https://github.com/openai/human-eval/raw/master/data/HumanEval.jsonl.gz"
+        assert _RECEIPT.findall(url) == []
+
+    def test_a_real_citation_beside_a_url_is_still_found(self) -> None:
+        # The URL guard must not blind the scan to the citation next to it.
+        line = f"from {'https://x.test/data/HumanEval.jsonl.gz'} → `data/mbpp-glm-5.1-results.json`"
+        assert _RECEIPT.findall(line) == ["data/mbpp-glm-5.1-results.json"]
 
 
 class TestKnownRegressions:
