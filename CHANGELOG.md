@@ -292,14 +292,18 @@ commit receipts.
   further violations.
 - **Three of the four `⊘ NO RECEIPT` claims above were only disclosed in the
   audit table, not at the claims themselves** — because the documents making
-  them were out of scope. Now marked where a reader meets them:
-  `data/modal-grid-darklight1-20260724-195209.json` and
-  `data/modal-grid-observatory1-20260723-234334.json` in
-  `docs/notes/bench-diagnosis-darklight1.md` (every per-cell count there is
-  testimony, not evidence — the verdicts still stand on inspectable grading
-  contracts), and `data/programbench-glm-5.2-code-results.json` in
-  `docs/specs/modal-amd64-programbench-grading.md`, where it is a proposal's
-  *intended* output rather than a result. Numbers kept, gaps named.
+  them were out of scope. Now marked where a reader meets them — in
+  `docs/notes/bench-diagnosis-darklight1.md`,
+  ⊘ NO RECEIPT — `data/modal-grid-darklight1-20260724-195209.json` and
+  ⊘ NO RECEIPT — `data/modal-grid-observatory1-20260723-234334.json`
+  (every per-cell count in that note is testimony, not evidence; the verdicts
+  still stand on inspectable grading contracts) — and in
+  `docs/specs/modal-amd64-programbench-grading.md`,
+  ⊘ NO RECEIPT — `data/programbench-glm-5.2-code-results.json`, which is a
+  proposal's *intended* output rather than a result. Numbers kept, gaps named.
+  Marked on these lines too: writing the three filenames into a release note
+  without the marker would have created three fresh unbacked citations while
+  announcing the fix for unbacked citations.
 - **Documents that quote a withdrawn number in order to explain it are exempt
   by name, from the retracted-score rule only.** Widening caught a class the
   narrow scope never met: the darklight1 diagnosis and the receipt audit have
@@ -314,12 +318,16 @@ commit receipts.
   rotting: every entry must exist, and every entry must still *need* its
   exemption, so a rewritten document drops off instead of shielding whatever it
   becomes next.
-- **Known and declared gap:** `CHANGELOG.md` is still outside the gate. It
-  holds one untracked-receipt citation and two retracted-score lines; pulling
-  it in means editing shipped release entries to satisfy a test, which is an
-  owner call rather than a test author's. Recorded in the `_PUBLISHED` comment
-  with the line numbers, because silence about scope is exactly what this
-  change exists to end.
+- **Known gap, now a ratchet instead of a comment:** `CHANGELOG.md` stays
+  outside `_PUBLISHED` — it cites one receipt that is in no commit, and carries
+  two retracted-score lines inside *shipped* 0.9.2/0.9.2.1 entries, so pulling
+  it in means editing released history to satisfy a test. That is an owner
+  call. But "declared exclusion" is one rename away from "unscanned directory",
+  so the existing debt is enumerated in `_CHANGELOG_UNBACKED` and a test fails
+  on any citation beyond it: old debt named, new debt red. The list is pinned
+  by filename rather than line number on purpose — the changelog grows at the
+  top every batch, and a line number in a comment is wrong by the next merge
+  while still reading as authoritative.
 
 ## 0.9.2.1 — 2026-07-27 — the verified grader
 
