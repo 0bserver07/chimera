@@ -9,6 +9,21 @@ commit receipts.
 
 ### Added
 
+- **Verification axis on the capability matrix**
+  (`docs/reference/capability-matrix.md`): every benchmark, agent layer,
+  provider and sandbox now carries **Exists · Registered · Dataset · Canaried ·
+  Live-run receipt · Verdict**, so availability (a code fact) can no longer read
+  as verification (a receipt fact). Measured, not quoted: 27 registered adapters
+  (46 aliases), 13 fetchable, **7 grader-verified**, 9 with any `data/` receipt,
+  **5 fully verified** — and 19 `EXEMPT`, which means *unverified, not healthy*.
+  Adds an explicit known-bad register (LiveCodeBench RETRACTED, mbpp-plus
+  base-strength grading, the `HumanEval/32` 99.4% ceiling, the receipt-less
+  Terminal-Bench 30%) and a risk-ranked gap list. Corrects three claims the code
+  contradicted: the adapter count, the `claude_code`/`coding_agent` preset
+  identity, and `bench-fidelity` being "live-verified" when tracker `T2.1`/`T2.2`
+  are both unrun. Also records six receipt filenames cited in docs that do not
+  exist in `data/`.
+
 - **One path registry for every on-disk store** (`chimera/config/paths.py`,
   M1 of `docs/specs/storage-and-experiments.md`): a frozen `Store` table —
   name, scope, relative path, owning writer, prunability, note — plus the
