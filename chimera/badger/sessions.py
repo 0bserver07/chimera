@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable, Iterator
+from chimera.config.paths import store_path
 
 __all__ = [
     "SessionRecord",
@@ -105,7 +106,7 @@ class SessionDetail:
 
 def default_eventlog_root() -> Path:
     """Return ``~/.chimera/eventlog/`` honoring the current ``Path.home()``."""
-    return Path.home() / ".chimera" / "eventlog"
+    return store_path("eventlog")
 
 
 def _read_summary(session_dir: Path) -> dict[str, Any] | None:

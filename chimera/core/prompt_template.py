@@ -4,6 +4,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from chimera.config.paths import store_path
 
 
 @dataclass
@@ -57,7 +58,7 @@ class PromptTemplateLoader:
     def load_all(self) -> dict[str, PromptTemplate]:
         templates: dict[str, PromptTemplate] = {}
         for base in self._paths:
-            prompts_dir = base / ".chimera" / "prompts"
+            prompts_dir = store_path("project-prompts", base)
             if not prompts_dir.exists():
                 continue
             for f in prompts_dir.glob("*.md"):

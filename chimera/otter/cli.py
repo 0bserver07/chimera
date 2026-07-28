@@ -31,6 +31,7 @@ from typing import Any
 
 from chimera.cli.help_long import register_argument
 from chimera.errors import friendly_errors
+from chimera.config.paths import store_path
 
 # WHY: only stdlib + chimera at import time. Provider deps (httpx, anthropic,
 # openai SDKs) are pulled in lazily inside ``_build_provider`` so importing
@@ -1442,7 +1443,7 @@ def _eventlog_root() -> Path:
     Returns:
         ``~/.chimera/eventlog/`` honoring the current ``Path.home()``.
     """
-    return Path.home() / ".chimera" / "eventlog"
+    return store_path("eventlog")
 
 
 def _apply_resume_prefix(

@@ -9,6 +9,7 @@ from typing import Any
 from chimera.permissions.context import PermissionContext
 from chimera.permissions.modes import PermissionMode
 from chimera.permissions.rules import RuleSource
+from chimera.config.paths import project_state_dir
 
 __all__ = ["PermissionRuleLoader"]
 
@@ -65,7 +66,7 @@ class PermissionRuleLoader:
     def _read_permissions(self, base_dir: Path) -> dict[str, Any] | None:
         """Return the ``permissions`` dict from ``<base>/.chimera/settings.json``,
         or ``None`` if unavailable."""
-        settings_path = base_dir / ".chimera" / "settings.json"
+        settings_path = project_state_dir(base_dir) / "settings.json"
         if not settings_path.is_file():
             return None
         try:

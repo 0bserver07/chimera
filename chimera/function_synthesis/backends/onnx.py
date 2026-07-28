@@ -37,6 +37,7 @@ from chimera.function_synthesis.bundle import (
     ChiBundle,
 )
 from chimera.function_synthesis.runtime import RuntimeBackend
+from chimera.config.paths import store_path
 
 _MISSING_DEP_MSG = (
     "OnnxBackend requires the optional dependency group "
@@ -45,7 +46,7 @@ _MISSING_DEP_MSG = (
     "(or: pip install onnxruntime 'optimum[onnxruntime]' transformers)."
 )
 
-_DEFAULT_CACHE_DIR = Path.home() / ".chimera" / "function_synthesis" / "onnx_cache"
+_DEFAULT_CACHE_DIR = store_path("function_synthesis") / "onnx_cache"
 
 
 class OnnxBackend(RuntimeBackend):

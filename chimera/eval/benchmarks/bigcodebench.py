@@ -46,9 +46,10 @@ from pathlib import Path
 from typing import Any, Literal
 
 from chimera.eval.harness import Benchmark
+from chimera.config.paths import STATE_DIRNAME, store_path
 
 VALID_SPLITS = ("complete", "instruct")
-DEFAULT_DATASET_DIR = "~/.chimera/datasets/bigcodebench"
+DEFAULT_DATASET_DIR = f"~/{STATE_DIRNAME}/datasets/bigcodebench"
 ENV_DATASET_PATH = "CHIMERA_BIGCODEBENCH_PATH"
 
 
@@ -59,8 +60,10 @@ def default_dataset_path() -> Path:
     back to ``~/.chimera/datasets/bigcodebench/``. The path may or may
     not exist on disk; callers are expected to check.
     """
-    raw = os.environ.get(ENV_DATASET_PATH) or DEFAULT_DATASET_DIR
-    return Path(raw).expanduser()
+    raw = os.environ.get(ENV_DATASET_PATH)
+    if raw:
+        return Path(raw).expanduser()
+    return store_path("datasets") / "bigcodebench"
 
 
 def dataset_available(path: Path | None = None) -> bool:

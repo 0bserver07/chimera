@@ -14,6 +14,7 @@ from pathlib import Path
 from chimera.auth.api_key import APIKeyAuth
 from chimera.auth.base import AuthProvider, Credential
 from chimera.auth.store import CredentialStore
+from chimera.config.paths import chimera_home
 
 __all__ = ["AuthManager", "StoredCredential"]
 
@@ -50,7 +51,7 @@ class AuthManager:
         self._providers: dict[str, AuthProvider] = {}
 
         # New API
-        self._config_dir = config_dir or Path.home() / ".chimera"
+        self._config_dir = config_dir or chimera_home()
         self._credentials: dict[str, StoredCredential] = {}
         self._load_from_env()
 

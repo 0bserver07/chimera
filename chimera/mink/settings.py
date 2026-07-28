@@ -16,6 +16,7 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from chimera.config.paths import project_state_dir
 
 if TYPE_CHECKING:
     from chimera.core.loop_config import LoopConfig
@@ -392,7 +393,7 @@ def load_mink_settings(cwd: Path | None = None) -> MinkSettings:
         _load_json_file(home / ".claude" / "settings.json"),
         _load_json_file(cwd / ".claude" / "settings.json"),
         _load_json_file(cwd / ".claude" / "settings.local.json"),
-        _load_json_file(cwd / ".chimera" / "settings.json"),
+        _load_json_file(project_state_dir(cwd) / "settings.json"),
     ]
     merged: dict[str, Any] = {}
     for layer in layers:

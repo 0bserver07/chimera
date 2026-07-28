@@ -34,7 +34,10 @@ exact prior discovery so behavior is byte-identical when no config is present:
   scope** via :func:`load_user_scope_config` (honoring ``$CHIMERA_CONFIG_HOME``);
 - the status line (:func:`chimera.tui.statusline.load_tui_config`) reads the
   **full** XDG/user/project chain via :func:`load_tui_config`, anchored on an
-  explicit ``home`` rather than ``$CHIMERA_CONFIG_HOME``.
+  explicit ``home`` rather than ``$CHIMERA_CONFIG_HOME``;
+- storage (:mod:`chimera.config.paths`) reads the same full chain via
+  :func:`load_storage_config` for the ``[storage]`` root and per-store
+  retention.
 
 Stdlib only. YAML/JSON parsing is delegated to
 :class:`chimera.config.config_file.ChimeraConfig`, which itself falls back to a
@@ -48,10 +51,15 @@ from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any
 
+from chimera.config.paths import project_state_dir, user_scope_dir
+
 __all__ = [
     "CONFIG_BASENAMES",
     "config_home_dir",
+    "config_scopes",
     "load_merged_config",
+    "load_section",
+    "load_storage_config",
     "load_tui_config",
     "load_user_scope_config",
     "tui_config_scopes",
@@ -85,8 +93,7 @@ def config_home_dir(home: str | os.PathLike[str] | None = None) -> Path:
     override = os.environ.get("CHIMERA_CONFIG_HOME")
     if override:
         return Path(override)
-    base = Path(home) if home is not None else Path.home()
-    return base / ".chimera"
+    return user_scope_dir(home)
 
 
 def _read_config_file(path: Path) -> dict[str, Any]:
@@ -175,17 +182,22 @@ def load_user_scope_config(*, home: str | os.PathLike[str] | None = None) -> dic
     return _load_scope_dir(config_home_dir(home))
 
 
-def tui_config_scopes(
+def config_scopes(
     project_dir: str | os.PathLike[str] | None = None,
     *,
     home: str | os.PathLike[str] | None = None,
 ) -> list[Path]:
-    """Return the status-line scope chain (XDG < user < project).
+    """Return the full scope chain (XDG < user < project).
 
     Unlike the CLI-side user scope, this deliberately ignores
     ``$CHIMERA_CONFIG_HOME`` and anchors on ``home`` — preserving the status
     line's historical discovery so callers that pass an explicit ``home`` (and
     tests) behave identically.
+
+    The user scope is :func:`chimera.config.paths.user_scope_dir`, the fixed
+    ``<home>/.chimera`` anchor rather than the (relocatable) storage root: this
+    chain is where ``[storage] root`` is *read from*, so resolving it through
+    that setting would be circular.
 
     Args:
         project_dir: Project root (default: cwd).
@@ -196,7 +208,48 @@ def tui_config_scopes(
     """
     base = Path(home) if home is not None else Path.home()
     project = Path(project_dir) if project_dir is not None else Path.cwd()
-    return [base / ".config" / "chimera", base / ".chimera", project / ".chimera"]
+    return [base / ".config" / "chimera", user_scope_dir(base), project_state_dir(project)]
+
+
+def tui_config_scopes(
+    project_dir: str | os.PathLike[str] | None = None,
+    *,
+    home: str | os.PathLike[str] | None = None,
+) -> list[Path]:
+    """Return the status-line scope chain (XDG < user < project).
+
+    Retained under its original name for the status-line callers; identical to
+    :func:`config_scopes`, which is the section-neutral spelling.
+
+    Args:
+        project_dir: Project root (default: cwd).
+        home: Home directory (default: the real home directory).
+
+    Returns:
+        The scope directories, ascending precedence order.
+    """
+    return config_scopes(project_dir, home=home)
+
+
+def load_section(
+    section: str,
+    project_dir: str | os.PathLike[str] | None = None,
+    *,
+    home: str | os.PathLike[str] | None = None,
+) -> dict[str, Any]:
+    """Load one top-level config section across the XDG/user/project chain.
+
+    Args:
+        section: Top-level table name (``"tui"``, ``"storage"``, …).
+        project_dir: Project root (default: cwd).
+        home: Home-directory override (tests).
+
+    Returns:
+        The section as a dict (``{}`` when absent or not a table).
+    """
+    merged = load_merged_config(config_scopes(project_dir, home=home))
+    table = merged.get(section)
+    return dict(table) if isinstance(table, dict) else {}
 
 
 def load_tui_config(
@@ -213,6 +266,35 @@ def load_tui_config(
     Returns:
         The ``tui`` section as a dict (``{}`` when absent).
     """
-    merged = load_merged_config(tui_config_scopes(project_dir, home=home))
-    tui = merged.get("tui")
-    return dict(tui) if isinstance(tui, dict) else {}
+    return load_section("tui", project_dir, home=home)
+
+
+def load_storage_config(
+    project_dir: str | os.PathLike[str] | None = None,
+    *,
+    home: str | os.PathLike[str] | None = None,
+) -> dict[str, Any]:
+    """Load the merged ``storage`` config section across the same chain.
+
+    The section carries the storage root and per-store retention::
+
+        [storage]
+        root = "~/.chimera"        # optional; $CHIMERA_HOME wins
+
+        [storage.sessions]
+        retain = 200               # keep newest N   (absent = keep forever)
+        max-age-days = 90          # and/or drop older than this
+
+    Consumed by :mod:`chimera.config.paths`: ``root`` by
+    :func:`~chimera.config.paths.chimera_home`, the per-store tables by
+    :func:`~chimera.config.paths.store_retention`. Retention is read here and
+    acted on only by ``chimera gc`` — declaring it prunes nothing.
+
+    Args:
+        project_dir: Project root (default: cwd).
+        home: Home-directory override (tests).
+
+    Returns:
+        The ``storage`` section as a dict (``{}`` when absent).
+    """
+    return load_section("storage", project_dir, home=home)

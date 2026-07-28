@@ -35,6 +35,7 @@ from pathlib import Path
 from typing import Any
 
 from chimera.otter import sessions as _sessions
+from chimera.config.paths import store_path
 
 __all__ = [
     "DEFAULT_SHARE_URL",
@@ -68,7 +69,7 @@ VALID_FORMATS = ("html", "json", "md")
 
 def default_shares_dir() -> Path:
     """Return ``~/.chimera/shares/`` (created lazily by callers)."""
-    return Path.home() / ".chimera" / "shares"
+    return store_path("shares")
 
 
 def _resolve_format(fmt: str | None) -> str:

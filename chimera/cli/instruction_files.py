@@ -30,6 +30,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from chimera.config.paths import project_state_dir
 
 __all__ = [
     "InstructionFile",
@@ -152,7 +153,7 @@ def load_instruction_files(
         pass
 
     # 4. Chimera-native rules file.
-    chimera_rules = cwd / ".chimera" / "rules.md"
+    chimera_rules = project_state_dir(cwd) / "rules.md"
     _push(chimera_rules, "rules.md")
 
     if out:

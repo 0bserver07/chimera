@@ -24,6 +24,7 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator, Sequence
+from chimera.config.paths import store_path
 
 __all__ = [
     "ENV_FLAG",
@@ -52,7 +53,7 @@ def teams_root() -> Path:
     override = os.environ.get("CHIMERA_TEAMS_HOME")
     if override:
         return Path(override).expanduser()
-    return Path.home() / ".chimera" / "teams"
+    return store_path("teams")
 
 
 @contextmanager

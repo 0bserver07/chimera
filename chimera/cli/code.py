@@ -25,6 +25,7 @@ from chimera.sessions.session import Session
 from chimera.sessions.tree import SessionTree
 from chimera.streaming.handlers import ConsoleStreamHandler
 from chimera.types import Message
+from chimera.config.paths import chimera_home, store_path
 
 _DEFAULT_SYSTEM = """\
 You are a coding assistant with access to tools for reading, writing, \
@@ -294,9 +295,7 @@ def cmd_session(session: Any, env: Any, args: str, out: PrintFn) -> None:
         else:
             out("Session save not available.")
     elif sub == "list":
-        from pathlib import Path
-
-        session_dir = Path.home() / ".chimera" / "sessions"
+        session_dir = store_path("sessions")
         if not session_dir.exists():
             out("No sessions (~/.chimera/sessions/ does not exist).")
             return
@@ -501,9 +500,8 @@ def _setup_readline() -> None:
     except ImportError:
         return
 
-    history_dir = Path.home() / ".chimera"
-    history_dir.mkdir(parents=True, exist_ok=True)
-    history_file = history_dir / "history"
+    history_file = store_path("history")
+    history_file.parent.mkdir(parents=True, exist_ok=True)
 
     try:
         readline.read_history_file(str(history_file))
@@ -523,7 +521,7 @@ def _setup_readline() -> None:
 def _session_path(workdir: str) -> Path:
     """Stable session file path based on workdir hash."""
     h = hashlib.sha256(workdir.encode()).hexdigest()[:12]
-    session_dir = Path.home() / ".chimera" / "sessions"
+    session_dir = store_path("sessions")
     session_dir.mkdir(parents=True, exist_ok=True)
     return session_dir / f"{h}.jsonl"
 
@@ -637,7 +635,7 @@ def load_mcp_tools(workdir: str) -> list[Any]:
     """
     try:
         candidates = (
-            Path.home() / ".chimera" / "mcp.json",
+            chimera_home() / "mcp.json",
             Path(workdir) / ".mcp.json",
         )
         merged_config: dict[str, Any] = {"servers": {}}

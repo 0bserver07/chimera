@@ -24,9 +24,11 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+from pathlib import Path as _Path
 from typing import Any
 
 from chimera.cli.help_long import register_argument
+from chimera.config.paths import STATE_DIRNAME, store_path
 from chimera.errors import friendly_errors
 
 # WHY: only stdlib + chimera at import time. Provider deps (httpx, anthropic,
@@ -1550,8 +1552,22 @@ def _apply_ferret_image_prefix(
 # ---------------------------------------------------------------------------
 
 
-_FERRET_PROFILES_DIR = "~/.chimera/profiles"
-"""Documented location of TOML profile overlays (see ``--profile``)."""
+_FERRET_PROFILES_DEFAULT = f"~/{STATE_DIRNAME}/profiles"
+_FERRET_PROFILES_DIR = _FERRET_PROFILES_DEFAULT
+"""Documented location of TOML profile overlays (see ``--profile``).
+
+Kept as a module-level string because tests and embedders relocate profiles by
+monkey-patching it. When it still holds the default, resolution goes through
+the path registry instead, so ``$CHIMERA_HOME`` / ``[storage] root`` relocate
+profiles like every other store.
+"""
+
+
+def _ferret_profiles_dir() -> _Path:
+    """Return the profile-overlay directory (registry-backed by default)."""
+    if _FERRET_PROFILES_DIR != _FERRET_PROFILES_DEFAULT:
+        return _Path(_FERRET_PROFILES_DIR).expanduser()
+    return store_path("profiles")
 
 # Argparse dest names that ``--profile`` is allowed to overlay. Limiting
 # the surface keeps the TOML from being able to spoof random attributes
@@ -1589,7 +1605,7 @@ def _apply_ferret_profile(args: argparse.Namespace) -> None:
     name = getattr(args, "profile", None)
     if not name:
         return
-    path = os.path.expanduser(os.path.join(_FERRET_PROFILES_DIR, f"{name}.toml"))
+    path = str(_ferret_profiles_dir() / f"{name}.toml")
     if not os.path.isfile(path):
         print(
             f"[ferret] --profile {name!r}: file not found at {path}; "

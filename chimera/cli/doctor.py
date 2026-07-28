@@ -33,6 +33,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Any, Callable
+from chimera.config.paths import store_path, user_scope_dir
 
 # ---------------------------------------------------------------------------
 # Status helpers
@@ -379,8 +380,7 @@ def check_cli_versions(
 
 def check_eventlog_dir(home: Path | None = None) -> Check:
     """Verify ``~/.chimera/eventlog/`` exists and is writable."""
-    base = home or Path.home()
-    target = base / ".chimera" / "eventlog"
+    target = user_scope_dir(home) / "eventlog" if home is not None else store_path("eventlog")
     try:
         target.mkdir(parents=True, exist_ok=True)
     except OSError as exc:

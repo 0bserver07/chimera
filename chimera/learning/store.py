@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     pass
 
 from chimera.learning.observation import Observation, ObservationCategory
+from chimera.config.paths import store_path
 
 __all__ = ["LearningStore"]
 
@@ -71,7 +72,7 @@ class LearningStore:
 
     def __init__(self, db_path: str | Path | None = None) -> None:
         if db_path is None:
-            db_dir = Path.home() / ".chimera" / "learning"
+            db_dir = store_path("learning")
             db_dir.mkdir(parents=True, exist_ok=True)
             db_path = db_dir / "observations.db"
         self._db_path = Path(db_path)

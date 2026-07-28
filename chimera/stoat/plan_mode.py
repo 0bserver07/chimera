@@ -24,13 +24,13 @@ upstream brand that pioneered it is never named in source.
 from __future__ import annotations
 
 import json
-import os
 import re
 import time
 import uuid
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Iterable, Iterator
+from chimera.config.paths import store_path
 
 __all__ = [
     "MODE_PLAN",
@@ -223,10 +223,15 @@ def default_plans_dir() -> Path:
     exist_ok=True)`` themselves before reading.
 
     Honors ``$CHIMERA_HOME`` for embedders / tests that want to relocate
-    persistent state. Falls back to ``$HOME`` then ``Path.home()``.
+    persistent state.
+
+    Note: ``$CHIMERA_HOME`` now means the storage *root* itself
+    (``$CHIMERA_HOME/plans``), matching every other consumer and the registry.
+    It previously meant a home directory here (``$CHIMERA_HOME/.chimera/plans``)
+    — the only place in the codebase that read it that way. Unset, the path is
+    unchanged: ``~/.chimera/plans``.
     """
-    base = os.environ.get("CHIMERA_HOME") or os.environ.get("HOME") or str(Path.home())
-    return Path(base).expanduser() / ".chimera" / "plans"
+    return store_path("plans")
 
 
 def save_plan(plan: Plan, *, root: Path | None = None) -> Path:

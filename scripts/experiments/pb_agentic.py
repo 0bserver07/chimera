@@ -19,6 +19,8 @@ import shutil
 import tarfile
 from pathlib import Path
 
+from chimera.config.paths import store_path
+
 for line in Path(".env").read_text().splitlines():
     line = line.strip()
     if line and not line.startswith("#") and "=" in line:
@@ -37,7 +39,7 @@ PB_CLI = ("/Users/yadkonrad/dev_dev/year26/may26/ProgramBench/.venv/bin/programb
 # root, which is gated (tests/test_repo_hygiene.py). Override for relocation.
 PB_RUNS = Path(
     os.environ.get("CHIMERA_PB_RUNS")
-    or Path.home() / ".chimera" / "experiment-runs" / "pb-runs"
+    or store_path("experiment-runs") / "pb-runs"
 )
 
 RUN_DIR = str(PB_RUNS / "_agentic/run")

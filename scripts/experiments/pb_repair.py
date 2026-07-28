@@ -10,6 +10,8 @@ import re
 import shutil
 from pathlib import Path
 
+from chimera.config.paths import store_path
+
 for line in Path(".env").read_text().splitlines():
     line = line.strip()
     if line and not line.startswith("#") and "=" in line:
@@ -31,7 +33,7 @@ from chimera.providers.base import Message  # noqa: E402
 # root, which is gated (tests/test_repo_hygiene.py). Override for relocation.
 PB_RUNS = Path(
     os.environ.get("CHIMERA_PB_RUNS")
-    or Path.home() / ".chimera" / "experiment-runs" / "pb-runs"
+    or store_path("experiment-runs") / "pb-runs"
 )
 
 TASKS = "/Users/yadkonrad/dev_dev/year26/may26/ProgramBench/src/programbench/data/tasks"

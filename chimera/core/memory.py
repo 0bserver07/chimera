@@ -7,6 +7,7 @@ Content is truncated to 200 lines on load.
 from __future__ import annotations
 
 from pathlib import Path
+from chimera.config.paths import store_path
 
 __all__ = ["PersistentMemory"]
 
@@ -20,7 +21,7 @@ class PersistentMemory:
     """
 
     def __init__(self, project_dir: str | Path) -> None:
-        self._memory_dir = Path(project_dir) / ".chimera" / "memory"
+        self._memory_dir = store_path("project-memory", project_dir)
         self._memory_file = self._memory_dir / "MEMORY.md"
 
     def load(self) -> str | None:

@@ -42,9 +42,10 @@ from pathlib import Path
 from typing import Any
 
 from chimera.eval.harness import Benchmark
+from chimera.config.paths import STATE_DIRNAME, store_path
 
 VALID_DOMAINS = ("airline", "retail", "telecom", "banking", "mock")
-DEFAULT_DATASET_DIR = "~/.chimera/datasets/tau-bench"
+DEFAULT_DATASET_DIR = f"~/{STATE_DIRNAME}/datasets/tau-bench"
 ENV_DATASET_PATH = "CHIMERA_TAU_BENCH_PATH"
 
 
@@ -55,8 +56,10 @@ def default_dataset_path() -> Path:
     otherwise falls back to ``~/.chimera/datasets/tau-bench/``. The path
     may or may not exist; callers are expected to check.
     """
-    raw = os.environ.get(ENV_DATASET_PATH) or DEFAULT_DATASET_DIR
-    return Path(raw).expanduser()
+    raw = os.environ.get(ENV_DATASET_PATH)
+    if raw:
+        return Path(raw).expanduser()
+    return store_path("datasets") / "tau-bench"
 
 
 def dataset_available(path: Path | None = None, domain: str | None = None) -> bool:

@@ -14,6 +14,7 @@ import json
 import os
 from pathlib import Path
 from typing import Any
+from chimera.config.paths import store_path
 
 __all__ = ["CredentialStore"]
 
@@ -24,11 +25,7 @@ def _default_path() -> Path:
     Honours the same environment variable as :class:`CacheDirs` so a single
     setting can redirect both bundles and credentials during tests.
     """
-    env = os.environ.get("CHIMERA_FS_HOME")
-    if env:
-        return Path(env) / "credentials.json"
-    home = Path(os.environ.get("HOME") or Path.home())
-    return home / ".chimera" / "function_synthesis" / "credentials.json"
+    return store_path("function_synthesis") / "credentials.json"
 
 
 class CredentialStore:

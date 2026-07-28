@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any
 
 from chimera.core.loop_events import LoopEvent, LoopEventType
+from chimera.config.paths import chimera_home, store_path
 
 __all__ = ["CodingAgent", "LOOP_POSTURES"]
 
@@ -241,7 +242,7 @@ class CodingAgent:
                 self._permission_checker = PermissionChecker()
                 loader = PermissionRuleLoader(
                     project_dir=str(self._project_dir),
-                    user_dir=str(Path.home() / ".chimera"),
+                    user_dir=str(chimera_home()),
                 )
                 self._permission_context = loader.load()
 
@@ -273,7 +274,7 @@ class CodingAgent:
                 self._hook_executor = HookExecutor()
                 HookLoader(
                     project_dir=str(self._project_dir),
-                    user_dir=str(Path.home() / ".chimera"),
+                    user_dir=str(chimera_home()),
                 )
                 self._hook_matchers = []
             except Exception:
@@ -291,7 +292,7 @@ class CodingAgent:
                 from chimera.sessions.transcript import TranscriptStorage
 
                 session_id = str(uuid.uuid4())[:8]
-                transcript_dir = self._project_dir / ".chimera" / "sessions"
+                transcript_dir = store_path("project-sessions", self._project_dir)
                 self._transcript = TranscriptStorage(transcript_dir, session_id)
             except Exception:
                 pass

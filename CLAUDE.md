@@ -170,6 +170,14 @@ Layer 1: Environment     Local, Docker, Git, Remote, Cloud, PersistentShell
 - `thresholds.py` — ThresholdCompaction (SOFT/HARD thresholds, tool call/result atomicity)
 
 ### Config (`chimera/config/`)
+- `paths.py` — **the path registry**: the one declared truth for every on-disk
+  store (`Store` rows: name/scope/rel/writer/prunable/note) + `chimera_home()`,
+  `project_state_dir()`, `store_path()`, `all_stores()`, `store_retention()`.
+  Root precedence: `$CHIMERA_HOME` → `[storage] root` → `~/.chimera`. Guide:
+  `docs/guides/storage-and-paths.md`
+- `user_config.py` — the ONE config chain (XDG < user < project), any of
+  `config.{toml,yaml,yml,json}`; `load_section` / `load_tui_config` /
+  `load_storage_config`
 - `union.py` — DiscriminatedUnion base (from_config/to_config dispatch, type field validation)
 - `config_file.py` — ChimeraConfig for YAML/JSON loading
 - `loader.py` — ProjectConfig discovery
@@ -252,6 +260,17 @@ Interactive frontends over AgentDriver (spec: `docs/specs/interactive-frontends.
   scratch drivers + 1.3 GB of `pb-runs/`/`runs/` output accumulated at the
   root, six of the files gitignored *while tracked* — invisible to every gate
   until an owner audit found them.
+- **Never hand-build a `~/.chimera` path.** Every on-disk store goes through
+  `chimera/config/paths.py` — `store_path("<name>")`, `chimera_home()`,
+  `project_state_dir(project)` — and adding a store means adding a `Store`
+  row, not a code path. A directory the registry does not name is, by
+  definition, an orphan: that is what lets `doctor` report it and what makes
+  it structurally impossible for `gc` to delete something undeclared. Why:
+  ~90 hand-built `Path.home() / ".chimera" / …` constructions across 60 files
+  meant nobody could answer where data lived or what was safe to reclaim, and
+  a 2.0 GB orphaned checkpoint sat undetected for four months. Acceptance for
+  any change here is the grep audit: zero home-anchored `.chimera`
+  constructions outside `paths.py`. Guide: `docs/guides/storage-and-paths.md`.
 - **Zero-dependency core.** Only stdlib in main package. Providers and tools like browser (playwright), remote env (httpx) are optional extras.
 - **TYPE_CHECKING imports.** Use `if TYPE_CHECKING:` for cross-module type hints to avoid circular imports.
 - **3-tier API.** Every feature has: one-liner convenience, developer configuration, framework-author subclassing.

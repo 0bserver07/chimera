@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any
 from chimera.core.tool import BaseTool
 from chimera.env.base import Environment
 from chimera.types import ToolResult
+from chimera.config.paths import project_state_dir, store_path
 
 if TYPE_CHECKING:
     from chimera.events.base import Event, EventBus
@@ -44,11 +45,11 @@ def _project_hash(cwd: str) -> str:
 
 
 def _project_todo_path(cwd: str) -> Path:
-    return Path(cwd) / ".chimera" / "todo.json"
+    return project_state_dir(cwd) / "todo.json"
 
 
 def _user_todo_path(cwd: str) -> Path:
-    return Path.home() / ".chimera" / "projects" / _project_hash(cwd) / "todo.json"
+    return store_path("projects") / _project_hash(cwd) / "todo.json"
 
 
 class TodoTool(BaseTool):

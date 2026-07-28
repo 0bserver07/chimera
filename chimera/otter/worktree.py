@@ -43,6 +43,7 @@ import subprocess
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from chimera.config.paths import store_path
 
 __all__ = [
     "WorktreeRecord",
@@ -81,7 +82,7 @@ class WorktreeRecord:
 
 def default_worktree_root() -> Path:
     """Return ``~/.chimera/worktrees/`` honoring the current ``Path.home()``."""
-    return Path.home() / ".chimera" / "worktrees"
+    return store_path("worktrees")
 
 
 def manifest_path(root: Path | None = None) -> Path:

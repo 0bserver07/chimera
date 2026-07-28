@@ -25,6 +25,7 @@ from typing import Any
 from chimera.core.tool import BaseTool
 from chimera.env.base import Environment
 from chimera.types import ToolResult
+from chimera.config.paths import store_path
 
 
 def _jobs_dir() -> Path:
@@ -32,7 +33,7 @@ def _jobs_dir() -> Path:
     override = os.environ.get("CHIMERA_CRON_DIR")
     if override:
         return Path(override)
-    return Path.home() / ".chimera" / "cron"
+    return store_path("cron")
 
 
 def _jobs_file() -> Path:

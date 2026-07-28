@@ -35,6 +35,7 @@ import sys
 import uuid
 from pathlib import Path
 from typing import Any
+from chimera.config.paths import store_path
 
 __all__ = [
     "build_otter_agent",
@@ -60,7 +61,7 @@ def otter_eventlog_root() -> Path:
         O3 owns the subcommand-listing surface; we just mint
         ``otter-*`` run directories underneath this root.
     """
-    return Path.home() / ".chimera" / "eventlog"
+    return store_path("eventlog")
 
 
 def make_run_id() -> str:

@@ -7,7 +7,76 @@ commit receipts.
 
 ## Unreleased
 
-_Nothing yet._
+### Added
+
+- **One path registry for every on-disk store** (`chimera/config/paths.py`,
+  M1 of `docs/specs/storage-and-experiments.md`): a frozen `Store` table —
+  name, scope, relative path, owning writer, prunability, note — plus the
+  accessors `chimera_home()`, `project_state_dir()`, `store_path()`,
+  `all_stores()`. 36 stores are declared — 28 user-scope, 8 project-scope, of
+  which 19 are structurally never reclaimable. Why it exists: every writer
+  used to hand-build `Path.home() / ".chimera" / …`, so nothing could
+  answer *where does Chimera keep my data*, *what is safe to reclaim*, or
+  *what on disk is nobody's* — which is how a 2.0 GB orphaned checkpoint tree
+  sat undetected for four months. A directory the registry does not name is,
+  by construction, an orphan; M2's `doctor` and `gc` inherit that guarantee
+  and structurally cannot act on a path nobody declared.
+  - **Every call site migrated.** Grep audit clean: zero home-anchored
+    `.chimera` constructions outside `paths.py` across `chimera/` and
+    `scripts/`. What remains is prose in docstrings, two paths that are
+    deliberately *not* local (`chimera/env/ssh.py` writes
+    `$HOME/.chimera/ssh-checkpoints` on the **remote** host;
+    `scripts/modal_bench_app.py` names `/root/.chimera/datasets` **inside** a
+    Modal container), and the `.chimera` entries in the three not-source
+    ignore lists that M3 consolidates.
+  - **Behavior is unchanged when nothing is configured** — pinned by
+    `tests/config/test_paths.py`, which asserts the defaults longhand rather
+    than deriving them from the registry, so a typo in a `rel` field fails the
+    suite instead of being agreed with.
+  - New guide: `docs/guides/storage-and-paths.md`.
+
+- **`[storage]` in the one config chain** (`chimera/config/user_config.py`,
+  XDG < user < project): `[storage] root` relocates the storage root
+  (`$CHIMERA_HOME` still wins), and `[storage.<name>] retain / max-age-days`
+  declares per-store retention. Reading only — M1 ships no pruning; `chimera
+  gc` (M2) is the sole consumer and is dry-run first. Retention on a store
+  declared `prunable=False` returns an inactive policy no matter what the file
+  says, so datasets, synthesised model artifacts, credentials, cron jobs, and
+  authored skills/agents cannot be made reclaimable by a typo. Generalised
+  helpers `config_scopes` / `load_section` / `load_storage_config` sit beside
+  the existing `load_tui_config`, which now routes through them.
+  - **Backwards compatible:** `CHIMERA_DATASETS_DIR`, `CHIMERA_FS_HOME`,
+    `CHIMERA_PB_RUNS`, `CHIMERA_TEAMS_HOME`, `CHIMERA_CRON_DIR` and the
+    per-benchmark dataset variables all keep their exact prior meaning
+    (`CHIMERA_DATASETS_DIR` and `CHIMERA_FS_HOME` are now declared *on their
+    store rows* rather than re-implemented per module), and `[tui.cohorts]` is
+    still read as a legacy alias when `[storage.cohorts]` is absent. The
+    cohort pruner now rides the one shared retention reader instead of a
+    second implementation.
+
+- **Two inconsistencies the sweep surfaced, fixed with it** — both invisible
+  while every module resolved its own paths:
+  - **`$CHIMERA_HOME` had two meanings.** `chimera/stoat/plan_mode.py` read it
+    as a *home directory* (`$CHIMERA_HOME/.chimera/plans`) while
+    `chimera/stoat/hooks.py` and `chimera/badger/slash.py` read it as the
+    *root* (`$CHIMERA_HOME/stoat/hooks.json`). Plan mode now agrees with the
+    registry and with its siblings: `$CHIMERA_HOME/plans`. Unset — the case
+    that covers every real install — the resolved path is unchanged
+    (`~/.chimera/plans`).
+  - **Benchmarks ignored `CHIMERA_DATASETS_DIR`.** Seven adapters
+    (`tau_bench`, `bigcodebench`, `webarena`, `aider_polyglot`,
+    `terminal_bench`, `harbor`, `gaia`) plus `mbpp` hard-coded
+    `~/.chimera/datasets/<bench>` while `chimera bench-fetch` staged through
+    `staging_dir()`, which honors the variable — so relocating the dataset
+    cache made the fetcher and the reader disagree. All eight now resolve
+    through the `datasets` store. Per-benchmark `CHIMERA_*_PATH` overrides are
+    unaffected and still win.
+
+- **Known, deliberately not fixed here:** `CommandRegistry.load_all` joins a
+  second `.chimera` onto the `user_dir` its callers already pass as
+  `~/.chimera`, so user-scope skills have never loaded from
+  `~/.chimera/skills`. Preserved verbatim with a `NOTE` at the site — changing
+  skill resolution is not something a path-plumbing change should do silently.
 
 ## 0.9.2.1 — 2026-07-27 — the verified grader
 

@@ -18,6 +18,7 @@ from typing import Any
 
 from chimera.agents.config import _parse_frontmatter
 from chimera.agents.loader import builtin_subagents_dir
+from chimera.config.paths import store_path
 
 __all__ = ["discover_team_roles"]
 
@@ -101,8 +102,8 @@ def discover_team_roles(workdir: Path | None = None) -> list[dict[str, Any]]:
     root = workdir if workdir is not None else Path.cwd()
 
     accumulator: dict[str, dict[str, Any]] = {}
-    _collect_from_dir(root / ".chimera" / "agents", accumulator)
-    _collect_from_dir(Path.home() / ".chimera" / "agents", accumulator)
+    _collect_from_dir(store_path("project-agents", root), accumulator)
+    _collect_from_dir(store_path("agents"), accumulator)
     _collect_from_dir(builtin_subagents_dir(), accumulator)
 
     return sorted(accumulator.values(), key=lambda entry: entry["role"])

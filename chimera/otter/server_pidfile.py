@@ -76,6 +76,7 @@ import threading
 import time
 from pathlib import Path
 from typing import Any
+from chimera.config.paths import store_path
 
 try:  # POSIX path — fcntl is unavailable on Windows.
     import fcntl as _fcntl
@@ -217,7 +218,7 @@ def default_pidfile_dir() -> Path:
     Returns:
         ``~/.chimera/run`` (not created).
     """
-    return Path.home() / ".chimera" / "run"
+    return store_path("run")
 
 
 def pidfile_path(prefix: str, port: int, *, base_dir: Path | None = None) -> Path:

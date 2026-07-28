@@ -57,6 +57,7 @@ from typing import Any
 
 from chimera.permissions.base import PermissionAction
 from chimera.permissions.rule import PermissionRuleset, Rule
+from chimera.config.paths import chimera_home
 
 __all__ = [
     "DEFAULT_VERSION",
@@ -222,7 +223,7 @@ def default_permissions_path() -> Path:
     override = os.environ.get("CHIMERA_PERMISSIONS_FILE")
     if override:
         return Path(override)
-    return Path.home() / ".chimera" / "permissions.json"
+    return chimera_home() / "permissions.json"
 
 
 # ---------------------------------------------------------------------------

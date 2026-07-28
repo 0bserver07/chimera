@@ -54,6 +54,7 @@ from pathlib import Path
 from typing import Any
 
 from chimera.eval.harness import Benchmark
+from chimera.config.paths import STATE_DIRNAME, store_path
 
 __all__ = [
     "TerminalBench",
@@ -65,7 +66,7 @@ __all__ = [
 ]
 
 
-DEFAULT_DATASET_DIR = "~/.chimera/datasets/terminal-bench"
+DEFAULT_DATASET_DIR = f"~/{STATE_DIRNAME}/datasets/terminal-bench"
 """Default on-disk location for the staged Terminal-Bench dataset."""
 
 ENV_DATASET_PATH = "CHIMERA_TERMINAL_BENCH_PATH"
@@ -85,8 +86,10 @@ def default_dataset_path() -> Path:
         Absolute :class:`Path` to the dataset root (existence not
         guaranteed).
     """
-    raw = os.environ.get(ENV_DATASET_PATH) or DEFAULT_DATASET_DIR
-    return Path(raw).expanduser()
+    raw = os.environ.get(ENV_DATASET_PATH)
+    if raw:
+        return Path(raw).expanduser()
+    return store_path("datasets") / "terminal-bench"
 
 
 def dataset_available(path: Path | None = None) -> bool:

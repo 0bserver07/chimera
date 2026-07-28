@@ -8,6 +8,7 @@ from typing import Any
 from chimera.hooks.events import HookEvent
 from chimera.hooks.session_hooks import SessionHookManager
 from chimera.hooks.hook_types import CommandHook, HookMatcher, PromptHook
+from chimera.config.paths import project_state_dir
 
 
 class HookLoader:
@@ -71,7 +72,7 @@ class HookLoader:
         source: str,
     ) -> list[HookMatcher]:
         """Load hooks from ``<directory>/.chimera/settings.json``."""
-        settings_path = os.path.join(directory, ".chimera", "settings.json")
+        settings_path = str(project_state_dir(directory) / "settings.json")
         if not os.path.isfile(settings_path):
             return []
 

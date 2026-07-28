@@ -58,6 +58,7 @@ from pathlib import Path
 from typing import Any
 
 from chimera.eval.harness import Benchmark
+from chimera.config.paths import STATE_DIRNAME, store_path
 
 __all__ = [
     "AiderPolyglot",
@@ -70,7 +71,7 @@ __all__ = [
 ]
 
 
-DEFAULT_DATASET_DIR = "~/.chimera/datasets/aider-polyglot"
+DEFAULT_DATASET_DIR = f"~/{STATE_DIRNAME}/datasets/aider-polyglot"
 """Default on-disk location for the staged Aider Polyglot dataset."""
 
 ENV_DATASET_PATH = "CHIMERA_AIDER_POLYGLOT_PATH"
@@ -102,8 +103,10 @@ def default_dataset_path() -> Path:
         Absolute :class:`Path` to the dataset root (existence not
         guaranteed).
     """
-    raw = os.environ.get(ENV_DATASET_PATH) or DEFAULT_DATASET_DIR
-    return Path(raw).expanduser()
+    raw = os.environ.get(ENV_DATASET_PATH)
+    if raw:
+        return Path(raw).expanduser()
+    return store_path("datasets") / "aider-polyglot"
 
 
 def dataset_available(path: Path | None = None) -> bool:

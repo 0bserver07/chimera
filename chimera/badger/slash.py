@@ -65,6 +65,7 @@ from chimera.cli.slash_commands import (  # noqa: E402
     cmd_status as _cmd_status,
 )
 
+from chimera.config.paths import store_path  # noqa: E402
 from chimera.cli.code import (  # noqa: E402
     cmd_agent as _cmd_agent,
     cmd_clear as _cmd_clear,
@@ -186,9 +187,7 @@ def cmd_rerun(session: Any, _env: Any, args: str, out: PrintFn) -> None:
 
 def _badger_memory_path() -> Path:
     """Return the badger-scoped memory file path, honouring ``$CHIMERA_HOME``."""
-    chimera_home = os.environ.get("CHIMERA_HOME")
-    root = Path(chimera_home) if chimera_home else Path.home() / ".chimera"
-    return root / "badger" / "memory.md"
+    return store_path("badger") / "memory.md"
 
 
 def cmd_memory(_session: Any, _env: Any, args: str, out: PrintFn) -> None:
@@ -276,9 +275,7 @@ def cmd_export(session: Any, _env: Any, args: str, out: PrintFn) -> None:
 
     history = list(getattr(session, "history", None) or [])
     session_id = str(getattr(session, "id", None) or getattr(session, "session_id", "")) or "current"
-    chimera_home = os.environ.get("CHIMERA_HOME")
-    root = Path(chimera_home) if chimera_home else Path.home() / ".chimera"
-    out_dir = root / "exports"
+    out_dir = store_path("exports")
     out_dir.mkdir(parents=True, exist_ok=True)
     if target_path:
         path = Path(target_path)

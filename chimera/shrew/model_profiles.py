@@ -54,6 +54,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Final
+from chimera.config.paths import store_path
 
 __all__ = [
     "DEFAULT_SETTINGS_PATH",
@@ -111,7 +112,7 @@ settings file behaves identically to today.
 
 def default_settings_path() -> Path:
     """Return ``~/.chimera/shrew/settings.json`` honouring the current ``Path.home()``."""
-    return Path.home() / ".chimera" / "shrew" / "settings.json"
+    return store_path("shrew") / "settings.json"
 
 
 DEFAULT_SETTINGS_PATH: Final[Path] = default_settings_path()

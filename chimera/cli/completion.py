@@ -26,6 +26,7 @@ import argparse
 import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Iterable
+from chimera.config.paths import STATE_DIRNAME, user_scope_dir
 
 if TYPE_CHECKING:
     from typing import TextIO
@@ -318,10 +319,11 @@ def _completion_paths(shell: str, home: Path) -> tuple[Path, Path | None]:
     ``rc_path`` is ``None`` for fish — fish autoloads completions from
     ``~/.config/fish/completions/`` so no rc edit is required.
     """
+    completion_dir = user_scope_dir(home) / "completion"
     if shell == "bash":
-        return home / ".chimera" / "completion" / "bash.sh", home / ".bashrc"
+        return completion_dir / "bash.sh", home / ".bashrc"
     if shell == "zsh":
-        return home / ".chimera" / "completion" / "zsh.sh", home / ".zshrc"
+        return completion_dir / "zsh.sh", home / ".zshrc"
     if shell == "fish":
         return home / ".config" / "fish" / "completions" / "chimera.fish", None
     raise ValueError(f"Unsupported shell '{shell}'.")
@@ -491,8 +493,8 @@ def install(
     # fish path lives under ~/.config/fish/, which the user already
     # owns at whatever permission they've chosen — leave it alone.
     script_path.parent.mkdir(parents=True, exist_ok=True)
-    if ".chimera" in script_path.parts:
-        chimera_dir = home_path / ".chimera"
+    if STATE_DIRNAME in script_path.parts:
+        chimera_dir = user_scope_dir(home_path)
         try:
             chimera_dir.chmod(0o700)
         except OSError:

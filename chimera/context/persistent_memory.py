@@ -29,6 +29,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from chimera.config.paths import chimera_home
 from chimera.context.consolidation import MemoryConsolidator
 from chimera.sessions.long_term_memory import LongTermMemory, MemoryEntry
 
@@ -52,7 +53,7 @@ class PersistentMemoryConfig:
             ``None`` means all categories.
     """
 
-    path: str = "~/.chimera/persistent_memory.json"
+    path: str | None = None
     auto_save_interval: int = 5
     max_facts: int = 200
     categories: list[str] | None = None
@@ -76,7 +77,7 @@ class PersistentMemory:
 
     def __init__(
         self,
-        path: str = "~/.chimera/persistent_memory.json",
+        path: str | None = None,
         auto_save_interval: int = 5,
         max_facts: int = 200,
         config: PersistentMemoryConfig | None = None,
@@ -89,7 +90,11 @@ class PersistentMemory:
         else:
             self._categories = None
 
-        self._ltm = LongTermMemory(path)
+        # ``None`` resolves through the path registry so the default lands in
+        # the same user-scope root every other store uses.
+        self._ltm = LongTermMemory(
+            path if path is not None else str(chimera_home() / "persistent_memory.json")
+        )
         self._consolidator = MemoryConsolidator()
         self._auto_save_interval = auto_save_interval
         self._max_facts = max_facts

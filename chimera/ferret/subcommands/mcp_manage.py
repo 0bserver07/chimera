@@ -39,6 +39,7 @@ import os
 import sys
 from pathlib import Path
 from typing import Any
+from chimera.config.paths import STATE_DIRNAME, store_path
 
 __all__ = [
     "DEFAULT_MCP_CONFIG_PATH",
@@ -53,12 +54,12 @@ __all__ = [
 
 def _default_config_path() -> Path:
     """Return ``~/.chimera/ferret/mcp_servers.json`` honoring ``Path.home()``."""
-    return Path.home() / ".chimera" / "ferret" / "mcp_servers.json"
+    return store_path("ferret") / "mcp_servers.json"
 
 
 # Module-level constant kept for ``__all__`` exposure; resolved lazily so
 # tests that monkey-patch ``Path.home()`` see the patched value.
-DEFAULT_MCP_CONFIG_PATH = "~/.chimera/ferret/mcp_servers.json"
+DEFAULT_MCP_CONFIG_PATH = f"~/{STATE_DIRNAME}/ferret/mcp_servers.json"
 
 
 def load_mcp_config(path: Path | None = None) -> dict[str, Any]:

@@ -7,6 +7,7 @@ from typing import Any
 
 from chimera.sessions.base import SessionData, SessionID, Storage
 from chimera.types import Message, ToolCall
+from chimera.config.paths import chimera_home
 
 __all__ = ["SQLiteStorage"]
 
@@ -29,8 +30,12 @@ class SQLiteStorage(Storage):
     Messages are stored as a JSON blob in a single ``messages`` column.
     """
 
-    def __init__(self, db_path: str = "~/.chimera/sessions.db") -> None:
-        resolved = os.path.expanduser(db_path)
+    def __init__(self, db_path: str | None = None) -> None:
+        resolved = (
+            os.path.expanduser(db_path)
+            if db_path is not None
+            else str(chimera_home() / "sessions.db")
+        )
         os.makedirs(os.path.dirname(resolved) or ".", exist_ok=True)
         self._conn = sqlite3.connect(resolved)
         self._conn.execute("PRAGMA journal_mode=WAL;")
