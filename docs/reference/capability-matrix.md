@@ -181,6 +181,14 @@ uv run python -c "from chimera.eval.runners.registry import load_registry, \
 uv run python -c "from chimera.env.factory import _BUILTIN; print(sorted(_BUILTIN))"
 ```
 
+**All six commands above were executed and reproduced their stated output** on
+the date below — none is quoted from a prior run or from another document. A
+block of commands that does not reproduce is worse than no block, because it
+*looks* checked. The canary tallies are stable across sample size: `--limit 10`
+and `--limit 25` both return `6 pass · 0 BROKEN · 0 unclassified · 1
+env-missing · 1 not staged · 19 exempt`, so the cheap run is enough to confirm
+this section.
+
 Measured on 2026-07-28, branch `integrate/m-track`, CPython 3.12.8, under the
 documented setup `uv sync --extra dev --extra anthropic`. Dataset staging is
 **machine-local** (`~/.chimera/datasets`), so the "Dataset" column records what
