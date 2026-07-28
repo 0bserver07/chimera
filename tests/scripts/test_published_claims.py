@@ -97,6 +97,19 @@ def _load_observatory():
     return mod
 
 
+def _registries() -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """``(retracted, known)`` benchmark ids, read from the generator.
+
+    Both come from ``scripts/render_observatory.py`` so this gate and the page
+    it guards cannot drift: retracting a benchmark there arms this test here.
+    """
+    obs = _load_observatory()
+    retracted = tuple(obs.RETRACTED)
+    assert retracted, "RETRACTED registry is empty — was a fix verified?"
+    known = tuple({*obs._BENCH_ORDER, *retracted})
+    return retracted, known
+
+
 def _published_files() -> list[Path]:
     out: list[Path] = []
     for entry in _PUBLISHED:
@@ -106,6 +119,78 @@ def _published_files() -> list[Path]:
         elif p.is_dir():
             out.extend(sorted(p.rglob("*.md")))
     return out
+
+
+def _owner_of(line_lower: str, upto: int, known: tuple[str, ...]) -> str | None:
+    """The benchmark named closest before *upto*, or ``None`` if none is."""
+    best: tuple[int, int] | None = None
+    winner: str | None = None
+    for name in known:
+        at = line_lower.rfind(name, 0, upto)
+        if at < 0:
+            continue
+        # Later mention wins; on a tie the longer name wins, so "mbpp-plus"
+        # beats the "mbpp" nested inside it.
+        key = (at, len(name))
+        if best is None or key > best:
+            best, winner = key, name
+    return winner
+
+
+def _quotes_a_score_for(line: str, bench: str, known: tuple[str, ...]) -> bool:
+    """Whether *line* publishes a percentage a reader would read as *bench*'s.
+
+    Attribution is deliberately narrow. A percentage is cleared only when some
+    **other** benchmark the observatory knows explicitly owns it earlier on the
+    same line, which is the real shape in ``modal-cloud-benches.md``::
+
+        mbpp-plus ≥91% and math500 ≥43% ran at full-work cost. **The
+        livecodebench reasoning in this section is retained …
+
+    where 91% is mbpp-plus's and 43% is math500's, and ``livecodebench`` is
+    only named as the subject of the withdrawal that follows. An *unowned*
+    percentage stays attributed to *bench* — ``100% on both … (LiveCodeBench)``
+    is still a violation — so the rule cannot launder an unlabelled score.
+    """
+    low = line.lower()
+    for m in _PERCENT.finditer(line):
+        owner = _owner_of(low, m.start(), known)
+        if owner is None or owner == bench:
+            return True
+    return False
+
+
+def _retracted_score_offenders(
+    text: str, retracted: tuple[str, ...], known: tuple[str, ...]
+) -> list[tuple[int, str]]:
+    """Lines that publish a score for a retracted benchmark, with line numbers."""
+    offenders: list[tuple[int, str]] = []
+    in_correction_table = False
+    prev = ""
+    for i, line in enumerate(text.splitlines(), 1):
+        stripped = line.strip()
+        if _TABLE_SEPARATOR.match(stripped):
+            # The line above a `|---|` row is that table's header.
+            in_correction_table = bool(_CORRECTION_TABLE_HEADER.search(prev))
+        elif not stripped.startswith("|"):
+            in_correction_table = False
+        prev = line
+
+        low = line.lower()
+        for bench in retracted:
+            if bench not in low:
+                continue
+            if not _quotes_a_score_for(line, bench, known):
+                continue
+            # Withdrawals are allowed to state the number they withdraw …
+            if _WITHDRAWN.search(line):
+                continue
+            # … and so is a row of a table that prints the claim beside the truth.
+            if in_correction_table:
+                continue
+            offenders.append((i, stripped))
+            break
+    return offenders
 
 
 class TestCitedReceiptsExist:
@@ -140,29 +225,14 @@ class TestRetractedBenchmarksAreNotQuoted:
     """A retraction that only covers the generated page is not a retraction."""
 
     def test_no_published_page_quotes_a_retracted_benchmark_score(self) -> None:
-        obs = _load_observatory()
-        retracted = set(obs.RETRACTED)
-        assert retracted, "RETRACTED registry is empty — was a fix verified?"
-
-        # A score next to a retracted benchmark's name, within one line.
+        retracted, known = _registries()
         offenders: list[str] = []
         for doc in _published_files():
-            for i, line in enumerate(
-                doc.read_text(encoding="utf-8", errors="replace").splitlines(), 1
-            ):
-                low = line.lower()
-                if not any(b in low for b in retracted):
-                    continue
-                if not re.search(r"\b\d{1,3}(?:\.\d+)?\s*%", line):
-                    continue
-                # Withdrawals are allowed to state the number they withdraw.
-                if re.search(
-                    r"retract|withdraw|previously reported|do not cite|⊘|~~",
-                    line,
-                    re.I,
-                ):
-                    continue
-                offenders.append(f"{doc.relative_to(ROOT)}:{i}: {line.strip()[:110]}")
+            text = doc.read_text(encoding="utf-8", errors="replace")
+            offenders.extend(
+                f"{doc.relative_to(ROOT)}:{i}: {line[:110]}"
+                for i, line in _retracted_score_offenders(text, retracted, known)
+            )
         assert not offenders, (
             "a RETRACTED benchmark is quoted with a score:\n  "
             + "\n  ".join(offenders)
