@@ -1,7 +1,11 @@
 # Bench diagnosis — the `darklight1` Modal grid
 
-Receipt under diagnosis: `data/modal-grid-darklight1-20260724-195209.json`
-(agent `coding-agent`, model `glm-5.2[1m]`, n=50 per cell).
+Receipt under diagnosis: ⊘ NO RECEIPT — `data/modal-grid-darklight1-20260724-195209.json`
+(agent `coding-agent`, model `glm-5.2[1m]`, n=50 per cell) is in **no commit and
+on no disk**. Every per-cell number quoted below was read off that file during
+the diagnosis and cannot be re-derived from this repo. The verdicts stand on
+their own reasoning — the grading contracts are inspectable — but the counts do
+not: treat them as the diagnosis author's testimony, not as evidence.
 
 Two cells were held back from publication pending this diagnosis:
 
@@ -315,8 +319,8 @@ generator's `DEFAULT_PATTERNS`. The "How to read these numbers" section gains a
 sentence documenting the new abort, **but the page was deliberately not
 regenerated in this worktree.**
 
-`data/modal-grid-observatory1-20260723-234334.json` is untracked at this base
-commit and absent here, while the committed page renders from it — so
+⊘ NO RECEIPT — `data/modal-grid-observatory1-20260723-234334.json` is in no
+commit and absent from disk, while the committed page renders from it — so
 `render_observatory.py --check` already exits 1 on the pristine tree (verified
 by stashing the script change and re-running), and regenerating here would
 *delete* the entire depth-matrix section. CI does not run the freshness gate.
