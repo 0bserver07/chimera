@@ -1,0 +1,89 @@
+{
+  "model": "glm-5.2[1m]",
+  "cells": [
+    {
+      "agent_id": "react",
+      "benchmark": "mbpp-sanitized",
+      "total": 5,
+      "passed": 2,
+      "pass_rate": 0.4,
+      "cost_usd": 0.004234,
+      "tool_calls": 0,
+      "wall_clock_sec": 2.692867784999997,
+      "status": "error",
+      "budget_honored": true,
+      "budget_note": "",
+      "category": "unknown"
+    },
+    {
+      "agent_id": "react",
+      "benchmark": "human-eval-plus",
+      "total": 5,
+      "passed": 2,
+      "pass_rate": 0.4,
+      "cost_usd": 0.016139999999999998,
+      "tool_calls": 0,
+      "wall_clock_sec": 8.668000337000002,
+      "status": "completed",
+      "budget_honored": true,
+      "budget_note": "",
+      "category": "unknown"
+    },
+    {
+      "agent_id": "reflexion",
+      "benchmark": "mbpp-sanitized",
+      "total": 5,
+      "passed": 4,
+      "pass_rate": 0.8,
+      "cost_usd": 0.013045999999999999,
+      "tool_calls": 1,
+      "wall_clock_sec": 13.625103095,
+      "status": "completed",
+      "budget_honored": true,
+      "budget_note": "",
+      "category": "unknown"
+    },
+    {
+      "agent_id": "reflexion",
+      "benchmark": "human-eval-plus",
+      "total": 5,
+      "passed": 3,
+      "pass_rate": 0.6,
+      "cost_usd": 0.014942,
+      "tool_calls": 0,
+      "wall_clock_sec": 10.514251955999995,
+      "status": "completed",
+      "budget_honored": true,
+      "budget_note": "",
+      "category": "unknown"
+    },
+    {
+      "agent_id": "coding-agent",
+      "benchmark": "mbpp-sanitized",
+      "total": 5,
+      "passed": 4,
+      "pass_rate": 0.8,
+      "cost_usd": 0.047142,
+      "tool_calls": 3,
+      "wall_clock_sec": 25.83513908399999,
+      "status": "completed",
+      "budget_honored": false,
+      "budget_note": "max_turns aligned to budget.max_llm_calls=15; tool-call budget not enforced (factory takes no loop_config)",
+      "category": "unknown"
+    },
+    {
+      "agent_id": "coding-agent",
+      "benchmark": "human-eval-plus",
+      "total": 5,
+      "passed": 5,
+      "pass_rate": 1.0,
+      "cost_usd": 0.08391599999999999,
+      "tool_calls": 4,
+      "wall_clock_sec": 39.518805496,
+      "status": "completed",
+      "budget_honored": false,
+      "budget_note": "max_turns aligned to budget.max_llm_calls=15; tool-call budget not enforced (factory takes no loop_config)",
+      "category": "unknown"
+    }
+  ]
+}
