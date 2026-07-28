@@ -149,13 +149,25 @@ passed, the best of any agent on that benchmark," citing
 `data/depth-lcb-coding-agent-glm52.json`. **That is withdrawn on two
 independent grounds**, either of which is sufficient.
 
-*First, the citation has no receipt.*
-⊘ NO RECEIPT — `data/depth-lcb-coding-agent-glm52.json` is not in this repo and appears in no commit on any branch (verified 2026-07-28).
+*First, nothing published has ever backed it.*
+⊘ NO RECEIPT — `data/depth-lcb-coding-agent-glm52.json` is in no commit on any branch and is not tracked (verified 2026-07-28: `git log --all -- <path>` and `git ls-files --error-unmatch <path>` both come back empty).
 `data/` is gitignored and receipts are committed one at a time with
-`git add -f`; this one never was. An earlier note in this repo's history
-asserted the file "exists and holds 21/25" — that assertion could not be
-reproduced and should not be relied on. Nothing published here has ever backed
-the 84%.
+`git add -f`; this one never was.
+
+Being exact about what "no receipt" does and does not mean here, because an
+earlier draft of this note overstated it: the file **does** exist on the
+machine that produced the run, untracked, and it **does** contain
+`total: 25, passed: 21, pass_rate: 0.84` — opened and re-read on 2026-07-28.
+The number was not invented, and the earlier note that said so was right about
+the contents. What it was wrong about is that this makes no difference: a file
+that exists only outside version control cannot be reached by any reader,
+reviewer, or CI job, so a citation of it is indistinguishable from a citation
+of nothing. That is the whole reason `data/` receipts are force-added.
+
+Now that the file has been located, it is still deliberately **not** being
+committed — see the second ground below. Committing it would publish a
+retracted benchmark's score as though it were evidence, which is worse than
+the missing citation it would fix.
 
 *Second, and decisively, the adapter does not measure LiveCodeBench*, so
 recovering the file would not rescue the number: 63 of the 175 staged tasks are
