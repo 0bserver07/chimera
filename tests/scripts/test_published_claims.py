@@ -84,6 +84,21 @@ _PERCENT = re.compile(r"\b\d{1,3}(?:\.\d+)?\s*%")
 #: Same-line phrasing that marks a number as withdrawn rather than published.
 _WITHDRAWN = re.compile(r"retract|withdraw|previously reported|do not cite|⊘|~~", re.I)
 
+#: The one way to name a receipt this repo does not have.
+#:
+#: Some published numbers cite a file that was never committed. Deleting the
+#: citation would hide that a number is unbacked; leaving it bare asserts
+#: evidence that cannot be produced. So the claim stays, the missing receipt
+#: stays named, and the line carries this marker — which makes the whole
+#: inventory greppable::
+#:
+#:     grep -rn '⊘ NO RECEIPT' README.md docs/ site/
+#:
+#: Deliberately a fixed token rather than a phrase list: nothing trips it by
+#: accident, and adding one is a visible edit a reviewer sees in the diff.
+#: It exempts only the line it appears on.
+_NO_RECEIPT = re.compile(r"⊘\s*NO RECEIPT", re.I)
+
 
 def _load_observatory():
     """Import the generator by path (scripts/ is not an importable package)."""
@@ -118,6 +133,22 @@ def _published_files() -> list[Path]:
             out.append(p)
         elif p.is_dir():
             out.extend(sorted(p.rglob("*.md")))
+    return out
+
+
+def _missing_citations(text: str) -> list[tuple[int, str]]:
+    """``(line number, path)`` for every cited receipt that is not on disk.
+
+    A line carrying ``⊘ NO RECEIPT`` is disclosing an absence, not offering
+    evidence, so it is skipped — see ``_NO_RECEIPT``.
+    """
+    out: list[tuple[int, str]] = []
+    for i, line in enumerate(text.splitlines(), 1):
+        if _NO_RECEIPT.search(line):
+            continue
+        for rel in dict.fromkeys(_RECEIPT.findall(line)):
+            if not (ROOT / rel).exists():
+                out.append((i, rel))
     return out
 
 
@@ -200,16 +231,19 @@ class TestCitedReceiptsExist:
         It reads as evidence and cannot be checked, so it survives review
         indefinitely.
         """
-        missing: list[str] = []
-        for doc in _published_files():
-            text = doc.read_text(encoding="utf-8", errors="replace")
-            for rel in set(_RECEIPT.findall(text)):
-                if not (ROOT / rel).exists():
-                    missing.append(f"{doc.relative_to(ROOT)} -> {rel}")
+        missing = [
+            f"{doc.relative_to(ROOT)}:{i} -> {rel}"
+            for doc in _published_files()
+            for i, rel in _missing_citations(
+                doc.read_text(encoding="utf-8", errors="replace")
+            )
+        ]
         assert not missing, (
             "docs cite receipt files that do not exist:\n  "
             + "\n  ".join(sorted(missing))
-            + "\nEither add the receipt or stop citing it."
+            + "\nAdd the receipt, stop citing it, or — if the number is real "
+            "but its receipt was never committed — keep both and mark the "
+            "line '⊘ NO RECEIPT'."
         )
 
     def test_the_scan_actually_finds_citations(self) -> None:
@@ -295,6 +329,38 @@ class TestTheExemptionsStillCatchRealViolations:
         # once the table has ended.
         after = corrected + f"\n\nThe agent scored 84% on {bench}.\n"
         assert _retracted_score_offenders(after, retracted, known)
+
+    def test_no_receipt_marker_exempts_only_its_own_line(self) -> None:
+        gone = "data/definitely-not-a-real-receipt-42.json"
+
+        # NOT cleared: a bare citation of a file that is not on disk.
+        assert _missing_citations(f"Raw data: `{gone}`") == [(1, gone)]
+
+        # Cleared: the same citation disclosed as unbacked.
+        assert _missing_citations(f"⊘ NO RECEIPT — `{gone}` was never committed") == []
+
+        # NOT cleared: the marker does not reach a neighbouring line. A
+        # document-wide exemption is exactly the hole this gate exists to close.
+        two = f"⊘ NO RECEIPT — `{gone}` is absent\nBut see `{gone}` for the run.\n"
+        assert _missing_citations(two) == [(2, gone)]
+
+    def test_the_no_receipt_inventory_is_greppable_and_declared(self) -> None:
+        # The marker's whole value is that it enumerates unbacked claims. If
+        # this list ever empties silently, the exemption has become dead code
+        # hiding nothing — or someone deleted the disclosures instead of the
+        # claims.
+        declared = [
+            f"{doc.relative_to(ROOT)}:{i}"
+            for doc in _published_files()
+            for i, line in enumerate(
+                doc.read_text(encoding="utf-8", errors="replace").splitlines(), 1
+            )
+            if _NO_RECEIPT.search(line)
+        ]
+        assert declared, (
+            "no '⊘ NO RECEIPT' disclosures found. If the unbacked claims were "
+            "genuinely backed since, delete this test with the last one."
+        )
 
     def test_a_results_table_header_cannot_match_the_contrast_pattern(self) -> None:
         for header in (
