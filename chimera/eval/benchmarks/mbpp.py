@@ -286,14 +286,72 @@ class MBPPPlus(MBPP):
     compatible with :class:`MBPP`; this subclass only relabels the benchmark so
     matrix columns and reports never present an MBPP+ run as ``mbpp-sanitized``.
 
-    Grading honesty: ``evaluate()`` (inherited) runs the base ``test_list``
-    asserts only — the EvalPlus expanded ``test`` harness is preserved verbatim
-    in every staged row but not yet executed, so results are **base-strength**,
-    not plus-strength.
+    Grading strength: ``evaluate()`` runs the EvalPlus expanded ``test``
+    harness — the whole point of MBPP+. It previously inherited MBPP's
+    ``test_list`` path, which is three base assertions against a suite designed
+    to have hundreds, so a published 99.7% was *MBPP+ tasks, base-graded*. That
+    gap was disclosed on the observatory rather than hidden; this closes it.
+    Expect the score to DROP: that is the fix working, not a regression.
     """
 
     def name(self) -> str:
         return "mbpp-plus"
+
+    def evaluate(self, task: dict[str, Any], agent_output: str, env: Any) -> bool:
+        """Grade against the EvalPlus expanded harness, not the base asserts.
+
+        The staged ``test`` blob is self-driving — it defines an ``assertion``
+        helper and ends in a loop calling ``assertion(fn(*inp), exp, atol)``
+        over hundreds of inputs — so splicing it after the solution is
+        sufficient. Unlike HumanEval+ there is no ``check(candidate)`` to
+        invoke, and no ``entry_point`` field; the harness names the function
+        itself.
+
+        Falls back to the inherited base ``test_list`` path only when a row has
+        no ``test`` blob, so a partially-staged dataset degrades to a weaker
+        grade rather than to a vacuous pass — and says so via
+        :meth:`graded_strength`.
+
+        Args:
+            task: MBPP+ record; ``test`` is the expanded harness.
+            agent_output: Candidate solution, possibly Markdown-fenced.
+            env: Optional execution environment; ``None`` runs in-process.
+
+        Returns:
+            ``True`` only if every expanded assertion passes.
+        """
+        from chimera.eval.benchmarks._code_extract import extract_code
+
+        solution = extract_code(agent_output)
+        if not solution.strip():
+            # An errored or empty run has nothing to grade. The harness would
+            # still define its helpers and then fail at the first call, but
+            # failing fast keeps the reason legible (measurement integrity).
+            return False
+
+        test_code = task.get("test") or ""
+        if not test_code.strip():
+            return super().evaluate(task, agent_output, env)
+
+        full_code = f"{solution}\n\n{test_code}\n"
+        if env is not None:
+            env.write_file("solution.py", full_code)
+            return bool(env.run_command("python solution.py").exit_code == 0)
+        try:
+            exec(full_code, {})  # noqa: S102
+            return True
+        except Exception:
+            return False
+
+    @staticmethod
+    def graded_strength(task: dict[str, Any]) -> str:
+        """``"plus"`` when the expanded harness will run, else ``"base"``.
+
+        Lets a caller record *which* contract produced a number instead of
+        inferring it from the benchmark's name — the ambiguity that let a
+        base-graded score publish as MBPP+.
+        """
+        return "plus" if (task.get("test") or "").strip() else "base"
 
 
 # ---------------------------------------------------------------------------

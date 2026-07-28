@@ -7,6 +7,25 @@ commit receipts.
 
 ## Unreleased
 
+### Fixed
+
+- **`mbpp-plus` now grades with the EvalPlus expanded harness, closing the
+  base-strength gap disclosed in 0.9.2.1.** `MBPPPlus` inherited MBPP's
+  `test_list` path — three or four assertions against a suite designed to have
+  hundreds — while the 9,460-character expanded `test` blob sat staged in every
+  row and never executed. The published **99.7%** was therefore *MBPP+ tasks,
+  base-graded*. Proven strictly stronger, not just different: a hardcoded
+  lookup (`{2: False, 10: True}.get(n, False)`) satisfies every base assertion
+  for `is_not_prime` and the base path **accepts** it; the expanded harness
+  rejects it. **Expect the published number to drop — that is the fix
+  working.** Canaried at n=60: the dataset's own canonical answers pass
+  60/60 under the expanded harness and zero wrong answers slip through.
+  A row missing the plus blob degrades to base grading rather than to a
+  vacuous pass, and the new `MBPPPlus.graded_strength(task)` names which
+  contract actually ran, so a number can record its own strength instead of
+  having it inferred from the benchmark's name.
+
+
 ### Added
 
 - **Verification axis on the capability matrix**
