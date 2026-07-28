@@ -9,13 +9,17 @@ stated above.
 
 > **Note, 2026-07-28 — dataset staging path corrected; the result is
 > untouched.** The reproduce commands below originally staged the HumanEval
-> *dataset* to `data/humaneval.json`. In this repo `data/` holds committed
-> result receipts, so that path made an input look like evidence: an auditor
-> scanning cited `data/*.json` files found one that was never committed and
-> never should have been. The commands now stage to `~/.chimera/datasets/`,
-> which is where `CLAUDE.md` says datasets go. The model, the date, the method
-> and the **109/164** result are unchanged — only where the script writes its
-> input.
+> *dataset* into `data/` itself, as a file named `humaneval.json`. In this repo
+> `data/` holds committed result receipts, so that path made an input look like
+> evidence: an auditor scanning cited `data/*.json` files found one that was
+> never committed and never should have been. The commands now stage to
+> `~/.chimera/datasets/`, which is where `CLAUDE.md` says datasets go. The
+> model, the date, the method and the **109/164** result are unchanged — only
+> where the script writes its input.
+>
+> The retired path is deliberately no longer written here as a `data/…json`
+> token: naming it in that form is what made a *dataset input* scan as a cited
+> *result receipt* in the first place.
 
 ## What HumanEval Measures
 
