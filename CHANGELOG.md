@@ -9,22 +9,31 @@ commit receipts.
 
 ### Fixed
 
-- **User-scope permission rules were silently ignored.** `CodingAgent` — the
-  stack behind `chimera code` — passed `user_dir=~/.chimera` into
-  `PermissionRuleLoader`, which appends `.chimera` itself, so every user-scope
-  lookup resolved to `~/.chimera/.chimera/settings.json`: a path nothing
-  writes. A `deny` rule you put in `~/.chimera/settings.json` never applied.
-  Demonstrated directly — the same rule loads as
-  `deny_rules {USER: ['Bash(rm -rf *)']}` under the loader's real contract and
-  as nothing under the one being passed. **This is the worst shape a safety
-  control can fail in**: the file exists, the syntax is valid, nothing warns,
-  and the rule simply does not apply. Dating to the original assembly commit
-  (`a5213636`); a later refactor only renamed the expression. The identical
-  call site for `HookLoader` is corrected with it — though note the hooks half
-  is *not* claimed as a proven user-visible bug, because a fixture reproducing
-  it loads zero matchers under both scopes; the reasoning is recorded in
-  `tests/assembly/test_user_scope_settings.py` rather than asserted.
-  Found while fixing a *latent* double-join with no callers.
+- **User-scope permission rules _and_ hooks were silently ignored.**
+  `CodingAgent` — the stack behind `chimera code` — passed `user_dir=~/.chimera`
+  into `PermissionRuleLoader` **and** `HookLoader`, both of which append
+  `.chimera` themselves, so every user-scope lookup resolved to
+  `~/.chimera/.chimera/settings.json`: a path nothing writes. A `deny` rule or
+  a `PreToolUse` hook you put in `~/.chimera/settings.json` never applied.
+  Both halves demonstrated directly — the rule loads as
+  `deny_rules {USER: ['Bash(rm -rf *)']}`, and the hook as one `source='user'`
+  matcher, under the loaders' real contract; both load as **nothing** under the
+  one being passed. **This is the worst shape a safety control can fail in**:
+  the file exists, the syntax is valid, nothing warns, and the rule simply does
+  not apply. Dating to the original assembly commit (`a5213636`); a later
+  refactor only renamed the expression. Found while fixing a *latent*
+  double-join with no callers.
+
+  The hooks half shipped hedged in 0.9.2.2 ("not claimed as a proven
+  user-visible bug") because the first fixture loaded zero matchers under
+  **both** scopes. That hedge was wrong, and the reason is worth more than the
+  bug: a fixture that fails identically under the bug and under the fix has not
+  reproduced anything. `HookLoader` parses `type`/`matcher`/`command` off each
+  entry directly; the fixture used the nested form that wraps a `hooks` list,
+  so the parser dropped it — silently — for every directory it was given. Two
+  unrelated faults presenting as one empty list. Written up on
+  `TestUserScopeHooks` in `tests/assembly/test_user_scope_settings.py`, along
+  with the silent-drop itself, which is pinned but not fixed.
 
 - **`mbpp-plus` now grades with the EvalPlus expanded harness, closing the
   base-strength gap disclosed in 0.9.2.1.** `MBPPPlus` inherited MBPP's
@@ -267,6 +276,50 @@ commit receipts.
   during this pass and is now a test. A second test pins the known hole
   (a withdrawal word anywhere on a line clears the whole line) rather than
   hiding it.
+- **…and the gate was reading 327 of 575 published markdown files.** Every
+  correction above was made under a `_PUBLISHED` scope of `README.md`,
+  `docs/{benchmarks,progress,releases}` and the site. The other 248 files were
+  not clean; they were unread — and an unscanned directory is indistinguishable
+  from a clean one. Widening to **all of `docs/`** surfaced thirteen sites at
+  once, including a live violation: `docs/specs/modal-bench-fanout.md` still
+  published "Flagship 100%/100% (only agent to sweep both)" — half of "both"
+  being the retracted `livecodebench` column — three weeks after the same
+  retraction landed in its sibling write-up. Struck in place, infra numbers
+  (8 cells, 0 errors, `$0.83`, 611s vs 782s) untouched. All of `docs/`, not the
+  three subdirectories where the hits happened to be: naming directories
+  re-creates the hole one level down, and the sweep measured it as free —
+  guides, playbooks, plans, `_archive` and the seven codename dirs add zero
+  further violations.
+- **Three of the four `⊘ NO RECEIPT` claims above were only disclosed in the
+  audit table, not at the claims themselves** — because the documents making
+  them were out of scope. Now marked where a reader meets them:
+  `data/modal-grid-darklight1-20260724-195209.json` and
+  `data/modal-grid-observatory1-20260723-234334.json` in
+  `docs/notes/bench-diagnosis-darklight1.md` (every per-cell count there is
+  testimony, not evidence — the verdicts still stand on inspectable grading
+  contracts), and `data/programbench-glm-5.2-code-results.json` in
+  `docs/specs/modal-amd64-programbench-grading.md`, where it is a proposal's
+  *intended* output rather than a result. Numbers kept, gaps named.
+- **Documents that quote a withdrawn number in order to explain it are exempt
+  by name, from the retracted-score rule only.** Widening caught a class the
+  narrow scope never met: the darklight1 diagnosis and the receipt audit have
+  to state what is being retracted to argue the retraction, and unexempted the
+  gate's loudest complaints would land on the two most honest documents in the
+  repo. `_RETRACTION_EXPLAINERS` lists exactly two files, each with a comment
+  saying what it quotes and why. It never touches the receipt rule — an
+  explanation cannot conjure a file into the repo — and a test pins that by
+  running an exempt document through both rules. Not exempted, on purpose:
+  `docs/guides/benchmark-canary.md`, which earns its clearance structurally via
+  the claim-versus-truth table header. Two further guards keep the list from
+  rotting: every entry must exist, and every entry must still *need* its
+  exemption, so a rewritten document drops off instead of shielding whatever it
+  becomes next.
+- **Known and declared gap:** `CHANGELOG.md` is still outside the gate. It
+  holds one untracked-receipt citation and two retracted-score lines; pulling
+  it in means editing shipped release entries to satisfy a test, which is an
+  owner call rather than a test author's. Recorded in the `_PUBLISHED` comment
+  with the line numbers, because silence about scope is exactly what this
+  change exists to end.
 
 ## 0.9.2.1 — 2026-07-27 — the verified grader
 
