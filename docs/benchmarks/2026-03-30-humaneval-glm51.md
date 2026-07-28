@@ -3,7 +3,19 @@
 **Date:** 2026-03-30
 **Model:** GLM-5.1 via api.z.ai (Anthropic-compatible endpoint)
 **Result:** 109/164 passed (66.5% pass@1)
-**Raw data:** `data/humaneval-glm51-results.json`
+**Raw data:** `data/humaneval-glm51-results.json` — verified 2026-07-28 to
+contain `passed: 109, total: 164, pass_rate: 0.6646`, i.e. exactly the result
+stated above.
+
+> **Note, 2026-07-28 — dataset staging path corrected; the result is
+> untouched.** The reproduce commands below originally staged the HumanEval
+> *dataset* to `data/humaneval.json`. In this repo `data/` holds committed
+> result receipts, so that path made an input look like evidence: an auditor
+> scanning cited `data/*.json` files found one that was never committed and
+> never should have been. The commands now stage to `~/.chimera/datasets/`,
+> which is where `CLAUDE.md` says datasets go. The model, the date, the method
+> and the **109/164** result are unchanged — only where the script writes its
+> input.
 
 ## What HumanEval Measures
 
@@ -28,7 +40,9 @@ export ANTHROPIC_MODEL="glm-5.1"
 
 ```bash
 python3 -c "
-import urllib.request, json, gzip
+import urllib.request, json, gzip, os
+dest = os.path.expanduser('~/.chimera/datasets/humaneval.json')
+os.makedirs(os.path.dirname(dest), exist_ok=True)
 resp = urllib.request.urlopen('https://github.com/openai/human-eval/raw/master/data/HumanEval.jsonl.gz')
 tasks = [json.loads(l) for l in gzip.decompress(resp.read()).decode().strip().split('\n')]
 json.dump([{
@@ -36,7 +50,7 @@ json.dump([{
     'prompt': t['prompt'],
     'test': t.get('test', ''),
     'entry_point': t.get('entry_point', ''),
-} for t in tasks], open('data/humaneval.json', 'w'))
+} for t in tasks], open(dest, 'w'))
 "
 ```
 
@@ -72,7 +86,7 @@ from chimera.providers.factory import create_provider
 from chimera.types import Message
 
 provider = create_provider(model="glm-5.1")
-tasks = json.load(open("data/humaneval.json"))
+tasks = json.load(open(os.path.expanduser("~/.chimera/datasets/humaneval.json")))
 
 TYPING_IMPORTS = "from typing import *\nfrom collections import *\nimport math\n..."
 
@@ -153,12 +167,14 @@ The 24-point drop may reflect: (a) a different harness with better parsing, (b) 
 # 1. Set up environment
 source .env  # ANTHROPIC_BASE_URL, ANTHROPIC_API_KEY, ANTHROPIC_MODEL=glm-5.1
 
-# 2. Download dataset (one time)
+# 2. Download dataset (one time) — stages to ~/.chimera/datasets, not data/
 python3 -c "
-import urllib.request, json, gzip
+import urllib.request, json, gzip, os
+dest = os.path.expanduser('~/.chimera/datasets/humaneval.json')
+os.makedirs(os.path.dirname(dest), exist_ok=True)
 resp = urllib.request.urlopen('https://github.com/openai/human-eval/raw/master/data/HumanEval.jsonl.gz')
 tasks = [json.loads(l) for l in gzip.decompress(resp.read()).decode().strip().split('\n')]
-json.dump([{'id':t['task_id'],'prompt':t['prompt'],'test':t.get('test',''),'entry_point':t.get('entry_point','')} for t in tasks], open('data/humaneval.json','w'))
+json.dump([{'id':t['task_id'],'prompt':t['prompt'],'test':t.get('test',''),'entry_point':t.get('entry_point','')} for t in tasks], open(dest,'w'))
 "
 
 # 3. Run benchmark
