@@ -28,6 +28,12 @@ from chimera.config.paths import store_path
 _REPO = Path(__file__).resolve().parent.parent
 _CHIMERA_PKG = _REPO / "chimera"
 _DATASETS = store_path("datasets")
+#: Where the local entrypoints drop their grid receipts. Anchored on the repo
+#: rather than the cwd: ``modal run`` can be fired from anywhere, and a
+#: cwd-relative ``data/`` scatters a stray directory wherever you were standing
+#: (``tests/test_repo_hygiene.py`` gates exactly that shape). Promotion of a
+#: receipt into the curated set is still a deliberate act, not this write.
+_RECEIPTS = _REPO / "data"
 
 # Chimera (local source, with the Modal fixes) + staged datasets baked in.
 # HOME=/root so the benches' ~/.chimera/datasets lookup resolves to the copy.
@@ -204,7 +210,6 @@ def grid(
     wall-clock ≈ the slowest single cell — not the serial sum. This is the fix
     for the local depth-run timeouts.
     """
-    import os
     from datetime import datetime
 
     agent_list = [a.strip() for a in agents.split(",") if a.strip()]
@@ -259,9 +264,9 @@ def grid(
     errs = sum(1 for c in combined if c.get("status") == "error")
     print(f"\ncells: {len(combined)} | errors: {errs} | total cost: ${total_cost:.4f}")
 
-    os.makedirs("data", exist_ok=True)
-    out = f"data/modal-grid-{datetime.now().strftime('%Y%m%d-%H%M%S')}.json"
-    with open(out, "w") as fh:
+    _RECEIPTS.mkdir(parents=True, exist_ok=True)
+    out = _RECEIPTS / f"modal-grid-{datetime.now().strftime('%Y%m%d-%H%M%S')}.json"
+    with out.open("w") as fh:
         json.dump({"model": model, "cells": combined}, fh, indent=2)
     print(f"saved -> {out}")
 
@@ -332,9 +337,9 @@ def collect(run_id: str) -> None:
               f"${float(c.get('cost_usd', 0) or 0):.3f}  {c.get('status','')}")
     from datetime import datetime
 
-    import os as _os
-    _os.makedirs("data", exist_ok=True)
-    out = f"data/modal-grid-{run_id}-{datetime.now().strftime('%Y%m%d-%H%M%S')}.json"
-    with open(out, "w") as fh:
+    _RECEIPTS.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    out = _RECEIPTS / f"modal-grid-{run_id}-{stamp}.json"
+    with out.open("w") as fh:
         json.dump({"run_id": run_id, "cells": combined}, fh, indent=2)
     print(f"saved -> {out}")

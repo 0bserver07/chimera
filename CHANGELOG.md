@@ -131,11 +131,21 @@ commit receipts.
   roots: M2's orphan scan as specified would have missed the 2.0 GB tree
   again. M3 must move the writer; M2 must scan the legacy name explicitly.
 
-- **Known, deliberately not fixed here:** `CommandRegistry.load_all` joins a
-  second `.chimera` onto the `user_dir` its callers already pass as
-  `~/.chimera`, so user-scope skills have never loaded from
-  `~/.chimera/skills`. Preserved verbatim with a `NOTE` at the site — changing
-  skill resolution is not something a path-plumbing change should do silently.
+- **`CommandRegistry.load_all` no longer double-joins `.chimera`**
+  (deferred by M1, fixed here): its `user_dir` is now the user-scope Chimera
+  state directory itself — `chimera_home()` / `~/.chimera`, the spelling
+  `coding_agent.py` already passes its sibling loaders — so user skills load
+  from `<user_dir>/skills` instead of `~/.chimera/.chimera/skills`, and
+  omitting `user_dir` falls back to the registry's `skills` store (honoring
+  `$CHIMERA_HOME`). Scope correction to the M1 note above: `load_all` has
+  **zero callers**, and the production skill path (`discover_all_skills` →
+  `default_search_paths` → `store_path("skills")`) always resolved correctly,
+  so user skills *did* reach the system prompt — this was a trap for the next
+  caller, not a live outage. Four tests, revert-verified. A comment at the
+  site now records that two skill-discovery paths read the same directory
+  with disjoint file layouts (flat `*.md` → slash commands here;
+  nested `SKILL.md` → prompt bullets in `skills/discovery.py`) so they
+  converge on the store rather than drift.
 - **A static gate on cwd-relative writes** (`tests/test_repo_hygiene.py`, spec
   M5): an `ast` walk of every `chimera/**/*.py` fails the suite when package
   code writes to a literal relative path — `os.makedirs("runs")`,
@@ -146,7 +156,23 @@ commit receipts.
   flagged. Clean on the current tree with an empty allowlist; a seeded
   violation is proven to go red. The gate's limits are documented in the
   module docstring — it cannot see external harnesses (the source of the
-  944 MB root `runs/`), dynamic paths, or non-`chimera/` code.
+  944 MB root `runs/`), dynamic paths, or non-Python writers.
+  - **Widened past the shipped package to the whole tree.** `SCANNED_ROOTS` is
+    now `chimera/`, `scripts/`, `tests/`, `examples/` — every `*.py` in the
+    repo, since no other tracked root contains any, and a new root with Python
+    must join the tuple or `test_every_python_root_is_scanned` fails. The
+    package-only scope was hiding 7 hits in 3 files. Fixed: both
+    `@app.local_entrypoint()` receipt writes in `scripts/modal_bench_app.py`
+    (`os.makedirs("data")` + `open("data/modal-grid-…", "w")`, one of them via
+    `import os as _os`) now anchor on the `_REPO` root the module already
+    computes, so firing `modal run` from outside the checkout no longer
+    scatters a stray `data/`. Allowlisted with reasons: the
+    `tests/assembly/fake_external_agent.py` fixture, whose whole point is
+    writing into the cwd it is handed, and the frozen
+    `examples/_archive/swe_bench_coding_agent.py`, kept verbatim as history.
+    `chimera/` still contributes zero exemptions and a test enforces that.
+    Revert-verified twice: against the real tree (the pre-fix Modal script
+    fails the gate) and hermetically per newly-covered root.
 - **The experiment toolkit** (`chimera/experiments/`, spec M4): `start` /
   `resume` give a stamped run directory under the registry's
   `experiment-runs` store with a `manifest.json` carrying the git SHA + dirty

@@ -270,11 +270,17 @@ Interactive frontends over AgentDriver (spec: `docs/specs/interactive-frontends.
   `scripts/experiments/`, raw run dirs belong outside the repo. Why: `pb_*.py`
   scratch drivers + 1.3 GB of `pb-runs/`/`runs/` output accumulated at the
   root, six of the files gitignored *while tracked* — invisible to every gate
-  until an owner audit found them. The claim that package code writes no
+  until an owner audit found them. The claim that this repo's code writes no
   cwd-relative directory is now **enforced**, not asserted: a static `ast`
   scan in the same test file fails the suite on a literal relative write
   (`os.makedirs("runs")`, `Path("out").mkdir()`, …). Caller-supplied,
-  temp-, and home-rooted paths are deliberately not flagged.
+  temp-, and home-rooted paths are deliberately not flagged. It walks
+  `SCANNED_ROOTS` — `chimera/`, `scripts/`, `tests/`, `examples/`, i.e. every
+  `*.py` in the repo — because scoping it to the shipped package alone hid 7
+  real hits in `scripts/` and `examples/`. Adding a top-level root with Python
+  in it means adding it to `SCANNED_ROOTS` in the same commit. An exemption
+  goes in `CWD_WRITE_ALLOWLIST` **with a comment saying why**; `chimera/` may
+  never have one (a test enforces that) — fix the writer instead.
 - **Never hand-build a `~/.chimera` path.** Every on-disk store goes through
   `chimera/config/paths.py` — `store_path("<name>")`, `chimera_home()`,
   `project_state_dir(project)` — and adding a store means adding a `Store`

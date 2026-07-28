@@ -22,13 +22,21 @@ The static cwd-write gate
 -------------------------
 
 The root gate above catches rot *after* it lands. The second gate here is the
-manual sweep that proved ``chimera/`` clean, made permanent: an ``ast`` walk of
-every ``chimera/**/*.py`` that fails on a **literal relative** path being
-written — ``os.makedirs("runs")``, ``Path("runs").mkdir()``,
-``open("out/x.json", "w")``, ``Path("out/x").write_text(...)``,
-``shutil.copytree(src, "runs")``. Package code must root its writes in
-``chimera_home()``, a caller-supplied directory, or a temp dir — never in
-whatever directory the user happened to be standing in.
+manual sweep that proved ``chimera/`` clean, made permanent: an ``ast`` walk
+that fails on a **literal relative** path being written — ``os.makedirs("runs")``,
+``Path("runs").mkdir()``, ``open("out/x.json", "w")``,
+``Path("out/x").write_text(...)``, ``shutil.copytree(src, "runs")``. Code must
+root its writes in ``chimera_home()``, a caller-supplied directory, a
+``__file__``-anchored directory, or a temp dir — never in whatever directory
+the user happened to be standing in.
+
+It walks ``SCANNED_ROOTS`` — ``chimera/``, ``scripts/``, ``tests/``,
+``examples/`` — which is every ``*.py`` in the repo (the remaining tracked
+roots, ``chimera-plugin/``, ``data/``, ``docs/``, ``research/``, ``site/``,
+contain none). It started scoped to the shipped package; widening it to the
+rest of the tree found three writers the package-only scan could not see, one
+of them live (``scripts/modal_bench_app.py``, since fixed). Scoping a gate to
+the code you already believe is clean is how the rot ends up next door.
 
 Deliberately NOT flagged, because each is already disciplined: absolute paths,
 ``Path.home()``-rooted paths, ``~``-prefixed paths, ``tempfile.*``, and any
@@ -48,8 +56,8 @@ oversold is a guard people stop checking):
   name assigned in one function and written in another. Resolution here is
   deliberately shallow: literals, ``Path(...)`` of literals, ``/`` joins,
   f-string literal prefixes, and single-assignment locals within one scope.
-* **Anything outside ``chimera/``** — ``scripts/``, ``tests/``, ``examples/``,
-  and every non-Python writer. Scope is the shipped package.
+* **Non-Python writers** — a shell script, a Makefile recipe, a YAML workflow
+  step. Only ``*.py`` under ``SCANNED_ROOTS`` is parsed.
 * **Runtime behaviour.** This is a source scan. A cwd-relative write reached
   through an import of a third-party library is invisible to it.
 
@@ -69,6 +77,13 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE = ROOT / "chimera"
+
+#: Every root the cwd-write scan walks. Together these hold every ``*.py`` in
+#: the repo — ``chimera-plugin/``, ``data/``, ``docs/``, ``research/`` and
+#: ``site/`` contain none, so this is whole-tree coverage, not a sample. A new
+#: root with Python in it must be added here in the same commit that adds it
+#: (``test_every_python_root_is_scanned`` fails otherwise).
+SCANNED_ROOTS: tuple[str, ...] = ("chimera", "scripts", "tests", "examples")
 
 #: Every top-level path that is ALLOWED to be tracked. Additions require
 #: editing this set — that edit is the deliberate act the gate exists to force.
@@ -145,15 +160,34 @@ _DEST_ARG_FUNCS = {
 #: ``Path`` methods that write at the path they are called on.
 _PATH_WRITE_METHODS = frozenset({"mkdir", "write_text", "write_bytes", "touch"})
 
-#: Legitimate cwd-relative writes inside ``chimera/``, as
-#: ``(posix path relative to the repo root, the literal path written)``.
-#: An entry needs a comment saying WHY it is legitimate — "the scan went red"
-#: is not a reason. Keyed by literal rather than line number so the allowlist
-#: does not rot when code moves.
-CWD_WRITE_ALLOWLIST: frozenset[tuple[str, str]] = frozenset()
-# (empty: the shipped package roots every write in chimera_home(), a
-#  caller-supplied directory, or a temp dir — verified by an owner audit
-#  2026-07-27 and held by this gate since.)
+#: Cwd-relative writes that are deliberate, as ``(posix path relative to the
+#: repo root, the literal path written)``. An entry needs a comment saying WHY
+#: — "the scan went red" is not a reason, and neither is "it is inconvenient to
+#: fix". Keyed by literal rather than line number so the allowlist does not rot
+#: when code moves.
+#:
+#: ``chimera/`` contributes NOTHING here and must stay that way: the shipped
+#: package roots every write in ``chimera_home()``, a caller-supplied
+#: directory, or a temp dir (owner audit 2026-07-27, held by this gate since).
+CWD_WRITE_ALLOWLIST: frozenset[tuple[str, str]] = frozenset({
+    # The cwd IS the subject under test. ``fake_external_agent.py`` is a
+    # scripted stand-in for an external agent CLI, spawned by the
+    # ExternalAgentDriver tests with ``cwd=`` set to a per-lane temp
+    # workspace; writing ``external.txt`` into that cwd is how workspace
+    # isolation and the resulting diff are proven. Anchoring it anywhere else
+    # would delete the thing the fixture exists to demonstrate.
+    ("tests/assembly/fake_external_agent.py", "external.txt"),
+
+    # Frozen provenance, not maintained code. ``examples/_archive/`` is
+    # documented in its own README as superseded scripts kept verbatim for
+    # historical reference, explicitly "not guaranteed to run against the
+    # current codebase"; the canonical SWE-bench entry points are listed
+    # there. This write IS the shape the gate exists to stop — it is
+    # allowlisted because rewriting an archived artifact to satisfy a
+    # present-day gate falsifies what actually shipped, not because it is
+    # good. Anything promoted OUT of ``_archive/`` loses this exemption.
+    ("examples/_archive/swe_bench_coding_agent.py", "data/traces"),
+})
 
 
 class CwdWrite(NamedTuple):
@@ -452,14 +486,39 @@ def scan_package(
     return found
 
 
-def test_package_never_writes_a_cwd_relative_path() -> None:
-    hits = scan_package()
+def scan_repo(
+    allowlist: frozenset[tuple[str, str]] = CWD_WRITE_ALLOWLIST,
+) -> list[CwdWrite]:
+    """Run :func:`scan_package` over every root in :data:`SCANNED_ROOTS`."""
+    found: list[CwdWrite] = []
+    for name in SCANNED_ROOTS:
+        found.extend(scan_package(ROOT / name, allowlist))
+    return found
+
+
+def test_repo_never_writes_a_cwd_relative_path() -> None:
+    hits = scan_repo()
     assert hits == [], (
-        "chimera/ writes to paths resolved against the caller's working "
+        "these write to paths resolved against the caller's working "
         "directory:\n  " + "\n  ".join(str(hit) for hit in hits) + "\n"
-        "Root writes in chimera_home(), a caller-supplied directory, or a "
-        "temp dir. If a hit is genuinely legitimate, add (path, literal) to "
-        "CWD_WRITE_ALLOWLIST with a comment saying why."
+        "Root writes in chimera_home(), a caller-supplied directory, a "
+        "__file__-anchored directory, or a temp dir. If a hit is genuinely "
+        "legitimate, add (path, literal) to CWD_WRITE_ALLOWLIST with a "
+        "comment saying why."
+    )
+
+
+def test_the_shipped_package_needs_no_allowlist_entries() -> None:
+    """``chimera/`` must be clean on its own merits, exemptions aside.
+
+    The allowlist exists for fixtures and frozen archives. The moment the
+    shipped package needs one, the rule it encodes has been abandoned.
+    """
+    exempted = sorted(path for path, _ in CWD_WRITE_ALLOWLIST if path.startswith("chimera/"))
+    assert exempted == [], (
+        f"chimera/ has cwd-write exemptions: {exempted} — package code roots "
+        "its writes in chimera_home(), a caller-supplied directory, or a temp "
+        "dir. Fix the writer, do not exempt it."
     )
 
 
@@ -601,6 +660,35 @@ def test_the_package_scan_actually_reads_files() -> None:
     assert len(modules) > 100, f"only {len(modules)} modules found under {PACKAGE}"
 
 
+def test_every_scanned_root_actually_contributes_files() -> None:
+    """A root that reads zero files is a scope claim the gate cannot back."""
+    empty = [
+        name for name in SCANNED_ROOTS
+        if not any((ROOT / name).rglob("*.py"))
+    ]
+    assert empty == [], f"SCANNED_ROOTS entries with no Python: {empty}"
+
+
+def test_every_python_root_is_scanned() -> None:
+    """No tracked top-level directory may hold Python the gate never reads.
+
+    The package-only scope is exactly how ``scripts/modal_bench_app.py`` wrote
+    a cwd-relative ``data/`` for months without a single red test. A new root
+    with Python in it must join SCANNED_ROOTS in the commit that adds it.
+    """
+    unscanned = sorted(
+        name for name in ALLOWED_ROOT_ENTRIES
+        if (ROOT / name).is_dir()
+        and name not in SCANNED_ROOTS
+        and name != ".github"  # workflow YAML, no Python
+        and any((ROOT / name).rglob("*.py"))
+    )
+    assert unscanned == [], (
+        f"tracked roots holding unscanned Python: {unscanned} — add them to "
+        "SCANNED_ROOTS, in the same commit, or explain the exemption here."
+    )
+
+
 def _seed_violating_package(tmp_path: Path) -> Path:
     package = tmp_path / "chimera"
     (package / "eval").mkdir(parents=True)
@@ -636,3 +724,34 @@ def test_the_allowlist_suppresses_exactly_its_entry(tmp_path: Path) -> None:
     assert scan_package(root=package, allowlist=frozenset({("rotter.py", "pb-runs")})) == []
     # ...and it is keyed on BOTH fields — a near-miss must still go red.
     assert scan_package(root=package, allowlist=frozenset({("rotter.py", "runs")})) != []
+
+
+@pytest.mark.parametrize("root", [r for r in SCANNED_ROOTS if r != "chimera"])
+def test_a_violation_in_a_newly_covered_root_goes_red(
+    root: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Widening the scope is only real if each new root can fail the suite.
+
+    Drives the exact function the gate runs (``scan_repo``) over a fake repo
+    whose roots mirror the real ones, with one rotter seeded in the root under
+    test. ``chimera`` is excluded only because it was already proven — every
+    root this commit ADDED is proven here.
+    """
+    for name in SCANNED_ROOTS:
+        (tmp_path / name).mkdir()
+    rotter = tmp_path / root / "driver.py"
+    rotter.write_text(
+        "import os\n"
+        "\n"
+        "def run():\n"
+        '    os.makedirs("runs", exist_ok=True)\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(f"{__name__}.ROOT", tmp_path)
+
+    hits = scan_repo(allowlist=frozenset())
+    assert [(hit.path, hit.symbol, hit.literal) for hit in hits] == [
+        (f"{root}/driver.py", "os.makedirs", "runs")
+    ], hits
+    # ...and the allowlist reaches the new roots too.
+    assert scan_repo(allowlist=frozenset({(f"{root}/driver.py", "runs")})) == []
