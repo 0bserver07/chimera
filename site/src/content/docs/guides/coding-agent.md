@@ -143,10 +143,20 @@ n=1 per cell under a shared budget), the `coding-agent` preset **solved all 7 of
 its benchmark columns** — human-eval, human-eval-plus, mbpp-sanitized, mbpp-plus,
 livecodebench-codegeneration, math500, and tau-bench:airline.
 
-**Depth — LiveCodeBench at n=25.** In the deeper run
-`data/depth-lcb-coding-agent-glm52.json` (same model), the `coding-agent` preset
-scored **84% on LiveCodeBench code-generation — 21 of 25 tasks passed**, the best
-of any agent on that benchmark.
+**Depth — LiveCodeBench at n=25. ⊘ RETRACTED, do not cite.** This guide
+previously reported "84% on LiveCodeBench code-generation — 21 of 25 tasks
+passed, the best of any agent on that benchmark," from
+`data/depth-lcb-coding-agent-glm52.json`. **That is withdrawn.** The receipt is
+real (21/25 completed cleanly), but the adapter that produced it does not
+measure LiveCodeBench: 63 of the 175 staged tasks are `functional` +
+`starter_code` while the runner executed `python solution.py < stdin`, so 36% of
+the dataset could not pass under *any* answer; the staged file is
+platform-blocked (AtCoder 0–111, LeetCode 112–174), so a contiguous n=25 slice
+is AtCoder-only rather than a sample; and only public sample tests are staged.
+`livecodebench` is in the `RETRACTED` registry in
+`scripts/render_observatory.py`, which is why the observatory page on this same
+site shows no score for it. Full diagnosis:
+`docs/notes/bench-diagnosis-darklight1.md`.
 
 ---
 
