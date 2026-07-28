@@ -46,7 +46,43 @@ _PUBLISHED = (
 )
 
 #: A ``data/<file>.json`` citation inside prose or a markdown table.
-_RECEIPT = re.compile(r"`?(data/[A-Za-z0-9._@-]+\.(?:json|jsonl))`?")
+#:
+#: Two corrections over the first draft, both of which made the gate *report the
+#: wrong thing*, not merely over-fire:
+#:
+#: * ``jsonl`` must come first in the alternation. Python's ``|`` is
+#:   first-match-wins, so ``(?:json|jsonl)`` chopped ``data/x.jsonl`` down to
+#:   ``data/x.json`` and reported three receipts that exist as missing. The
+#:   dangerous direction is the other one: a doc citing a missing
+#:   ``data/x.jsonl`` would have **passed** whenever ``data/x.json`` existed.
+#:   ``(?![A-Za-z0-9])`` pins the extension to the end of the token.
+#: * ``(?<![A-Za-z0-9._/-])`` keeps a match repo-relative. Without it the
+#:   upstream URL ``…/human-eval/raw/master/data/HumanEval.jsonl.gz`` was read
+#:   as a local citation of ``data/HumanEval.json`` — a file this repo never
+#:   claimed to have and never should.
+_RECEIPT = re.compile(
+    r"(?<![A-Za-z0-9._/-])(data/[A-Za-z0-9._@-]+\.(?:jsonl|json))(?![A-Za-z0-9])"
+)
+
+#: The separator row that turns the line above it into a markdown table header.
+_TABLE_SEPARATOR = re.compile(r"^\|[\s:|-]+\|$")
+
+#: A table header that declares its columns as claim-versus-truth. Rows under
+#: such a header exist to print the withdrawn number *next to* the correction —
+#: the repo's documented way of recording a fabrication
+#: (``docs/guides/benchmark-canary.md``), which is the opposite of republishing
+#: it. Anchored to the header row on purpose: a results table
+#: (``| Task | Benchmark | Model | Result |``) cannot match, so this cannot
+#: quietly exempt a scoreboard.
+_CORRECTION_TABLE_HEADER = re.compile(
+    r"\|\s*what\s+(?:it\s+)?(?:looked\s+like|was\s+true)\s*\|", re.I
+)
+
+#: Any percentage a reader would take as a result.
+_PERCENT = re.compile(r"\b\d{1,3}(?:\.\d+)?\s*%")
+
+#: Same-line phrasing that marks a number as withdrawn rather than published.
+_WITHDRAWN = re.compile(r"retract|withdraw|previously reported|do not cite|⊘|~~", re.I)
 
 
 def _load_observatory():
