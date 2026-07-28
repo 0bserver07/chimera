@@ -13,7 +13,8 @@ Config via env:
   PB_RAG        1 to enable DocsRsProvider (default: 1)
   PB_SKIP       comma list of instance_ids to skip (e.g. interactive TUIs)
 
-Writes pb-runs/_matrix/<stamp>/matrix.jsonl (flushed) + a printed summary.
+Writes <PB_RUNS>/_matrix/<stamp>/matrix.jsonl (flushed; default
+~/.chimera/experiment-runs/pb-runs, override CHIMERA_PB_RUNS) + a printed summary.
 NOTE: interactive programs (cmatrix, TUIs) hang grading — keep them in PB_SKIP
 until a per-grade timeout lands. Run attended; watch the first task.
 """
@@ -35,6 +36,14 @@ from chimera.eval.benchmarks.programbench import ProgramBench  # noqa: E402
 from chimera.eval.benchmarks.rebuild_docs import DocsRsProvider  # noqa: E402
 from chimera.providers.factory import create_provider  # noqa: E402
 
+# Chimera-owned experiment-state root (scripts/experiments/README.md): history
+# and new runs live OUTSIDE the repo, under ~/.chimera — never at the repo
+# root, which is gated (tests/test_repo_hygiene.py). Override for relocation.
+PB_RUNS = Path(
+    os.environ.get("CHIMERA_PB_RUNS")
+    or Path.home() / ".chimera" / "experiment-runs" / "pb-runs"
+)
+
 TASKS = "/Users/yadkonrad/dev_dev/year26/may26/ProgramBench/src/programbench/data/tasks"
 PB_CLI = ("/Users/yadkonrad/dev_dev/year26/may26/ProgramBench/.venv/bin/programbench", "eval")
 MODELS = os.environ.get("PB_MODELS", "qwen3-coder-next:cloud,glm-5.2:cloud").split(",")
@@ -48,7 +57,7 @@ SKIP = {s for s in os.environ.get(
     "PB_SKIP", "abishekvashok__cmatrix.5c082c6,xorg62__tty-clock.f2f847c"
 ).split(",") if s}
 
-OUT = Path("pb-runs/_matrix/run")
+OUT = PB_RUNS / "_matrix/run"
 OUT.mkdir(parents=True, exist_ok=True)
 logf = open(OUT / "matrix.jsonl", "a")  # noqa: SIM115
 docs = DocsRsProvider() if RAG else None

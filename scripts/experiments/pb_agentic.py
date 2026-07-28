@@ -32,10 +32,18 @@ from chimera.providers.anthropic import AnthropicProvider  # noqa: E402
 
 TASKS = "/Users/yadkonrad/dev_dev/year26/may26/ProgramBench/src/programbench/data/tasks"
 PB_CLI = ("/Users/yadkonrad/dev_dev/year26/may26/ProgramBench/.venv/bin/programbench", "eval")
-RUN_DIR = "pb-runs/_agentic/run"
-SWEEP = Path("pb-runs/2026-06-17-sweep/glm-5.2_cloud")
+# Chimera-owned experiment-state root (scripts/experiments/README.md): history
+# and new runs live OUTSIDE the repo, under ~/.chimera — never at the repo
+# root, which is gated (tests/test_repo_hygiene.py). Override for relocation.
+PB_RUNS = Path(
+    os.environ.get("CHIMERA_PB_RUNS")
+    or Path.home() / ".chimera" / "experiment-runs" / "pb-runs"
+)
+
+RUN_DIR = str(PB_RUNS / "_agentic/run")
+SWEEP = PB_RUNS / "2026-06-17-sweep/glm-5.2_cloud"
 MODEL = os.environ.get("PB_MODEL", "glm-5.2[1m]")
-PROGRESS = Path("pb-runs/_agentic/progress.jsonl")
+PROGRESS = PB_RUNS / "_agentic/progress.jsonl"
 PROGRESS.parent.mkdir(parents=True, exist_ok=True)
 
 # Exclude build artifacts, the agent's own state, and the local binary so the
@@ -83,7 +91,7 @@ for i, task in enumerate(tasks):
         print(f"[{i}] skip {iid} (done)", flush=True)
         continue
     src_inputs = SWEEP / iid / "ws" / "_inputs"
-    ws = Path(f"pb-runs/_agentic/ws/{iid}")
+    ws = PB_RUNS / f"_agentic/ws/{iid}"
     if ws.exists():
         shutil.rmtree(ws)
     ws.mkdir(parents=True)

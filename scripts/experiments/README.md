@@ -34,6 +34,18 @@ keep them under version control is unchanged (`e18cf1b6`, *"preserve
 ProgramBench/Modal scratch harness under git"*); only the location and the
 misleading ignore rules changed.
 
+## Where their state lives
+
+**Never at the repo root.** All five ProgramBench drivers read and write under
+`~/.chimera/experiment-runs/pb-runs` (override: `CHIMERA_PB_RUNS`) — including
+the historical `2026-06-17-sweep` data several of them consume, which was
+relocated there 2026-07-27. Before that they wrote a repo-root `pb-runs/`
+(336 MB accumulated) and `pb_sweep.py` resolved `.env` relative to its own
+location, both of which broke silently when the files moved — the redirect
+fixed both. The repo root is gated (`tests/test_repo_hygiene.py`), and
+Chimera-owned run state belongs under `~/.chimera` where a future storage
+inventory can see it.
+
 ## If you add one
 
 Put it here rather than at the root, give it a docstring saying what run it

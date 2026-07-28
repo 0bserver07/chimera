@@ -25,6 +25,13 @@ _Nothing yet._
   `~/.chimera/datasets`, results are explicit `--output` files with curated
   receipts under `data/`, and nothing in `chimera/` writes a cwd-relative
   directory.
+  - The relocated experiment drivers now read/write a **Chimera-owned home**:
+    `~/.chimera/experiment-runs/pb-runs` (override `CHIMERA_PB_RUNS`) instead
+    of a repo-root `pb-runs/`. The historical June sweep moved there too, so
+    reruns and re-reads keep working while the repo stays clean. The redirect
+    also fixed two breaks the bare relocation had introduced in
+    `pb_sweep.py` (its `.env` and `chimera/agents` lookups were
+    script-relative).
 
 - **Daytona cloud sandbox backend** (#144): `chimera/env/daytona.py` adds
   `DaytonaEnvironment`, a third managed-sandbox backend beside Modal and E2B,

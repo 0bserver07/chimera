@@ -1,14 +1,17 @@
 """ProgramBench 10x2 sweep: glm-5.2 + qwen3-coder-next via the Ollama-Cloud bridge.
 
 Uses the fixed swe-agent preset. Writes per-task JSONL (flushed) + a summary.
-Scratch harness — safe to delete; runs land in pb-runs/ (gitignored).
+Scratch harness — safe to delete; runs land under
+~/.chimera/experiment-runs/pb-runs (override CHIMERA_PB_RUNS).
 """
 import json
 import os
 from pathlib import Path
 
 # --- env: load .env, configure the Claude-Code-style bridge + live gate ---
-ROOT = Path(__file__).resolve().parent
+# Repo root (this file lives at scripts/experiments/): the .env lookup broke
+# when the script moved off the root — resolve it explicitly.
+ROOT = Path(__file__).resolve().parents[2]
 for line in (ROOT / ".env").read_text().splitlines():
     line = line.strip()
     if line and not line.startswith("#") and "=" in line:
@@ -18,6 +21,14 @@ os.environ["ANTHROPIC_BASE_URL"] = "http://localhost:11434"
 os.environ["ANTHROPIC_API_KEY"] = os.environ.get("OLLAMA_API_KEY", "")
 os.environ["ANTHROPIC_AUTH_TOKEN"] = os.environ.get("OLLAMA_API_KEY", "")
 os.environ["CHIMERA_PROGRAMBENCH_LIVE"] = "1"  # arm64 host: force-run under QEMU
+
+# Chimera-owned experiment-state root (scripts/experiments/README.md): history
+# and new runs live OUTSIDE the repo, under ~/.chimera — never at the repo
+# root, which is gated (tests/test_repo_hygiene.py). Override for relocation.
+PB_RUNS = Path(
+    os.environ.get("CHIMERA_PB_RUNS")
+    or Path.home() / ".chimera" / "experiment-runs" / "pb-runs"
+)
 
 from chimera.agents.config import AgentConfig  # noqa: E402
 from chimera.eval.benchmarks.programbench import ProgramBench  # noqa: E402
@@ -35,7 +46,7 @@ class BigBudgetAnthropic(AnthropicProvider):
 
 TASKS_DIR = "/Users/yadkonrad/dev_dev/year26/may26/ProgramBench/src/programbench/data/tasks"
 PB_CLI = ("/Users/yadkonrad/dev_dev/year26/may26/ProgramBench/.venv/bin/programbench", "eval")
-RUN_ROOT = ROOT / "pb-runs" / "2026-06-17-sweep"
+RUN_ROOT = PB_RUNS / "2026-06-17-sweep"
 MODELS = ["glm-5.2:cloud", "qwen3-coder-next:cloud"]
 LIMIT = 10
 

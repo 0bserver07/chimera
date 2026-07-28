@@ -26,6 +26,14 @@ from chimera.eval.benchmarks.programbench import (  # noqa: E402
 from chimera.providers.anthropic import AnthropicProvider  # noqa: E402
 from chimera.providers.base import Message  # noqa: E402
 
+# Chimera-owned experiment-state root (scripts/experiments/README.md): history
+# and new runs live OUTSIDE the repo, under ~/.chimera — never at the repo
+# root, which is gated (tests/test_repo_hygiene.py). Override for relocation.
+PB_RUNS = Path(
+    os.environ.get("CHIMERA_PB_RUNS")
+    or Path.home() / ".chimera" / "experiment-runs" / "pb-runs"
+)
+
 TASKS = "/Users/yadkonrad/dev_dev/year26/may26/ProgramBench/src/programbench/data/tasks"
 PB_CLI = ("/Users/yadkonrad/dev_dev/year26/may26/ProgramBench/.venv/bin/programbench", "eval")
 INSTANCE = os.environ.get("PB_INSTANCE", "abishekvashok__cmatrix.5c082c6")
@@ -33,9 +41,9 @@ LANG = os.environ.get("PB_LANG", "c")
 MAX_REPAIR = int(os.environ.get("PB_MAX_REPAIR", "4"))
 MODEL = "qwen3-coder-next:cloud"
 PROJECT = INSTANCE.split("__")[-1].rsplit(".", 1)[0]
-SRC_INPUTS = Path(f"pb-runs/2026-06-17-sweep/glm-5.2_cloud/{INSTANCE}/ws/_inputs")
-WS = Path(f"pb-runs/_repair/{INSTANCE}/ws")
-RUN_DIR = Path("pb-runs/_repair/run")
+SRC_INPUTS = PB_RUNS / f"2026-06-17-sweep/glm-5.2_cloud/{INSTANCE}/ws/_inputs"
+WS = PB_RUNS / f"_repair/{INSTANCE}/ws"
+RUN_DIR = PB_RUNS / "_repair/run"
 
 
 class BB(AnthropicProvider):

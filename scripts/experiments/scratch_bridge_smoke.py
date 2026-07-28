@@ -19,12 +19,20 @@ os.environ["CHIMERA_PROGRAMBENCH_LIVE"] = "1"
 from chimera.eval.benchmarks.programbench import ProgramBench  # noqa: E402
 from chimera.providers.factory import create_provider  # noqa: E402
 
+# Chimera-owned experiment-state root (scripts/experiments/README.md): history
+# and new runs live OUTSIDE the repo, under ~/.chimera — never at the repo
+# root, which is gated (tests/test_repo_hygiene.py). Override for relocation.
+PB_RUNS = Path(
+    os.environ.get("CHIMERA_PB_RUNS")
+    or Path.home() / ".chimera" / "experiment-runs" / "pb-runs"
+)
+
 TASKS = "/Users/yadkonrad/dev_dev/year26/may26/ProgramBench/src/programbench/data/tasks"
 PB_CLI = ("/Users/yadkonrad/dev_dev/year26/may26/ProgramBench/.venv/bin/programbench", "eval")
 INSTANCE = "agourlay__zip-password-finder.704700d"
-WS = Path(f"pb-runs/2026-06-17-sweep/glm-5.2_cloud/{INSTANCE}/ws")  # has _inputs
+WS = PB_RUNS / f"2026-06-17-sweep/glm-5.2_cloud/{INSTANCE}/ws"  # has _inputs
 
-bench = ProgramBench(tasks_dir=TASKS, run_dir="pb-runs/_live_rebuild", programbench_cli=PB_CLI)
+bench = ProgramBench(tasks_dir=TASKS, run_dir=str(PB_RUNS / "_live_rebuild"), programbench_cli=PB_CLI)
 task = next(t for t in bench.tasks() if (t.get("instance_id") or t.get("id")) == INSTANCE)
 provider = create_provider(model="qwen3-coder-next:cloud")
 

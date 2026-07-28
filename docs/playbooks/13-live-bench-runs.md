@@ -82,3 +82,13 @@ A task is **done** only when all four exist in the same push:
 commit + test proving the behavior + a `verify_status.py` check (or cited
 data file) + the tracker box ticked. "Starting X" in a conversation is
 **not** a state; if there is no commit, it did not happen.
+
+## External harnesses write where you stand
+
+Terminal-Bench — like most external harnesses — defaults its run output to the
+invocation cwd. The March 30% baseline was launched from the repo root and left
+**944 MB of `runs/`** there, orphaned for four months because the writer wasn't
+Chimera code and nothing gated the working tree. Invoke external harnesses from
+outside the repo (or pass their output-dir flag), and keep Chimera-side
+experiment state under `~/.chimera/experiment-runs`. The repo root itself is
+now gated by `tests/test_repo_hygiene.py`.
