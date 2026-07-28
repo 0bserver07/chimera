@@ -310,6 +310,56 @@ class TestTheExemptionsStillCatchRealViolations:
         unowned = f"100% on both — the gap is on the harder column ({bench})"
         assert _retracted_score_offenders(unowned, retracted, known)
 
+    def test_a_withdrawal_marker_reaches_only_its_own_line(self) -> None:
+        """``_WITHDRAWN`` is line-scoped, and a multi-line strike does not carry.
+
+        Not hypothetical — this is the bug the 2026-07-28 retraction pass hit.
+        Striking the "flagship earns premiere" bullet in
+        ``modal-cloud-benches.md`` opened ``~~`` on one line and closed it three
+        lines later. Markdown renders that struck, so it *looked* retracted, but
+        the middle line carried both the benchmark name and ``100%`` with no
+        marker of its own and was still a published score. The fix was to reflow
+        the claim onto the marked line; widening the exemption to span lines
+        would have re-opened the hole for every future retraction.
+        """
+        retracted, known = _registries()
+        bench = sorted(retracted)[0]
+
+        # Cleared: the strike sits on the same line as the score it withdraws.
+        same_line = f"~~the agent scored 84% on {bench}~~ **[RETRACTED]**"
+        assert _retracted_score_offenders(same_line, retracted, known) == []
+
+        # NOT cleared: the marker opens on an earlier line and closes on a
+        # later one. The score in the middle is still live to a reader who
+        # copies that line out, and must still be reported.
+        spanning = (
+            f"~~a conclusion that opens here\n"
+            f"and scores 84% on {bench} here\n"
+            f"and only closes here~~"
+        )
+        assert [i for i, _ in _retracted_score_offenders(spanning, retracted, known)] == [2]
+
+    def test_the_withdrawal_exemption_clears_the_whole_line_a_known_limit(self) -> None:
+        """Pinned because it is a real hole, not because it is correct.
+
+        ``_WITHDRAWN`` matches anywhere on the line, so a *live* score sharing a
+        line with an unrelated withdrawal is exempted. Narrowing it (e.g.
+        requiring the marker to precede the percentage) would silently
+        un-retract existing prose, so the limit is recorded here instead of
+        papered over: this test fails the day someone tightens the rule, which
+        is the moment to re-audit every line that currently relies on it.
+
+        The gate's docstring calls itself a floor, not a ceiling. This is one of
+        the floorboards.
+        """
+        retracted, known = _registries()
+        bench = sorted(retracted)[0]
+
+        # A published 98% is NOT caught, because "do not cite" appears later on
+        # the same line about a different number entirely.
+        mixed = f"{bench} scored 98% today; we do not cite the older 18.9% figure"
+        assert _retracted_score_offenders(mixed, retracted, known) == []
+
     def test_correction_table_exemption_requires_the_contrast_header(self) -> None:
         retracted, known = _registries()
         bench = sorted(retracted)[0]
