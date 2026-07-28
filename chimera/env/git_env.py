@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from chimera.config.paths import store_path
 from chimera.env.local import LocalEnvironment
 from chimera.types import CommandResult
 
@@ -54,10 +55,11 @@ class GitEnvironment(LocalEnvironment):
             test_cmd=self.test_cmd,
             timeout=self.timeout,
         )
-        # Skip full setup — git clone already initialised the repo
+        # Skip full setup — git clone already initialised the repo. The
+        # checkpoint path is resolved through the registry, like ``setup``, and
+        # left uncreated until something actually checkpoints.
         cloned.workdir.mkdir(parents=True, exist_ok=True)
-        cloned._checkpoint_dir = cloned.workdir / ".chimera_checkpoints"
-        cloned._checkpoint_dir.mkdir(exist_ok=True)
+        cloned._checkpoint_dir = store_path("project-checkpoints", cloned.workdir)
         return cloned
 
     def _git(self, cmd: str) -> CommandResult:

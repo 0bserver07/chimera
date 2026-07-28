@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, TYPE_CHECKING
 
-from chimera.env.local import LocalEnvironment
+from chimera.env.local import WORKSPACE_STATE_DIRS, LocalEnvironment
 
 _logger = logging.getLogger(__name__)
 from chimera.training.strategies.base import (  # noqa: E402
@@ -58,7 +58,9 @@ def _clone_environment(env: LocalEnvironment, suffix: str = "clone") -> LocalEnv
     clone_dir = Path(tempfile.mkdtemp(prefix=f"chimera-{suffix}-", dir=parent))
 
     for item in env.workdir.iterdir():
-        if item.name == ".chimera_checkpoints":
+        # Chimera's own state, including the checkpoint store that now lives
+        # under ``.chimera`` — copying it would clone every checkpoint too.
+        if item.is_dir() and item.name in WORKSPACE_STATE_DIRS:
             continue
         dest = clone_dir / item.name
         if item.is_dir():
@@ -184,14 +186,14 @@ class TreeSearch(Strategy):
                 env.restore(parent.checkpoint_id)
                 # Remove non-checkpoint files in main env, then copy from clone
                 for item in env.workdir.iterdir():
-                    if item.name == ".chimera_checkpoints":
+                    if item.is_dir() and item.name in WORKSPACE_STATE_DIRS:
                         continue
                     if item.is_dir():
                         shutil.rmtree(item)
                     else:
                         item.unlink()
                 for item in clones[i].workdir.iterdir():
-                    if item.name == ".chimera_checkpoints":
+                    if item.is_dir() and item.name in WORKSPACE_STATE_DIRS:
                         continue
                     dest = env.workdir / item.name
                     if item.is_dir():

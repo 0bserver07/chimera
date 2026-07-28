@@ -12,16 +12,17 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+from chimera.config.ignore import NOT_SOURCE_DIRS, prune_dirnames
 from chimera.core.tool import BaseTool
 from chimera.env.base import Environment
 from chimera.types import ToolResult
 
-# Directories to skip when walking the file tree.
-_IGNORE_DIRS = {
-    ".git", ".hg", ".svn", "__pycache__", ".mypy_cache", ".pytest_cache",
-    ".ruff_cache", "node_modules", ".venv", "venv", ".tox", ".eggs",
-    "dist", "build", ".chimera_checkpoints",
-}
+# Directories to skip when walking the file tree — the shared non-source set
+# (`chimera/config/ignore.py`), where this module's hand-copy went. The copy had
+# 15 of the 26 entries list_files knew about; the union only widens what is
+# skipped, and `find` keeps its separate dot-prefix skip via
+# `prune_dirnames(skip_hidden=True)`.
+_IGNORE_DIRS = NOT_SOURCE_DIRS
 
 # File extensions we know how to search for definitions.
 _SOURCE_EXTENSIONS = frozenset((
@@ -71,8 +72,8 @@ class DefinitionFinder:
 
         # Then search all files
         for root, dirs, files in os.walk(self._workdir):
-            # Skip common non-source directories
-            dirs[:] = [d for d in dirs if d not in _IGNORE_DIRS and not d.startswith(".")]
+            # Skip common non-source directories (and, as before, every dotdir).
+            prune_dirnames(dirs, skip_hidden=True)
             for fname in sorted(files):
                 fpath = os.path.join(root, fname)
                 rel_path = os.path.relpath(fpath, self._workdir)

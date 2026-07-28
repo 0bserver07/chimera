@@ -52,12 +52,10 @@ PROTOCOL_VERSION = "2024-11-05"
 # Extensions to index for documentation content
 _DOC_EXTENSIONS = {".md", ".rst", ".txt"}
 
-# Directories to skip when walking
-_IGNORE_DIRS = frozenset({
-    ".git", ".hg", ".svn", "__pycache__", ".mypy_cache", ".pytest_cache",
-    ".ruff_cache", "node_modules", ".venv", "venv", ".tox", ".eggs",
-    "dist", "build", ".chimera_checkpoints",
-})
+# Directories to skip when walking — the shared non-source set
+# (`chimera/config/ignore.py`). A fourth hand-copy of the same list lived here;
+# the indexer keeps its separate dot-prefix skip below.
+_IGNORE_DIRS = NOT_SOURCE_DIRS
 
 # ── Tool definitions ─────────────────────────────────────────────────
 
