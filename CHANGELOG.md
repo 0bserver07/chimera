@@ -98,6 +98,22 @@ commit receipts.
   module docstring — it cannot see external harnesses (the source of the
   944 MB root `runs/`), dynamic paths, or non-`chimera/` code.
 
+### Fixed
+
+- **Checkpoints no longer copy the whole tree** (M3 of
+  `docs/specs/storage-and-experiments.md`): `LocalEnvironment.checkpoint()`
+  excludes the shared not-source set at every depth — measured on this repo,
+  1,778.4 MB → 170.3 MB — writes to the registry's `project-checkpoints` store
+  (`<workdir>/.chimera/checkpoints`, created on first write rather than on
+  every `setup()`), keeps pre-M3 `.chimera_checkpoints` trees readable and
+  never prunes them, honours opt-in `[storage.checkpoints] retain`, and warns
+  past 256 MB. `restore()` is symmetric, so it no longer deletes the `.venv`
+  it never captured. That set is now one definition (`chimera/config/ignore.py`,
+  `NOT_SOURCE_DIRS`) consumed by twelve modules — the audit found three copies;
+  a sweep found eleven — with `chimera/hooks/validate_path.py` a documented
+  stdlib-only exception bounded by a subset test, and a static gate blocking
+  copy twelve. Guide: `docs/guides/checkpoints.md`.
+
 ## 0.9.2.1 — 2026-07-27 — the verified grader
 
 ### Added
