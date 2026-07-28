@@ -81,7 +81,7 @@ project by definition.
 | `project-state` | project | *(the dir itself)* | `chimera/commands/builtins.py` | yes |
 | `project-sessions` | project | `sessions` | `chimera/assembly/coding_agent.py` | yes |
 | `project-agents` | project | `agents` | `chimera/agents/team_roles.py` | **never** |
-| `project-checkpoints` | project | `checkpoints` | `chimera/checkpoints.py` | yes |
+| `project-checkpoints` | project | `checkpoints` | `chimera/env/local.py` | yes |
 | `project-snapshots` | project | `snapshots` | `chimera/commands/builtins.py` | yes |
 | `project-memory` | project | `memory` | `chimera/core/memory.py` | **never** |
 | `project-prompts` | project | `prompts` | `chimera/core/prompt_template.py` | **never** |
