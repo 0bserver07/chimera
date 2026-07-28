@@ -21,10 +21,42 @@ Four parallel benchmark tasks fanned out from a single fan-out spec (a local 9-s
 | B | HumanEval+ (164) | Opus 4.7 | **95.1%** (156/164) | $21.49 | 28 min | [`8dc18a2`](https://github.com/0bserver07/chimera/commit/8dc18a2) |
 | C | MATH-500 full (500) | Haiku 4.5 | **89.2%** (446/500) | $1.47 | ~30 min | [`eb80aae`](https://github.com/0bserver07/chimera/commit/eb80aae) |
 | C | MATH-500 first-200 (200) | Sonnet 4.6 | **91.5%** (183/200) | $13.04 | ~75 min | [`eb80aae`](https://github.com/0bserver07/chimera/commit/eb80aae) |
-| D | LiveCodeBench easy-50 | Haiku 4.5 | **98.0%** (49/50) | $0.18 | 3.7 min | [`da6f6b5`](https://github.com/0bserver07/chimera/commit/da6f6b5) |
-| D | LiveCodeBench easy-50 | Sonnet 4.6 | **98.0%** (49/50) | $2.87 | 8.2 min | [`da6f6b5`](https://github.com/0bserver07/chimera/commit/da6f6b5) |
+| D | LiveCodeBench easy-50 | Haiku 4.5 | ~~**98.0%** (49/50)~~ **[RETRACTED — see below]** | $0.18 | 3.7 min | [`da6f6b5`](https://github.com/0bserver07/chimera/commit/da6f6b5) |
+| D | LiveCodeBench easy-50 | Sonnet 4.6 | ~~**98.0%** (49/50)~~ **[RETRACTED — see below]** | $2.87 | 8.2 min | [`da6f6b5`](https://github.com/0bserver07/chimera/commit/da6f6b5) |
 
 **Total spend: $48.29** across all six runs — almost exactly the $48 a-priori envelope from the fan-out spec.
+
+> **Correction, 2026-07-28 — the two Task D figures above are withdrawn. The
+> other four rows stand.** `livecodebench` is in the `RETRACTED` registry in
+> `scripts/render_observatory.py`, so the observatory on this repo's site
+> publishes no LiveCodeBench score; these hand-written rows were still quoting
+> one, which is precisely the gap a retraction that only reaches generated
+> pages leaves behind.
+>
+> **What is not wrong here.** The runs happened and the receipts are committed:
+> `data/livecodebench-claude-haiku-4-5-20251001-results.json` and
+> `data/livecodebench-claude-sonnet-4-6-results.json` both record
+> `passed: 49, total: 50`, and the costs match. The grader was not the broken
+> one — this run's failure list names a real wrong answer per model. Two of the
+> three defects behind the repo-wide retraction also do **not** apply: this
+> runner deliberately *excluded* the LeetCode `functional` problems instead of
+> mis-running them as stdin, so no part of its denominator was unpassable by
+> construction.
+>
+> **Why the number still cannot stand.** What the receipts actually record is
+> their own `split` field: `easy-stdin-first-50`. That is a single-difficulty,
+> single-test-format, first-50 head slice with the LeetCode half of the dataset
+> removed — not a sample of LiveCodeBench, and not a quantity the name
+> "LiveCodeBench easy-50" lets a reader compare with anything. Separately, the
+> repo can no longer vouch for the staged test coverage: the disqualifying
+> defect in the retraction is that only public sample tests were staged, and
+> the claim below that "all public + private tests must pass" has not been
+> re-verified against the staged file.
+>
+> Struck through rather than deleted, per `docs/releases/0.9.1.md`: a dated
+> report is a historical record, and silently editing a published number is the
+> same class of dishonesty as publishing a wrong one. Full diagnosis:
+> `docs/notes/bench-diagnosis-darklight1.md`.
 
 ## Shared setup
 
@@ -116,7 +148,9 @@ EvalPlus consistently extracts 3–5pt on this model family. Larger models have 
 
 ## Task D — LiveCodeBench × Haiku 4.5 + Sonnet 4.6
 
-**Result: Haiku 49/50 (98.0%) — $0.18 — 3.7 min · Sonnet 49/50 (98.0%) — $2.87 — 8.2 min — commit `da6f6b5`**
+~~**Result: Haiku 49/50 (98.0%) — $0.18 — 3.7 min · Sonnet 49/50 (98.0%) — $2.87 — 8.2 min — commit `da6f6b5`**~~
+**[RETRACTED — see the correction under the summary table.]** The costs and
+wall-clocks stand; the scores are withdrawn as LiveCodeBench results.
 
 Runner: `examples/benchmarks/livecodebench_sample.py` (new, 420 lines). Each problem runs the candidate Python program as a subprocess with the test's stdin; stdout is whitespace-normalized and compared to expected. All public + private tests must pass.
 
@@ -129,7 +163,7 @@ Sample: first 50 problems by `difficulty=easy` and stdin test format (filters ou
 | Haiku 4.5 | `abc313_a` | `ValueError: max() iterable argument is empty` on test 3 (edge case with empty input list) |
 | Sonnet 4.6 | `abc302_a` | Off-by-one: expected `499999999999999999`, got `500000000000000000` (integer overflow in a `n//2` rounding) |
 
-Both models scoring 98% on the easy tier is consistent with the LiveCodeBench leaderboard, which puts top frontier models in the 90s on easy. Worth running medium (50 problems) next as a follow-up — that's where the spread between models becomes legible.
+~~Both models scoring 98% on the easy tier is consistent with the LiveCodeBench leaderboard, which puts top frontier models in the 90s on easy.~~ **[RETRACTED, 2026-07-28 — see the correction under the summary table.]** This sentence was the most misleading line in the report: it validated an in-house head slice against an external leaderboard, which tells a reader the two are comparable. They are not. The slice is easy-only, stdin-only, first-50, with the LeetCode half of the dataset excluded; agreeing with a leaderboard number computed over the whole benchmark is a coincidence of range, not corroboration. Worth running medium (50 problems) next as a follow-up — that's where the spread between models becomes legible.
 
 ## Task C — MATH-500 × Haiku 4.5 + Sonnet 4.6
 
