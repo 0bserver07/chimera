@@ -143,10 +143,44 @@ n=1 per cell under a shared budget), the `coding-agent` preset **solved all 7 of
 its benchmark columns** — human-eval, human-eval-plus, mbpp-sanitized, mbpp-plus,
 livecodebench-codegeneration, math500, and tau-bench:airline.
 
-**Depth — LiveCodeBench at n=25.** In the deeper run
-`data/depth-lcb-coding-agent-glm52.json` (same model), the `coding-agent` preset
-scored **84% on LiveCodeBench code-generation — 21 of 25 tasks passed**, the best
-of any agent on that benchmark.
+**Depth — LiveCodeBench at n=25. ⊘ RETRACTED, do not cite.** This guide
+previously reported "84% on LiveCodeBench code-generation — 21 of 25 tasks
+passed, the best of any agent on that benchmark," citing
+⊘ NO RECEIPT — `data/depth-lcb-coding-agent-glm52.json`, detailed below.
+**That is withdrawn on two independent grounds**, either of which is
+sufficient.
+
+*First, nothing published has ever backed it.*
+⊘ NO RECEIPT — `data/depth-lcb-coding-agent-glm52.json` is in no commit on any branch and is not tracked (verified 2026-07-28: `git log --all -- <path>` and `git ls-files --error-unmatch <path>` both come back empty).
+`data/` is gitignored and receipts are committed one at a time with
+`git add -f`; this one never was.
+
+Being exact about what "no receipt" does and does not mean here, because an
+earlier draft of this note overstated it: the file **does** exist on the
+machine that produced the run, untracked, and it **does** contain
+`total: 25, passed: 21, pass_rate: 0.84` — opened and re-read on 2026-07-28.
+The number was not invented, and the earlier note that said so was right about
+the contents. What it was wrong about is that this makes no difference: a file
+that exists only outside version control cannot be reached by any reader,
+reviewer, or CI job, so a citation of it is indistinguishable from a citation
+of nothing. That is the whole reason `data/` receipts are force-added.
+
+Now that the file has been located, it is still deliberately **not** being
+committed — see the second ground below. Committing it would publish a
+retracted benchmark's score as though it were evidence, which is worse than
+the missing citation it would fix.
+
+*Second, and decisively, the adapter does not measure LiveCodeBench*, so
+recovering the file would not rescue the number: 63 of the 175 staged tasks are
+`functional` + `starter_code` while the runner executed
+`python solution.py < stdin`, so 36% of the dataset could not pass under *any*
+answer; the staged file is platform-blocked (AtCoder 0–111, LeetCode 112–174),
+so a contiguous n=25 slice is AtCoder-only rather than a sample; and only
+public sample tests are staged.
+`livecodebench` is in the `RETRACTED` registry in
+`scripts/render_observatory.py`, which is why the observatory page on this same
+site shows no score for it. Full diagnosis:
+`docs/notes/bench-diagnosis-darklight1.md`.
 
 ---
 

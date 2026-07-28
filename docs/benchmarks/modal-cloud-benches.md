@@ -64,19 +64,21 @@ without sinking the grid; results collect into an agents×benches table and
 Flagship + three loop architectures × {mbpp, livecodebench}, **8 cells fanned
 out concurrently on Modal** (`data/modal-grid-20260707-201224.json`):
 
-| Agent | LiveCodeBench | MBPP |
+| Agent | ~~LiveCodeBench~~ ⊘ RETRACTED | MBPP |
 |---|---|---|
-| **coding-agent** (flagship) | **5/5 (100%)** | **5/5 (100%)** |
-| react | 4/5 (80%) | 5/5 (100%) |
-| reflexion | 4/5 (80%) | 5/5 (100%) |
-| tree-of-thought | 3/5 (60%) | 4/5 (80%) |
+| **coding-agent** (flagship) | ~~**5/5 (100%)**~~ | **5/5 (100%)** |
+| react | ~~4/5 (80%)~~ | 5/5 (100%) |
+| reflexion | ~~4/5 (80%)~~ | 5/5 (100%) |
+| tree-of-thought | ~~3/5 (60%)~~ | 4/5 (80%) |
 
 **8 cells, 0 errors, $0.83.** Two things this shows:
 
-- **The flagship earns "premiere."** `coding-agent` is the *only* agent to go
-  100% on both — and the gap is on the harder column (LiveCodeBench), exactly
-  where the 24-tool assembled stack should pull ahead of a bare loop. At n=5
-  this is a real signal, not the n=1 tie.
+- ~~**The flagship earns "premiere."** `coding-agent` is the *only* agent to go 100% on both — and the gap is on the harder column (LiveCodeBench), exactly where the 24-tool assembled stack should pull ahead of a bare loop. At n=5 this is a real signal, not the n=1 tie.~~
+  **[RETRACTED, 2026-07-28 — see the correction below this section.]** This
+  conclusion rested on the retracted column. Strike LiveCodeBench and what
+  remains is a four-way tie on MBPP at n=5 among every agent but
+  tree-of-thought — no separation, and nothing that ranks the flagship above a
+  bare loop. The wall-clock finding in the next bullet is unaffected.
 - **Parallel beats serial, and scales.** Wall-clock **611s** vs **782s
   sum-of-cells** even at 8 cells; the difference is fixed cold-start + image
   overhead. At the full 91-cell grid, serial ≈ hours while parallel stays ≈ the
@@ -90,7 +92,7 @@ The flagship run across all five staged benchmarks, all executing on Modal:
 | Benchmark | Result | n |
 |---|---|---|
 | human-eval-plus | ~~10/10~~ **INVALIDATED** → re-measured **5/5 (100%)** at n=5 | 10 → 5 |
-| livecodebench | **9/10 (90%)** | 10 |
+| livecodebench | ~~**9/10 (90%)**~~ **⊘ RETRACTED — do not cite** | 10 |
 | math500 | 4/5 (80%) | 5 |
 | mbpp | 6/10 (60%) | 10 |
 | mbpp-plus | 5/10 (50%) | 10 |
@@ -103,8 +105,35 @@ ones**. The 10/10 above was measured under that broken grader. Fixed (empty →
 False, wrong → False, canonical → True, `check(entry_point)` now invoked) and
 re-measured on Modal post-fix: the flagship scored **5/5 at n=5** on the honest
 grader (`data/modal-grid-20260708-232643.json`). The other columns used
-different graders and are unaffected. (math500 initially errored because the
-Modal image lacked the datasets — a one-line image fix, `14c32b9`.)
+different graders and are unaffected *by this bug* — see the separate
+LiveCodeBench retraction immediately below, which has nothing to do with the
+`check(candidate)` defect. (math500 initially errored because the Modal image
+lacked the datasets — a one-line image fix, `14c32b9`.)
+
+> **Correction, 2026-07-28 — every LiveCodeBench figure on this page is
+> withdrawn.** That covers the `livecodebench` column of the 2026-07-07 fan-out
+> table, the "flagship earns premiere" conclusion drawn from it, and the
+> `9/10 (90%)` scorecard row. `livecodebench` is in the `RETRACTED` registry in
+> `scripts/render_observatory.py`; the observatory publishes no LiveCodeBench
+> score, and these hand-written figures were the last place one survived.
+>
+> The disqualifying defect is that only public sample tests are staged, so the
+> grader can be passed by an answer that satisfies the examples printed in the
+> prompt. Two compounding defects — 63 of 175 tasks being `functional` +
+> `starter_code` while the runner executed `python solution.py < stdin`, and
+> the staged file being platform-blocked (AtCoder 0–111, LeetCode 112–174) so a
+> contiguous `--limit` slice is single-platform — were fixed on 2026-07-25 and
+> are *not* why these numbers are withdrawn. The first defect alone is
+> sufficient and remains open.
+>
+> **What survives.** The MBPP column, the math500 and mbpp/mbpp-plus scorecard
+> rows, the cost and wall-clock figures, and the parallel-vs-serial finding are
+> all untouched — none of them are LiveCodeBench measurements. The infra claim
+> the fan-out was run to test (8 cells concurrent on Modal, 0 errors, $0.83)
+> also stands.
+>
+> Struck rather than deleted, per `docs/releases/0.9.1.md`. Full diagnosis:
+> `docs/notes/bench-diagnosis-darklight1.md`.
 
 ## What runs
 
@@ -129,7 +158,18 @@ Spec + implementation checkpoints: `docs/specs/modal-bench-fanout.md`.
   evaluation image (`swebench/sweb.eval.x86_64.<instance_id>`) on Modal — no
   local docker. Live-proven: the image pulls, boots, and the instance's
   test-patch applies inside `/testbed` ($0.023, 55s;
-  `data/swe-modal-smoke.json`).
+  `data/swe-modal-smoke.json`, committed 2026-07-28 — it had been cited while
+  untracked, so until then it resolved on one machine and nowhere else).
+
+  **Read that receipt as infrastructure evidence only.** It records
+  `passed: 1, total: 1` for one instance, and that 1/1 is exactly the vacuous
+  pass described two bullets down: a pytest run that executed ZERO tests and
+  graded clean because nothing failed. It is **not** a SWE-bench resolve, and
+  a single instance would not be a resolve *rate* even if it were. What this
+  run demonstrates is that the per-instance image pulls, boots, and accepts
+  the test-patch; the cost and wall-clock are its only quotable numbers. The
+  receipt is committed *because* it is the artifact that exposed the
+  vacuous-pass bug — not because it scored anything.
 - **Faithful grading** (`ad8842d`): `evaluate()` now runs the instance's named
   `FAIL_TO_PASS` + `PASS_TO_PASS` tests (pytest node ids, chunked, exit-code
   authoritative) — the official resolve criterion — with conda auto-activation

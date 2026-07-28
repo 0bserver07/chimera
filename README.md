@@ -373,7 +373,7 @@ Reproducible runs with raw data in `data/`:
 
 | Benchmark | GLM-5.1 | Raw data |
 |-----------|---------|----------|
-| HumanEval (164 problems) | 92.7% pass@1 (152/164) | `data/humaneval-glm51-results.json` |
+| HumanEval (164 problems) | 92.7% pass@1 (152/164) | `data/humaneval-glm-5.1-results.json` |
 | HumanEval+ (164, EvalPlus tests) | 89.6% (147/164) | `data/humanevalplus-glm-5.1-results.json` |
 | MBPP (sanitized 427) | 87.4% (373/427) | `data/mbpp-glm-5.1-results.json` |
 | SWE-bench Lite (20 smallest patches) | 10% (2/20) | `data/swebench-lite-glm51-results.jsonl` |
