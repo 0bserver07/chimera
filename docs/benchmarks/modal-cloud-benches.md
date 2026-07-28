@@ -129,7 +129,18 @@ Spec + implementation checkpoints: `docs/specs/modal-bench-fanout.md`.
   evaluation image (`swebench/sweb.eval.x86_64.<instance_id>`) on Modal — no
   local docker. Live-proven: the image pulls, boots, and the instance's
   test-patch applies inside `/testbed` ($0.023, 55s;
-  `data/swe-modal-smoke.json`).
+  `data/swe-modal-smoke.json`, committed 2026-07-28 — it had been cited while
+  untracked, so until then it resolved on one machine and nowhere else).
+
+  **Read that receipt as infrastructure evidence only.** It records
+  `passed: 1, total: 1` for one instance, and that 1/1 is exactly the vacuous
+  pass described two bullets down: a pytest run that executed ZERO tests and
+  graded clean because nothing failed. It is **not** a SWE-bench resolve, and
+  a single instance would not be a resolve *rate* even if it were. What this
+  run demonstrates is that the per-instance image pulls, boots, and accepts
+  the test-patch; the cost and wall-clock are its only quotable numbers. The
+  receipt is committed *because* it is the artifact that exposed the
+  vacuous-pass bug — not because it scored anything.
 - **Faithful grading** (`ad8842d`): `evaluate()` now runs the instance's named
   `FAIL_TO_PASS` + `PASS_TO_PASS` tests (pytest node ids, chunked, exit-code
   authoritative) — the official resolve criterion — with conda auto-activation
