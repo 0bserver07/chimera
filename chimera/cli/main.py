@@ -556,6 +556,10 @@ def build_parser() -> argparse.ArgumentParser:
     from chimera.cli import config_cmd as _config_cmd
     _config_cmd.register(subparsers)
 
+    # ---- experiments subcommand ----
+    from chimera.cli import experiments_cmd as _experiments_cmd
+    _experiments_cmd.register(subparsers)
+
     # ---- which subcommand ----
     # WHY: heuristic CLI recommender. Late-bind so a broken which_cmd.py
     # never breaks ``chimera --help``. Falls through silently when the
@@ -1557,6 +1561,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     elif args.command == "config":
         from chimera.cli import config_cmd as _config_cmd
         return _config_cmd.run(args)
+    elif args.command == "experiments":
+        from chimera.cli import experiments_cmd as _experiments_cmd
+        return _experiments_cmd.run(args)
     elif args.command == "which":
         try:
             from chimera.cli.which_cmd import run as _which_run
