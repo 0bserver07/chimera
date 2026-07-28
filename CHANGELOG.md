@@ -102,8 +102,9 @@ commit receipts.
 
 - **Checkpoints no longer copy the whole tree** (M3 of
   `docs/specs/storage-and-experiments.md`): `LocalEnvironment.checkpoint()`
-  excludes the shared not-source set at every depth — measured on this repo,
-  1,778.4 MB → 170.3 MB — writes to the registry's `project-checkpoints` store
+  excludes the shared not-source set at every depth — measured on this repo's
+  checkout, 2,299.1 MB → 186.6 MB — writes to the registry's
+  `project-checkpoints` store
   (`<workdir>/.chimera/checkpoints`, created on first write rather than on
   every `setup()`), keeps pre-M3 `.chimera_checkpoints` trees readable and
   never prunes them, honours opt-in `[storage.checkpoints] retain`, and warns

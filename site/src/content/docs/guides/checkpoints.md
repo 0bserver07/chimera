@@ -18,8 +18,10 @@ containing a `.venv`, 759 MB of `site/node_modules`, and a duplicate of an
 unrelated output directory. Nothing surfaced it; the directory was also created
 on *every* `setup()`, so deleting it just brought it back.
 
-Measured on this repository, the same checkpoint is now **1,778.4 MB → 170.3 MB**
-— 90.4% smaller, and 6.5 seconds instead of 40.
+Measured on this repository's checkout (2026-07-28), the same checkpoint is now
+**2,299.1 MB → 186.6 MB** — 91.9% smaller, 22,503 files instead of 139,450, and
+7.3 seconds instead of 66. Your own numbers depend on what is vendored in your
+tree; the shape does not.
 
 The excluded set is `NOT_SOURCE_DIRS` in `chimera/config/ignore.py`: version
 control internals, virtualenvs and installed packages, `node_modules`, tool
