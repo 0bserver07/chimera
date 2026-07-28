@@ -28,6 +28,20 @@ from typing import Any
 _CHECKED_TOOLS = {"Write", "Edit", "write", "edit"}
 
 # Directories to skip when collecting candidate paths for suggestions.
+#
+# THE ONE DELIBERATE COPY of `chimera/config/ignore.py`'s NOT_SOURCE_DIRS. Every
+# other consumer imports the shared set; this hook does not, because
+# `chimera/hooks/hooks.json` invokes it as a bare script path
+# (`python3 chimera/hooks/validate_path.py`), which puts `chimera/hooks/` on
+# sys.path[0] rather than the repo root — a `chimera.*` import is not guaranteed
+# to resolve there, and a hook that fails to import blocks every Write and Edit.
+# The module is documented as standalone-stdlib for exactly this reason
+# (docs/playbooks/00-quick-start.md).
+#
+# Drift is bounded instead of prevented: tests/config/test_ignore.py asserts
+# this set is a SUBSET of NOT_SOURCE_DIRS, so it can be older than the shared
+# list but can never contradict it. Unifying it would mean changing the hook's
+# invocation form to `python3 -m chimera.hooks.validate_path`.
 _IGNORE_DIRS = {
     ".git", ".hg", ".svn", "__pycache__", ".mypy_cache", ".pytest_cache",
     ".ruff_cache", "node_modules", ".venv", "venv", ".tox", ".eggs",

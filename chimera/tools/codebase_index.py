@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from chimera.config.ignore import is_not_source
 from chimera.core.tool import BaseTool
 from chimera.env.base import Environment
 from chimera.types import ToolResult
@@ -110,9 +111,9 @@ class CodebaseIndex:
                 continue
             if path.stat().st_size > max_file_size:
                 continue
-            # Skip hidden/venv/node_modules
+            # Skip hidden dirs and the shared non-source set.
             parts = path.relative_to(root).parts
-            if any(p.startswith(".") or p in ("node_modules", "__pycache__", ".venv", "venv") for p in parts):
+            if any(p.startswith(".") or is_not_source(p) for p in parts):
                 continue
 
             try:

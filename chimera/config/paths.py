@@ -420,19 +420,21 @@ _STORES: tuple[Store, ...] = (
         name="project-checkpoints",
         scope="project",
         rel="checkpoints",
-        writer="(none yet — chimera/env/local.py writes elsewhere)",
+        writer="chimera/env/local.py",
         prunable=True,
         note=(
-            "Nothing writes here yet; M3 points the writer at it. CORRECTION "
-            "to the spec, which says the checkpoint writer 'was deleted months "
-            "ago': it is live and unconditional. LocalEnvironment.setup() "
-            "creates <workdir>/.chimera_checkpoints on every setup and "
-            "CheckpointManager.create() -> env.checkpoint() fills it with full "
-            "tree copies. That path sits BESIDE <project>/.chimera, not inside "
-            "it, so it is outside both scope roots — M2's orphan scan as "
-            "specified would not have found the 2.0 GB tree either. M3 must "
-            "move the writer here; M2 should scan for the legacy name "
-            "explicitly."
+            "M3 points LocalEnvironment.checkpoint() here and excludes "
+            "NOT_SOURCE_DIRS from the copy. CORRECTION to the spec, which says "
+            "the checkpoint writer 'was deleted months ago': it was live and "
+            "unconditional — setup() created <workdir>/.chimera_checkpoints on "
+            "every setup and CheckpointManager.create() -> env.checkpoint() "
+            "filled it with full tree copies including .venv and node_modules. "
+            "That legacy path sits BESIDE <project>/.chimera, not inside it, so "
+            "it is outside both scope roots and M2's orphan scan must look for "
+            "the name `.chimera_checkpoints` explicitly: pre-M3 trees are still "
+            "readable by restore() and are never deleted, so they linger. "
+            "Retention: `[storage.checkpoints] retain` (short alias for this "
+            "row), opt-in, applied to this store only."
         ),
     ),
     Store(
@@ -470,10 +472,16 @@ _STORES: tuple[Store, ...] = (
 
 _BY_NAME: dict[str, Store] = {store.name: store for store in _STORES}
 
-#: Retention tables that predate ``[storage.<name>]``, read when the new
-#: spelling is absent. Maps a store name to its ``(section, table)`` path in
-#: the merged config.
-_LEGACY_RETENTION: dict[str, tuple[str, str]] = {"cohorts": ("tui", "cohorts")}
+#: Retention tables read when the ``[storage.<name>]`` spelling is absent. Maps
+#: a store name to its ``(section, table)`` path in the merged config. Two
+#: cases: ``cohorts`` predates the registry entirely, and ``project-checkpoints``
+#: answers to the short ``[storage.checkpoints]`` the spec documents (the
+#: registry key carries a ``project-`` prefix that a user writing config should
+#: not have to know).
+_LEGACY_RETENTION: dict[str, tuple[str, str]] = {
+    "cohorts": ("tui", "cohorts"),
+    "project-checkpoints": ("storage", "checkpoints"),
+}
 
 
 def all_stores() -> tuple[Store, ...]:

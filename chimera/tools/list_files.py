@@ -4,6 +4,7 @@ from __future__ import annotations
 import fnmatch
 from typing import TYPE_CHECKING, Any
 
+from chimera.config.ignore import NOT_SOURCE_DIRS
 from chimera.core.tool import BaseTool
 from chimera.env.base import Environment
 from chimera.types import ToolResult
@@ -17,18 +18,14 @@ if TYPE_CHECKING:
 # in a repo with a `.venv` or `node_modules` can return millions of tokens and
 # blow past a model's prompt limit. These are skipped only when listing a
 # *parent* directory — an explicit `path` INTO one of them still lists it (see
-# `_render`), so nothing is truly hidden. Note: bare ``env`` is intentionally
-# absent (it collides with real source dirs like ``chimera/env``).
-_IGNORED_DIRS: frozenset[str] = frozenset({
-    ".git", ".hg", ".svn",
-    ".venv", "venv", ".virtualenv", "site-packages",
-    "node_modules",
-    "__pycache__", ".mypy_cache", ".pytest_cache", ".ruff_cache", ".tox", ".nox",
-    ".cache", ".idea", ".vscode",
-    ".chimera", ".antigravitycli",
-    ".next", ".nuxt", ".svelte-kit", ".gradle",
-    "dist", "build", "target",
-})
+# `_render`), so nothing is truly hidden.
+#
+# The set itself lives in `chimera/config/ignore.py`, shared with repo_map,
+# definition_lookup, and the checkpoint writer. This module's list was the
+# richest of the three that existed, including the finding that bare ``env``
+# must stay out of it (it collides with real source dirs like ``chimera/env``);
+# that reasoning moved with the set and is pinned there by a test.
+_IGNORED_DIRS: frozenset[str] = NOT_SOURCE_DIRS
 
 # Cap the number of paths returned; huge listings are unhelpful to the model and
 # risk the prompt limit. The truncation note tells the agent how to narrow.

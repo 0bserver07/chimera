@@ -363,19 +363,27 @@ def test_the_spec_migration_table_is_fully_declared():
     assert declared["history"].prunable is False
 
 
-def test_the_live_checkpoint_writer_is_recorded_not_assumed_gone():
-    """The spec says the checkpoint writer was deleted. It was not.
+def test_the_live_checkpoint_writer_now_resolves_through_the_registry(tmp_path):
+    """The spec said the checkpoint writer was deleted. It was not — M1 pinned
+    that; M3 moved it here.
 
-    ``LocalEnvironment.setup`` creates ``<workdir>/.chimera_checkpoints`` on
-    every setup — *beside* ``<project>/.chimera``, so outside both scope roots.
-    Pinned here so M2/M3 cannot inherit the spec's false premise: an orphan
-    scan restricted to the two roots would miss the 2.0 GB tree again.
+    ``LocalEnvironment.setup`` used to create ``<workdir>/.chimera_checkpoints``
+    unconditionally — *beside* ``<project>/.chimera``, so outside both scope
+    roots. It now resolves the store through :func:`store_path` and creates
+    nothing until something checkpoints. The legacy name stays in the store note
+    because pre-M3 trees are still on disk and M2's orphan scan has to look for
+    it by name.
     """
-    import inspect
+    from chimera.env.local import LEGACY_CHECKPOINT_DIRNAME, LocalEnvironment
 
-    from chimera.env.local import LocalEnvironment
+    env = LocalEnvironment(workdir=str(tmp_path / "ws"))
+    env.setup()
+    assert env._checkpoint_dir == store_path("project-checkpoints", tmp_path / "ws")
+    assert env._checkpoint_dir == tmp_path / "ws" / ".chimera" / "checkpoints"
+    # setup() no longer leaves a directory behind at either location.
+    assert not env._checkpoint_dir.exists()
+    assert not (tmp_path / "ws" / LEGACY_CHECKPOINT_DIRNAME).exists()
 
-    assert ".chimera_checkpoints" in inspect.getsource(LocalEnvironment.setup)
     note = get_store("project-checkpoints").note
     assert ".chimera_checkpoints" in note
     assert get_store("project-checkpoints").rel == "checkpoints"

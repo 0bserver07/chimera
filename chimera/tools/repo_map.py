@@ -6,17 +6,20 @@ import ast
 from pathlib import Path
 from typing import Any
 
+from chimera.config.ignore import NOT_SOURCE_DIRS
 from chimera.core.tool import BaseTool
 from chimera.env.base import Environment
 from chimera.tools.parsers import GoParser, LanguageParser, PythonParser, RustParser, TypeScriptParser
 from chimera.tools.parsers.base import Symbol
 from chimera.types import ToolResult
 
-IGNORE_DIRS = {
-    ".git", ".hg", ".svn", "__pycache__", ".mypy_cache", ".pytest_cache",
-    ".ruff_cache", "node_modules", ".venv", "venv", ".tox", ".eggs",
-    "dist", "build", ".chimera_checkpoints",
-}
+# The shared non-source set (`chimera/config/ignore.py`). This module carried a
+# hand-copy that had drifted to 15 of the 26 entries list_files knew about;
+# adopting the union only widens what is skipped, and every added entry
+# (`site-packages`, `target`, the framework caches) is build output or vendored
+# code that a structural map should never have descended into. `_walk` keeps its
+# separate dot-prefix skip — a different policy, deliberately not folded in.
+IGNORE_DIRS = NOT_SOURCE_DIRS
 
 _PARSERS: dict[str, LanguageParser] = {}
 for _parser_cls in (PythonParser, TypeScriptParser, GoParser, RustParser):

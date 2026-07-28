@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from chimera.config.ignore import is_not_source
 from chimera.core.tool import BaseTool
 from chimera.env.base import Environment
 from chimera.types import ToolResult
@@ -39,7 +40,7 @@ class ImportGraph:
         for filepath in root_path.rglob("*"):
             if filepath.suffix not in extensions:
                 continue
-            if any(part.startswith(".") or part in ("node_modules", "__pycache__", "venv", ".git")
+            if any(part.startswith(".") or is_not_source(part)
                    for part in filepath.parts):
                 continue
             rel = str(filepath.relative_to(root_path))

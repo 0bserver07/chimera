@@ -10,11 +10,12 @@ import os
 import re
 from pathlib import Path
 
-_SKIP_DIRS = {
-    ".git", ".venv", "venv", "node_modules", "__pycache__",
-    ".mypy_cache", ".ruff_cache", ".pytest_cache", "dist", "build",
-    ".eggs", ".tox", ".next", ".astro",
-}
+from chimera.config.ignore import NOT_SOURCE_DIRS
+
+# The shared non-source set (`chimera/config/ignore.py`). This module carried
+# the only copy that knew about `.astro`; that entry moved into the shared set
+# rather than being dropped.
+_SKIP_DIRS = NOT_SOURCE_DIRS
 
 _CODE_EXTS = {".py", ".js", ".ts", ".jsx", ".tsx", ".go", ".rs", ".java", ".rb"}
 
