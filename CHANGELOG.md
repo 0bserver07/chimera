@@ -112,11 +112,21 @@ commit receipts.
   roots: M2's orphan scan as specified would have missed the 2.0 GB tree
   again. M3 must move the writer; M2 must scan the legacy name explicitly.
 
-- **Known, deliberately not fixed here:** `CommandRegistry.load_all` joins a
-  second `.chimera` onto the `user_dir` its callers already pass as
-  `~/.chimera`, so user-scope skills have never loaded from
-  `~/.chimera/skills`. Preserved verbatim with a `NOTE` at the site — changing
-  skill resolution is not something a path-plumbing change should do silently.
+- **`CommandRegistry.load_all` no longer double-joins `.chimera`**
+  (deferred by M1, fixed here): its `user_dir` is now the user-scope Chimera
+  state directory itself — `chimera_home()` / `~/.chimera`, the spelling
+  `coding_agent.py` already passes its sibling loaders — so user skills load
+  from `<user_dir>/skills` instead of `~/.chimera/.chimera/skills`, and
+  omitting `user_dir` falls back to the registry's `skills` store (honoring
+  `$CHIMERA_HOME`). Scope correction to the M1 note above: `load_all` has
+  **zero callers**, and the production skill path (`discover_all_skills` →
+  `default_search_paths` → `store_path("skills")`) always resolved correctly,
+  so user skills *did* reach the system prompt — this was a trap for the next
+  caller, not a live outage. Four tests, revert-verified. A comment at the
+  site now records that two skill-discovery paths read the same directory
+  with disjoint file layouts (flat `*.md` → slash commands here;
+  nested `SKILL.md` → prompt bullets in `skills/discovery.py`) so they
+  converge on the store rather than drift.
 - **A static gate on cwd-relative writes** (`tests/test_repo_hygiene.py`, spec
   M5): an `ast` walk of every `chimera/**/*.py` fails the suite when package
   code writes to a literal relative path — `os.makedirs("runs")`,
