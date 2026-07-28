@@ -54,6 +54,22 @@ commit receipts.
     cohort pruner now rides the one shared retention reader instead of a
     second implementation.
 
+- **`chimera doctor` grows a storage section, and `chimera gc` lands**
+  (`chimera/config/storage.py`, `chimera/cli/gc_cmd.py`, M2 of
+  `docs/specs/storage-and-experiments.md`): `doctor --section storage` reports
+  every one of the 36 declared stores — path, size, entries, newest/oldest age,
+  retention — for both scopes, plus every directory nothing claims; the scan
+  covers project-root `.chimera*` **siblings**, so `<workdir>/.chimera_checkpoints`
+  is reported rather than walked past as the spec first had it. `chimera gc` is
+  dry-run by default, names the rule behind each candidate, and only considers
+  stores that are `prunable` *and* have retention configured; `--apply` is the
+  sole destructive surface and `--archive DIR` relocates instead of deleting.
+  Every candidate is revalidated against the registry before the first
+  deletion, so no undeclared path — `datasets`, `function_synthesis`, `data/`
+  receipts, or anything else — is reachable. The cohort pruner now calls this
+  engine, leaving one retention implementation. Guide:
+  `docs/guides/storage-inspection-and-gc.md`.
+
 - **Two inconsistencies the sweep surfaced, fixed with it** — both invisible
   while every module resolved its own paths:
   - **`$CHIMERA_HOME` had two meanings.** `chimera/stoat/plan_mode.py` read it

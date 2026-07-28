@@ -9,9 +9,8 @@ store inside them is declared in one registry, `chimera/config/paths.py`. If a
 directory is not in that registry, Chimera did not put it there.
 
 That registry is what makes the rest of this page possible: a single place to
-relocate everything, a single place to declare retention, and — once `chimera
-gc` lands — a structural guarantee that no lifecycle tool can touch a path the
-registry never named.
+relocate everything, a single place to declare retention, and a structural
+guarantee that no lifecycle tool can touch a path the registry never named.
 
 **If you have never configured anything, nothing has moved.** With no
 environment variable and no config file, every path resolves exactly where it
@@ -92,8 +91,9 @@ Single files also live at the root and are not stores: `config.toml`,
 `mcp.json`, `settings.json`, `permissions.json`, `credentials.json`,
 `sessions.db`, `persistent_memory.json`, `loop_detector_state.json`.
 
-`chimera doctor` will grow a storage section that prints this table with sizes
-and ages, plus any directory it finds that the registry does *not* claim.
+`chimera doctor --section storage` prints this table with sizes and ages, plus
+any directory it finds that the registry does *not* claim — see
+[Seeing and reclaiming your storage](/chimera/guides/storage-inspection-and-gc/).
 
 ### Why "never prunable" is not a default
 
@@ -116,8 +116,8 @@ keeps everything.
 ## Retention
 
 Retention is **opt-in and off by default**. Declaring it changes nothing on its
-own — `chimera gc` (shipping next) is the only thing that will act on it, and
-its dry run is the default.
+own — [`chimera gc`](/chimera/guides/storage-inspection-and-gc/) is the only
+thing that acts on it, and its dry run is the default.
 
 ```toml
 [storage.sessions]

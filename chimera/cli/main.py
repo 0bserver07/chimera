@@ -664,6 +664,10 @@ def build_parser() -> argparse.ArgumentParser:
         )
         doctor_parser.add_argument("--format", default="text")
 
+    # ---- gc subcommand ----
+    from chimera.cli import gc_cmd as _gc_cmd
+    _gc_cmd.register(subparsers)
+
     # ---- auth subcommand ----
     # OAuth device-flow login + credential management. Stdlib-only.
     auth_parser = subparsers.add_parser(
@@ -1549,6 +1553,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"chimera doctor: unavailable ({exc})", file=sys.stderr)
             return 2
         return _doctor_run(args)
+    elif args.command == "gc":
+        rc_gc: int = args.func(args)
+        return rc_gc
     elif args.command == "auth":
         return run_auth(args)
     elif args.command == "fs":

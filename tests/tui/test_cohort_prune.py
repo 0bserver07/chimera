@@ -99,6 +99,60 @@ def test_non_cohort_dirs_are_ignored(tmp_path):
     assert (root / "stray.txt").is_file()
 
 
+# -- one retention implementation, not two (M2) ------------------------------
+def test_the_pruner_routes_through_the_shared_selector(tmp_path, monkeypatch):
+    """Cohorts must not keep a private copy of the keep/drop rules.
+
+    The point of M2's engine is that ``chimera gc`` and this pruner cannot
+    drift apart, so the keep/drop decision has to be *made* in the shared
+    selector rather than merely resemble it. The spy delegates to the real
+    implementation, so this asserts the call happens without freezing the
+    outcome. (``cohort.py`` imports the seam inside the function, which is what
+    makes it patchable here.)
+    """
+    from chimera.config import storage as storage_engine
+
+    root = _cohort_root(tmp_path)
+    for i in range(4):
+        _make_cohort(root, f"2026010{i}-000000-aaaa")
+
+    real = storage_engine.select_for_prune
+    seen: list[dict] = []
+
+    def spy(entries, retention, **kwargs):
+        seen.append({"n": len(entries), "store": kwargs.get("store")})
+        return real(entries, retention, **kwargs)
+
+    monkeypatch.setattr(storage_engine, "select_for_prune", spy)
+    removed = prune_cohorts(root=root, retention=CohortRetention(retain=1))
+
+    assert seen == [{"n": 4, "store": "cohorts"}]
+    assert len(removed) == 3
+    assert _ids(root) == ["20260103-000000-aaaa"]
+
+
+def test_the_pruner_inherits_the_registry_guard(tmp_path, monkeypatch):
+    """Cohort deletions are revalidated against the registry like any other.
+
+    Flipping the ``cohorts`` row to ``prunable=False`` must stop the pruner
+    dead — the guarantee is structural, not a courtesy the caller extends.
+    """
+    import dataclasses
+
+    from chimera.config import paths
+
+    root = _cohort_root(tmp_path)
+    for i in range(4):
+        _make_cohort(root, f"2026010{i}-000000-aaaa")
+
+    locked = dataclasses.replace(paths.get_store("cohorts"), prunable=False)
+    monkeypatch.setattr(paths, "_BY_NAME", {**paths._BY_NAME, "cohorts": locked})
+
+    with pytest.raises(ValueError, match="prunable=False"):
+        prune_cohorts(root=root, retention=CohortRetention(retain=1))
+    assert len(_ids(root)) == 4
+
+
 # -- config parsing ----------------------------------------------------------
 def test_from_tui_config_parsing():
     assert CohortRetention.from_tui_config(None) == CohortRetention()

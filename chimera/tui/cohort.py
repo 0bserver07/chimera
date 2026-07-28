@@ -26,7 +26,7 @@ from chimera.tui.budget import budget_to_dict
 from chimera.tui.history_io import serialize_history
 from chimera.tui.lane import Lane
 from chimera.tui.routing import RoutingMode
-from chimera.config.paths import store_path
+from chimera.config.paths import StoreRetention, store_path
 
 if TYPE_CHECKING:
     from chimera.core.budget import BudgetSpec
@@ -489,6 +489,15 @@ def _cohort_age_days(manifest_path: Path, entry: Path, ref: datetime) -> float:
     return max(0.0, (ref - created).total_seconds() / 86400.0)
 
 
+def _is_cohort_dir(path: Path) -> bool:
+    """Only directories carrying a ``manifest.json`` count as cohorts.
+
+    Anything else under the store root — a stray file, a half-written temp
+    directory — is invisible to pruning, so it can never be deleted.
+    """
+    return path.is_dir() and (path / "manifest.json").is_file()
+
+
 def prune_cohorts(
     root: str | Path | None = None,
     retention: CohortRetention | None = None,
@@ -498,19 +507,26 @@ def prune_cohorts(
 ) -> list[str]:
     """Delete old persisted cohorts per *retention*; return the ids removed.
 
-    Cohorts are ordered newest-first by id (ids are ``<UTC-stamp>-<rand>``, so
-    lexical order is chronological). The newest ``retention.retain`` are always
-    kept (a hard floor); among the older remainder, a cohort is removed when
-    ``retention.max_age_days`` says it is too old — or, when only ``retain`` is
-    set, simply because it is past the newest-N window. When only
-    ``max_age_days`` is set, every cohort older than the limit is removed
-    regardless of count.
+    A thin caller of the shared retention engine in
+    :mod:`chimera.config.storage`, so cohorts and ``chimera gc`` cannot drift
+    apart: :func:`~chimera.config.storage.select_for_prune` makes every
+    keep/drop decision and :func:`~chimera.config.storage.apply_prune`
+    revalidates each path against the registry before touching it. What this
+    function adds is the cohort-specific vocabulary — a cohort is a directory
+    with a ``manifest.json``, its age comes from the manifest's ``created_at``
+    with the directory mtime as a fallback, and ids sort chronologically
+    (``<UTC-stamp>-<rand>``), so ordering is by id rather than by mtime.
+
+    The newest ``retention.retain`` are always kept (a hard floor); among the
+    older remainder, a cohort is removed when ``retention.max_age_days`` says
+    it is too old — or, when only ``retain`` is set, simply because it is past
+    the newest-N window. When only ``max_age_days`` is set, every cohort older
+    than the limit is removed regardless of count.
 
     Ids in *exclude* are never removed — the caller passes the cohort it is
-    about to run or resume, so a live cohort is untouchable. Only directories
-    that carry a ``manifest.json`` are considered, so unrelated files under
-    *root* are never deleted. Deletion is best-effort: a directory that vanishes
-    or is locked by a concurrent instance is skipped, never fatal.
+    about to run or resume, so a live cohort is untouchable. Deletion is
+    best-effort: a directory that vanishes or is locked by a concurrent
+    instance is skipped, never fatal.
 
     A no-op returning ``[]`` when *retention* is ``None``/inactive, when *root*
     does not exist, or when nothing qualifies — the default, data-preserving
@@ -531,32 +547,29 @@ def prune_cohorts(
     if not base.is_dir():
         return []
 
-    excluded = set(exclude)
-    ref = now or datetime.now(timezone.utc)
-    entries: list[tuple[str, Path, float]] = []
-    for entry in base.iterdir():
-        manifest_path = entry / "manifest.json"
-        if not entry.is_dir() or not manifest_path.is_file():
-            continue
-        entries.append(
-            (entry.name, entry, _cohort_age_days(manifest_path, entry, ref))
-        )
-    entries.sort(key=lambda item: item[0], reverse=True)  # newest id first
+    from chimera.config.storage import (
+        apply_prune,
+        collect_entries,
+        select_for_prune,
+    )
 
-    keep = retention.retain
-    max_age = retention.max_age_days
-    removed: list[str] = []
-    for position, (cohort_id, entry, age) in enumerate(entries):
-        if cohort_id in excluded:
-            continue
-        if keep is not None and position < keep:
-            continue  # always keep the newest N (the retain floor)
-        # Past the retain window (or no retain set): delete when an age limit
-        # says so, or when a retain limit alone applies to this overflow.
-        if (max_age is not None and age > max_age) or (max_age is None and keep is not None):
-            try:
-                shutil.rmtree(entry)
-            except OSError:
-                continue  # best-effort: a concurrent reader/racer is not fatal
-            removed.append(cohort_id)
-    return removed
+    entries = collect_entries(
+        base,
+        select=_is_cohort_dir,
+        age_of=lambda path, ref: _cohort_age_days(
+            path / "manifest.json", path, ref
+        ),
+        order="id",
+        now=now,
+    )
+    candidates = select_for_prune(
+        entries,
+        StoreRetention(
+            retain=retention.retain, max_age_days=retention.max_age_days
+        ),
+        store="cohorts",
+        root=base,
+        exclude=exclude,
+        measure=False,
+    )
+    return [c.entry.id for c in apply_prune(candidates)]
