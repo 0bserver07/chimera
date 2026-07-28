@@ -68,16 +68,39 @@ ROOT = Path(__file__).resolve().parents[2]
 #: indistinguishable from a clean one, so the only defensible scope is the one
 #: that needs no argument about which prose "counts".
 #:
-#: Known and deliberate exclusion: ``CHANGELOG.md``, which currently holds one
-#: untracked-receipt citation (``data/depth-lcb-coding-agent-glm52.json``,
-#: line 246) and two retracted-score lines (676, 1141). Bringing it in means
-#: editing shipped release entries, i.e. rewriting the historical record to
-#: satisfy a gate — an owner call, not a test author's. Recorded here rather
-#: than left silent, because silence is what this widening exists to fix.
+#: Known and deliberate exclusion: ``CHANGELOG.md``. It cites a receipt that is
+#: in no commit, and carries two retracted-score lines inside **shipped**
+#: 0.9.2/0.9.2.1 entries — bringing it in means editing released history to
+#: satisfy a gate, which is an owner call and not a test author's. Excluded, but
+#: not unwatched: see ``_CHANGELOG_UNBACKED``, because "declared exclusion" is
+#: one rename away from "unscanned directory".
 _PUBLISHED = (
     "README.md",
     "docs",
     "site/src/content/docs",
+)
+
+#: Receipts ``CHANGELOG.md`` cites that git does not track — a **ratchet**, not
+#: an inventory. The file is outside ``_PUBLISHED`` (above), so nothing else in
+#: this repo would notice the list growing; naming the existing debt lets the
+#: paired test fail on anything beyond it. Old debt named, new debt red.
+#:
+#: Pinned by filename rather than line number on purpose. The changelog grows at
+#: the top every batch, so a line number recorded here is wrong by the next
+#: merge while still reading as authoritative — the exact failure mode of a
+#: comment standing in for a check.
+#:
+#: Earned the hard way: the changelog entry announcing that unbacked citations
+#: are disclosed at the claim introduced three fresh unbacked citations, by
+#: naming the three filenames without the marker. Out of scope, so nothing
+#: caught it.
+_CHANGELOG_UNBACKED = (
+    # The 84% LiveCodeBench figure's receipt. Located on the author's disk
+    # holding exactly `passed: 21, total: 25`, so the number was real; in no
+    # commit on any branch, and deliberately never committed, because
+    # `livecodebench` is retracted and committing it would make a retracted
+    # score look evidenced.
+    "data/depth-lcb-coding-agent-glm52.json",
 )
 
 #: Documents exempt from the **retracted-score rule only** — never from the
@@ -694,6 +717,54 @@ class TestTheWidenedScopeReallyScansAndStillFails:
         files = {str(p.relative_to(ROOT)) for p in _published_files()}
         for d in ("docs/notes", "docs/reference", "docs/specs", "docs/mink"):
             assert any(f.startswith(d + "/") for f in files), f"{d} is not in scope"
+
+
+class TestTheChangelogExclusionIsWatched:
+    """The one file in scope-shaped limbo, held by a ratchet.
+
+    ``CHANGELOG.md`` cannot join ``_PUBLISHED`` without editing shipped release
+    entries. Left at that, the exclusion decays into the very thing this gate's
+    widening was about: a surface nobody reads, indistinguishable from a clean
+    one. So the debt is enumerated and anything past it fails.
+    """
+
+    def test_the_changelog_adds_no_unbacked_citation_beyond_the_known_debt(
+        self,
+    ) -> None:
+        tracked = _tracked_paths()
+        text = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+        found = {rel for _, rel in _missing_citations(text, tracked)}
+        new = sorted(found - set(_CHANGELOG_UNBACKED))
+        assert not new, (
+            "CHANGELOG.md cites receipts git does not track, beyond the debt "
+            f"declared in _CHANGELOG_UNBACKED: {new}\nCommit the receipt, stop "
+            "citing it, or mark the line '⊘ NO RECEIPT'. Do not extend "
+            "_CHANGELOG_UNBACKED to make this pass — that list is history, not "
+            "an allowance."
+        )
+
+    def test_the_declared_debt_is_still_real(self) -> None:
+        # A ratchet with stale teeth is slack: an entry that is no longer cited
+        # (or has since been committed) silently widens what "beyond the known
+        # debt" means.
+        tracked = _tracked_paths()
+        text = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+        found = {rel for _, rel in _missing_citations(text, tracked)}
+        for rel in _CHANGELOG_UNBACKED:
+            assert rel in found, (
+                f"{rel} is declared as CHANGELOG debt but is no longer an "
+                "unbacked citation there — delete the entry"
+            )
+
+    def test_the_changelog_is_deliberately_out_of_scope(self) -> None:
+        # If it ever joins _PUBLISHED, the ratchet is dead weight and the two
+        # retracted-score lines in shipped entries become a hard failure. That
+        # is a decision, so it should arrive as a failing test, not a surprise.
+        assert (ROOT / "CHANGELOG.md") not in _published_files(), (
+            "CHANGELOG.md is now scanned — delete _CHANGELOG_UNBACKED and its "
+            "tests, and resolve the retracted-score lines in the shipped "
+            "0.9.2 / 0.9.2.1 entries"
+        )
 
 
 class TestTheRetractionExemptionsAreLive:
