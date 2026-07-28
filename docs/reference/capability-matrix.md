@@ -327,20 +327,37 @@ stack.
 
 **5. Six receipt filenames are cited in docs but do not exist in `data/`.**
 Reproduce with a filename-existence sweep over `docs/`, `site/`, `README.md`,
-`CHANGELOG.md`:
+`CHANGELOG.md`. Two were resolved on 2026-07-28 by committing the receipt;
+four remain unbacked and are marked `⊘ NO RECEIPT` so
+`grep -rn '⊘ NO RECEIPT'` enumerates them:
 
-| Missing file | Cited in | What it is claimed to prove |
-|---|---|---|
-| `data/depth-lcb-coding-agent-glm52.json` | `site/src/content/docs/guides/coding-agent.md` | LiveCodeBench **84% (21/25)**, "the best of any agent" — a **retracted** benchmark, published live on the site |
-| `data/swe-modal-smoke.json` | `docs/benchmarks/modal-cloud-benches.md`, `docs/specs/agent-benchmark-matrix.tasks.md` | that `--env swe-modal` live-boots an official SWE-bench image |
-| `data/modal-grid-20260708-232643.json` | `docs/benchmarks/modal-cloud-benches.md` | the human-eval-plus re-measurement after the grader-integrity fix |
-| `data/modal-grid-observatory1-20260723-234334.json` | `docs/notes/bench-diagnosis-darklight1.md` | the `observatory1` depth grid |
-| `data/modal-grid-darklight1-20260724-195209.json` | `docs/notes/bench-diagnosis-darklight1.md` | the darklight1 diagnosis run |
-| `data/programbench-glm-5.2-code-results.json` | `docs/specs/modal-amd64-programbench-grading.md` | a ProgramBench result |
+| Missing file | Cited in | What it is claimed to prove | Status 2026-07-28 |
+|---|---|---|---|
+| ⊘ NO RECEIPT — `data/depth-lcb-coding-agent-glm52.json` | `site/src/content/docs/guides/coding-agent.md` | LiveCodeBench **84% (21/25)**, "the best of any agent" — a **retracted** benchmark, published live on the site | **Still unbacked, now deliberately.** The file was located on the author's disk holding exactly `passed: 21, total: 25`, so the number was real; it is in no commit on any branch. Not committed, because `livecodebench` is retracted and publishing it would make a retracted score look evidenced. The site claim is withdrawn (`acaf6b1e`, `160f8efc`) |
+| `data/swe-modal-smoke.json` | `docs/benchmarks/modal-cloud-benches.md`, `docs/specs/agent-benchmark-matrix.tasks.md` | that `--env swe-modal` live-boots an official SWE-bench image | **Resolved** — committed `adc75b5e`. Cost `0.023248` and wall-clock `55.08s` match the prose. Annotated at the citation (`0cc239f6`): its `passed: 1, total: 1` is the *vacuous pass* this run exposed, not a resolve |
+| `data/modal-grid-20260708-232643.json` | `docs/benchmarks/modal-cloud-benches.md` | the human-eval-plus re-measurement after the grader-integrity fix | **Resolved** — committed `6126aba8`. The `coding-agent`/`human-eval-plus` cell reads `total: 5, passed: 5`, exactly the claimed 5/5 |
+| ⊘ NO RECEIPT — `data/modal-grid-observatory1-20260723-234334.json` | `docs/notes/bench-diagnosis-darklight1.md` | the `observatory1` depth grid | **Still unbacked.** Absent from the repo *and* from the author's disk — nothing anywhere to commit |
+| ⊘ NO RECEIPT — `data/modal-grid-darklight1-20260724-195209.json` | `docs/notes/bench-diagnosis-darklight1.md` | the darklight1 diagnosis run | **Still unbacked.** Absent from the repo *and* from the author's disk |
+| ⊘ NO RECEIPT — `data/programbench-glm-5.2-code-results.json` | `docs/specs/modal-amd64-programbench-grading.md` | a ProgramBench result | **Still unbacked.** Absent from the repo *and* from the author's disk |
 
-Plus one extension mismatch: `README.md`, `docs/benchmarks/2026-03-30-swebench-lite-glm51.md`
-and `docs/mink/benchmarks.md` cite `data/swebench-lite-glm51-results.json`; the
-file is `.jsonl`.
+~~Plus one extension mismatch: `README.md`, `docs/benchmarks/2026-03-30-swebench-lite-glm51.md` and `docs/mink/benchmarks.md` cite `data/swebench-lite-glm51-results.json`; the file is `.jsonl`.~~
+
+**Correction, 2026-07-28 — that seventh finding was wrong, and the audit's own
+tooling produced it.** All three documents cite `data/swebench-lite-glm51-results.jsonl`
+correctly, and `git log -S` finds no commit that ever wrote the `.json` form
+into any of them. The sweep's regex alternated `(?:json|jsonl)`, which is
+first-match-wins in Python, so it truncated every `.jsonl` citation to `.json`
+and then reported the truncation as a missing file. Fixed in
+`tests/scripts/test_published_claims.py` by putting `jsonl` first and pinning
+the extension with `(?![A-Za-z0-9])`; the dangerous direction of the same bug —
+a genuinely missing `data/x.jsonl` passing whenever `data/x.json` happened to
+exist — is covered by a test there.
+
+**Method note.** This sweep tested filename *existence*. That is not the right
+question for `data/`, which is gitignored: a receipt on the author's disk but
+never `git add -f`-ed exists locally and is invisible to CI, to clones, and to
+every other worktree. Two of the six above were in exactly that state. The gate
+now checks `git ls-files` instead.
 
 **6. `README.md` cites the retired receipt for its HumanEval headline.** The
 table publishes "HumanEval 92.7% (152/164)" sourced to
