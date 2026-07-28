@@ -209,6 +209,10 @@ Layer 1: Environment     Local, Docker, Git, Remote, Cloud, PersistentShell
 ### Testing (`chimera/testing/`)
 - `harness.py` — hermetic agent-loop harness: `create_harness` (real AgentLoop) / `create_assembled_harness` (AgentDriver/CodingAgent) run FauxProvider scripts through the REAL loop with real tools in a temp workspace; `HarnessRun` exposes ordered LoopEvents, tool calls/results, file diffs, usage/cost, terminal reason. Regression locks live in `tests/regressions/` (commit-named, revert-verified). Complements — never replaces — real-LLM validation (guide: `docs/guides/testing-agents.md`).
 
+### Experiments (`chimera/experiments/`)
+- `run.py` — the "run an experiment and keep the evidence" API: `start`/`resume` → a stamped run dir under the registry's `experiment-runs` store; `manifest.json` (config, argv, cwd, **git SHA + dirty flag**, host/pid, `status=running`); `run.jsonl()` appends **and flushes** so a crash keeps every row; `run.seen(file, key=…)` is resume-by-key; `run.finish(summary)` → `result.json` shaped like a `data/` bench-receipt cell and validated against the same invariants `scripts/render_observatory.py` enforces. A run is **structurally unable to write outside its own directory** (names validated, `..`/absolute/symlink escapes refused). CLI: `chimera experiments list|show` — pruning goes through `gc`, never a second mechanism. Guide: `docs/guides/experiments.md`; exemplar: `scripts/experiments/example_toolkit_run.py`
+- **Don't hand-roll a run directory.** `scripts/experiments/*` are frozen provenance for June's numbers, not templates: each reinvented run dirs, progress files, resume and `.env` loading, and one grew a 336 MB tree nobody owned. New drivers use the toolkit; `data/` promotion stays a deliberate `cp`.
+
 ### Assembly (`chimera/assembly/`)
 - `coding_agent.py` — CodingAgent, the assembled daily-driver stack behind `chimera code` (presets, conversation memory, loop postures via `LOOP_POSTURES`)
 - `driver.py` — AgentDriver: the one control surface a REPL/TUI drives (send/steer/cancel/clear/load_history + model/tools/cost/history)

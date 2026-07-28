@@ -112,6 +112,18 @@ commit receipts.
   violation is proven to go red. The gate's limits are documented in the
   module docstring — it cannot see external harnesses (the source of the
   944 MB root `runs/`), dynamic paths, or non-`chimera/` code.
+- **The experiment toolkit** (`chimera/experiments/`, spec M4): `start` /
+  `resume` give a stamped run directory under the registry's
+  `experiment-runs` store with a `manifest.json` carrying the git SHA + dirty
+  flag, a `run.jsonl()` ledger that flushes so a crash keeps every row,
+  `run.seen()` for resume-by-key, and `run.finish()` writing a
+  `result.json` shaped like — and validated against — a `data/` bench receipt.
+  A run is structurally unable to write outside its own directory. Plus
+  `chimera experiments list` / `show` (pruning stays with `gc`), the guide
+  `docs/guides/experiments.md`, and a runnable, credential-free exemplar
+  `scripts/experiments/example_toolkit_run.py`. Why: Chimera had no API for
+  "run an experiment and keep the evidence," so five one-off drivers each
+  hand-rolled one and grew a 336 MB directory nobody owned.
 
 ### Fixed
 
