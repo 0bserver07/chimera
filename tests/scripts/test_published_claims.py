@@ -1,7 +1,8 @@
 """Published numbers must cite a receipt that exists and says what they claim.
 
-Docs are the one surface with no compiler. Two failures shipped here, both
-found by an owner-requested audit rather than by any gate:
+Docs are the one surface with no compiler. Three failures shipped here. The
+first two were found by an owner-requested audit rather than by any gate; the
+third was found by this file, while fixing them:
 
 * ``README.md`` cited ``data/humaneval-glm51-results.json`` for "92.7% pass@1
   (152/164)". That file contains **109/164 = 66.5%** — the retired buggy run.
@@ -13,22 +14,36 @@ found by an owner-requested audit rather than by any gate:
   formally **retracted** in ``scripts/render_observatory.py``, on the same site
   whose observatory page shows no LiveCodeBench score at all. The receipt
   existed; the benchmark's grader did not measure what its name claims.
+* A third, found on 2026-07-28 while fixing the first two, and the reason this
+  file now asks git rather than the filesystem: ``data/`` is **gitignored**.
+  Receipts are force-added one at a time, so a benchmark run leaves its receipt
+  on the author's disk and outside the repo by default. At that moment the
+  checkout had **63** files in ``data/`` and **34** in the repo. Four published
+  citations pointed into that 29-file gap — including the only evidence that
+  ``--env swe-modal`` had ever run. Every one of them resolved on one machine
+  and nowhere else, and a gate built on ``Path.exists()`` agreed with them
+  there, which is the worst possible place for it to agree.
 
-Both are the same class the benchmark canary exists for
+Both of the first two are the same class the benchmark canary exists for
 (``docs/guides/benchmark-canary.md``), one layer out: the canary proves a
 *grader* is honest, this proves a *citation* is. Neither the canary nor the
 observatory's integrity aborts could catch these, because hand-written prose
 bypasses the generator entirely.
 
-Scope, stated honestly: this checks that cited receipt files **exist** and that
-retracted benchmarks are not quoted as scores. It cannot verify that an
-arbitrary prose number matches its receipt — the shapes are too varied — so it
-is a floor, not a ceiling.
+Scope, stated honestly: this checks that cited receipt files are **committed**
+(not merely present on the author's disk) and that retracted benchmarks are not
+quoted as scores. It cannot verify that an arbitrary prose number matches its
+receipt — the shapes are too varied — so it is a floor, not a ceiling. Two
+known gaps in that floor are pinned by tests rather than hidden: a withdrawal
+marker clears its whole line, and a score whose line does not name its
+benchmark (a table cell under a benchmark-named column header, say) is not
+attributed to it at all.
 """
 from __future__ import annotations
 
 import importlib.util
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -136,8 +151,47 @@ def _published_files() -> list[Path]:
     return out
 
 
-def _missing_citations(text: str) -> list[tuple[int, str]]:
-    """``(line number, path)`` for every cited receipt that is not on disk.
+def _tracked_paths() -> frozenset[str] | None:
+    """Every path git tracks, or ``None`` when git cannot answer.
+
+    Existence on disk is the wrong question to ask about a receipt, and asking
+    it was a real defect in the first version of this gate.
+
+    ``data/`` is **gitignored**. Receipts get in one at a time with
+    ``git add -f``, so a run that produces a receipt leaves it on the author's
+    disk and *outside* the repo unless someone force-adds it. On the machine
+    that did the run, ``Path.exists()`` says yes; in CI, in a fresh clone, and
+    in any other git worktree of the same repo, the file is simply not there.
+    A filesystem check therefore returns a different verdict per checkout, and
+    the direction it errs is the dangerous one: it goes **green** exactly where
+    the untracked file lives, i.e. for the one person able to add it.
+
+    That is not theoretical. When this pass began, ``data/`` held 63 files on
+    the main checkout and 34 in the repo — 29 receipts that every doc could
+    cite and no reader could open. Four such citations were shipped.
+    """
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(ROOT), "ls-files", "-z"],
+            capture_output=True,
+            check=True,
+            text=True,
+            timeout=120,
+        ).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return frozenset(p for p in out.split("\0") if p)
+
+
+def _missing_citations(
+    text: str, tracked: frozenset[str] | None = None
+) -> list[tuple[int, str]]:
+    """``(line number, path)`` for every cited receipt a reader cannot open.
+
+    *tracked* is the set from :func:`_tracked_paths`. When it is supplied a
+    citation counts as backed only if git **tracks** it; when it is ``None``
+    the check degrades to filesystem existence, which is weaker for the reason
+    documented above and is used only as a fallback where git cannot be run.
 
     A line carrying ``⊘ NO RECEIPT`` is disclosing an absence, not offering
     evidence, so it is skipped — see ``_NO_RECEIPT``.
@@ -147,7 +201,8 @@ def _missing_citations(text: str) -> list[tuple[int, str]]:
         if _NO_RECEIPT.search(line):
             continue
         for rel in dict.fromkeys(_RECEIPT.findall(line)):
-            if not (ROOT / rel).exists():
+            backed = rel in tracked if tracked is not None else (ROOT / rel).exists()
+            if not backed:
                 out.append((i, rel))
     return out
 
@@ -231,20 +286,62 @@ class TestCitedReceiptsExist:
         It reads as evidence and cannot be checked, so it survives review
         indefinitely.
         """
+        tracked = _tracked_paths()
         missing = [
             f"{doc.relative_to(ROOT)}:{i} -> {rel}"
             for doc in _published_files()
             for i, rel in _missing_citations(
-                doc.read_text(encoding="utf-8", errors="replace")
+                doc.read_text(encoding="utf-8", errors="replace"), tracked
             )
         ]
         assert not missing, (
-            "docs cite receipt files that do not exist:\n  "
+            "docs cite receipt files no reader can open:\n  "
             + "\n  ".join(sorted(missing))
-            + "\nAdd the receipt, stop citing it, or — if the number is real "
-            "but its receipt was never committed — keep both and mark the "
-            "line '⊘ NO RECEIPT'."
+            + "\nNote these are checked against `git ls-files`, not the "
+            "filesystem: data/ is gitignored, so a receipt sitting in your "
+            "working tree is still invisible to CI and to every clone until "
+            "`git add -f` puts it in.\nCommit the receipt, stop citing it, "
+            "or — if the number is real but its receipt was never committed — "
+            "keep both and mark the line '⊘ NO RECEIPT'."
         )
+
+    def test_a_receipt_on_disk_but_untracked_is_still_missing(self) -> None:
+        """The whole point of checking git instead of the filesystem.
+
+        Writes a real file into ``data/`` — gitignored, so it lands untracked,
+        exactly like a fresh benchmark receipt — and asserts the gate reports a
+        citation of it as unbacked *while the file is sitting right there*. The
+        second assertion is the one that matters: it pins that the old
+        filesystem check would have passed this, so the difference between the
+        two is a live, tested property rather than a claim in a comment.
+        """
+        tracked = _tracked_paths()
+        assert tracked is not None, "git could not be run — cannot verify"
+
+        probe = ROOT / "data" / "untracked-probe-for-the-claims-gate.json"
+        assert not probe.exists(), f"probe path is not free: {probe}"
+        cite = f"Raw data: `data/{probe.name}`"
+        probe.write_text('{"passed": 1, "total": 1}\n', encoding="utf-8")
+        try:
+            assert probe.exists()  # the filesystem is happy
+            assert f"data/{probe.name}" not in tracked  # git is not
+
+            # Caught: no reader, reviewer, or CI job can open this file.
+            assert _missing_citations(cite, tracked) == [(1, f"data/{probe.name}")]
+
+            # Missed by the check this replaced — the regression being fixed.
+            assert _missing_citations(cite, None) == []
+        finally:
+            probe.unlink(missing_ok=True)
+
+    def test_the_tracked_set_is_real_and_covers_the_receipts(self) -> None:
+        # Guard the guard: an empty or bogus set would make the check above
+        # fail everything (loudly) or, if it silently became None, nothing.
+        tracked = _tracked_paths()
+        assert tracked is not None
+        assert "README.md" in tracked
+        receipts = {p for p in tracked if p.startswith("data/")}
+        assert len(receipts) > 20, f"only {len(receipts)} receipts tracked"
 
     def test_the_scan_actually_finds_citations(self) -> None:
         # Guard the guard: a broken regex would make the test above vacuous.
