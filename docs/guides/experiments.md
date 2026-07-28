@@ -213,8 +213,10 @@ and nothing should: `data/` is the curated receipt set that backs published
 numbers.
 
 ```bash
-cp ~/.chimera/experiment-runs/pb-sweep/2026-07-27T14-03-11/result.json \
-   data/modal-grid-observatory-pb-sweep.json
+# EXAMPLE ONLY — <run>/<stamp> and the destination name are yours to choose.
+# Nothing here is a receipt that exists; promotion is always a deliberate act.
+cp ~/.chimera/experiment-runs/<run>/<stamp>/result.json \
+   data/modal-grid-<your-run-name>.json
 ```
 
 The rename matters: the observatory scans a fixed pattern list, so a receipt
