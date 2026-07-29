@@ -9,6 +9,15 @@ commit receipts.
 
 ### Fixed
 
+- **`numpy` was declared in no extra, so the plus contract could not run.**
+  The EvalPlus expanded harnesses (`mbpp-plus`, `humaneval-plus`) `import numpy`
+  inside the graded program, so under the repo's own documented
+  `uv sync --extra dev --extra anthropic` the canary reported **ENV-MISSING**
+  for both — a grader that silently cannot be checked, which is one step from a
+  grader that silently cannot score. New `[bench]` extra (`numpy>=1.26`), folded
+  into `[all]`. With it the canary judges both: `2 pass · 0 BROKEN ·
+  0 env-missing` at n=40, where it previously refused a verdict.
+
 - **User-scope permission rules _and_ hooks were silently ignored.**
   `CodingAgent` — the stack behind `chimera code` — passed `user_dir=~/.chimera`
   into `PermissionRuleLoader` **and** `HookLoader`, both of which append

@@ -550,6 +550,7 @@ all = [
     { name = "httpx" },
     { name = "modal" },
     { name = "nbformat" },
+    { name = "numpy" },
     { name = "openai" },
     { name = "playwright" },
     { name = "pygments" },
@@ -559,6 +560,9 @@ all = [
 ]
 anthropic = [
     { name = "anthropic" },
+]
+bench = [
+    { name = "numpy" },
 ]
 browser = [
     { name = "playwright" },
@@ -645,7 +649,7 @@ requires-dist = [
     { name = "asyncssh", marker = "extra == 'ssh'", specifier = ">=2.14" },
     { name = "boto3", marker = "extra == 'dev'", specifier = ">=1.34" },
     { name = "boto3", marker = "extra == 'function-synthesis-s3'", specifier = ">=1.34" },
-    { name = "chimera-run", extras = ["anthropic", "openai", "browser", "remote", "mink", "notebook", "mcp", "ssh", "tui", "modal-sandbox", "e2b", "daytona"], marker = "extra == 'all'" },
+    { name = "chimera-run", extras = ["anthropic", "openai", "browser", "remote", "mink", "notebook", "mcp", "ssh", "tui", "modal-sandbox", "e2b", "daytona", "bench"], marker = "extra == 'all'" },
     { name = "datasets", marker = "extra == 'function-synthesis-compile'", specifier = ">=2.18" },
     { name = "daytona", marker = "extra == 'daytona'", specifier = ">=0.200" },
     { name = "docker", marker = "extra == 'docker'", specifier = ">=7.0" },
@@ -657,6 +661,7 @@ requires-dist = [
     { name = "modal", marker = "extra == 'modal-sandbox'", specifier = ">=0.62" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.10" },
     { name = "nbformat", marker = "extra == 'notebook'", specifier = ">=5" },
+    { name = "numpy", marker = "extra == 'bench'", specifier = ">=1.26" },
     { name = "onnxruntime", marker = "extra == 'function-synthesis-onnx'", specifier = ">=1.18" },
     { name = "openai", marker = "extra == 'openai'", specifier = ">=1.50" },
     { name = "optimum", extras = ["onnxruntime"], marker = "extra == 'function-synthesis-onnx'", specifier = ">=1.24" },
@@ -678,7 +683,7 @@ requires-dist = [
     { name = "transformers", marker = "extra == 'function-synthesis-transformers'", specifier = ">=4.40" },
     { name = "websockets", marker = "extra == 'mcp'", specifier = ">=12" },
 ]
-provides-extras = ["anthropic", "openai", "browser", "docker", "remote", "mink", "notebook", "mcp", "ssh", "tui", "modal-sandbox", "e2b", "daytona", "all", "dev", "function-synthesis", "function-synthesis-s3", "function-synthesis-compile", "function-synthesis-transformers", "function-synthesis-onnx"]
+provides-extras = ["anthropic", "openai", "browser", "docker", "remote", "mink", "notebook", "mcp", "ssh", "tui", "modal-sandbox", "e2b", "daytona", "bench", "all", "dev", "function-synthesis", "function-synthesis-s3", "function-synthesis-compile", "function-synthesis-transformers", "function-synthesis-onnx"]
 
 [package.metadata.requires-dev]
 dev = [

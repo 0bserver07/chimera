@@ -43,7 +43,12 @@ tui = ["textual>=8.0"]  # >=8: native text selection, get_selected_text, run(mou
 modal-sandbox = ["modal>=0.62"]
 e2b = ["e2b>=1.0"]
 daytona = ["daytona>=0.200"]
-all = ["chimera-run[anthropic,openai,browser,remote,mink,notebook,mcp,ssh,tui,modal-sandbox,e2b,daytona]"]
+# Benchmark grading. The EvalPlus expanded harnesses (mbpp-plus, humaneval-plus)
+# execute `import numpy` inside the graded program, so without this the plus
+# contract cannot run and the known-correct-answer canary reports ENV-MISSING
+# rather than a verdict — a grader that silently cannot be checked.
+bench = ["numpy>=1.26"]
+all = ["chimera-run[anthropic,openai,browser,remote,mink,notebook,mcp,ssh,tui,modal-sandbox,e2b,daytona,bench]"]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
