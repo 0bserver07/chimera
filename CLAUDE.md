@@ -281,6 +281,34 @@ Interactive frontends over AgentDriver (spec: `docs/specs/interactive-frontends.
   in it means adding it to `SCANNED_ROOTS` in the same commit. An exemption
   goes in `CWD_WRITE_ALLOWLIST` **with a comment saying why**; `chimera/` may
   never have one (a test enforces that) — fix the writer instead.
+- **Scope is the half of a gate nobody reviews. An unscanned directory is
+  indistinguishable from a clean one.** Every published number goes through
+  `tests/scripts/test_published_claims.py`, whose `_PUBLISHED` scope is now
+  **all of `docs/`** plus `README.md` and the site — not a list of the
+  subdirectories where violations were last found, which only moves the hole
+  one level down. It was five hand-picked entries covering 327 of 575 markdown
+  files; the other 248 were not clean, they were unread, and widening surfaced
+  thirteen sites including a live retracted score in `docs/specs` that a
+  three-week-old retraction had never reached. When a gate needs an exemption,
+  it goes in an **enumerated, per-file list with a comment saying why that
+  document legitimately does the thing** (`_RETRACTION_EXPLAINERS`) — never a
+  directory prefix, never an unscanned tree — and it narrows **one rule**: a
+  document earns the right to quote a withdrawn number by explaining it, and no
+  explanation conjures a receipt into the repo. Every exemption is paired with
+  a test that it still catches real violations, plus guards that each entry
+  exists and still needs to exist. A number whose receipt is missing is marked
+  `⊘ NO RECEIPT` at the claim, never deleted: naming the gap is the disclosure,
+  removing the number is the cover-up.
+- **A fixture that fails identically under the bug and under the fix has not
+  reproduced anything.** A user-scope hooks defect sat parked as "unproven" for
+  a day because the fixture loaded zero matchers under *both* scopes — read as
+  "maybe there is no bug", it was actually a wrong settings schema silently
+  dropped by the parser, masking a real defect underneath. Before concluding
+  "no defect here", change something that **must** flip the result; if nothing
+  flips it, you are measuring the fixture. Corollary: a parser that drops
+  malformed config without a word makes two unrelated faults present as one
+  empty list (`chimera/hooks/loader.py::_parse_hook_config` — pinned in
+  `tests/assembly/test_user_scope_settings.py`, not yet fixed).
 - **Never hand-build a `~/.chimera` path.** Every on-disk store goes through
   `chimera/config/paths.py` — `store_path("<name>")`, `chimera_home()`,
   `project_state_dir(project)` — and adding a store means adding a `Store`

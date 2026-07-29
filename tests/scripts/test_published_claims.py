@@ -52,12 +52,94 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 
 #: Prose files that publish benchmark numbers to users.
+#:
+#: This was five hand-picked entries — ``docs/benchmarks``, ``docs/progress``,
+#: ``docs/releases`` and the two roots — covering 327 of the repo's markdown
+#: files. The other 248 were not clean; they were unread. Widening to all of
+#: ``docs/`` surfaced thirteen sites at once, including three receipts absent
+#: from disk entirely and one live retracted score in ``docs/specs`` that the
+#: 2026-07-28 LiveCodeBench retraction simply never reached.
+#:
+#: **All of** ``docs/``, not the subdirectories where the violations happened to
+#: be. Naming four directories would have re-created the same hole one level
+#: down, and the measurement says it costs nothing: sweeping every remaining
+#: ``docs/`` subtree — guides, playbooks, plans, ``_archive``, the seven
+#: codename dirs — adds zero further violations. An unscanned directory is
+#: indistinguishable from a clean one, so the only defensible scope is the one
+#: that needs no argument about which prose "counts".
+#:
+#: Known and deliberate exclusion: ``CHANGELOG.md``. It cites a receipt that is
+#: in no commit, and carries two retracted-score lines inside **shipped**
+#: 0.9.2/0.9.2.1 entries — bringing it in means editing released history to
+#: satisfy a gate, which is an owner call and not a test author's. Excluded, but
+#: not unwatched: see ``_CHANGELOG_UNBACKED``, because "declared exclusion" is
+#: one rename away from "unscanned directory".
 _PUBLISHED = (
     "README.md",
-    "docs/benchmarks",
-    "docs/progress",
-    "docs/releases",
+    "docs",
     "site/src/content/docs",
+)
+
+#: Receipts ``CHANGELOG.md`` cites that git does not track — a **ratchet**, not
+#: an inventory. The file is outside ``_PUBLISHED`` (above), so nothing else in
+#: this repo would notice the list growing; naming the existing debt lets the
+#: paired test fail on anything beyond it. Old debt named, new debt red.
+#:
+#: Pinned by filename rather than line number on purpose. The changelog grows at
+#: the top every batch, so a line number recorded here is wrong by the next
+#: merge while still reading as authoritative — the exact failure mode of a
+#: comment standing in for a check.
+#:
+#: Earned the hard way: the changelog entry announcing that unbacked citations
+#: are disclosed at the claim introduced three fresh unbacked citations, by
+#: naming the three filenames without the marker. Out of scope, so nothing
+#: caught it.
+_CHANGELOG_UNBACKED = (
+    # The 84% LiveCodeBench figure's receipt. Located on the author's disk
+    # holding exactly `passed: 21, total: 25`, so the number was real; in no
+    # commit on any branch, and deliberately never committed, because
+    # `livecodebench` is retracted and committing it would make a retracted
+    # score look evidenced.
+    "data/depth-lcb-coding-agent-glm52.json",
+)
+
+#: Documents exempt from the **retracted-score rule only** — never from the
+#: receipt rule, and never from anything else.
+#:
+#: Widening the scope caught a class the narrow scope never had to think about:
+#: prose that quotes a withdrawn number *in order to explain why it is wrong*.
+#: A retraction has to be argued somewhere, and the argument cannot be made
+#: without stating what is being retracted. Left unexempted, the gate's loudest
+#: complaints would be aimed at the two documents doing the most honest work in
+#: the repo, and the pressure would be to delete the analysis rather than the
+#: claim.
+#:
+#: The exemption is per-document and enumerated, never per-directory: a named
+#: entry is a line in a diff a reviewer can challenge, whereas an unscanned
+#: directory is invisible. Two guards below keep the list from rotting — every
+#: entry must exist, and every entry must still *need* the exemption, so an
+#: entry that stops earning its place fails the suite instead of quietly
+#: shielding whatever the document grows into next.
+#:
+#: Note what is **not** here. ``docs/guides/benchmark-canary.md`` quotes the
+#: same withdrawn ≥18.9% and needs no entry: it does so inside a
+#: claim-versus-truth table, which ``_CORRECTION_TABLE_HEADER`` already clears
+#: structurally. Structure beats enumeration wherever a document can be
+#: restructured to earn its exemption — this list is for the ones that cannot.
+_RETRACTION_EXPLAINERS = (
+    # The diagnosis that produced the retraction. Its entire subject is why
+    # `livecodebench` 44/50 (88.0%) is not a LiveCodeBench score and why the
+    # published ≥18.9% is not one either: 63 of 175 staged tasks are
+    # `functional` + starter_code while the runner executes
+    # `python solution.py < stdin`, so 36% of the denominator cannot pass under
+    # any answer. Both numbers appear on five lines because the argument is a
+    # comparison between them. Delete them and the document says nothing.
+    "docs/notes/bench-diagnosis-darklight1.md",
+    # The receipt audit's own gap list. Its first ranked finding *is* the
+    # violation — "LiveCodeBench 84% on the public site" — quoted so the entry
+    # names what was published and where. A gate that forbade an audit from
+    # reciting the claim it caught would forbid the audit.
+    "docs/reference/capability-matrix.md",
 )
 
 #: A ``data/<file>.json`` citation inside prose or a markdown table.
@@ -140,10 +222,17 @@ def _registries() -> tuple[tuple[str, ...], tuple[str, ...]]:
     return retracted, known
 
 
-def _published_files() -> list[Path]:
+def _published_files(root: Path = ROOT) -> list[Path]:
+    """Every markdown file in scope under *root*.
+
+    *root* is a parameter purely so the scope-widening tests can build a
+    throwaway tree with the same shape. Seeding a violation into the real
+    ``docs/`` to prove the gate still fires would mean a tracked directory
+    briefly containing a deliberate lie, and a crashed test leaving it there.
+    """
     out: list[Path] = []
     for entry in _PUBLISHED:
-        p = ROOT / entry
+        p = root / entry
         if p.is_file():
             out.append(p)
         elif p.is_dir():
@@ -279,6 +368,47 @@ def _retracted_score_offenders(
     return offenders
 
 
+def _scan_retracted(root: Path = ROOT) -> list[str]:
+    """Every ``path:line: text`` in scope that quotes a retracted score.
+
+    Applies ``_RETRACTION_EXPLAINERS``, which is why this is one function rather
+    than a loop repeated per caller: an exemption that some callers honour and
+    others do not is worse than no exemption, because the gate's verdict then
+    depends on which test you happened to run.
+    """
+    retracted, known = _registries()
+    exempt = {root / rel for rel in _RETRACTION_EXPLAINERS}
+    out: list[str] = []
+    for doc in _published_files(root):
+        if doc in exempt:
+            continue
+        text = doc.read_text(encoding="utf-8", errors="replace")
+        out.extend(
+            f"{doc.relative_to(root)}:{i}: {line[:110]}"
+            for i, line in _retracted_score_offenders(text, retracted, known)
+        )
+    return out
+
+
+def _scan_receipts(root: Path = ROOT) -> list[str]:
+    """Every ``path:line -> receipt`` in scope citing a file git does not track.
+
+    Takes no exemption list, deliberately. ``_RETRACTION_EXPLAINERS`` narrows
+    the retracted-score rule and *only* that rule: a document earns the right to
+    quote a withdrawn number by explaining it, and no amount of explanation
+    conjures a receipt into the repo. The one escape here is the per-line
+    ``⊘ NO RECEIPT`` marker, which discloses the absence instead of hiding it.
+    """
+    tracked = _tracked_paths()
+    return [
+        f"{doc.relative_to(root)}:{i} -> {rel}"
+        for doc in _published_files(root)
+        for i, rel in _missing_citations(
+            doc.read_text(encoding="utf-8", errors="replace"), tracked
+        )
+    ]
+
+
 class TestCitedReceiptsExist:
     def test_every_cited_data_file_is_real(self) -> None:
         """A citation pointing at a missing file is worse than no citation.
@@ -286,14 +416,7 @@ class TestCitedReceiptsExist:
         It reads as evidence and cannot be checked, so it survives review
         indefinitely.
         """
-        tracked = _tracked_paths()
-        missing = [
-            f"{doc.relative_to(ROOT)}:{i} -> {rel}"
-            for doc in _published_files()
-            for i, rel in _missing_citations(
-                doc.read_text(encoding="utf-8", errors="replace"), tracked
-            )
-        ]
+        missing = _scan_receipts()
         assert not missing, (
             "docs cite receipt files no reader can open:\n  "
             + "\n  ".join(sorted(missing))
@@ -356,14 +479,7 @@ class TestRetractedBenchmarksAreNotQuoted:
     """A retraction that only covers the generated page is not a retraction."""
 
     def test_no_published_page_quotes_a_retracted_benchmark_score(self) -> None:
-        retracted, known = _registries()
-        offenders: list[str] = []
-        for doc in _published_files():
-            text = doc.read_text(encoding="utf-8", errors="replace")
-            offenders.extend(
-                f"{doc.relative_to(ROOT)}:{i}: {line[:110]}"
-                for i, line in _retracted_score_offenders(text, retracted, known)
-            )
+        offenders = _scan_retracted()
         assert not offenders, (
             "a RETRACTED benchmark is quoted with a score:\n  "
             + "\n  ".join(offenders)
@@ -516,6 +632,169 @@ class TestTheExemptionsStillCatchRealViolations:
             "| Column (full n) | Result (lower bound) | ¢/task | Read |",
         ):
             assert not _CORRECTION_TABLE_HEADER.search(header), header
+
+
+class TestTheWidenedScopeReallyScansAndStillFails:
+    """Scope is the half of a gate nobody reviews.
+
+    Every other test here interrogates the matchers. None of them notices if
+    ``_PUBLISHED`` quietly stops naming a directory — the suite goes green
+    either way, and green is exactly what an unscanned tree looks like. These
+    tests read the scope itself.
+
+    They build a throwaway tree with the same layout rather than seeding a
+    violation into the real ``docs/``: a gate proving itself by writing a
+    deliberate falsehood into a tracked directory is one crashed test away from
+    publishing it.
+    """
+
+    @staticmethod
+    def _tree(tmp_path: Path, rel: str, body: str) -> Path:
+        doc = tmp_path / rel
+        doc.parent.mkdir(parents=True, exist_ok=True)
+        doc.write_text(body, encoding="utf-8")
+        return doc
+
+    def test_a_violation_in_a_newly_covered_directory_goes_red(
+        self, tmp_path: Path
+    ) -> None:
+        """The point of widening: ``docs/specs`` was invisible, now it is not.
+
+        Not hypothetical. ``docs/specs/modal-bench-fanout.md`` published
+        "Flagship 100%/100% (only agent to sweep both)" — half of "both" being
+        the retracted ``livecodebench`` column — for as long as the scope
+        stopped at ``docs/benchmarks``. The 2026-07-28 retraction reached the
+        benchmarks write-up and not its own spec, and nothing said so.
+        """
+        retracted, _ = _registries()
+        bench = sorted(retracted)[0]
+        for rel in (
+            "docs/specs/seeded.md",
+            "docs/notes/seeded.md",
+            "docs/reference/seeded.md",
+            "docs/mink/seeded.md",
+            "docs/guides/seeded.md",
+            "docs/playbooks/seeded.md",
+        ):
+            tree = tmp_path / rel.split("/")[1]  # one clean tree per directory
+            tree.mkdir(exist_ok=True)
+            self._tree(tmp_path, rel, f"The agent scored 84% on {bench}.\n")
+            found = _scan_retracted(tmp_path)
+            assert found == [f"{rel}:1: The agent scored 84% on {bench}."], (
+                f"{rel} is not being scanned — a violation there would ship"
+            )
+            (tmp_path / rel).unlink()
+
+    def test_an_exempt_document_still_fails_the_receipt_rule(
+        self, tmp_path: Path
+    ) -> None:
+        """The exemption is one rule wide, and this is what holds it there.
+
+        Uses a real entry from ``_RETRACTION_EXPLAINERS`` at its real path, so
+        the day someone widens the exemption to cover receipts too — or moves
+        the check behind the same skip — this fails.
+        """
+        retracted, _ = _registries()
+        bench = sorted(retracted)[0]
+        gone = "data/no-such-receipt-for-the-scope-test.json"
+        rel = _RETRACTION_EXPLAINERS[0]
+        self._tree(
+            tmp_path, rel, f"It looked like 84% on {bench}.\nRaw data: `{gone}`\n"
+        )
+
+        # Exempt from the retracted-score rule …
+        assert _scan_retracted(tmp_path) == []
+        # … and still fully subject to the receipt rule.
+        assert _scan_receipts(tmp_path) == [f"{rel}:2 -> {gone}"]
+
+    def test_the_scope_names_no_directory_that_is_gone(self) -> None:
+        # A stale entry scans nothing and reports nothing — the failure mode
+        # this whole class exists to catch, arriving by rename instead of edit.
+        for entry in _PUBLISHED:
+            assert (ROOT / entry).exists(), f"_PUBLISHED names a missing path: {entry}"
+
+    def test_the_widened_scope_reaches_the_directories_it_claims(self) -> None:
+        files = {str(p.relative_to(ROOT)) for p in _published_files()}
+        for d in ("docs/notes", "docs/reference", "docs/specs", "docs/mink"):
+            assert any(f.startswith(d + "/") for f in files), f"{d} is not in scope"
+
+
+class TestTheChangelogExclusionIsWatched:
+    """The one file in scope-shaped limbo, held by a ratchet.
+
+    ``CHANGELOG.md`` cannot join ``_PUBLISHED`` without editing shipped release
+    entries. Left at that, the exclusion decays into the very thing this gate's
+    widening was about: a surface nobody reads, indistinguishable from a clean
+    one. So the debt is enumerated and anything past it fails.
+    """
+
+    def test_the_changelog_adds_no_unbacked_citation_beyond_the_known_debt(
+        self,
+    ) -> None:
+        tracked = _tracked_paths()
+        text = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+        found = {rel for _, rel in _missing_citations(text, tracked)}
+        new = sorted(found - set(_CHANGELOG_UNBACKED))
+        assert not new, (
+            "CHANGELOG.md cites receipts git does not track, beyond the debt "
+            f"declared in _CHANGELOG_UNBACKED: {new}\nCommit the receipt, stop "
+            "citing it, or mark the line '⊘ NO RECEIPT'. Do not extend "
+            "_CHANGELOG_UNBACKED to make this pass — that list is history, not "
+            "an allowance."
+        )
+
+    def test_the_declared_debt_is_still_real(self) -> None:
+        # A ratchet with stale teeth is slack: an entry that is no longer cited
+        # (or has since been committed) silently widens what "beyond the known
+        # debt" means.
+        tracked = _tracked_paths()
+        text = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+        found = {rel for _, rel in _missing_citations(text, tracked)}
+        for rel in _CHANGELOG_UNBACKED:
+            assert rel in found, (
+                f"{rel} is declared as CHANGELOG debt but is no longer an "
+                "unbacked citation there — delete the entry"
+            )
+
+    def test_the_changelog_is_deliberately_out_of_scope(self) -> None:
+        # If it ever joins _PUBLISHED, the ratchet is dead weight and the two
+        # retracted-score lines in shipped entries become a hard failure. That
+        # is a decision, so it should arrive as a failing test, not a surprise.
+        assert (ROOT / "CHANGELOG.md") not in _published_files(), (
+            "CHANGELOG.md is now scanned — delete _CHANGELOG_UNBACKED and its "
+            "tests, and resolve the retracted-score lines in the shipped "
+            "0.9.2 / 0.9.2.1 entries"
+        )
+
+
+class TestTheRetractionExemptionsAreLive:
+    """An exemption nobody can see is an unscanned directory with extra steps.
+
+    ``_RETRACTION_EXPLAINERS`` is auditable only while every entry is real and
+    every entry is load-bearing. Both halves rot silently: a renamed file makes
+    an entry inert, and a rewritten document makes it unnecessary while it goes
+    on shielding whatever that document becomes next.
+    """
+
+    def test_every_exempt_document_exists(self) -> None:
+        for rel in _RETRACTION_EXPLAINERS:
+            assert (ROOT / rel).is_file(), f"exempt document is gone: {rel}"
+
+    def test_every_exempt_document_still_needs_its_exemption(self) -> None:
+        retracted, known = _registries()
+        for rel in _RETRACTION_EXPLAINERS:
+            text = (ROOT / rel).read_text(encoding="utf-8", errors="replace")
+            assert _retracted_score_offenders(text, retracted, known), (
+                f"{rel} no longer quotes a retracted score, so its exemption "
+                "now protects nothing and hides whatever it grows next — "
+                "delete the entry"
+            )
+
+    def test_the_exemption_is_enumerated_not_a_prefix(self) -> None:
+        # A directory prefix would re-create the hole the widening just closed:
+        # every future file under it inherits an exemption nobody chose.
+        for rel in _RETRACTION_EXPLAINERS:
+            assert rel.endswith(".md"), f"exemptions are files, not trees: {rel}"
 
 
 class TestTheReceiptRegexReadsWholePaths:

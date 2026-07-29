@@ -109,7 +109,11 @@ Dockerfiles. A one-time `chimera pb-images push` helper may be warranted.
 ## Wiring
 
 - `chimera eval --benchmark programbench --agent code --grader modal --resume
-  --output data/programbench-glm-5.2-code-results.json`.
+  --output data/programbench-glm-5.2-code-results.json`. ⊘ NO RECEIPT — that
+  path is this proposal's *intended output*, not evidence: the run it describes
+  has not happened, and the file is in no commit and on no disk. It is named
+  here so the Acceptance Criteria below ("numbers saved to `data/`") stay
+  checkable against something.
 - Agent runs **local** (arm64 is fine — the agent is verified) → submission tar
   → **Modal-graded** amd64. (Running the agent on Modal too is a later option.)
 - Modal auth surfaced through `chimera/env/factory.py` (`create_environment(
