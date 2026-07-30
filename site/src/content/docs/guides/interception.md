@@ -319,11 +319,12 @@ kind of gate.
 
 ## Per-loop coverage
 
-Every runnable loop, seam by seam. A "yes" cell is enforced through the
-real loop by a test; the one scoped cell and the resumed-approval
-carve-out below are *also* pinned by tests proving the uncovered calls
-are genuinely inert — a claimed gap here is documented and tested, never
-assumed.
+The loops with provider-call sites of their own — `ReAct`, `AgentLoop`
+(the `chimera code` default), and the three swappable strategy loops —
+seam by seam. A "yes" cell is enforced through the real loop by a test;
+the one scoped cell and the resumed-approval carve-out below are *also*
+pinned by tests proving the uncovered calls are genuinely inert — a
+claimed gap here is documented and tested, never assumed.
 
 | Seam | `ReAct` (sync + async) | `AgentLoop` (`chimera code` default) | `PlanAndExecute` | `Reflexion` | `TreeOfThought` |
 | --- | --- | --- | --- | --- | --- |
@@ -352,6 +353,17 @@ Pins: `tests/core/test_interception.py` (`ReAct`, `AgentLoop`),
 supported cell, the inert-evaluator pin, and a byte-identical
 no-interceptors pin per loop), `tests/assembly/test_loop_adapter.py` and
 `tests/assembly/test_plugin_interceptors.py` (the assembled lanes below).
+
+The remaining loop classes compose the loops above rather than adding
+provider-call sites of their own. `PlanActLoop` runs its two phases on
+inner `ReAct` loops built with the same config, so its conversation calls
+carry the `ReAct` column; `AutonomousLoop` executes each sub-task on an
+inner `ReAct` with the same config, while its internal planning and
+replanning calls send synthetic prompts and are not intercepted — the
+same class of internal call as `TreeOfThought`'s evaluator. `RetryLoop`
+and `LintFeedbackLoop` wrap a caller-supplied inner loop (default: a
+config-less `ReAct`), so their coverage is exactly their inner loop's —
+construct the inner loop with the config that carries your chains.
 
 ### Strategy-loop lanes
 
