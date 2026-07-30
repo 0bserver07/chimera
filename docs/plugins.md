@@ -1,5 +1,32 @@
 # Plugins & Marketplace
 
+## Plugins carry policy: interceptors and the bundled packs
+
+Chimera plugins are not just tool bags — they carry **interceptors**, the
+typed decision seams that block, mutate, and rewrite at the four
+load-bearing points of an agent turn. A loaded plugin's chains are active
+on every assembled agent (`CodingAgent` / `AgentDriver` /
+`chimera.AgentSession`) with no host wiring: plugin chains run first, in
+registration order; host-supplied chains run last and have final say.
+
+Three **policy packs** ship in the package (`chimera.plugins.packs`),
+loadable by instance or by entry-point name through `PluginManager`:
+
+```python
+from chimera.plugins import PluginManager
+
+manager = PluginManager()
+manager.load("plan-gate")          # no writes before a recorded plan
+manager.load("redactor")           # secret pattern scrubbed from wire + transcript
+manager.load("delegate-spawner")   # spawn_* tool calls routed to a sub-agent
+```
+
+The full story — seam contracts, the merge ordering, each pack's behavior
+and honest limits, and hot-swap (arriving) — is in
+[`docs/guides/interception.md`](guides/interception.md).
+
+## Per-CLI plugin directories
+
 Chimera ships seven coding-agent CLIs (`mink`, `otter`, `ferret`, `weasel`,
 `shrew`, `stoat`, `badger`). Each one loads plugins from a per-CLI
 directory:

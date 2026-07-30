@@ -191,8 +191,9 @@ Layer 1: Environment     Local, Docker, Git, Remote, Cloud, PersistentShell
 
 ### Plugins (`chimera/plugins/`)
 - `base.py` — BasePlugin ABC, ComponentRegistry, Hook, MCPServerConfig
-- `manager.py` — PluginManager (load, unload, discover)
-- `registry.py` — PluginExtensionRegistry (agents, strategies, constraints, middleware, skills, MCP, hooks)
+- `manager.py` — PluginManager (load, unload, discover, reload)
+- `registry.py` — PluginExtensionRegistry (agents, strategies, constraints, middleware, skills, MCP, hooks, **interceptors** — `register_interceptor(seam, fn)`; chains merge into every assembled agent per turn, plugin chains first, host `interceptors=` last with final say; pinned in `tests/assembly/test_plugin_interceptors.py`)
+- `packs/` — bundled policy packs, entry-point loadable by name (`plan-gate`, `redactor`, `delegate-spawner`): worked interceptor-carrying plugins (plan gate, secret scrubbing, sub-agent spawning). Guide: `docs/guides/interception.md`
 - `dir_loader.py` — DirectoryPluginLoader (agents/*.md, .mcp.json, hooks/)
 - `marketplace.py` — PluginInfo, MarketplaceRegistry, Marketplace (search, install, uninstall)
 

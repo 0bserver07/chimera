@@ -19,7 +19,7 @@ from chimera.plugins.registry import INTERCEPTOR_SEAMS, PluginExtensionRegistry
 
 @pytest.fixture(autouse=True)
 def _clean_registry():
-    """Reset the extension registry between tests."""
+    """Reset the plugin registry between tests."""
     PluginExtensionRegistry._reset()
     yield
     PluginExtensionRegistry._reset()

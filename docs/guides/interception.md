@@ -1,18 +1,22 @@
 ---
-title: "Interception Seams"
-description: "Typed, decision-capable hooks that block, mutate, and rewrite at the four load-bearing points of an agent turn — provider request, tool call, tool result, and outgoing context — through public LoopConfig configuration."
+title: "Interception Seams & Policy Packs"
+description: "Typed, decision-capable hooks that block, mutate, and rewrite at the four load-bearing points of an agent turn — carried by plugins onto every assembled agent, and proven by the bundled policy packs."
 ---
 
 Chimera's event bus is **observational**: subscribers watch, they cannot
 change what happens. Interception seams are the **decision** counterpart —
 small synchronous callables that can *block*, *mutate*, or *rewrite* a value
-at the four load-bearing points of a turn. They make sub-agents, plan gates,
-payload redaction, and tool policy implementable as user-space plugins
-instead of core features.
+at the four load-bearing points of a turn. Sub-agents, plan gates, payload
+redaction, and tool policy are plugin territory here, not core features:
+plugins carry interceptor chains onto every assembled agent, and Chimera
+ships three bundled policy packs (`chimera.plugins.packs`) that do exactly
+those things through the seams — worked, tested through the real loop, and
+loadable by name. Batteries on, as everywhere else in the platform.
 
 Everything is configured through public config: a typed
 `Interceptors` dataclass hanging off `LoopConfig` (and threaded through
-`CodingAgent` / `AgentDriver` for the assembled stack).
+`CodingAgent` / `AgentDriver` / `chimera.AgentSession` for the assembled
+stack), plus a plugin registry that merges chains in for you.
 
 ```python
 from chimera.core import Interceptors, InterceptDecision, LoopConfig
@@ -77,6 +81,142 @@ loop behavior byte-identical; this is pinned by a test.
 - **`tool_result` runs on executed tools only** — synthetic denial
   messages never pass through it — and before truncation, hooks, and
   events, so every downstream consumer sees the effective result.
+- **Across sources — plugins before host**: when chains come from more
+  than one place, the merge order is defined below.
+
+## Plugins carry interceptors
+
+A plugin does not need the host to thread anything: it registers its
+chains, and every assembled agent (`CodingAgent`, `AgentDriver`,
+`chimera.AgentSession`) picks them up on its next turn.
+
+```python
+from chimera.core.interception import InterceptDecision
+from chimera.plugins import BasePlugin, PluginExtensionRegistry, PluginManager
+
+class NoDeletePlugin(BasePlugin):
+    @property
+    def name(self) -> str:
+        return "no-delete"
+
+    def register_interceptors(self, registry) -> None:
+        PluginExtensionRegistry.register_interceptor("tool_call", self._gate)
+
+    def deactivate(self) -> None:
+        PluginExtensionRegistry.unregister_interceptor("tool_call", self._gate)
+
+    def _gate(self, tc):
+        if "rm -rf" in str(tc.arguments):
+            return InterceptDecision.block("no-delete: recursive removal is gated")
+        return None
+
+PluginManager().load_plugin(NoDeletePlugin())
+# Done. Every assembled agent in this process now enforces the gate —
+# no LoopConfig, no constructor kwargs, no host code beyond the load.
+```
+
+The registry surface mirrors the other plugin registries:
+`register_interceptor(seam, fn)` and `unregister_interceptor(seam, fn)`
+(call the latter from `deactivate()` so unloading a plugin withdraws its
+chains), `get_interceptors(seam)`, and `get_all_interceptors()` — with
+seam names validated against the four seams, so a typo raises instead of
+registering a chain that can never fire.
+
+### The merge contract (pinned by test)
+
+Per seam, the effective chain on an assembled agent is:
+
+1. **plugin-registered interceptors first**, in registration order
+   (load order across plugins, list order within one);
+2. **host-supplied interceptors last** — the `interceptors=` passed to
+   `CodingAgent` / `AgentDriver` / `AgentSession`.
+
+The ordinary chain semantics then apply, which gives the host final say:
+the host's interceptors see the *plugin-effective* value (every plugin
+replacement has already happened), and a `block` from either side is
+terminal — nothing can un-block, so a host block can never be undone by a
+plugin, and a plugin gate fires before the host chain is even consulted.
+
+Guarantees, all pinned by tests:
+
+- No plugins registered and no host chains → the loop receives `None`,
+  byte-identical to today.
+- Host chains only → the host's `Interceptors` object passes through
+  untouched (the same object, not a copy).
+- The merge is read at the start of every turn, so a plugin loaded — or
+  unloaded — between turns simply takes effect on the next one.
+
+`merge_interceptors(*bundles)` in `chimera.core.interception` is the
+underlying pure function, for anyone composing bundles by hand.
+
+## The bundled policy packs
+
+Three shipped, importable, tested plugins under `chimera.plugins.packs` —
+loadable by instance or by entry-point name:
+
+```python
+from chimera.plugins import PluginManager
+from chimera.plugins.packs import PlanGatePlugin, RedactorPlugin
+
+manager = PluginManager()
+manager.load_plugin(RedactorPlugin(pattern=r"acme-[0-9a-f]{32}"))
+manager.load("plan-gate")        # entry-point name, default configuration
+```
+
+Every pack also exposes `interceptors()` for host-side use without the
+plugin system: `CodingAgent(interceptors=pack.interceptors())`.
+
+### plan-gate
+
+Blocks write / edit / shell tool calls (`write_file`, `edit_file`,
+`replace_in_file`, `apply_patch`, `bash` by default) until the agent has
+recorded a plan, and tells the model exactly how to unblock itself. The
+honest heuristic: "a plan exists" means the model has **issued** a call to
+a planning tool (`think` or `todo` by default) since the most recent user
+message — issuing is enough (the gate opens on the `tool_call` seam,
+before execution, so it works even where no planning tool is installed);
+the pack does not read the plan or judge its quality. A `context`-seam
+watcher re-arms the gate on every new user message, including mid-run
+steering. Limits: gate state is per plugin instance and therefore per
+process (all agents in the process share one gate), and tool names match
+exactly as the loop dispatches them — namespaced variants need explicit
+configuration.
+
+### redactor
+
+Scrubs a configurable secret pattern (`pattern=`, `replacement=`) from
+the provider request — message contents, tool-call arguments riding them,
+and request headers — on the `provider_request` seam, and from tool
+outputs and error text on the `tool_result` seam. Headers named in
+`headers=` (`Authorization` by default, case-insensitive) are replaced
+wholesale. The wire scrub is **ephemeral** (the durable conversation
+keeps its originals); the tool-result scrub is **durable** (the
+transcript records the scrubbed output) — both sides are pinned through
+the real loop. Limits: header redaction reaches only providers exposing a
+`request_headers` surface; text only (image blocks and result metadata
+pass through); both seams are fail-open by the seam contract, so pair it
+with the events-side `RedactionMiddleware` for defense in depth. An
+invalid pattern raises at construction.
+
+### delegate-spawner
+
+Sub-agents as plugin policy: rewrites matching tool calls (the `spawn_`
+prefix and/or exact `names=`) into calls to the `delegate` tool on the
+`tool_call` seam — same call id, one `task` argument taken from the
+original call's `task`/`prompt` or rendered from its arguments — so the
+loop dispatches a sub-agent instead, with core untouched. Limit: the
+host's tool set must actually include a delegate tool
+(`chimera.tools.delegate.DelegateTool`, shipped outside the default
+interactive set — add it via `extra_tools=`); without one the rewritten
+call surfaces as a loud `Unknown tool` error, never a silent drop.
+
+### Hot-swap
+
+Hot-swap — editing a pack's source and swapping the new policy into a
+live process — is arriving. The pieces are in place (`PluginManager.reload`
+re-imports and re-activates a plugin from fresh source, and the per-turn
+merge picks up whatever is registered), and the end-to-end story will
+ship once it is pinned the way everything above is.
 
 ## Failure policy (per seam)
 
@@ -104,10 +244,10 @@ the decision path. On the `AgentLoop` path (which has no event bus),
 decisions surface through the denial text and the run-result reason
 (`"interceptor_blocked: ..."`).
 
-## Worked example 1: payload + header redaction
+## Worked example 1: payload + header redaction, inline
 
-Scrub a marker from every outgoing message and redact the
-`Authorization` header before the request leaves the process:
+The redactor pack does this off the shelf; here is the same policy
+written by hand, for when you want a one-off without a plugin:
 
 ```python
 from chimera.core import Interceptors, InterceptDecision, LoopConfig, ProviderRequest
@@ -145,7 +285,7 @@ raises. Providers whose headers live inside an SDK client (e.g. the
 Anthropic provider's client-level `default_headers`) see `headers=None`;
 replacing them is a no-op there.
 
-## Worked example 2: tool-gating policy
+## Worked example 2: tool-gating policy, inline
 
 Block any tool matching a name pattern, surfaced as a denial with a
 reason — the model sees why and can route around it:
@@ -162,7 +302,8 @@ interceptors = Interceptors(tool_call=[gate_tools])
 ```
 
 On the assembled stack, the same object threads through without touching
-core:
+core — and composes with whatever loaded plugins registered (plugin
+chains first, yours last):
 
 ```python
 from chimera.assembly.driver import AgentDriver
@@ -170,11 +311,11 @@ from chimera.assembly.driver import AgentDriver
 driver = AgentDriver(model="glm-5.2", interceptors=interceptors)
 ```
 
-`CodingAgent(..., interceptors=...)` accepts it directly as well. A plugin
-is just an object that builds an `Interceptors` instance (see
-`RedactionPolicyPlugin` in `tests/core/test_interception.py` for a
-four-seam example verified through the real loop); the embedder passes it
-to `LoopConfig` or the assembled constructors.
+`CodingAgent(..., interceptors=...)` and `chimera.AgentSession` accept it
+the same way. When the policy is worth keeping, promote it into a plugin
+(see "Plugins carry interceptors" above) and it rides along with every
+agent the process assembles — the plan-gate pack began as exactly this
+kind of gate.
 
 ## Scope and contract notes
 
@@ -186,7 +327,8 @@ to `LoopConfig` or the assembled constructors.
   async), `PlanAndExecute`, `Reflexion`, `TreeOfThought`, and `AgentLoop`
   (the `chimera code` path). The `context` / `provider_request` seams
   fire at the `ReAct` and `AgentLoop` provider-call sites; strategy loops
-  own their provider calls and are not yet covered there.
+  own their provider calls and are not yet covered there. The
+  plugin-registry merge rides the assembled (`AgentLoop`) path.
 - **`kwargs` passthrough.** `ProviderRequest.kwargs` is passed verbatim
   to the provider's `complete` / `stream` call (e.g.
   `{"temperature": 0.7}`); keys must be accepted by the provider's

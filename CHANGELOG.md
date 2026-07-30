@@ -96,7 +96,43 @@ commit receipts.
 
 ### Added
 
-- **Verification axis on the capability matrix**
+- **Plugins carry interceptors — and three bundled policy packs prove it.**
+  The interception guide used to claim that sub-agents, plan gates, payload
+  redaction, and tool policy were "implementable as user-space plugins";
+  plugins could not actually carry interceptors, so that sentence was a
+  design intent wearing a shipped-fact costume. Now it is literal.
+  `PluginExtensionRegistry.register_interceptor(seam, fn)` (plus
+  `unregister_interceptor` / `get_interceptors` / `get_all_interceptors`,
+  seam names validated against a closed set drift-pinned to the
+  `Interceptors` dataclass), `BasePlugin.register_interceptors` in the
+  activation chain, and a per-turn merge in `CodingAgent` — so a loaded
+  plugin's chains are active on every assembled agent (`CodingAgent`,
+  `AgentDriver`, `chimera.AgentSession`) with **no host code beyond loading
+  the plugin**. Merge contract, pinned by test: per seam, plugin chains run
+  first in registration order, host `interceptors=` chains run last — the
+  host sees the plugin-effective value and has final say; a block from
+  either side is terminal. With nothing registered the host's object passes
+  through untouched and `None` stays `None` (byte-identical, pinned).
+  - **The policy packs** (`chimera/plugins/packs/`, entry-point loadable:
+    `PluginManager().load("plan-gate" | "redactor" | "delegate-spawner")`):
+    **plan-gate** blocks write/edit/shell calls until a plan-tool call is
+    *issued* this turn (heuristic stated honestly; re-arms on every new
+    user message); **redactor** scrubs a configurable secret pattern from
+    provider payloads, headers (named ones wholesale, case-insensitive),
+    and tool results — wire scrub ephemeral, transcript scrub durable,
+    both pinned through the real loop with a recording provider;
+    **delegate-spawner** rewrites `spawn_*`/named tool calls into
+    `delegate` sub-agent calls, same call id — sub-agents as plugin
+    policy, and the no-delegate-tool case errors loudly rather than
+    vanishing.
+  - **60 new tests** (5 `merge_interceptors`, 28 registry + assembled-path
+    acceptance, 27 pack tests), the loop-touching ones through the
+    hermetic harness against the real `AgentLoop` — including the
+    acceptance case: a plugin blocks `write_file` with the only host act
+    being `load_plugin`.
+  - Docs retold as one arc (`docs/guides/interception.md`, `docs/plugins.md`):
+    seams → plugins carry them → the shipped packs demonstrate them →
+    hot-swap noted as arriving, not promised.
   (`docs/reference/capability-matrix.md`): every benchmark, agent layer,
   provider and sandbox now carries **Exists · Registered · Dataset · Canaried ·
   Live-run receipt · Verdict**, so availability (a code fact) can no longer read
