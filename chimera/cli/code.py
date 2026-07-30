@@ -912,12 +912,19 @@ def run_code(args: Any) -> int:
     # Auto-discover skills
     # WHY (audit M-19): same pattern as above — log instead of swallow so a
     # broken SKILL.md surfaces visibly without crashing the REPL.
+    # The pre-skills prompt text and the discovered snapshot are stashed on
+    # the session below so /resync can rebuild the prompt in place mid-session
+    # (the hot-swap seam, chimera/assembly/resync.py).
+    _system_base = system
+    _skills_state: dict[str, str] | None = None
     try:
+        from chimera.assembly.resync import skill_state
         from chimera.skills.discovery import discover_all_skills, format_skills_for_prompt
         # discover_all_skills also folds in other harnesses' skill dirs when
         # the opt-in foreign scan is enabled (config / CHIMERA_SKILLS_FOREIGN);
         # default off, so this is unchanged for users who never enable it.
         skills = discover_all_skills(workdir)
+        _skills_state = skill_state(skills)
         skills_section = format_skills_for_prompt(skills)
         if skills_section:
             system += "\n\n" + skills_section
@@ -995,6 +1002,11 @@ def run_code(args: Any) -> int:
     session.cost_tracker = cost_tracker  # type: ignore[attr-defined]
     session.tools = tools  # type: ignore[attr-defined]
     session.debug = False  # type: ignore[attr-defined]
+    # Hot-swap seam (/resync): the pre-skills base prompt and the discovered
+    # skill snapshot let resync_session rebuild THIS session's system prompt
+    # in place and diff the catalog honestly (see chimera/assembly/resync.py).
+    session._system_base = _system_base  # type: ignore[attr-defined]
+    session._skills_state = _skills_state  # type: ignore[attr-defined]
 
     # Model cycling
     models_arg = getattr(args, "models", "")
@@ -1136,6 +1148,7 @@ async def _run_new_stack(
         print("  /cost          — cumulative cost this session")
         print("  /history       — messages currently in context")
         print("  /clear         — forget the conversation (fresh context)")
+        print("  /resync        — hot-swap plugins/skills/agents from disk")
         print("  /cls           — clear the screen")
         print("  /exit, /quit   — leave the REPL")
 
@@ -1173,6 +1186,15 @@ async def _run_new_stack(
         if user_input == "/clear":
             driver.clear()
             print("  (conversation cleared — next message starts fresh)")
+            continue
+        if user_input == "/resync":
+            # Hot-swap: re-discover plugins/skills/agents on disk and rebind
+            # them into the live driver; the report says what changed.
+            try:
+                for line in driver.resync_resources().lines():
+                    print(f"  {line}")
+            except Exception as exc:  # noqa: BLE001 - never crash the REPL
+                print(f"  resync failed: {exc}")
             continue
         if user_input == "/cls":
             # ANSI clear-screen + move cursor to top-left. Works on most terminals.

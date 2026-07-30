@@ -1059,6 +1059,38 @@ def cmd_review(session: Any, env: Any, _args: str, out: PrintFn) -> None:
         out(f"review error: {exc}")
 
 
+def cmd_resync(session: Any, env: Any, _args: str, out: PrintFn) -> None:
+    """Hot-swap plugins / skills / agent definitions from disk, mid-session.
+
+    ``/resync`` re-discovers the resource catalogs (plugin source, SKILL.md
+    trees, agent definition files) and rebinds them into the live session:
+    edit a plugin or a skill on disk, ``/resync``, and the next turn uses
+    the new behavior. Reports added / removed / refreshed / failed per
+    resource kind, refuses while a turn is running, and states honestly
+    whether the system prompt could be rebuilt for this session.
+
+    Routes by session shape: a session driving the assembled stack (an
+    agent exposing ``resync_resources``) uses the assembly seam; the classic
+    REPL session goes through
+    :func:`chimera.assembly.resync.resync_session`.
+    """
+    try:
+        # Assembled stack: the agent owns the full rebind seam.
+        agent = getattr(session, "agent", None) or getattr(session, "_agent", None)
+        resync = getattr(agent, "resync_resources", None)
+        if callable(resync):
+            report = resync()
+        else:
+            from chimera.assembly.resync import resync_session
+
+            report = resync_session(session, env)
+    except Exception as exc:  # noqa: BLE001 - degrade, never crash the REPL
+        out(f"not available: {exc}")
+        return
+    for line in report.lines():
+        out(line)
+
+
 def cmd_config(_session: Any, env: Any, _args: str, out: PrintFn) -> None:
     """Print effective merged settings.
 
@@ -1189,6 +1221,7 @@ def _build_default_registry() -> None:
     register("sandbox", cmd_sandbox, "toggle sandbox mode")
     register("subagent", cmd_subagent, "spawn a registered subagent")
     register("plugin", cmd_plugin, "list/install/enable/disable plugins")
+    register("resync", cmd_resync, "hot-swap plugins/skills/agents from disk")
     register("review", cmd_review, "review current git diff")
     register("config", cmd_config, "print effective merged settings")
 

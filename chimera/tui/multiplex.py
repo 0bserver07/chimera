@@ -1131,6 +1131,8 @@ class MultiplexApp(App):
             self._mode = RoutingMode.BROADCAST if cmd == "/broadcast" else RoutingMode.TARGETED
             self.query_one("#prompt", PromptArea).placeholder = self._placeholder()
             self._refresh_global()
+        elif cmd == "/resync":
+            self._handle_resync_command()
         elif cmd == "/theme":
             self._handle_theme_command(text)
         elif cmd == "/cohorts":
@@ -1143,6 +1145,48 @@ class MultiplexApp(App):
                 self._open_cohort_picker()
         else:
             say(f"unknown command: {cmd}", style="red")
+
+    # -- hot-swap (/resync) ----------------------------------------------
+    def _handle_resync_command(self) -> None:
+        """``/resync`` — hot-swap the focused lane's plugins/skills/agents.
+
+        Applies to the focused lane (each lane owns its driver and its
+        workspace, so resources rescan per lane). Refused while the lane is
+        mid-turn — the driver would refuse anyway, but checking the lane's
+        own busy state also covers a turn still queued for a slot. External
+        lanes (a third-party CLI) have no Chimera resources to rebind and
+        say so instead of pretending.
+        """
+        lane = self._focused_lane()
+        if lane is None:
+            return
+        pane = self._pane(lane.id)
+        if lane.telemetry.busy:
+            from chimera.assembly.resync import BUSY_MESSAGE
+
+            pane.note(f"resync refused: {BUSY_MESSAGE}", style="red")
+            return
+        resync = getattr(lane.driver, "resync_resources", None)
+        if resync is None:
+            pane.note(
+                "resync: not supported by this lane's driver (external lane)",
+                style="red",
+            )
+            return
+        try:
+            report = resync()
+        except Exception as exc:  # noqa: BLE001 - surfaced to the pane
+            pane.note(f"resync failed: {exc}", style="red")
+            return
+        lines = report.lines()
+        for i, line in enumerate(lines):
+            if report.refused:
+                style = "red"
+            elif i == 0:
+                style = "yellow" if not report.ok else "green"
+            else:
+                style = "dim"
+            pane.note(line, style=style)
 
     # -- themes (#R-THEME-3) ---------------------------------------------
     def _handle_theme_command(self, text: str) -> None:

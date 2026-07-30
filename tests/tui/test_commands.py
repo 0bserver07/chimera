@@ -31,9 +31,9 @@ def test_catalog_carries_every_previous_command():
     for cmd in PREVIOUS_SLASH_COMMANDS:
         assert cmd in catalog, f"{cmd} dropped from the registry catalog"
     # deliberate additions only: /keys (R-KEY-1), /statusline (R-STAT-1),
-    # /budget (#170), /theme (R-THEME-3)
+    # /budget (#170), /theme (R-THEME-3), /resync (the hot-swap seam)
     assert set(catalog) - set(PREVIOUS_SLASH_COMMANDS) == {
-        "/keys", "/statusline", "/budget", "/theme",
+        "/keys", "/statusline", "/budget", "/theme", "/resync",
     }
 
 
@@ -139,7 +139,7 @@ def test_filter_commands_over_registry_catalog():
 
     catalog = completion_catalog(single=True)
     assert filter_commands("/q", catalog) == ["/quit"]
-    assert filter_commands("/re", catalog) == ["/results", "/resume"]
+    assert filter_commands("/re", catalog) == ["/results", "/resume", "/resync"]
     assert filter_commands("/broadcast", catalog) == []   # multi-only, single surface
     assert filter_commands("/b", completion_catalog(single=False)) == ["/broadcast", "/budget"]
 
@@ -151,7 +151,7 @@ def test_complete_command_over_registry_catalog():
     catalog = completion_catalog(single=False)
     assert complete_command("/ke", catalog) == "/keys "
     assert complete_command("/q", catalog) == "/quit "     # alias completes as itself
-    assert complete_command("/re", catalog) == "/resu"     # common prefix
+    assert complete_command("/re", catalog) == "/res"      # common prefix (results/resume/resync)
 
 
 # -- registry hygiene shared with the key registry ---------------------------------
