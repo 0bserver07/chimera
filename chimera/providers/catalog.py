@@ -136,6 +136,19 @@ _BUILTIN_ENTRIES: list[ModelConfig] = [
                 base_url="https://api.z.ai/api/anthropic",
                 api_key_env="ANTHROPIC_AUTH_TOKEN",
                 context_window=200_000, cost=(2.0, 8.0)),
+    # glm-5.2 — the model this repo actually publishes its flagship scorecard
+    # with, and which was MISSING from the catalog until 2026-07-29: a
+    # bench-matrix run naming it failed with "Unknown provider: 'glm-5.2'" and
+    # recorded an error cell, so the model behind the published numbers could
+    # not be re-run through the CLI. Verified served by the same z.ai
+    # Anthropic-compat endpoint as 5.1 (bare id and the `[1m]` long-context
+    # tag both answer). Rates mirror glm-5.1 pending Zhipu's public sheet —
+    # PRICING/PRICING_PLACEHOLDERS in cost.py is the source of truth and keeps
+    # glm-5.2 as a declared placeholder, so this row must not diverge from it.
+    ModelConfig("glm-5.2", "anthropic",
+                base_url="https://api.z.ai/api/anthropic",
+                api_key_env="ANTHROPIC_AUTH_TOKEN",
+                context_window=200_000, cost=(2.0, 8.0)),
     # GPT-OSS (OpenAI open-weights). Distributed via Ollama; both 20B
     # and 120B run locally on adequately-sized hardware. $0/$0 because
     # local serve is free.

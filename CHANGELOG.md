@@ -9,6 +9,17 @@ commit receipts.
 
 ### Fixed
 
+- **`glm-5.2` was missing from the provider catalog** — the model this repo
+  publishes its flagship scorecard with. A `bench-matrix --model glm-5.2` run
+  failed with `Unknown provider: 'glm-5.2'` and recorded an **error cell**, so
+  the model behind the published numbers could not be re-run through the CLI at
+  all; only `glm-4.6` and `glm-5.1` were registered. Found while re-running the
+  mbpp-plus column: the fallback to `glm-5.1` silently confounded the
+  comparison, because the grading change and a model change would have moved
+  the number together. Verified served by the same z.ai Anthropic-compat
+  endpoint as 5.1 (bare id and the `[1m]` long-context tag both answer). Rates
+  mirror 5.1 and match `PRICING`, which keeps glm-5.2 a declared placeholder.
+
 - **`numpy` was declared in no extra, so the plus contract could not run.**
   The EvalPlus expanded harnesses (`mbpp-plus`, `humaneval-plus`) `import numpy`
   inside the graded program, so under the repo's own documented
