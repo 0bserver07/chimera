@@ -201,13 +201,20 @@ GRADING_NOTES: dict[str, str] = {
         "or four per task against a suite designed for hundreds — because "
         "`MBPPPlus` inherited MBPP's grading path and never executed the "
         "EvalPlus expanded `test` blob staged in every row. That harness now "
-        "runs. Re-running the **identical model, tasks and agent** under it "
-        "gives **321/378 = 84.9%** "
+        "runs. Re-running the **same tasks and agent** under it gives "
+        "**321/378 = 84.9%** "
         "(`data/modal-grid-fullscore4-20260730-plusgrade.json`), a "
         "**14.8-point** gap attributable to grading alone, since nothing else "
         "changed. The expanded contract is strictly stronger, not merely "
         "different: a hardcoded lookup satisfying every base assertion for "
-        "`is_not_prime` is accepted by base and rejected by plus."
+        "`is_not_prime` is accepted by base and rejected by plus. On provenance: "
+        "`agent_id` is recorded as `coding-agent` in **both** receipts and the "
+        "task set is identical (n=378); the model is recorded only in the new "
+        "one (`glm-5.2`) — the 2026-07-09 receipts predate that field, and the "
+        "flagship column's model is documented here rather than per-cell. Cost "
+        "corroborates it independently: **$2.38 then, $2.32 now** (2.5% apart), "
+        "which is what the same model doing the same work costs — the agent "
+        "solved as before and the grader accepted fewer answers."
     ),
 }
 

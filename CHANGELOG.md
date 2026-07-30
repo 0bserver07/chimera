@@ -145,10 +145,18 @@ commit receipts.
 
 - **The mbpp-plus base-grading inflation, measured: 14.8 points.** The
   published **99.7% (377/378)** was the MBPP+ task set graded with the
-  dataset's *base* `test_list` asserts. Re-running the **identical model
-  (glm-5.2), tasks and agent** under the newly-wired EvalPlus expanded harness
-  gives **321/378 = 84.9%**, `{completed: 378}`, $2.32 — so the gap is
-  attributable to grading alone, with nothing else changed. Receipt:
+  dataset's *base* `test_list` asserts. Re-running the **same tasks and agent**
+  under the newly-wired EvalPlus expanded harness gives **321/378 = 84.9%**,
+  `{completed: 378}`, $2.32 — so the gap is attributable to grading alone.
+  - **Exactly how much of that is recorded vs inferred:** `agent_id` is
+    `coding-agent` in **both** receipts and the task set is identical (n=378);
+    the model is recorded only in the new one (`glm-5.2`), because the
+    2026-07-09 flagship receipts predate that field and the column's model is
+    documented on the observatory page rather than per-cell. Cost corroborates
+    it independently — **$2.38 then, $2.32 now**, 2.5% apart, which is what the
+    same model doing the same work costs: the agent solved as before and the
+    grader accepted fewer answers. Saying "identical model" flatly would have
+    asserted a receipt field that does not exist. Receipt:
   `data/modal-grid-fullscore4-20260730-plusgrade.json`; the observatory row and
   README now carry the plus-graded number, and the `GRADING_NOTES` entry that
   said *"until the plus harness is wired and the column re-run"* is replaced by

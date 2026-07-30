@@ -296,9 +296,11 @@ that cannot pass is fiction with an inequality sign in front of it.
 `MBPPPlus` inherited `MBPP`'s `test_list` grading path while the EvalPlus
 expanded `test` blob sat staged in every row and never executed, so the
 published 99.7% (377/378) was *MBPP+ tasks, base-graded*. The expanded harness
-now runs (`MBPPPlus.evaluate`), and re-running the **identical model, tasks and
-agent** under it gives **321/378 = 84.9%** — a **14.8-point** base-grading
-inflation attributable to grading alone. Receipt:
+now runs (`MBPPPlus.evaluate`), and re-running the **same tasks and agent**
+under it gives **321/378 = 84.9%** — a **14.8-point** base-grading inflation
+attributable to grading alone. (`agent_id` and n=378 are recorded in both
+receipts; the model only in the new one, since the 2026-07-09 receipts predate
+that field. Near-identical cost — $2.38 vs $2.32 — corroborates it.) Receipt:
 `data/modal-grid-fullscore4-20260730-plusgrade.json`. The contract is strictly
 stronger, not merely different: a hardcoded lookup satisfying every base
 assertion for `is_not_prime` is accepted by base and rejected by plus. A
