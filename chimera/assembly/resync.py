@@ -30,11 +30,16 @@ Guarantees (also documented in ``docs/plugins.md``):
   plugin failing to swap never blocks the others.
 * **No half-applied plugin.** A plugin's visible registrations swap as one
   complete snapshot (the manager installs a registry only after a fully
-  successful activation). On a failed swap the previous in-memory
-  registration is restored best-effort by re-activating the old instance;
-  if that too fails the plugin ends **cleanly unloaded** and is reported as
-  such. What is *not* guaranteed: automatic rollback of the plugin's own
-  side effects outside its registry.
+  successful activation), **including its interceptor chains**: activation
+  runs in an ownership scope, so an ``activate()`` that raises after
+  registering part of its chains is rolled back by owner and the shipped
+  interceptor registry is left exactly as it was — a failed swap can never
+  orphan a chain. On a failed swap the previous in-memory registration is
+  restored best-effort by re-activating the old instance; if that too
+  fails the plugin ends **cleanly unloaded** and is reported as such.
+  What is *not* guaranteed: automatic rollback of side effects a plugin
+  performs outside the plugin registries (spawned processes, module-level
+  state elsewhere).
 * **Prompt honesty.** In the assembled stack the system prompt is
   reassembled every turn, so a refreshed skill catalog reaches the *next
   turn of the current conversation*. In the classic REPL the prompt was
@@ -298,12 +303,16 @@ def resync_plugins(manager: Any) -> KindDelta:
     under :attr:`KindDelta.failed` and skipped; the others proceed.
 
     Failure handling — exactly what is guaranteed: the manager only installs
-    a plugin's component registry after a fully successful activation, so a
-    plugin is never left half-applied. On a failed swap this function
-    re-activates the *previous* instance best-effort; when that restore also
-    fails the plugin ends cleanly unloaded (recorded in
-    :attr:`KindDelta.removed` as well). No rollback of side effects a plugin
-    performed outside its registry is attempted.
+    a plugin's component registry after a fully successful activation, and
+    activation runs in an interceptor ownership scope — an ``activate()``
+    that raises after registering part of its chains is rolled back by
+    owner, so a plugin is never left half-applied in *either* registry and
+    a failed swap leaves the interceptor registry exactly as it was. On a
+    failed swap this function re-activates the *previous* instance
+    best-effort; when that restore also fails the plugin ends cleanly
+    unloaded (recorded in :attr:`KindDelta.removed` as well, with its
+    chains withdrawn by owner). No rollback of side effects a plugin
+    performed outside the plugin registries is attempted.
 
     Args:
         manager: A :class:`~chimera.plugins.manager.PluginManager` (or

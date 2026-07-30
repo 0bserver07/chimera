@@ -297,13 +297,18 @@ What one resync does, per kind:
   plugin's visible registrations swap as one complete snapshot: the manager
   installs a component registry only after the plugin's activation fully
   succeeds, so at every instant a plugin is either fully registered (old or
-  new) or not registered at all. On a failed swap, Chimera re-activates
-  the previous instance best-effort — the report then says `previous
-  registration restored`; if that restore also fails, the plugin ends
-  **cleanly unloaded** and the report says so. What is *not* claimed:
-  rollback of side effects a plugin performed outside its registry
-  (spawned processes, module-level state elsewhere) — those are the
-  plugin's own responsibility.
+  new) or not registered at all. **Interceptor chains are inside that
+  snapshot**: activation runs in an ownership scope, so an `activate()`
+  that raises after registering part of its chains is rolled back by owner
+  — a failed swap leaves the interceptor registry exactly as it was, and
+  `unload` withdraws by owner anything a `deactivate()` forgot (or died
+  before) removing, so no chain can outlive its plugin. On a failed swap,
+  Chimera re-activates the previous instance best-effort — the report then
+  says `previous registration restored`; if that restore also fails, the
+  plugin ends **cleanly unloaded** and the report says so. What is *not*
+  claimed: rollback of side effects a plugin performed outside the plugin
+  registries (spawned processes, module-level state elsewhere) — those are
+  the plugin's own responsibility.
 - **System-prompt honesty, per stack.** The assembled stack (`chimera
   code`, both TUIs, the embed surface) reassembles its system prompt every
   turn, so a refreshed skill catalog reaches the next turn of the *current*

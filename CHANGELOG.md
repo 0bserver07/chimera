@@ -211,7 +211,9 @@ commit receipts.
   harness), **per-plugin isolation** (a failing plugin is reported and
   skipped; its previous registration is restored best-effort, else it ends
   cleanly unloaded — never half-applied, because the manager installs a
-  registry only after a fully successful activation), and **prompt honesty**
+  registry only after a fully successful activation *and* rolls back the
+  failing instance's interceptor registrations by owner — see the
+  atomicity fix below), and **prompt honesty**
   (the assembled prompt is reassembled every turn, so the refreshed skill
   catalog demonstrably lands in the *next* turn's system prompt — asserted
   against the provider-received prompt; the classic REPL rebuilds its baked
@@ -251,6 +253,27 @@ commit receipts.
     guard in `tests/plugins/test_registry_interceptors.py` now also pins
     resync's closed seam set to the `Interceptors` dataclass, so a fifth
     seam cannot ship half-known.
+  - **Interceptor registrations are now atomic on failed activation**
+    (adversarial-review finding, confirmed and pinned): registrations land
+    in the class-level `PluginExtensionRegistry` *during* `activate()`,
+    while the manager only gated the per-instance component registry — so
+    an activation that raised after its first `register_interceptor` (a
+    multi-seam plugin dying on a later seam, a seam-typo `ValueError`)
+    left owner-less chains no unload could ever remove; a failed v2's
+    block-everything gate permanently blocked every assembled agent while
+    the manager reported v1 healthy. Fixed with ownership-tracked
+    registration: `PluginExtensionRegistry.owner_scope(owner)` attributes
+    every activation-time registration to the plugin instance,
+    `unregister_owner(owner)` withdraws them, the manager rolls the owner
+    back when `activate()` raises and scrubs by owner on `unload` (even a
+    dying `deactivate()` cannot leak). The invariant — a failed swap
+    leaves the interceptor registry exactly as before, and unload leaves
+    it empty — is pinned by the reviewer's exact scenario end-to-end
+    (`test_failed_swap_cannot_orphan_interceptor_chains`: v2 registers
+    block-everything then dies → registry identical to pre-swap v1 → the
+    next real turn still writes → unload(v1) → registry empty) plus
+    manager/registry units (partial multi-seam rollback, seam-typo
+    rollback, forgetful/dying deactivate scrubs, ownership alignment).
 
 - **Verification axis on the capability matrix**
   (`docs/reference/capability-matrix.md`): every benchmark, agent layer,

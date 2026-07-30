@@ -7,6 +7,7 @@ import sys
 from typing import TYPE_CHECKING, Any
 
 from chimera.plugins.base import BasePlugin, ComponentRegistry
+from chimera.plugins.registry import PluginExtensionRegistry
 
 if TYPE_CHECKING:
     from chimera.core.tool import BaseTool
@@ -42,6 +43,33 @@ class PluginManager:
         group = importlib.metadata.entry_points(group="chimera.plugins")
         return [ep.name for ep in group]
 
+    def _activate_atomic(self, plugin: BasePlugin, registry: ComponentRegistry) -> None:
+        """Run ``plugin.activate`` with class-registry side effects owned + atomic.
+
+        Activation runs inside a
+        :meth:`~chimera.plugins.registry.PluginExtensionRegistry.owner_scope`,
+        so every interceptor the plugin registers is attributed to this
+        instance. If activation raises after registering part of its
+        chains (a multi-seam plugin failing on a later seam, a
+        ``ValueError`` from an invalid seam name), the partial
+        registrations are rolled back before the error propagates: a
+        failed activation leaves the interceptor registry exactly as it
+        was, so no orphaned chain can outlive its owner.
+
+        Args:
+            plugin: The plugin being activated.
+            registry: The per-instance component registry.
+
+        Raises:
+            BaseException: Whatever ``activate()`` raised, after rollback.
+        """
+        with PluginExtensionRegistry.owner_scope(plugin):
+            try:
+                plugin.activate(registry)
+            except BaseException:
+                PluginExtensionRegistry.unregister_owner(plugin)
+                raise
+
     def load(self, name: str) -> BasePlugin:
         """Load and activate a plugin by entry point name.
 
@@ -63,7 +91,7 @@ class PluginManager:
         plugin_cls = matches[0].load()
         plugin: BasePlugin = plugin_cls()
         registry = ComponentRegistry()
-        plugin.activate(registry)
+        self._activate_atomic(plugin, registry)
         plugin._registry = registry  # type: ignore[attr-defined]  # dynamic attr for plugin bookkeeping
         self._plugins[plugin.name] = plugin
         self._registries[plugin.name] = registry
@@ -71,6 +99,11 @@ class PluginManager:
 
     def load_plugin(self, plugin: BasePlugin) -> None:
         """Load and activate an already-instantiated plugin.
+
+        Activation is atomic with respect to the shipped interceptor
+        registry (:meth:`_activate_atomic`): if ``activate()`` raises, any
+        interceptor chains it registered first are rolled back and the
+        plugin is not loaded — never half-applied, in either registry.
 
         Args:
             plugin: The plugin instance to load.
@@ -81,7 +114,7 @@ class PluginManager:
         if plugin.name in self._plugins:
             raise ValueError(f"Plugin '{plugin.name}' is already loaded")
         registry = ComponentRegistry()
-        plugin.activate(registry)
+        self._activate_atomic(plugin, registry)
         plugin._registry = registry  # type: ignore[attr-defined]  # dynamic attr for plugin bookkeeping
         self._plugins[plugin.name] = plugin
         self._registries[plugin.name] = registry
@@ -110,6 +143,12 @@ class PluginManager:
         Contributions registered without provenance cannot be attributed
         and are left in place.
 
+        After ``deactivate()`` — even when it raises — every interceptor
+        chain still attributed to this instance is withdrawn by owner
+        (:meth:`PluginExtensionRegistry.unregister_owner`), so an unload
+        always leaves zero chains owned by the plugin: a forgetful or
+        dying ``deactivate()`` cannot leak policy into later turns.
+
         Args:
             name: The plugin name to unload.
 
@@ -128,7 +167,10 @@ class PluginManager:
             UIExtensionRegistry.unregister_plugin(name)
         except Exception:  # noqa: BLE001 - best-effort surface cleanup
             pass
-        plugin.deactivate()
+        try:
+            plugin.deactivate()
+        finally:
+            PluginExtensionRegistry.unregister_owner(plugin)
 
     def reload(self, name: str) -> BasePlugin:
         """Hot-reload a loaded plugin, picking up source changes.

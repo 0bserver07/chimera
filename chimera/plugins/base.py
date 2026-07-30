@@ -245,6 +245,15 @@ class BasePlugin(ABC):
         last). Pair each registration with an
         ``unregister_interceptor`` call in :meth:`deactivate` so unloading
         the plugin withdraws its chains.
+
+        When loaded through :class:`~chimera.plugins.manager.PluginManager`,
+        registrations made during ``activate()`` are additionally
+        attributed to this instance: a failed activation rolls its partial
+        chains back, and ``unload`` withdraws by owner anything
+        ``deactivate()`` forgot — so a chain can never outlive the plugin.
+        The explicit ``unregister_interceptor`` in :meth:`deactivate`
+        remains the contract's polite half (and covers hosts that
+        activate plugins without the manager).
         """
 
     def deactivate(self) -> None:

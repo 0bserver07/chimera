@@ -1,10 +1,11 @@
 """Extended plugin registry supporting all Chimera extension points."""
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from contextlib import contextmanager
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Iterator
 
     from chimera.agents.config import AgentConfig
     from chimera.config.skills import Skill
@@ -39,6 +40,11 @@ class PluginExtensionRegistry:
     _mcp_servers: dict[str, MCPServerConfig] = {}
     _hooks: dict[str, list[Hook]] = {}
     _interceptors: dict[str, list[Callable[..., InterceptDecision | None]]] = {}
+    #: Owner of each interceptor entry, index-aligned with ``_interceptors``
+    #: per seam (``None`` = registered outside any :meth:`owner_scope`).
+    _interceptor_owners: dict[str, list[Any]] = {}
+    #: Active owner-attribution stack (innermost last); see :meth:`owner_scope`.
+    _owner_stack: list[Any] = []
 
     # -- Agents ---------------------------------------------------------------
 
@@ -226,6 +232,9 @@ class PluginExtensionRegistry:
                 f"expected one of {INTERCEPTOR_SEAMS}"
             )
         cls._interceptors.setdefault(seam, []).append(interceptor)
+        cls._interceptor_owners.setdefault(seam, []).append(
+            cls._owner_stack[-1] if cls._owner_stack else None
+        )
 
     @classmethod
     def unregister_interceptor(
@@ -253,10 +262,78 @@ class PluginExtensionRegistry:
                 f"unknown interceptor seam {seam!r}; "
                 f"expected one of {INTERCEPTOR_SEAMS}"
             )
+        chain = cls._interceptors.get(seam, [])
         try:
-            cls._interceptors.get(seam, []).remove(interceptor)
+            idx = chain.index(interceptor)
         except ValueError:
-            pass
+            return
+        del chain[idx]
+        owners = cls._interceptor_owners.get(seam, [])
+        if idx < len(owners):
+            del owners[idx]
+
+    @classmethod
+    @contextmanager
+    def owner_scope(cls, owner: Any) -> Iterator[None]:
+        """Attribute registrations inside the ``with`` body to *owner*.
+
+        The ownership half of interceptor atomicity: while the scope is
+        active, every :meth:`register_interceptor` call records *owner*
+        (compared by identity) against the new chain entry, so
+        :meth:`unregister_owner` can later withdraw exactly what this
+        owner registered. The plugin manager wraps each plugin's
+        ``activate()`` in a scope, rolls the owner back if activation
+        raises partway, and scrubs by owner on unload. Scopes nest
+        (innermost wins); registrations made outside any scope stay
+        owner-less and are never touched by an owner-based withdrawal.
+
+        Args:
+            owner: The owning identity — in the shipped manager's use,
+                the plugin instance being activated.
+
+        Yields:
+            Nothing; the scope exists for its attribution side effect.
+        """
+        cls._owner_stack.append(owner)
+        try:
+            yield
+        finally:
+            cls._owner_stack.pop()
+
+    @classmethod
+    def unregister_owner(cls, owner: Any) -> int:
+        """Remove every interceptor registered under *owner*, on all seams.
+
+        The withdrawal half of :meth:`owner_scope`, matched by identity.
+        The plugin manager uses it to (a) roll back a plugin whose
+        ``activate()`` raised after registering part of its chains — the
+        atomicity guarantee: a failed activation leaves this registry
+        exactly as it was — and (b) scrub on ``unload`` anything the
+        plugin's ``deactivate()`` forgot, or died before, withdrawing, so
+        no chain can outlive its owner.
+
+        Args:
+            owner: The owning identity passed to :meth:`owner_scope`.
+
+        Returns:
+            The number of chain entries removed (0 for an owner with
+            none — an unknown owner is a no-op, never an error).
+        """
+        removed = 0
+        for seam, chain in cls._interceptors.items():
+            owners = cls._interceptor_owners.setdefault(seam, [])
+            kept_fns: list[Any] = []
+            kept_owners: list[Any] = []
+            for idx, fn in enumerate(chain):
+                entry_owner = owners[idx] if idx < len(owners) else None
+                if entry_owner is owner:
+                    removed += 1
+                else:
+                    kept_fns.append(fn)
+                    kept_owners.append(entry_owner)
+            chain[:] = kept_fns
+            cls._interceptor_owners[seam] = kept_owners
+        return removed
 
     @classmethod
     def get_interceptors(
@@ -312,3 +389,5 @@ class PluginExtensionRegistry:
         cls._mcp_servers.clear()
         cls._hooks.clear()
         cls._interceptors.clear()
+        cls._interceptor_owners.clear()
+        cls._owner_stack.clear()

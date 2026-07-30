@@ -5,6 +5,7 @@ import pytest
 
 from chimera.plugins.base import BasePlugin, ComponentRegistry
 from chimera.plugins.manager import PluginManager
+from chimera.plugins.registry import INTERCEPTOR_SEAMS, PluginExtensionRegistry
 from chimera.core.tool import BaseTool
 from chimera.types import ToolResult
 
@@ -124,6 +125,109 @@ def test_plugin_manager_unload_prunes_ui_contributions():
         assert UIExtensionRegistry.get_command("surf") is None
     finally:
         UIExtensionRegistry._reset()
+
+class TestActivationAtomicity:
+    """A failed activation cannot orphan interceptor chains (the confirmed
+    leak: registrations land in the CLASS-LEVEL PluginExtensionRegistry
+    during activate(), while the manager only gated the per-instance
+    ComponentRegistry — so an activate() dying after its first
+    register_interceptor left owner-less chains no unload could remove)."""
+
+    @pytest.fixture(autouse=True)
+    def _clean_registry(self):
+        PluginExtensionRegistry._reset()
+        yield
+        PluginExtensionRegistry._reset()
+
+    def test_partial_multi_seam_activation_rolls_back(self):
+        """activate() dies after its first seam lands → registry exactly
+        as before, plugin not loaded, error propagated."""
+
+        class DiesOnSecondSeam(BasePlugin):
+            @property
+            def name(self):
+                return "dies-second"
+
+            def register_interceptors(self, registry):
+                PluginExtensionRegistry.register_interceptor("tool_call", self._gate)
+                raise RuntimeError("dies before the second seam lands")
+
+            def _gate(self, call):
+                return None
+
+        manager = PluginManager()
+        with pytest.raises(RuntimeError, match="second seam"):
+            manager.load_plugin(DiesOnSecondSeam())
+        assert manager.plugins == {}
+        for seam in INTERCEPTOR_SEAMS:
+            assert PluginExtensionRegistry.get_interceptors(seam) == []
+
+    def test_invalid_seam_name_rolls_back_earlier_registrations(self):
+        """The seam-typo ValueError is itself a mid-activation failure:
+        the chains registered before it must not survive."""
+
+        class TypoSeam(BasePlugin):
+            @property
+            def name(self):
+                return "typo-seam"
+
+            def register_interceptors(self, registry):
+                PluginExtensionRegistry.register_interceptor("tool_call", self._gate)
+                PluginExtensionRegistry.register_interceptor("tool_cal", self._gate)
+
+            def _gate(self, call):
+                return None
+
+        manager = PluginManager()
+        with pytest.raises(ValueError, match="unknown interceptor seam"):
+            manager.load_plugin(TypoSeam())
+        assert PluginExtensionRegistry.get_interceptors("tool_call") == []
+
+    def test_unload_scrubs_chains_a_forgetful_deactivate_leaves(self):
+        """unload withdraws by owner what deactivate() forgot."""
+
+        class Forgetful(BasePlugin):
+            @property
+            def name(self):
+                return "forgetful"
+
+            def register_interceptors(self, registry):
+                PluginExtensionRegistry.register_interceptor("tool_call", self._gate)
+
+            def _gate(self, call):
+                return None
+            # deliberately no deactivate override: BasePlugin's is a no-op
+
+        manager = PluginManager()
+        manager.load_plugin(Forgetful())
+        assert len(PluginExtensionRegistry.get_interceptors("tool_call")) == 1
+        manager.unload("forgetful")
+        assert PluginExtensionRegistry.get_interceptors("tool_call") == []
+
+    def test_unload_scrubs_even_when_deactivate_raises(self):
+        """A dying deactivate() still cannot leak: the owner scrub runs on
+        the way out and the exception propagates."""
+
+        class DyingDeactivate(BasePlugin):
+            @property
+            def name(self):
+                return "dying-deactivate"
+
+            def register_interceptors(self, registry):
+                PluginExtensionRegistry.register_interceptor("tool_call", self._gate)
+
+            def deactivate(self):
+                raise RuntimeError("deactivate died")
+
+            def _gate(self, call):
+                return None
+
+        manager = PluginManager()
+        manager.load_plugin(DyingDeactivate())
+        with pytest.raises(RuntimeError, match="deactivate died"):
+            manager.unload("dying-deactivate")
+        assert PluginExtensionRegistry.get_interceptors("tool_call") == []
+        assert "dying-deactivate" not in manager.plugins
 
 
 def test_plugin_registry_register_tool():

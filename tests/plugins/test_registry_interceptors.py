@@ -139,6 +139,61 @@ class TestGetAllInterceptors:
         assert PluginExtensionRegistry.get_interceptors("tool_call") == []
 
 
+class TestOwnershipTracking:
+    """Ownership-tracked registration: the atomicity seam behind the
+    manager's failed-activation rollback and owner-complete unload."""
+
+    def test_owner_scope_attributes_and_unregister_owner_withdraws(self) -> None:
+        owner = object()
+        outside = _fn("outside")
+        PluginExtensionRegistry.register_interceptor("tool_call", outside)
+        with PluginExtensionRegistry.owner_scope(owner):
+            PluginExtensionRegistry.register_interceptor("tool_call", _fn("g1"))
+            PluginExtensionRegistry.register_interceptor("context", _fn("g2"))
+
+        assert PluginExtensionRegistry.unregister_owner(owner) == 2
+        assert PluginExtensionRegistry.get_interceptors("tool_call") == [outside]
+        assert PluginExtensionRegistry.get_interceptors("context") == []
+
+    def test_unknown_owner_is_a_noop(self) -> None:
+        PluginExtensionRegistry.register_interceptor("tool_call", _fn("g"))
+        assert PluginExtensionRegistry.unregister_owner(object()) == 0
+        assert len(PluginExtensionRegistry.get_interceptors("tool_call")) == 1
+
+    def test_scopes_nest_innermost_wins(self) -> None:
+        outer, inner = object(), object()
+        with PluginExtensionRegistry.owner_scope(outer):
+            PluginExtensionRegistry.register_interceptor("tool_call", _fn("a"))
+            with PluginExtensionRegistry.owner_scope(inner):
+                PluginExtensionRegistry.register_interceptor("tool_call", _fn("b"))
+        assert PluginExtensionRegistry.unregister_owner(inner) == 1
+        assert PluginExtensionRegistry.unregister_owner(outer) == 1
+        assert PluginExtensionRegistry.get_interceptors("tool_call") == []
+
+    def test_ownership_stays_aligned_after_equality_unregister(self) -> None:
+        """Removing one entry by value must not shift another owner's
+        attribution — the parallel bookkeeping cannot skew."""
+        a_owner, b_owner = object(), object()
+        a, b = _fn("a"), _fn("b")
+        with PluginExtensionRegistry.owner_scope(a_owner):
+            PluginExtensionRegistry.register_interceptor("tool_call", a)
+        with PluginExtensionRegistry.owner_scope(b_owner):
+            PluginExtensionRegistry.register_interceptor("tool_call", b)
+
+        PluginExtensionRegistry.unregister_interceptor("tool_call", a)
+        assert PluginExtensionRegistry.unregister_owner(a_owner) == 0
+        assert PluginExtensionRegistry.unregister_owner(b_owner) == 1
+        assert PluginExtensionRegistry.get_interceptors("tool_call") == []
+
+    def test_reset_clears_ownership_state(self) -> None:
+        owner = object()
+        with PluginExtensionRegistry.owner_scope(owner):
+            PluginExtensionRegistry.register_interceptor("tool_call", _fn("g"))
+        PluginExtensionRegistry._reset()
+        assert PluginExtensionRegistry.unregister_owner(owner) == 0
+        assert PluginExtensionRegistry.get_interceptors("tool_call") == []
+
+
 class TestSeamDriftGuard:
     def test_interceptor_seams_match_interceptors_dataclass_fields(self) -> None:
         """INTERCEPTOR_SEAMS must name exactly the Interceptors fields — a

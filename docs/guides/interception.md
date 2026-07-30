@@ -120,7 +120,12 @@ The registry surface mirrors the other plugin registries:
 (call the latter from `deactivate()` so unloading a plugin withdraws its
 chains), `get_interceptors(seam)`, and `get_all_interceptors()` — with
 seam names validated against the four seams, so a typo raises instead of
-registering a chain that can never fire.
+registering a chain that can never fire. When a plugin loads through
+`PluginManager`, activation-time registrations are additionally
+attributed to the plugin instance: an `activate()` that raises after
+registering part of its chains is rolled back (a failed load leaves the
+registry exactly as it was), and `unload` withdraws by owner anything
+`deactivate()` forgot — a chain can never outlive its plugin.
 
 ### The merge contract (pinned by test)
 

@@ -783,6 +783,105 @@ def test_resync_cycles_leave_no_interceptor_residue(tmp_path):
         sys.modules.pop(mod_name, None)
 
 
+_LEAK_PROBE_V1 = '''\
+"""Leak-repro fixture v1: a healthy probe chain (blocks nothing)."""
+from chimera.plugins.base import BasePlugin
+from chimera.plugins.registry import PluginExtensionRegistry
+
+
+class LeakProbePlugin(BasePlugin):
+    @property
+    def name(self):
+        return "leak-probe"
+
+    def register_interceptors(self, registry):
+        PluginExtensionRegistry.register_interceptor("tool_call", self._probe)
+
+    def deactivate(self):
+        PluginExtensionRegistry.unregister_interceptor("tool_call", self._probe)
+
+    def _probe(self, call):
+        return None
+'''
+
+_LEAK_PROBE_V2 = '''\
+"""Leak-repro fixture v2: registers a block-everything gate, then dies."""
+from chimera.core.interception import InterceptDecision
+from chimera.plugins.base import BasePlugin
+from chimera.plugins.registry import PluginExtensionRegistry
+
+
+class LeakProbePlugin(BasePlugin):
+    @property
+    def name(self):
+        return "leak-probe"
+
+    def register_interceptors(self, registry):
+        PluginExtensionRegistry.register_interceptor(
+            "tool_call", self._block_everything
+        )
+        raise RuntimeError("v2 dies after partial registration")
+
+    def deactivate(self):
+        PluginExtensionRegistry.unregister_interceptor(
+            "tool_call", self._block_everything
+        )
+
+    def _block_everything(self, call):
+        return InterceptDecision.block("orphaned v2 gate")
+'''
+
+
+def test_failed_swap_cannot_orphan_interceptor_chains(tmp_path):
+    """The confirmed leak, pinned shut end-to-end: v2 registers a
+    block-everything gate then dies mid-activation. The failed swap must
+    leave the registry exactly as v1 had it (restore reported), the next
+    REAL turn must still write, and unloading v1 must leave the registry
+    empty — no chain outlives its owner."""
+    mod_name = "chimera_test_resync_leak_probe"
+    plugin_file = tmp_path / f"{mod_name}.py"
+    _publish_source(plugin_file, _LEAK_PROBE_V1)
+    module = _load_plugin_module(mod_name, plugin_file)
+    manager = PluginManager()
+    manager.load_plugin(module.LeakProbePlugin())
+    ws = tmp_path / "ws"
+    try:
+        with create_assembled_harness(
+            _write_script("still-works.txt", "post-failure"), workspace=ws,
+            tools=default_test_tools(ws),
+        ) as harness:
+            agent = harness.driver.agent
+            agent.attach_plugin_manager(manager)
+            harness.driver.resync_resources()  # bind v1
+
+            _publish_source(plugin_file, _LEAK_PROBE_V2)
+            report = harness.driver.resync_resources()
+            plugins = report.delta("plugins")
+            assert [name for name, _ in plugins.failed] == ["leak-probe"]
+            assert "previous registration restored" in plugins.failed[0][1]
+
+            # Registry state is EXACTLY pre-swap v1: one probe, no orphan.
+            chains = PluginExtensionRegistry.get_interceptors("tool_call")
+            assert [fn.__qualname__ for fn in chains] == ["LeakProbePlugin._probe"]
+            restored = manager.plugins["leak-probe"]
+            assert chains == [restored._probe]
+            inter = report.delta("interceptors")
+            if inter is not None:  # the report never names the dead v2 gate
+                mentioned = inter.added + inter.removed + inter.refreshed
+                assert not any("_block_everything" in entry for entry in mentioned)
+
+            # A REAL turn still writes — no orphaned block-everything gate.
+            run = harness.run("write still-works.txt")
+            assert run.reason == "completed"
+            assert (ws / "still-works.txt").read_text() == "post-failure"
+
+            # And unloading v1 leaves the registry EMPTY.
+            manager.unload("leak-probe")
+            assert PluginExtensionRegistry.get_interceptors("tool_call") == []
+    finally:
+        sys.modules.pop(mod_name, None)
+
+
 def test_registry_chains_reported_without_a_manager(tmp_path):
     """Chains on the shipped registry ride the per-turn merge whether or
     not a manager is attached — the typed accounting reports them either
