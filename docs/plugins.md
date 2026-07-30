@@ -172,6 +172,63 @@ client.uninstall("rufflint", cli="otter")
 For lower-level use (e.g. a custom registry index baked into a private
 mirror), wire up `PluginInfo` + `install_plugin` directly.
 
+## Plugin slash commands: one contract, every frontend
+
+A plugin can put a slash command in front of the user — and the same
+registration reaches **every interactive surface**: the `chimera code` REPL,
+the single-lane TUI, and the multiplexer. Register once:
+
+```python
+from chimera.plugins.ui import UIExtensionRegistry
+
+def greet(session, env, args, out):
+    out(f"hello, {args or 'world'}")
+
+UIExtensionRegistry.register_command(
+    "greet", greet, help="say hello", aliases=("hi",), plugin="my-plugin",
+)
+```
+
+The handler contract is frontend-neutral and never changes:
+`handler(session, env, args, out)` — `args` is everything after the command
+word, `out(msg)` writes a line to whatever the surface's transcript is, and
+`env.workdir` anchors file work.
+
+What differs per surface is what rides in the `session` position:
+
+- **REPL** — the live REPL session object, installed via the existing
+  bridge (`install_into_repl`).
+- **TUI (both surfaces)** — a thin `TUICommandContext`
+  (`chimera.tui.commands`): `say(msg, style=...)` writes to the focused
+  lane's transcript, `driver` is the focused lane's live driver, and
+  `busy`, `single`, `lane_id`, `lane_label`, `model`, `workdir`, and
+  `surface == "tui"` describe exactly where the command is running. Probe
+  defensively (`getattr(session, "provider", None)`) and the context
+  degrades like a bare session; *require* an ability the TUI cannot grant
+  and the dispatcher refuses with a clear transcript message
+  (`plugin command /greet refused: …`) rather than half-running. A handler
+  that mutates the driver should check `session.busy` first.
+
+The TUI lists plugin commands everywhere built-ins are listed —
+Tab completion, the autocomplete hint line, and `/help` (with the one-line
+help and `[plugin-name]` provenance) — and recomposes the catalog on every
+`/resync`, so a hot-swapped command appears and an unloaded plugin's
+command disappears, with the delta announced in the transcript.
+
+**Collision policy — built-ins always win, loudly.** A plugin command whose
+name collides with any built-in name or alias is rejected whole; an alias
+that collides is dropped while the command survives under its clean tokens.
+Every rejection is reported at report time — TUI startup, `/help`, and
+after each `/resync` — as `plugin command /name rejected: shadows the
+built-in /… — built-ins win`. A plugin can therefore never intercept
+`/help`, `/exit`, or any other built-in, on any surface.
+
+Register with `plugin="my-plugin"` provenance: that is what lets an unload
+withdraw the command (`UIExtensionRegistry.unregister_plugin` runs inside
+`PluginManager.unload`, the same way `/resync` uses `unregister_source` for
+skill commands). Provenance-free registrations cannot be attributed and
+survive unloads.
+
 ## Hot-swap: `/resync`
 
 Chimera sessions are long-lived; plugin development should not require
@@ -202,6 +259,11 @@ What one resync does, per kind:
   the live tool list in place: an edited plugin's tools are *replaced*, an
   unloaded plugin's tools drop out, and a plugin tool whose name collides
   with a non-plugin tool is refused (a plugin can never shadow a built-in).
+- **plugin commands** — the interactive catalogs refresh: the REPL
+  re-installs plugin commands into its dispatch registry, and the TUI
+  recomposes built-ins + plugin commands (autocomplete, `/help`, dispatch),
+  announcing the delta and any collision rejections (see the
+  plugin-slash-commands section above).
 - **interceptors** — whatever interceptor surface the plugin registries
   expose is aggregated generically and bound *behind* the session's
   constructor-supplied chain (a team-policy gate always runs first);

@@ -82,6 +82,42 @@ binding's source (default / user / migrated). Defaults:
 
 Mid-turn, typing **steers** the running lane; at idle it starts a new turn.
 
+### Plugin commands — hosted like built-ins
+
+Both TUI surfaces — the single-lane daily driver and the multiplexer — host
+plugin-registered slash commands as first-class citizens, from the same
+source the REPL installs from (`UIExtensionRegistry.register_command` in
+`chimera.plugins.ui`). A plugin command is:
+
+- **listed** — it appears in Tab completion, the autocomplete hint line, and
+  `/help` (with its one-line description and `[plugin-name]` provenance),
+  on whichever surface you are on;
+- **dispatched** — typing `/name args` routes to the plugin's handler, and
+  its output writes into the **focused lane's** transcript, exactly where a
+  built-in's output goes;
+- **hot-swapped** — `/resync` recomposes the catalog: a command added by a
+  swapped-in plugin appears, a command belonging to an unloaded plugin
+  disappears, and the delta is announced in the transcript
+  (`slash catalog: +/greet  −/old`).
+
+Handlers keep the frontend-neutral contract they already have —
+`handler(session, env, args, out)`. On a TUI surface the `session` position
+carries a thin `TUICommandContext`: `say(msg, style=...)` writes to the
+focused lane's transcript, `driver` is the focused lane's live driver
+(model, tools, cost, history), and `busy` / `single` / `lane_id` /
+`lane_label` / `model` / `workdir` state exactly where the command is
+running. `env.workdir` is the lane's isolated workspace. A handler that
+probes for REPL-session abilities the TUI cannot grant
+(`getattr(session, "provider", None)`) degrades gracefully; one that
+*requires* them is refused with a clear transcript message —
+`plugin command /name refused: …` — never half-run.
+
+**A plugin command can never shadow a built-in.** A name colliding with any
+built-in name or alias rejects the whole command; a colliding alias drops
+just that alias. Every rejection is reported loudly — at startup and after
+each `/resync` — as `plugin command /name rejected: shadows the built-in
+/… — built-ins win`, and the built-in keeps working untouched.
+
 ### `/resync` — hot-swap plugins, skills, and agents
 
 Edit a plugin's source, a `SKILL.md`, or an agent definition on disk, type
@@ -103,6 +139,12 @@ The semantics are deliberate and honest:
 - **Per-plugin isolation.** Each loaded plugin hot-swaps on its own; one
   plugin failing to swap never blocks the rest, and a failure line names
   the plugin, the error, and what state it was left in.
+- **The slash catalog recomposes.** After the swap, autocomplete and
+  dispatch are recomputed from the plugin UI registry: added plugin
+  commands appear, an unloaded plugin's commands disappear, and the delta
+  is announced (`slash catalog: +/greet  −/old`) along with any
+  collision rejections (built-ins win — see the plugin-commands section
+  above).
 - **Prompt honesty.** The assembled stack rebuilds its system prompt every
   turn, so a refreshed skill catalog genuinely reaches the *current*
   conversation's next turn — the report says so rather than leaving you to

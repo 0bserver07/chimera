@@ -96,6 +96,33 @@ commit receipts.
 
 ### Added
 
+- **Plugin slash commands now work in both TUI surfaces — the frontend
+  asymmetry the hot-swap work documented is closed.** `/resync` used to
+  report, honestly, that "REPL surfaces re-install them; the TUI catalog is
+  fixed": the TUI's slash catalog was a static tuple and its dispatch a
+  fixed name switch, so a plugin-registered command existed in `chimera
+  code` but not in `chimera code --tui` or the multiplexer. Now
+  `chimera/tui/commands.py` composes the catalog dynamically — built-ins
+  from `COMMAND_DEFS` plus the plugin UI registry's commands
+  (`UIExtensionRegistry`, the same source `install_into_repl` reads) — so
+  a plugin command is listed (Tab completion, hint line, `/help` with
+  provenance, context-aware per surface), dispatched (to the plugin's
+  unchanged `(session, env, args, out)` handler, with a thin
+  `TUICommandContext` — `say()`, the focused lane's driver, busy state —
+  riding in the `session` position; a handler needing abilities the TUI
+  cannot grant is refused with a clear message, never half-run), and
+  hot-swapped (`/resync` recomposes the catalog, announces
+  `slash catalog: +/x −/y`). Collision policy, pinned by test: a plugin
+  command can **never shadow a built-in** — a colliding name rejects the
+  whole command, a colliding alias drops just the alias, every rejection
+  is reported loudly at startup/`/help`/resync, and the built-in keeps
+  working. `UIExtensionRegistry.unregister_plugin` (wired into
+  `PluginManager.unload`, pruning before `deactivate()` so a raising
+  deactivate cannot strand rows) is what makes an unloaded plugin's
+  commands genuinely disappear. Docs: `docs/guides/tui.md` plugin-commands
+  section, `docs/plugins.md` "Plugin slash commands: one contract, every
+  frontend".
+
 - **Plugins carry interceptors — and three bundled policy packs prove it.**
   The interception guide used to claim that sub-agents, plan gates, payload
   redaction, and tool policy were "implementable as user-space plugins";
