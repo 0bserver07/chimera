@@ -238,11 +238,26 @@ RECIPES: dict[str, Recipe] = {
     ),
     "tau-bench": Recipe(exempt="agentic — grading replays actions against a sim env"),
     "webarena": Recipe(exempt="agentic — grading needs a live browser environment"),
-    "nocha": Recipe(exempt="long-context QA — claims are graded, no reference answer"),
+    # nocha was also listed as "no reference answer" — but claim A is the true
+    # one in EVERY instance by dataset construction (`NoCha.evaluate` returns
+    # `choice == "A"`), so the reference answer is the constant "A". That makes
+    # it the cheapest canary in the set, and the inverse half carries the weight
+    # here: a positive-only check would be satisfied by a grader hardwired to
+    # True, precisely because the expected answer never varies.
+    "nocha": Recipe(
+        answer=lambda t: "A", wrong=lambda t: "B", code_like=False
+    ),
     "harbor": Recipe(exempt="delegating adapter — grading is the upstream harness's"),
     "programbench": Recipe(exempt="submission-contract bench — grading fetches deps"),
     "dpai-arena": Recipe(exempt="agentic arena — no per-task reference answer"),
-    "context-bench": Recipe(exempt="agentic — retrieval behaviour, no reference answer"),
+    # context-bench is NOT exempt: it was listed as "no reference answer" while
+    # `ContextBench.evaluate` grades against `task["answer"]`. A false exemption
+    # reason is how an adapter stays unverified forever — the sweep reads
+    # EXEMPT and no one re-derives the claim. With a real recipe it reports
+    # NOT-STAGED until the dataset lands, which is true and actionable.
+    "context-bench": Recipe(
+        answer=_field("answer"), wrong=lambda t: "-99999", code_like=False
+    ),
     "cline-bench": Recipe(exempt="repo-task bench — needs a checked-out workspace"),
     "feature-bench": Recipe(exempt="repo-task bench — needs a checked-out workspace"),
     "aider-polyglot": Recipe(exempt="repo-task bench — needs a checked-out workspace"),

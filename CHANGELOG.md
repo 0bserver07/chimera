@@ -72,6 +72,36 @@ commit receipts.
     (`coding_agent.py` interceptor/budget comments, the guide's coverage
     bullet, the TUI guide's lane caveat). Budgets still do not reach
     strategy-loop lanes; that note now says exactly that.
+- **Substring grading accepted a *different* value as correct.** The sibling of
+  the length defect, in the graders that *do* have a reference answer and
+  compared it with a raw `in`. `ContextBench.evaluate` graded the answer `142`
+  as correct against ground truth `42`; `TauBench`'s best-effort path accepted
+  `transfer_to_agent_v2` for the terminal action `transfer_to_agent`. Both now
+  match on word boundaries — applied only where the truth's own edge is
+  alphanumeric, so a truth like `$5` or `f(x)` stays matchable instead of being
+  made permanently unmatchable by an anchor that can never fire (that would
+  trade a false-accept for a silent false-reject).
+  - Neither fed a published number — `context-bench` is marked *unverified* in
+    the capability matrix and tau-bench appears only as n=1 ✓ ticks — so this is
+    prevention, not a retraction. Recorded plainly rather than fixed quietly.
+  - **The residual leniency is disclosed and test-pinned, not solved.** An answer
+    that negates or hedges around the truth ("The answer is NOT 42") still grades
+    correct, because detecting that is natural-language judgement; the `judge`
+    hook exists for it. A test asserts the current behaviour so the limitation
+    stays visible — a limitation nobody can see is indistinguishable from a bug
+    nobody found.
+- **Two canary exemptions claimed a reason that was false.** `context-bench` and
+  `nocha` were both listed as *"no reference answer"* while their graders read
+  one: `ContextBench.evaluate` grades against `task["answer"]`, and `nocha`'s
+  correct choice is the constant `"A"` in every instance by construction. A
+  false exemption reason is how an adapter stays unverified forever — the sweep
+  reads EXEMPT and nobody re-derives the claim. Both are now real recipes,
+  verified to accept the reference answer and reject a wrong one, and the sweep
+  reports **NOT-STAGED** for them, which is true and actionable. (`nocha` is the
+  cheapest canary in the set, and the one where the inverse half carries all the
+  weight: with a constant expected answer, a positive-only check is satisfied by
+  a grader hardwired to `True`.)
+
 - **A fifth fabricated-result class: length-as-correctness.** Five benchmark
   adapters — `swe_bench`, `swt_bench`, `swe_polybench`, `feature_bench`,
   `dpai_arena` (six sites) — graded a task **solved** from

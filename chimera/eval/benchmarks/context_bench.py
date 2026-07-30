@@ -25,10 +25,32 @@ GLM-4.6 56.8%, Kimi K2 55.1%. Chimera target: 50%+ baseline.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
 from chimera.eval.harness import Benchmark
+
+
+def _contains_on_word_boundary(haystack: str, needle: str) -> bool:
+    """Whether *needle* appears in *haystack* as a whole token, case-insensitively.
+
+    A raw ``needle in haystack`` test grades a *different value* as correct:
+    ground truth ``42`` is satisfied by ``142``, and ``cat`` by ``concatenate``.
+    Boundaries are required only where the needle's own edge is alphanumeric, so
+    a truth that starts or ends in punctuation (``$5``, ``f(x)``) still matches
+    rather than being made unmatchable by an anchor that can never fire.
+
+    Args:
+        haystack: The agent's answer.
+        needle: The ground-truth string to find.
+
+    Returns:
+        ``True`` when *needle* occurs as a distinct token in *haystack*.
+    """
+    left = r"\b" if needle[:1].isalnum() else ""
+    right = r"\b" if needle[-1:].isalnum() else ""
+    return re.search(left + re.escape(needle) + right, haystack, re.IGNORECASE) is not None
 
 
 class ContextBench(Benchmark):
@@ -87,9 +109,22 @@ class ContextBench(Benchmark):
         Upstream Letta uses an LLM judge for free-form answers. This
         scaffold supports two modes:
 
-        * ``exact`` (default): case-insensitive substring match between
-          ``agent_output`` and ``task["answer"]``.
+        * ``contains`` (default): case-insensitive match of ``task["answer"]``
+          inside ``agent_output``, **on word boundaries**. Deliberately lenient
+          about surrounding prose, because a QA answer arrives as a sentence.
         * ``judge``: when ``task["judge"]`` is callable, defer to it.
+
+        This was a raw ``in`` substring test, which graded a *different value*
+        as correct: ground truth ``42`` was satisfied by the answer ``142``.
+        Word boundaries fix that class — ``142`` no longer matches ``42``, while
+        "The answer is 42." still does.
+
+        **Known residual leniency, not solved here:** an answer that *negates*
+        the truth ("The answer is NOT 42") or hedges around it ("possibly 42?")
+        still grades as correct, because detecting that is natural-language
+        judgement rather than string matching. That is what the ``judge`` hook
+        is for; this path does not pretend to do it. Recorded rather than left
+        for someone to discover in a published number.
 
         Args:
             task: Task dict containing at least ``"answer"``.
@@ -104,10 +139,10 @@ class ContextBench(Benchmark):
         judge = task.get("judge")
         if callable(judge):
             return bool(judge(task, agent_output))
-        truth = task.get("answer", "")
+        truth = str(task.get("answer", "")).strip()
         if not truth:
             return False
-        return str(truth).strip().lower() in agent_output.strip().lower()
+        return _contains_on_word_boundary(agent_output, truth)
 
     def _load_tasks(self) -> list[dict[str, Any]]:
         """Load tasks from a local JSON file or the Letta Evals framework.

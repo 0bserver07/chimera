@@ -321,6 +321,17 @@ Interactive frontends over AgentDriver (spec: `docs/specs/interactive-frontends.
   asserted the broken behaviour, which is why a green suite proved nothing. When
   a test's name describes a *fallback* rather than a *contract*, read it as a
   confession and check what it locks in.
+  Two corollaries found the same day, pinned in
+  `tests/eval/test_substring_grading_boundaries.py`: a grader that DOES have a
+  reference answer must not accept a **different value** — `ContextBench` graded
+  `142` correct against truth `42`, `TauBench` accepted `transfer_to_agent_v2`
+  for `transfer_to_agent` — and word-boundary anchors belong only where the
+  truth's own edge is alphanumeric, or a truth like `$5` becomes permanently
+  unmatchable and you have swapped a false-accept for a silent false-reject.
+  Second: **an exemption's stated reason is itself a claim that rots.**
+  `context-bench` and `nocha` sat EXEMPT as *"no reference answer"* while their
+  graders read one; the sweep says EXEMPT and nobody re-derives it, so the
+  adapter stays unverified forever. Both are recipes now.
 - **A fixture that fails identically under the bug and under the fix has not
   reproduced anything.** A user-scope hooks defect sat parked as "unproven" for
   a day because the fixture loaded zero matchers under *both* scopes — read as
