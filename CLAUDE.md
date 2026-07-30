@@ -300,6 +300,38 @@ Interactive frontends over AgentDriver (spec: `docs/specs/interactive-frontends.
   exists and still needs to exist. A number whose receipt is missing is marked
   `⊘ NO RECEIPT` at the claim, never deleted: naming the gap is the disclosure,
   removing the number is the cover-up.
+- **Inability to grade is not a pass — and a test that asserts the lenient
+  fallback is pinning the defect, not covering it.** Five benchmark adapters
+  graded a task *solved* from `len(agent_output.strip()) > 10` whenever they
+  could not run the benchmark's own tests, so one sentence of prose scored a
+  RESOLVED SWE-bench instance. The honest verdict is unresolved: a uniform-zero
+  column is the harness-gap signature `render_observatory.py` already refuses to
+  publish, whereas a 100% built from prose is invisible. Three compounding
+  lessons, each now enforced in `tests/eval/test_no_length_grading.py`:
+  **(1)** the adapters disagreed about *which* env shape was unsafe (`swe_bench`
+  safe at `env=None`, `swt_bench` the mirror image), so a guard must be
+  parametrised over every configuration, not the one you happened to hit.
+  **(2)** the class spread by **imitation** — `dpai_arena._evaluate_rubric`'s
+  docstring said it was "matching the SWE-bench fallback behaviour" — so a
+  behavioural test is not enough; there is a static **AST** gate over
+  `chimera/eval/benchmarks/` rejecting `len()` of any answer-shaped parameter.
+  AST and not grep, because the fix's own comments quote the old code and a text
+  search forces you to delete the explanation to stay green.
+  **(3)** six tests named `*_fallback_heuristic` / `*_uses_length_heuristic`
+  asserted the broken behaviour, which is why a green suite proved nothing. When
+  a test's name describes a *fallback* rather than a *contract*, read it as a
+  confession and check what it locks in.
+  Two corollaries found the same day, pinned in
+  `tests/eval/test_substring_grading_boundaries.py`: a grader that DOES have a
+  reference answer must not accept a **different value** — `ContextBench` graded
+  `142` correct against truth `42`, `TauBench` accepted `transfer_to_agent_v2`
+  for `transfer_to_agent` — and word-boundary anchors belong only where the
+  truth's own edge is alphanumeric, or a truth like `$5` becomes permanently
+  unmatchable and you have swapped a false-accept for a silent false-reject.
+  Second: **an exemption's stated reason is itself a claim that rots.**
+  `context-bench` and `nocha` sat EXEMPT as *"no reference answer"* while their
+  graders read one; the sweep says EXEMPT and nobody re-derives it, so the
+  adapter stays unverified forever. Both are recipes now.
 - **A fixture that fails identically under the bug and under the fix has not
   reproduced anything.** A user-scope hooks defect sat parked as "unproven" for
   a day because the fixture loaded zero matchers under *both* scopes — read as

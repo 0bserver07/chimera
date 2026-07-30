@@ -24,10 +24,31 @@ freestyle live runs.
    `passed>0` in the latest grid) — before any number goes into a doc.
    A uniform-100% column is a harness-bug signature, not a result
    (fence-extraction 2026-07-06; HumanEval+ `check()` never invoked 2026-07-08).
-6. **Numbers come from files, not memory.** Every published table cites its
+6. **Read the grader before you trust the column — a benchmark can score
+   without measuring.** Five distinct fabricated-result classes have surfaced
+   in this repo, so treat any un-canaried adapter as wrong until proven:
+   *(a)* the grader executes the wrong thing (`humaneval-x` ran chat prose as
+   Python → a fabricated 0/50 that was really 50/50); *(b)* the grading
+   contract is wrong for part of the dataset (`livecodebench`: 63 of its 175
+   tasks could not pass by construction — a count, deliberately not a
+   percentage, since that adapter is RETRACTED and no figure of its is a score); *(c)* the environment changes what the
+   benchmark sees (`list_files` `*` crossing `/`, so each sandbox saw different
+   files); *(d)* the grader is *weaker* than the name implies — `mbpp-plus` was
+   graded with base `test_list` asserts, worth **14.8 points** of inflation, and
+   the canary is blind to this class because a weaker suite still passes correct
+   answers; *(e)* **length stands in for correctness** — five adapters graded a
+   task solved from `len(agent_output) > 10`, so one sentence of prose resolved
+   a SWE-bench instance.
+   Run `uv run python scripts/canary_benchmarks.py` before buying a column:
+   the gold/canonical answer must score **100%** and prose/empty must score
+   **0%**. The inverse half is not optional — a grader hardwired to `True`
+   sails through a positive-only check. `EXEMPT` in that sweep means
+   *unverified*, never healthy.
+
+7. **Numbers come from files, not memory.** Every published table cites its
    `data/*.json`. If the file doesn't exist, the number doesn't exist.
 
-7. **Hours-long runs MUST be detached + server-persisted.** A plain
+8. **Hours-long runs MUST be detached + server-persisted.** A plain
    `modal run` keeps cells alive only while the local client is connected — a
    sleeping laptop terminated a 2h full-dataset run ("local client
    disconnected", all cells lost). Use `modal run --detach

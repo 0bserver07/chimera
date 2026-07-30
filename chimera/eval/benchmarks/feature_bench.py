@@ -89,7 +89,7 @@ class FeatureBench(Benchmark):
     exposes ``run_command`` and the task carries a ``docker_image``, tests
     are run inside the container. If the env only exposes ``run_tests``,
     that is used directly. Otherwise the grader falls back to a
-    non-empty-output heuristic — useful for smoke tests.
+    unresolved verdict — nothing ran, so nothing is verified.
 
     Args:
         dataset_path: Optional path to a local JSON/JSONL dump.
@@ -238,7 +238,8 @@ class FeatureBench(Benchmark):
            pass them through and report the aggregate result.
         2. Else if ``env`` exposes ``run_command``, invoke ``pytest`` against
            the listed test files (inside the container if the env wraps one).
-        3. Else fall back to a non-empty-output heuristic so smoke tests
+        3. Else grade as unresolved (this used to be a non-empty-output
+           heuristic, which scored prose as a solved task) so smoke tests
            against a stub env still produce a deterministic answer.
         """
         if env is None:
@@ -271,7 +272,14 @@ class FeatureBench(Benchmark):
             except Exception:
                 return False
 
-        return bool(agent_output and len(agent_output.strip()) > 10)
+        # MEASUREMENT INTEGRITY: inability to grade is not a pass. This was
+        # `len(agent_output.strip()) > 10`, which graded a sentence of prose as a
+        # solved task — the same defect class as a sandbox degrading to local:
+        # the result becomes indistinguishable from a real solve. A column of
+        # these reads as a uniform zero, which `scripts/render_observatory.py`
+        # already refuses to publish as a score. Pinned by
+        # tests/eval/test_no_length_grading.py.
+        return False
 
     # ----------------------------------------------------------------- helpers
 

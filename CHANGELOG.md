@@ -72,6 +72,139 @@ commit receipts.
     (`coding_agent.py` interceptor/budget comments, the guide's coverage
     bullet, the TUI guide's lane caveat). Budgets still do not reach
     strategy-loop lanes; that note now says exactly that.
+- **Substring grading accepted a *different* value as correct.** The sibling of
+  the length defect, in the graders that *do* have a reference answer and
+  compared it with a raw `in`. `ContextBench.evaluate` graded the answer `142`
+  as correct against ground truth `42`; `TauBench`'s best-effort path accepted
+  `transfer_to_agent_v2` for the terminal action `transfer_to_agent`. Both now
+  match on word boundaries — applied only where the truth's own edge is
+  alphanumeric, so a truth like `$5` or `f(x)` stays matchable instead of being
+  made permanently unmatchable by an anchor that can never fire (that would
+  trade a false-accept for a silent false-reject).
+  - Neither fed a published number — `context-bench` is marked *unverified* in
+    the capability matrix and tau-bench appears only as n=1 ✓ ticks — so this is
+    prevention, not a retraction. Recorded plainly rather than fixed quietly.
+  - **The residual leniency is disclosed and test-pinned, not solved.** An answer
+    that negates or hedges around the truth ("The answer is NOT 42") still grades
+    correct, because detecting that is natural-language judgement; the `judge`
+    hook exists for it. A test asserts the current behaviour so the limitation
+    stays visible — a limitation nobody can see is indistinguishable from a bug
+    nobody found.
+- **A static gate so raw containment cannot return by imitation.** The length
+  defect spread that way once (`dpai_arena`'s docstring said it matched "the
+  SWE-bench fallback behaviour"), so the containment fix ships with an AST scan
+  over `chimera/eval/benchmarks/` rejecting `X in <answer>`. It is enforceable
+  because both known sites were fixed first — the allowlist is **empty**, so any
+  new hit is a real defect or an entry someone must justify in place, with a
+  companion test that fails when an allowlist entry no longer matches a live
+  site (an exemption outliving its reason is a permanent hole). Stated honestly
+  in the test: the gate is *narrower* than the leniency it guards, because no
+  static check can see negation.
+- **Two canary exemptions claimed a reason that was false.** `context-bench` and
+  `nocha` were both listed as *"no reference answer"* while their graders read
+  one: `ContextBench.evaluate` grades against `task["answer"]`, and `nocha`'s
+  correct choice is the constant `"A"` in every instance by construction. A
+  false exemption reason is how an adapter stays unverified forever — the sweep
+  reads EXEMPT and nobody re-derives the claim. Both are now real recipes,
+  verified to accept the reference answer and reject a wrong one, and the sweep
+  reports **NOT-STAGED** for them, which is true and actionable. (`nocha` is the
+  cheapest canary in the set, and the one where the inverse half carries all the
+  weight: with a constant expected answer, a positive-only check is satisfied by
+  a grader hardwired to `True`.)
+
+- **A fifth fabricated-result class: length-as-correctness.** Five benchmark
+  adapters — `swe_bench`, `swt_bench`, `swe_polybench`, `feature_bench`,
+  `dpai_arena` (six sites) — graded a task **solved** from
+  `len(agent_output.strip()) > 10` whenever they could not run the benchmark's
+  own tests. Verified live, not inferred: `"I have analyzed the issue and
+  implemented a comprehensive fix."` graded as a **RESOLVED SWE-bench
+  instance**. All six sites now return unresolved, because inability to grade is
+  not a pass — the same principle as a cloud sandbox refusing to degrade to
+  local, since either way the result becomes indistinguishable from a real one.
+  - **The adapters disagreed about which configuration was unsafe.**
+    `swe_bench` was safe with `env=None` and unsafe with a runner-less env;
+    `swt_bench` was the exact mirror image. A test covering one shape would have
+    passed on four of five while the fifth stayed broken, so the new test
+    parametrises **both**.
+  - **The class spread by imitation.** `dpai_arena._evaluate_rubric`'s docstring
+    said its placeholder was "matching the SWE-bench fallback behaviour". So
+    alongside the behavioural test there is now a static **AST** gate over
+    `chimera/eval/benchmarks/` that fails on any `len()` of an answer-shaped
+    parameter. AST, not grep: the fix's own comments quote the old code, and a
+    text search would have forced deleting the explanation to stay green.
+  - **Six existing tests asserted the defect** — `test_evaluate_fallback_heuristic`,
+    `test_evaluate_no_env_uses_length_heuristic`,
+    `test_evaluate_unknown_track_falls_back_to_length`, and three siblings. The
+    suite was not blind to this behaviour; it was **pinning it in place**. They
+    are inverted, each carrying a note saying what it used to assert.
+  - The zero this produces is the honest outcome and is *legible*: a uniform-zero
+    column is already the harness-gap signature `scripts/render_observatory.py`
+    refuses to publish as a score. A 100% built from prose is not legible at all.
+  - Found while scoping the SWE-family gold-patch canary — the exemption the
+    canary sweep reported as "unverified, not healthy". It was right.
+
+- **The mbpp-plus base-grading inflation, measured: 14.8 points.** The
+  published **99.7% (377/378)** was the MBPP+ task set graded with the
+  dataset's *base* `test_list` asserts. Re-running the **same tasks and agent**
+  under the newly-wired EvalPlus expanded harness gives **321/378 = 84.9%**,
+  `{completed: 378}`, $2.32 — so the gap is attributable to grading alone.
+  - **Exactly how much of that is recorded vs inferred:** `agent_id` is
+    `coding-agent` in **both** receipts and the task set is identical (n=378);
+    the model is recorded only in the new one (`glm-5.2`), because the
+    2026-07-09 flagship receipts predate that field and the column's model is
+    documented on the observatory page rather than per-cell. Cost corroborates
+    it independently — **$2.38 then, $2.32 now**, 2.5% apart, which is what the
+    same model doing the same work costs: the agent solved as before and the
+    grader accepted fewer answers. Saying "identical model" flatly would have
+    asserted a receipt field that does not exist. Receipt:
+  `data/modal-grid-fullscore4-20260730-plusgrade.json`; the observatory row and
+  README now carry the plus-graded number, and the `GRADING_NOTES` entry that
+  said *"until the plus harness is wired and the column re-run"* is replaced by
+  the measurement.
+  - Getting to a *comparable* number took two runs. The first fell back to
+    `glm-5.1` because `glm-5.2` was absent from the catalog, which confounded
+    grading against model: 323/378 there. That result stands as a second data
+    point but is not the headline, because two variables moved in it.
+  - **The residual ceiling is 377/378, not 378.** Task 590 (`polar_rect`)
+    cannot pass under plus grading: the upstream harness compares floats with
+    `atol=0` and the dataset's own canonical answer differs in the last ULP.
+    Recorded in `KNOWN_UNPASSABLE` and `CEILINGS`, so 84.9% reads against an
+    achievable 99.7%, not a notional 100%.
+  - **The caveat markers were never on the number.** `CEILINGS` and
+    `GRADING_NOTES` shipped a release ago to make a caveat *travel with* a score,
+    but `†`/`‡` appeared only in the footnote lines below the table — so the
+    scorecard row, which is the unit anyone copies, carried the score and left
+    the caveat behind. The markers now render inside the score cell (and are
+    suppressed on retracted rows, whose footnotes are not emitted). Three tests
+    pin it, each falsified against the unfixed renderer.
+  - **§3's `mbpp+` ticks now disclose their grading strength.** That grid's
+    receipts predate the plus harness, so a ✓ under a plus-labelled column meant
+    the base contract — the same overstatement the retracted-adapter clause
+    already guarded against, for the same reason.
+  - **The ceiling was published without the canary entry backing it, and my own
+    changelog claimed otherwise.** `CEILINGS`' docstring says it is "Verified by
+    `canary_benchmarks.py` (`KNOWN_UNPASSABLE`)" — nothing enforced that pairing,
+    so the mbpp-plus ceiling shipped while its `KNOWN_UNPASSABLE` counterpart sat
+    uncommitted in a different worktree. Entry added; a test now fails on any
+    ceiling with no canary-side exclusion naming the task, because a ceiling is a
+    published reduction of the denominator, not a free adjustment.
+  - **Wiring the plus harness silently inverted a canary verdict.** The recipe
+    scanned `test_list` for dependency blockers while the grader had moved to the
+    expanded `test` blob — carrying a comment asserting that scope was "what
+    `MBPPPlus.evaluate` ACTUALLY executes", true when written and wrong after.
+    With numpy absent, the sweep reported mbpp-plus **BROKEN**, accusing a
+    working grader, where the honest verdict was ENV-MISSING. Proven three ways
+    against a genuinely numpy-free venv: stale scope → BROKEN, fixed scope →
+    ENV-MISSING, fixed + numpy → PASS. (A first attempt to reproduce this with an
+    import-blocking shim was invalid — a `numpy.py` on the path keeps
+    `find_spec` succeeding, so the canary cannot detect absence at all.) The
+    scope now tracks the grader and a test pins it *together with* the fact that
+    the adapter really grades at plus strength, so un-wiring one breaks the
+    other rather than leaving a green assertion describing nothing.
+  - `DEFAULT_PATTERNS` gained `modal-grid-fullscore4-*` — a receipt the
+    generator does not glob is silently never read, and this one first landed
+    under an `observatory-*` name that put it in the depth matrix instead of the
+    flagship row.
 
 - **`bench-matrix` exited 0 on a run that graded nothing.** `run_matrix`
   deliberately contains a per-cell exception as a `status="error"` cell so one

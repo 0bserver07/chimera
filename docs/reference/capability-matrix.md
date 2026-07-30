@@ -292,16 +292,21 @@ measures copying at least as much as solving. Diagnosis:
 `docs/notes/bench-diagnosis-darklight1.md`. A "lower bound" over a denominator
 that cannot pass is fiction with an inequality sign in front of it.
 
-**2. mbpp-plus 99.7% is graded at BASE strength.** `MBPPPlus` subclasses `MBPP`
-and inherits its `evaluate()`, which runs the dataset's original `test_list`
-asserts. The EvalPlus expanded `test` harness is staged verbatim in every row
-and **never executed** — stated in the `MBPPPlus` docstring
-(`chimera/eval/benchmarks/mbpp.py`). The canary cannot catch this class: a
-weaker suite still passes correct answers and rejects wrong ones. Read the
-column as *MBPP+ tasks, base-graded*. The caveat is carried on the observatory;
-it is **not** carried in `README.md`, which publishes "mbpp-plus 99.7%" with
-zero mention of base strength (`grep -c "base-strength" README.md` → 0).
-
+**2. mbpp-plus 99.7% was graded at BASE strength — RESOLVED 2026-07-30.**
+`MBPPPlus` inherited `MBPP`'s `test_list` grading path while the EvalPlus
+expanded `test` blob sat staged in every row and never executed, so the
+published 99.7% (377/378) was *MBPP+ tasks, base-graded*. The expanded harness
+now runs (`MBPPPlus.evaluate`), and re-running the **same tasks and agent**
+under it gives **321/378 = 84.9%** — a **14.8-point** base-grading inflation
+attributable to grading alone. (`agent_id` and n=378 are recorded in both
+receipts; the model only in the new one, since the 2026-07-09 receipts predate
+that field. Near-identical cost — $2.38 vs $2.32 — corroborates it.) Receipt:
+`data/modal-grid-fullscore4-20260730-plusgrade.json`. The contract is strictly
+stronger, not merely different: a hardcoded lookup satisfying every base
+assertion for `is_not_prime` is accepted by base and rejected by plus. A
+residual **ceiling of 377/378** stands — task 590 (`polar_rect`) cannot pass
+because the upstream harness compares floats with `atol=0` and the dataset's
+own canonical answer differs in the last ULP.
 **3. humaneval-plus is capped at 99.4%, not 100%.** `HumanEval/32` is
 unpassable by construction: the upstream EvalPlus assertion
 `_poly(*candidate(*inp), inp)` splats the float `find_zero` returns and dies of
@@ -506,9 +511,14 @@ Ranked by *how confidently a reader would trust the cell*, not by effort.
    *Cheapest fix:* collect the run (`modal run …::collect --run-id observatory1`)
    or strike the claim until it lands.
 
-6. **`mbpp-plus 99.7%` in `README.md` without the base-grading caveat.** The
-   number is real for what executed; the name promises more.
-   *Cheapest fix:* copy the observatory's ‡ footnote into the README line.
+6. ~~**`mbpp-plus 99.7%` in `README.md` without the base-grading caveat.**~~
+   **RESOLVED 2026-07-30** — the plus harness now runs and README carries the
+   plus-graded **84.9%**, so the name and the number finally agree.
+   *Original entry, kept for the record:* "The number is real for what
+   executed; the name promises more. *Cheapest fix:* copy the observatory's ‡
+   footnote into the README line." The actual fix went further than that,
+   because the footnote would have documented an inflated number rather than
+   correcting it.
 
 7. **`--env swe-modal` and `--modal-gpu` described as live-proven.** Both are
    narrative-only; the one named receipt is missing.

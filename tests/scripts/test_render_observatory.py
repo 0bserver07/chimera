@@ -165,14 +165,131 @@ def test_grading_strength_note_travels_with_the_score(tmp_path: Path) -> None:
     )
     page = _render(tmp_path)
     assert "‡ **mbpp-plus**" in page
-    assert "base strength" in page
-    assert "never executed" in page
+    # Asserted on the durable facts, not the phrasing: the note originally read
+    # "graded at base strength … until the plus harness is wired and the column
+    # re-run". Both happened, so the wording had to change — keying a test to
+    # the old sentence would have forced either a stale note or a weakened test.
+    # What must always survive is that the note explains the base-vs-plus
+    # difference and cites its receipt.
+    assert "base" in page and "plus" in page
+    assert "data/modal-grid-fullscore4" in page, "the note must cite its receipt"
+    assert "14.8" in page, "the measured inflation must travel with the number"
+
+
+def test_caveat_markers_ride_the_score_cell_not_only_the_footnote(
+    tmp_path: Path,
+) -> None:
+    # The registries existed for a release while † and ‡ appeared ONLY in the
+    # footnote lines below the table. A scorecard row is the unit people copy,
+    # so a caveat reachable only by reading further down the page is stripped
+    # off the moment the number is quoted anywhere else. Both markers must be
+    # inside the row, adjacent to the score.
+    _seed(tmp_path)
+    _write(
+        tmp_path,
+        "modal-grid-fullscore3-20990101-000000.json",
+        [
+            _cell(bench="mbpp-plus", total=378, passed=321, counts={"completed": 378}),
+            _cell(
+                bench="humaneval-plus", total=164, passed=151, counts={"completed": 164}
+            ),
+        ],
+        run_id="fullscore3",
+    )
+    page = _render(tmp_path)
+    rows = {
+        ln.split("|")[1].strip(): ln for ln in page.splitlines() if ln.startswith("| ")
+    }
+    # mbpp-plus carries both a ceiling and a grading note; humaneval-plus only a
+    # ceiling — so this also pins that markers are per-registry, not blanket.
+    assert "†" in rows["mbpp-plus"] and "‡" in rows["mbpp-plus"]
+    assert "†" in rows["humaneval-plus"]
+    assert "‡" not in rows["humaneval-plus"]
+    # mbpp has neither: a marker on every row would convey nothing.
+    assert "†" not in rows["mbpp"] and "‡" not in rows["mbpp"]
+
+
+def test_retracted_row_carries_no_caveat_markers(tmp_path: Path) -> None:
+    # A retracted row renders ⊘ instead of a score and suppresses its notes, so
+    # hanging † / ‡ off it would point at footnotes that were never emitted.
+    _seed(tmp_path)
+    bench = next(iter(obs.RETRACTED))
+    obs.CEILINGS[bench] = "test-only ceiling"
+    obs.GRADING_NOTES[bench] = "test-only grading note"
+    try:
+        _write(
+            tmp_path,
+            "modal-grid-fullscore1-20990101-000000.json",
+            [_cell(bench=bench, total=175, passed=33, status="partial_error")],
+            run_id="fullscore1",
+        )
+        page = _render(tmp_path)
+        row = next(
+            ln
+            for ln in page.splitlines()
+            if ln.startswith("| ") and ln.split("|")[1].strip() == bench
+        )
+        assert "RETRACTED" in row
+        assert "†" not in row and "‡" not in row
+    finally:
+        obs.CEILINGS.pop(bench, None)
+        obs.GRADING_NOTES.pop(bench, None)
+
+
+def test_breadth_ticks_disclose_under_strength_grading(tmp_path: Path) -> None:
+    # §3 is a ✓/· harness smoke whose receipts predate the stronger harness, so
+    # a ✓ under a plus-labelled column means the base contract. The retracted
+    # case already got this treatment; under-strength grading needs it for the
+    # same reason — the tick otherwise reads as the column's full name.
+    _seed(tmp_path)
+    _write(
+        tmp_path,
+        "matrix-full-glm52.json",
+        [_cell(agent="react", bench="mbpp-plus", total=1, passed=1)],
+        run_id="matrix",
+    )
+    page = _render(tmp_path)
+    breadth = page.split("## 3.")[1]
+    assert "`mbpp-plus`" in breadth
+    assert "base contract" in breadth
 
 
 def test_grading_notes_registry_reasons_are_substantive() -> None:
     assert obs.GRADING_NOTES, "registry emptied — was the plus harness wired?"
     for bench, reason in obs.GRADING_NOTES.items():
         assert len(reason) > 120, f"{bench}: note too thin to act on"
+
+
+def test_every_ceiling_is_backed_by_a_canary_exclusion() -> None:
+    """`CEILINGS`' own docstring says it is "Verified by canary_benchmarks.py
+    (KNOWN_UNPASSABLE)" — nothing enforced that, and the pairing broke.
+
+    The mbpp-plus ceiling shipped in `CEILINGS` while its `KNOWN_UNPASSABLE`
+    counterpart sat uncommitted in a different worktree, so the published page
+    claimed a verified cap that no canary entry backed. A ceiling is a *published
+    reduction of the denominator*: it must be traceable to a specific task the
+    canary agrees cannot pass, or it is just a number lowering a score.
+    """
+    import importlib.util as _u
+
+    script = Path(__file__).resolve().parents[2] / "scripts" / "canary_benchmarks.py"
+    spec = _u.spec_from_file_location("_canary_for_ceilings", script)
+    assert spec is not None and spec.loader is not None
+    canary = _u.module_from_spec(spec)
+    sys.modules["_canary_for_ceilings"] = canary
+    spec.loader.exec_module(canary)
+
+    assert obs.CEILINGS, "registry emptied — a ceiling was removed, not fixed?"
+    unbacked = [
+        bench
+        for bench in obs.CEILINGS
+        if not canary.KNOWN_UNPASSABLE.get(bench)
+    ]
+    assert not unbacked, (
+        "ceiling published with no canary-side exclusion naming the task: "
+        f"{unbacked}. Add the KNOWN_UNPASSABLE entry (with the reason) or drop "
+        "the ceiling."
+    )
 
 
 def test_retraction_registry_reasons_are_substantive() -> None:

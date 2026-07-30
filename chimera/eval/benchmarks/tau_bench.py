@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 from typing import Any
 
@@ -199,10 +200,17 @@ class TauBench(Benchmark):
             agent_actions = payload.get("actions")
             if agent_actions is not None:
                 return _actions_match(agent_actions, expected_actions)
-            # Best-effort: scan for the terminal action name in the output
+            # Best-effort: scan for the terminal action name in the output.
+            # Word-boundaried, so `transfer_to_agent` is not satisfied by a
+            # mention of `transfer_to_agent_v2`. Still best-effort by nature —
+            # a name appearing in prose is not proof the action was taken, which
+            # is why the structured path above is preferred whenever the agent
+            # reports actions at all.
             terminal = _terminal_action_name(expected_actions)
             if terminal:
-                return terminal in agent_output
+                return (
+                    re.search(rf"\b{re.escape(terminal)}\b", agent_output) is not None
+                )
         return False
 
     # ------------------------------------------------------------------

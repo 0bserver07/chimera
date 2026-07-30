@@ -200,17 +200,27 @@ def test_evaluate_coverage_track_uses_run_tests() -> None:
     assert bench.evaluate(task, "", _PatchEnv(tests_ok=False)) is False
 
 
-def test_evaluate_rubric_track_scores_substantive_output() -> None:
+def test_evaluate_rubric_track_never_scores_on_output_length() -> None:
+    # Was: asserted that an answer over N characters graded as SOLVED. The
+    # suite was pinning the defect in place — which is exactly why nothing
+    # caught it. Inability to grade is not a pass; see
+    # tests/eval/test_no_length_grading.py.
+    # The rubric tracks have NO grader (no LLM judge, no official scoring
+    # tool), so every instance is unresolved until one exists.
     task = DPAITask(instance_id="r", track="pr-review", repo="r", base_commit="c").to_task()
     bench = DPAIArena(track="pr-review")
     env = SimpleNamespace()  # rubric tracks ignore env beyond the None guard
-    assert bench.evaluate(task, "x" * 21, env) is True
+    assert bench.evaluate(task, "x" * 21, env) is False
     assert bench.evaluate(task, "short", env) is False
 
 
-def test_evaluate_unknown_track_falls_back_to_length() -> None:
-    """A track outside the known set falls through to the >10-char heuristic."""
+def test_evaluate_unknown_track_is_never_a_pass() -> None:
+    """A track outside the known set has no grader, so nothing is verified."""
+    # Was: asserted that an answer over N characters graded as SOLVED. The
+    # suite was pinning the defect in place — which is exactly why nothing
+    # caught it. Inability to grade is not a pass; see
+    # tests/eval/test_no_length_grading.py.
     task = {"id": "u", "track": "mystery-track"}
     env = SimpleNamespace()
-    assert DPAIArena(track="all").evaluate(task, "x" * 11, env) is True
+    assert DPAIArena(track="all").evaluate(task, "x" * 11, env) is False
     assert DPAIArena(track="all").evaluate(task, "tiny", env) is False

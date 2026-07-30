@@ -194,30 +194,36 @@ RECIPES: dict[str, Recipe] = {
     # NOT "prompt" — that is BigCodeBench's natural-language instruct prompt.
     "bigcodebench": Recipe(answer=_joined("code_prompt")),
     "mbpp": Recipe(answer=_field("code"), test_fields=("test_list",)),
-    # mbpp-plus: test_fields matches what MBPPPlus.evaluate ACTUALLY executes —
-    # the base `test_list` asserts. The EvalPlus `test` harness is staged but
-    # never run (base-strength grading, disclosed on the observatory), so
-    # scanning it here would invent a numpy dependency the grader never imports.
-    "mbpp-plus": Recipe(answer=_field("code"), test_fields=("test_list",)),
+    # mbpp-plus: `test` FIRST, because MBPPPlus.evaluate now runs the EvalPlus
+    # expanded harness and falls back to `test_list` only for rows with no
+    # `test` blob. This field list was `("test_list",)` with a comment claiming
+    # scanning `test` "would invent a numpy dependency the grader never
+    # imports" — accurate while grading was base-strength, and wrong the moment
+    # the plus harness was wired. The stale scope did not merely miss a
+    # blocker, it inverted a verdict: with numpy absent the adapter reported
+    # BROKEN (a working grader accused) instead of ENV-MISSING. Whenever an
+    # adapter's grading path changes, re-check this tuple against it — the two
+    # must name the same code.
+    "mbpp-plus": Recipe(answer=_field("code"), test_fields=("test", "test_list")),
     # --- natural-language answer graders -----------------------------------
     "aimo": Recipe(answer=_field("answer"), wrong=lambda t: "-99999", code_like=False),
     "math-500": Recipe(
         answer=_field("answer"), wrong=lambda t: "-99999", code_like=False
     ),
     # --- exempt: grading needs a checked-out repo and a real test runner ----
-    "swe-bench": Recipe(exempt="gold patch needs a checked-out repo + test runner"),
+    "swe-bench": Recipe(exempt="gold patch needs a checked-out repo + test runner; blocked on per-instance env provisioning (no dataset carries docker_image) — #175"),
     "swe-bench-verified": Recipe(
-        exempt="gold patch needs a checked-out repo + test runner"
+        exempt="gold patch needs a checked-out repo + test runner; blocked on per-instance env provisioning (no dataset carries docker_image) — #175"
     ),
-    "swe-polybench": Recipe(exempt="gold patch needs a checked-out repo + test runner"),
-    "swt-bench": Recipe(exempt="gold patch needs a checked-out repo + test runner"),
+    "swe-polybench": Recipe(exempt="gold patch needs a checked-out repo + test runner; blocked on per-instance env provisioning (no dataset carries docker_image) — #175"),
+    "swt-bench": Recipe(exempt="gold patch needs a checked-out repo + test runner; blocked on per-instance env provisioning (no dataset carries docker_image) — #175"),
     "multi-swe-bench": Recipe(
-        exempt="gold patch needs a checked-out repo + test runner"
+        exempt="gold patch needs a checked-out repo + test runner; blocked on per-instance env provisioning (no dataset carries docker_image) — #175"
     ),
     "senior-swe-bench": Recipe(
-        exempt="gold patch needs a checked-out repo + test runner"
+        exempt="gold patch needs a checked-out repo + test runner; blocked on per-instance env provisioning (no dataset carries docker_image) — #175"
     ),
-    "swe-lancer": Recipe(exempt="gold patch needs a checked-out repo + test runner"),
+    "swe-lancer": Recipe(exempt="gold patch needs a checked-out repo + test runner; blocked on per-instance env provisioning (no dataset carries docker_image) — #175"),
     # --- exempt: no reference answer exists in the dataset ------------------
     # The grading contract was fixed 2026-07-25 (functional tasks are now
     # called, not piped), but the dataset stages no canonical solution, so
@@ -232,11 +238,26 @@ RECIPES: dict[str, Recipe] = {
     ),
     "tau-bench": Recipe(exempt="agentic — grading replays actions against a sim env"),
     "webarena": Recipe(exempt="agentic — grading needs a live browser environment"),
-    "nocha": Recipe(exempt="long-context QA — claims are graded, no reference answer"),
+    # nocha was also listed as "no reference answer" — but claim A is the true
+    # one in EVERY instance by dataset construction (`NoCha.evaluate` returns
+    # `choice == "A"`), so the reference answer is the constant "A". That makes
+    # it the cheapest canary in the set, and the inverse half carries the weight
+    # here: a positive-only check would be satisfied by a grader hardwired to
+    # True, precisely because the expected answer never varies.
+    "nocha": Recipe(
+        answer=lambda t: "A", wrong=lambda t: "B", code_like=False
+    ),
     "harbor": Recipe(exempt="delegating adapter — grading is the upstream harness's"),
     "programbench": Recipe(exempt="submission-contract bench — grading fetches deps"),
     "dpai-arena": Recipe(exempt="agentic arena — no per-task reference answer"),
-    "context-bench": Recipe(exempt="agentic — retrieval behaviour, no reference answer"),
+    # context-bench is NOT exempt: it was listed as "no reference answer" while
+    # `ContextBench.evaluate` grades against `task["answer"]`. A false exemption
+    # reason is how an adapter stays unverified forever — the sweep reads
+    # EXEMPT and no one re-derives the claim. With a real recipe it reports
+    # NOT-STAGED until the dataset lands, which is true and actionable.
+    "context-bench": Recipe(
+        answer=_field("answer"), wrong=lambda t: "-99999", code_like=False
+    ),
     "cline-bench": Recipe(exempt="repo-task bench — needs a checked-out workspace"),
     "feature-bench": Recipe(exempt="repo-task bench — needs a checked-out workspace"),
     "aider-polyglot": Recipe(exempt="repo-task bench — needs a checked-out workspace"),
@@ -270,6 +291,15 @@ def _shapes(answer: str, code_like: bool) -> list[tuple[str, str]]:
 #: bug would love to hide behind. Verified by reading the staged bytes, not
 #: inferred from a failure.
 KNOWN_UNPASSABLE: dict[str, dict[str, str]] = {
+    "mbpp-plus": {
+        "590": (
+            "upstream EvalPlus data: polar_rect's expanded harness compares "
+            "floats with atol=0, and the dataset's OWN canonical answer differs "
+            "in the last ULP (38.85387210404512 vs ...511). The answer is "
+            "correct; the comparison is exact where it should be approximate. "
+            "Caps mbpp-plus at 377/378 = 99.7% under plus grading."
+        ),
+    },
     "humaneval-plus": {
         "HumanEval/32": (
             "upstream EvalPlus data: the final assertion is "

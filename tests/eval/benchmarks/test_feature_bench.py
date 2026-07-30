@@ -200,8 +200,12 @@ def test_evaluate_run_command_pytest_path() -> None:
     assert FeatureBench().evaluate(task, "", _CmdEnv(success=False)) is False
 
 
-def test_evaluate_fallback_heuristic_when_no_hooks() -> None:
+def test_evaluate_without_a_runner_is_never_a_pass() -> None:
+    # Was: asserted that an answer over N characters graded as SOLVED. The
+    # suite was pinning the defect in place — which is exactly why nothing
+    # caught it. Inability to grade is not a pass; see
+    # tests/eval/test_no_length_grading.py.
     task = FeatureBenchTask(task_id="t", repo="r", base_commit="c").to_task()
     env = SimpleNamespace()  # no run_tests, no run_command
-    assert FeatureBench().evaluate(task, "x" * 11, env) is True
+    assert FeatureBench().evaluate(task, "x" * 11, env) is False
     assert FeatureBench().evaluate(task, "tiny", env) is False

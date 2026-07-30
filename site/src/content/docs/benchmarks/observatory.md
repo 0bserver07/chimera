@@ -34,9 +34,9 @@ The assembled `chimera code` stack (`coding-agent`) over each benchmark's **whol
 
 | Benchmark | n | Score | Basis | Source |
 |---|---:|---|---|---|
-| mbpp-plus | 378 | **99.7%** (377/378) | EXACT — 0 errors (`{completed: 378}`) | `data/modal-grid-fullscore3-20260709-234842.json` |
 | mbpp | 427 | **99.1%** (423/427) | EXACT — 0 errors (`{completed: 427}`) | `data/modal-grid-fullscore2-20260709-154339.json` |
-| humaneval-plus | 164 | **92.1%** (151/164) | EXACT — 0 errors (`{completed: 164}`) | `data/modal-grid-fullscore2-20260709-154339.json` |
+| humaneval-plus | 164 | **92.1%** (151/164) † | EXACT — 0 errors (`{completed: 164}`) | `data/modal-grid-fullscore2-20260709-154339.json` |
+| mbpp-plus | 378 | **84.9%** (321/378) †‡ | EXACT — 0 errors (`{completed: 378}`) | `data/modal-grid-fullscore4-20260730-plusgrade.json` |
 | math500 | 500 | **77.6%** (388/500) | ~EXACT — `{completed: 496, budget_exhausted: 4}` (≤0.8% margin) | `data/modal-grid-fullscore3-20260709-234842.json` |
 | livecodebench | 175 | ⊘ **RETRACTED** | see the retraction note below | `data/modal-grid-fullscore1-20260709-105308.json` |
 
@@ -48,9 +48,11 @@ The assembled `chimera code` stack (`coding-agent`) over each benchmark's **whol
 
 † **humaneval-plus** — 1 of 164 tasks (`HumanEval/32`) is unpassable by construction — its upstream EvalPlus assertion `_poly(*candidate(*inp), inp)` splats the float `find_zero` returns and dies of `TypeError` before comparing anything, so the achievable maximum is **163/164 = 99.4%**, not 100%.
 
-‡ **mbpp-plus** — graded at **base strength**: the adapter runs the dataset's original `test_list` asserts, not the EvalPlus expanded `test` harness (staged verbatim in every row, never executed — `MBPPPlus` docstring). The MBPP+ task set under base grading scores higher than true MBPP+ would; treat this column as *MBPP+ tasks / base-graded* until the plus harness is wired and the column re-run.
+† **mbpp-plus** — 1 of 378 tasks (task `590`, `polar_rect`) is unpassable under plus grading — the upstream expanded harness compares the returned floats with `atol=0`, and the dataset's own canonical answer differs from the expected value in the last ULP, so the achievable maximum is **377/378 = 99.7%**, not 100%. Read the score against that, not against a notional perfect run.
 
-Receipts: 5 cells, **$22.91** total model spend (sum of the source cells' `cost_usd`).
+‡ **mbpp-plus** — **base-grading inflation, now measured.** The previously published **99.7% (377/378)** for this column was graded with the dataset's *base* `test_list` asserts — three or four per task against a suite designed for hundreds — because `MBPPPlus` inherited MBPP's grading path and never executed the EvalPlus expanded `test` blob staged in every row. That harness now runs. Re-running the **same tasks and agent** under it gives **321/378 = 84.9%** (`data/modal-grid-fullscore4-20260730-plusgrade.json`), a **14.8-point** gap attributable to grading alone, since nothing else changed. The expanded contract is strictly stronger, not merely different: a hardcoded lookup satisfying every base assertion for `is_not_prime` is accepted by base and rejected by plus. On provenance: `agent_id` is recorded as `coding-agent` in **both** receipts and the task set is identical (n=378); the model is recorded only in the new one (`glm-5.2`) — the 2026-07-09 receipts predate that field, and the flagship column's model is documented here rather than per-cell. Cost corroborates it independently: **$2.38 then, $2.32 now** (2.5% apart), which is what the same model doing the same work costs — the agent solved as before and the grader accepted fewer answers.
+
+Receipts: 5 cells, **$22.85** total model spend (sum of the source cells' `cost_usd`).
 
 **Reproduce:**
 
@@ -58,14 +60,14 @@ Receipts: 5 cells, **$22.91** total model spend (sum of the source cells' `cost_
 # small-n smoke of the same cells (any machine; model creds required;
 # drop --limit to run each full dataset):
 uvx --from chimera-run chimera bench-matrix --agents coding-agent \
-  --benchmarks mbpp-plus,mbpp,humaneval-plus,math500 \
+  --benchmarks mbpp,humaneval-plus,mbpp-plus,math500 \
   --limit 5 --model "glm-5.2[1m]"
 
 # how this data was actually produced — detached Modal grid
 # (survives disconnects; cells persist to a Volume):
 modal run --detach scripts/modal_bench_app.py::grid_detached \
   --run-id myscore --agents coding-agent \
-  --benches mbpp-plus,mbpp,humaneval-plus,math500 --limit 500
+  --benches mbpp,humaneval-plus,mbpp-plus,math500 --limit 500
 modal run scripts/modal_bench_app.py::collect --run-id myscore
 ```
 
@@ -115,7 +117,7 @@ The instrument demonstration: **every** replicated architecture against **every*
 
 Legend: HE=humaneval · HE+=humaneval-plus · mbpp+=mbpp-plus · math=math500 · lcb=livecodebench · tau=tau-bench.
 
-12/13 agents solve 7/7 at n=1. A ✓ under `livecodebench` means only that the harness ran and the adapter's grader accepted an answer — that adapter is under retraction (see §1) and its ticks carry no benchmark claim. `lint-loop`'s zero row is honest — it writes no solution file on from-scratch codegen (a known agent-behavior gap, not a grading bug).
+12/13 agents solve 7/7 at n=1. A ✓ under `livecodebench` means only that the harness ran and the adapter's grader accepted an answer — that adapter is under retraction (see §1) and its ticks carry no benchmark claim. Ticks under `mbpp-plus` were graded by the weaker harness described in §1's ‡ note — this grid's receipts predate the stronger one, so a ✓ there means the base contract, not the column's name. `lint-loop`'s zero row is honest — it writes no solution file on from-scratch codegen (a known agent-behavior gap, not a grading bug).
 
 Receipts: 91 cells, **$0.78** total model spend. Source: `data/matrix-full-glm52.json`.
 
@@ -130,6 +132,6 @@ uvx --from chimera-run chimera bench-matrix \
 
 ---
 
-*Generated by `scripts/render_observatory.py` from 4 data receipts: `data/matrix-full-glm52.json` · `data/modal-grid-fullscore1-20260709-105308.json` · `data/modal-grid-fullscore2-20260709-154339.json` · `data/modal-grid-fullscore3-20260709-234842.json`.*
+*Generated by `scripts/render_observatory.py` from 5 data receipts: `data/matrix-full-glm52.json` · `data/modal-grid-fullscore1-20260709-105308.json` · `data/modal-grid-fullscore2-20260709-154339.json` · `data/modal-grid-fullscore3-20260709-234842.json` · `data/modal-grid-fullscore4-20260730-plusgrade.json`.*
 
-*Data date: 2026-07-27 (newest receipt's mtime — the generator never reads the wall clock, so regenerating over unchanged inputs is byte-identical).*
+*Data date: 2026-07-30 (newest receipt's mtime — the generator never reads the wall clock, so regenerating over unchanged inputs is byte-identical).*

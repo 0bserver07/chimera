@@ -122,11 +122,14 @@ class TestSWTBench:
         bench.add_instance(SWTBenchInstance("x", "r", "c", "p"))
         assert bench.tasks() is bench.tasks()
 
-    def test_evaluate_no_env_falls_back_to_nontrivial(self):
+    def test_evaluate_no_env_is_never_a_pass(self):
+        # Was: asserted a long-enough answer graded as SOLVED with no env. Even
+        # a plausible-looking test body proves nothing when nothing ran it.
+        # See tests/eval/test_no_length_grading.py.
         bench = SWTBench()
         bench.add_instance(SWTBenchInstance("x", "r", "c", "p", patch="diff"))
         task = bench.tasks()[0]
-        assert bench.evaluate(task, "def test_repro(): assert False  # long enough")
+        assert not bench.evaluate(task, "def test_repro(): assert False  # long enough")
         assert not bench.evaluate(task, "")
 
     def test_evaluate_unit_test_f2p_success(self):
