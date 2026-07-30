@@ -1,0 +1,24 @@
+{
+  "run_id": "fullscore4-plusgrade",
+  "model": "glm-5.2",
+  "note": "MBPP+ graded with the EvalPlus EXPANDED harness (plus-strength), not the base test_list asserts. Same model/tasks/agent as the 99.7% cell in modal-grid-fullscore3-20260709-234842.json \u2014 only the grading contract differs, so the 14.8-point drop is attributable to grading alone. Achievable ceiling is 377/378: task 590 (polar_rect) cannot pass because the upstream harness compares floats with atol=0 and the dataset's own canonical answer differs in the last ULP.",
+  "cells": [
+    {
+      "agent_id": "coding-agent",
+      "benchmark": "mbpp-plus",
+      "total": 378,
+      "passed": 321,
+      "pass_rate": 0.8492063492063492,
+      "cost_usd": 2.320696,
+      "tool_calls": 3,
+      "wall_clock_sec": 9.786931333015673,
+      "status": "completed",
+      "budget_honored": false,
+      "budget_note": "factory does not accept loop_config",
+      "category": "unknown",
+      "status_counts": {
+        "completed": 378
+      }
+    }
+  ]
+}

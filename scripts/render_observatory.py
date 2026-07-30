@@ -54,6 +54,7 @@ DEFAULT_PATTERNS: tuple[str, ...] = (
     "modal-grid-fullscore1-*.json",
     "modal-grid-fullscore2-*.json",
     "modal-grid-fullscore3-*.json",
+    "modal-grid-fullscore4-*.json",
     "modal-grid-observatory*.json",
 )
 
@@ -176,6 +177,14 @@ CEILINGS: dict[str, str] = {
         "float `find_zero` returns and dies of `TypeError` before comparing "
         "anything, so the achievable maximum is **163/164 = 99.4%**, not 100%."
     ),
+    "mbpp-plus": (
+        "1 of 378 tasks (task `590`, `polar_rect`) is unpassable under plus "
+        "grading — the upstream expanded harness compares the returned floats "
+        "with `atol=0`, and the dataset's own canonical answer differs from the "
+        "expected value in the last ULP, so the achievable maximum is "
+        "**377/378 = 99.7%**, not 100%. Read the score against that, not against "
+        "a notional perfect run."
+    ),
 }
 
 
@@ -186,12 +195,19 @@ CEILINGS: dict[str, str] = {
 #: weaker test suite still passes correct answers and rejects wrong ones.
 GRADING_NOTES: dict[str, str] = {
     "mbpp-plus": (
-        "graded at **base strength**: the adapter runs the dataset's original "
-        "`test_list` asserts, not the EvalPlus expanded `test` harness (staged "
-        "verbatim in every row, never executed — `MBPPPlus` docstring). The "
-        "MBPP+ task set under base grading scores higher than true MBPP+ "
-        "would; treat this column as *MBPP+ tasks / base-graded* until the "
-        "plus harness is wired and the column re-run."
+        "**base-grading inflation, now measured.** The previously published "
+        "**99.7% (377/378)** for this column was graded with the dataset's "
+        "*base* `test_list` asserts — three "
+        "or four per task against a suite designed for hundreds — because "
+        "`MBPPPlus` inherited MBPP's grading path and never executed the "
+        "EvalPlus expanded `test` blob staged in every row. That harness now "
+        "runs. Re-running the **identical model, tasks and agent** under it "
+        "gives **321/378 = 84.9%** "
+        "(`data/modal-grid-fullscore4-20260730-plusgrade.json`), a "
+        "**14.8-point** gap attributable to grading alone, since nothing else "
+        "changed. The expanded contract is strictly stronger, not merely "
+        "different: a hardcoded lookup satisfying every base assertion for "
+        "`is_not_prime` is accepted by base and rejected by plus."
     ),
 }
 
@@ -527,6 +543,16 @@ def _render_flagship(rows: list[Cell]) -> list[str]:
             score = f"≥ {_pct(cell)} ({cell.passed}/{cell.total})"
         else:
             score = f"**{_pct(cell)}** ({cell.passed}/{cell.total})"
+        # A caveat that does not travel with the number is not a disclosure.
+        # The footnotes below the table were previously the ONLY place † and ‡
+        # appeared, so a reader who copied the row — which is what readers do
+        # with a scorecard — carried the score and left the caveat behind.
+        if not _is_retracted(cell.bench):
+            score += "".join(
+                m
+                for m, reg in ((" †", CEILINGS), ("‡", GRADING_NOTES))
+                if cell.bench in reg
+            )
         out.append(f"| {cell.bench} | {cell.total} | {score} | {basis} | `data/{cell.source}` |")
     out.append("")
     for bench in retracted_seen:
@@ -771,6 +797,18 @@ def _render_breadth(cells: list[Cell], model: str) -> list[str]:
             f" A ✓ under {names} means only that the harness ran and the"
             " adapter's grader accepted an answer — that adapter is under"
             " retraction (see §1) and its ticks carry no benchmark claim."
+        )
+    noted_here = [b for b in benches if b in GRADING_NOTES and not _is_retracted(b)]
+    if noted_here:
+        # Same reasoning as the retracted case: a ✓ under a column whose name
+        # promises more than its grader delivered reads as the full contract.
+        # These receipts predate the stronger harness, so the ticks are base
+        # grading under a plus-labelled column.
+        names = ", ".join(f"`{b}`" for b in noted_here)
+        summary += (
+            f" Ticks under {names} were graded by the weaker harness described"
+            " in §1's ‡ note — this grid's receipts predate the stronger one, so"
+            " a ✓ there means the base contract, not the column's name."
         )
     if wins_by_agent.get("lint-loop") == 0:
         summary += (

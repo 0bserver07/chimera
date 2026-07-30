@@ -72,6 +72,40 @@ commit receipts.
     (`coding_agent.py` interceptor/budget comments, the guide's coverage
     bullet, the TUI guide's lane caveat). Budgets still do not reach
     strategy-loop lanes; that note now says exactly that.
+- **The mbpp-plus base-grading inflation, measured: 14.8 points.** The
+  published **99.7% (377/378)** was the MBPP+ task set graded with the
+  dataset's *base* `test_list` asserts. Re-running the **identical model
+  (glm-5.2), tasks and agent** under the newly-wired EvalPlus expanded harness
+  gives **321/378 = 84.9%**, `{completed: 378}`, $2.32 — so the gap is
+  attributable to grading alone, with nothing else changed. Receipt:
+  `data/modal-grid-fullscore4-20260730-plusgrade.json`; the observatory row and
+  README now carry the plus-graded number, and the `GRADING_NOTES` entry that
+  said *"until the plus harness is wired and the column re-run"* is replaced by
+  the measurement.
+  - Getting to a *comparable* number took two runs. The first fell back to
+    `glm-5.1` because `glm-5.2` was absent from the catalog, which confounded
+    grading against model: 323/378 there. That result stands as a second data
+    point but is not the headline, because two variables moved in it.
+  - **The residual ceiling is 377/378, not 378.** Task 590 (`polar_rect`)
+    cannot pass under plus grading: the upstream harness compares floats with
+    `atol=0` and the dataset's own canonical answer differs in the last ULP.
+    Recorded in `KNOWN_UNPASSABLE` and `CEILINGS`, so 84.9% reads against an
+    achievable 99.7%, not a notional 100%.
+  - **The caveat markers were never on the number.** `CEILINGS` and
+    `GRADING_NOTES` shipped a release ago to make a caveat *travel with* a score,
+    but `†`/`‡` appeared only in the footnote lines below the table — so the
+    scorecard row, which is the unit anyone copies, carried the score and left
+    the caveat behind. The markers now render inside the score cell (and are
+    suppressed on retracted rows, whose footnotes are not emitted). Three tests
+    pin it, each falsified against the unfixed renderer.
+  - **§3's `mbpp+` ticks now disclose their grading strength.** That grid's
+    receipts predate the plus harness, so a ✓ under a plus-labelled column meant
+    the base contract — the same overstatement the retracted-adapter clause
+    already guarded against, for the same reason.
+  - `DEFAULT_PATTERNS` gained `modal-grid-fullscore4-*` — a receipt the
+    generator does not glob is silently never read, and this one first landed
+    under an `observatory-*` name that put it in the depth matrix instead of the
+    flagship row.
 
 - **`bench-matrix` exited 0 on a run that graded nothing.** `run_matrix`
   deliberately contains a per-cell exception as a `status="error"` cell so one
