@@ -23,7 +23,7 @@ from chimera.plugins.packs import RedactorPlugin
 from chimera.plugins.registry import PluginExtensionRegistry
 from chimera.providers.faux import FauxProvider
 from chimera.testing import create_assembled_harness
-from chimera.types import Message, ToolCall, ToolResult
+from chimera.types import ImageContent, Message, TextContent, ToolCall, ToolResult
 
 SECRET = "sk-livekey12345678"
 
@@ -190,3 +190,43 @@ def test_unload_withdraws_both_scrubs():
     manager.unload("redactor")
     assert PluginExtensionRegistry.get_interceptors("provider_request") == []
     assert PluginExtensionRegistry.get_interceptors("tool_result") == []
+
+
+def test_text_inside_content_blocks_is_scrubbed_images_untouched():
+    """A multimodal message duplicates its text into a TextContent block;
+    the block's copy of the secret must be scrubbed too, while the image
+    block rides through as the same object — and the rewrite never
+    mutates the original message."""
+    pack = RedactorPlugin()
+    image_b64 = "aGVsbG8sIHdvcmxk"  # plain base64, no secret shape
+    original = Message.user_with_image(f"auth with {SECRET} please", image_b64)
+    req = ProviderRequest(model="m", messages=[original])
+
+    out, block_reason = intercept_provider_request(
+        pack.interceptors().provider_request, req,
+    )
+
+    assert block_reason is None
+    scrubbed = out.messages[0]
+    assert SECRET not in (scrubbed.content or "")
+    text_blocks = [b for b in scrubbed.content_blocks if isinstance(b, TextContent)]
+    image_blocks = [b for b in scrubbed.content_blocks if isinstance(b, ImageContent)]
+    assert text_blocks and all(SECRET not in b.text for b in text_blocks)
+    assert "[redacted]" in text_blocks[0].text
+    assert text_blocks[0].type == "text"
+    # Image bytes and media type pass through as the same object.
+    assert image_blocks and image_blocks[0] is original.content_blocks[1]
+    assert image_blocks[0].data == image_b64
+    # Ephemeral rewrite: the original message still carries the secret.
+    assert SECRET in original.content
+    assert SECRET in original.content_blocks[0].text
+
+
+def test_multimodal_message_without_secrets_passes_through_untouched():
+    pack = RedactorPlugin()
+    req = ProviderRequest(
+        model="m",
+        messages=[Message.user_with_image("nothing secret here", "aGVsbG8=")],
+    )
+    out, _ = intercept_provider_request(pack.interceptors().provider_request, req)
+    assert out is req  # no match anywhere, blocks included: no rewrite at all

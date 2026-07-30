@@ -3,9 +3,10 @@
 A worked policy on the two data-shaping seams:
 
 - ``provider_request`` (fail-open): rewrites the request envelope before
-  it leaves the process — message contents, string values inside
-  assistant tool-call arguments, and request headers. The rewrite is
-  per call and ephemeral; the durable conversation keeps its originals.
+  it leaves the process — message contents, text content blocks, string
+  values inside assistant tool-call arguments, and request headers. The
+  rewrite is per call and ephemeral; the durable conversation keeps its
+  originals.
 - ``tool_result`` (fail-open): scrubs each executed tool's output (and
   error text) before it enters the conversation — this one is durable,
   since the scrubbed result is what the transcript records.
@@ -18,7 +19,7 @@ from typing import TYPE_CHECKING, Any
 from chimera.core.interception import InterceptDecision, Interceptors, ProviderRequest
 from chimera.plugins.base import BasePlugin
 from chimera.plugins.registry import PluginExtensionRegistry
-from chimera.types import Message, ToolCall, ToolResult
+from chimera.types import ContentBlock, Message, TextContent, ToolCall, ToolResult
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
@@ -36,10 +37,12 @@ class RedactorPlugin(BasePlugin):
     """Scrub a configurable secret pattern from payloads, headers, results.
 
     Every match of *pattern* is replaced with *replacement* in outgoing
-    message contents, in string values inside tool-call arguments riding
-    those messages, in request-header values, and in tool outputs; headers
-    named in *headers* are replaced wholesale (their value is the secret).
-    Header-name comparison is case-insensitive.
+    message contents, in ``TextContent`` blocks (multimodal messages
+    duplicate their text into one), in string values inside tool-call
+    arguments riding those messages, in request-header values, and in
+    tool outputs; headers named in *headers* are replaced wholesale
+    (their value is the secret). Header-name comparison is
+    case-insensitive.
 
     Honest limits:
 
@@ -47,8 +50,10 @@ class RedactorPlugin(BasePlugin):
       header surface (a ``request_headers`` property); otherwise the
       envelope carries ``headers=None`` and header redaction is a no-op —
       the payload scrub still applies.
-    - Text only: image content blocks and ``ToolResult.metadata`` pass
-      through unscrubbed.
+    - Text only. Exactly what passes through unscrubbed:
+      ``ImageContent`` blocks (base64 bytes and media type), content
+      blocks of types other than ``TextContent``, and
+      ``ToolResult.metadata``.
     - Both seams are fail-open by the seam contract: a crash inside the
       redactor degrades to no redaction for that value, reported
       observationally. Pair this pack with the events-side
@@ -160,8 +165,28 @@ class RedactorPlugin(BasePlugin):
             return (items, True) if changed else (value, False)
         return value, False
 
+    def _scrub_blocks(
+        self, blocks: list[ContentBlock],
+    ) -> tuple[list[ContentBlock], bool]:
+        """Scrub the text inside ``TextContent`` blocks; leave the rest alone.
+
+        Image blocks (and any other non-text block type) pass through as
+        the same objects — the class docstring's "text only" limit.
+        """
+        changed = False
+        out: list[ContentBlock] = []
+        for block in blocks:
+            if isinstance(block, TextContent):
+                text, text_changed = self._scrub_text(block.text)
+                if text_changed:
+                    out.append(TextContent(type=block.type, text=text))
+                    changed = True
+                    continue
+            out.append(block)
+        return (out, True) if changed else (blocks, False)
+
     def _scrub_message(self, message: Message) -> tuple[Message, bool]:
-        """Scrub one message's content and tool-call arguments."""
+        """Scrub one message's content, content blocks, and tool-call arguments."""
         content, content_changed = self._scrub_text(message.content or "")
         calls_changed = False
         tool_calls = message.tool_calls
@@ -176,14 +201,15 @@ class RedactorPlugin(BasePlugin):
                 )
             if calls_changed:
                 tool_calls = new_calls
-        if not (content_changed or calls_changed):
+        blocks, blocks_changed = self._scrub_blocks(message.content_blocks)
+        if not (content_changed or calls_changed or blocks_changed):
             return message, False
         return Message(
             role=message.role,
             content=content,
             tool_calls=tool_calls,
             call_id=message.call_id,
-            content_blocks=message.content_blocks,
+            content_blocks=blocks,
         ), True
 
     # -- seam callables --------------------------------------------------
