@@ -172,6 +172,100 @@ client.uninstall("rufflint", cli="otter")
 For lower-level use (e.g. a custom registry index baked into a private
 mirror), wire up `PluginInfo` + `install_plugin` directly.
 
+## Hot-swap: `/resync`
+
+Chimera sessions are long-lived; plugin development should not require
+killing one. **`/resync`** — the same command in the REPL (`chimera code`)
+and both TUI surfaces (single lane and multiplexer) — re-discovers the
+resource catalogs on disk and rebinds them into the *running* session:
+
+```
+> /resync
+resync: plugins 1 refreshed · plugin tools 1 refreshed · skills 2 added · agents unchanged
+  · invocable skill commands (flat *.md): 3 — live in the skill tool
+  · system prompt is reassembled every turn — the refreshed skill catalog
+    reaches the next turn of this conversation
+```
+
+Edit a plugin's source → `/resync` → the next turn runs the new code. Edit
+or add a `SKILL.md` → `/resync` → the next turn's prompt advertises the
+refreshed catalog. Every resync reports **added / removed / refreshed /
+failed counts per resource kind**, in the transcript, in both frontends.
+
+What one resync does, per kind:
+
+- **plugins** — every loaded plugin is hot-swapped: its module re-imported
+  from disk, a fresh instance activated against a fresh component registry.
+  Loading stays explicit: entry points present but not loaded are named in a
+  note, never auto-loaded.
+- **plugin tools** — the aggregate of plugin-registered tools is synced into
+  the live tool list in place: an edited plugin's tools are *replaced*, an
+  unloaded plugin's tools drop out, and a plugin tool whose name collides
+  with a non-plugin tool is refused (a plugin can never shadow a built-in).
+- **interceptors** — whatever interceptor surface the plugin registries
+  expose is aggregated generically and bound *behind* the session's
+  constructor-supplied chain (a team-policy gate always runs first);
+  contributions in a shape the seam cannot bind soundly are counted and
+  reported, never guessed at.
+- **skills** — the nested `SKILL.md` catalog re-walks and lands in the
+  agent's prompt catalog; the flat `*.md` skill commands re-read into the
+  `skill` tool's registry, stale entries removed.
+- **agents** — the file-based agent-definition catalog re-scans and the
+  diff is reported. Definitions are re-read at each invocation anyway, so
+  the reported catalog is exactly what the next `/subagent` or spawner
+  call sees.
+
+### The guarantees, exactly
+
+- **Busy refusal.** A resync never races a running turn. When a turn is
+  active the command refuses with a message and performs **no** rebinding
+  of any kind — there is no partially-resynced state to reason about.
+- **Per-plugin isolation.** Each plugin hot-swaps independently. One
+  plugin's broken source is reported and skipped; every other plugin still
+  swaps.
+- **No half-applied plugin — and what that does and does not mean.** A
+  plugin's visible registrations swap as one complete snapshot: the manager
+  installs a component registry only after the plugin's activation fully
+  succeeds, so at every instant a plugin is either fully registered (old or
+  new) or not registered at all. On a failed swap, Chimera re-activates
+  the previous instance best-effort — the report then says `previous
+  registration restored`; if that restore also fails, the plugin ends
+  **cleanly unloaded** and the report says so. What is *not* claimed:
+  rollback of side effects a plugin performed outside its registry
+  (spawned processes, module-level state elsewhere) — those are the
+  plugin's own responsibility.
+- **System-prompt honesty, per stack.** The assembled stack (`chimera
+  code`, both TUIs, the embed surface) reassembles its system prompt every
+  turn, so a refreshed skill catalog reaches the next turn of the *current*
+  conversation — the report states this. The classic REPL stack baked its
+  prompt at session start; there `/resync` rebuilds the prompt in place
+  when the session recorded its base prompt (the stock `chimera code
+  --legacy-react` REPL does), and otherwise reports plainly that refreshed
+  skills apply to new sessions.
+
+### Programmatic hot-swap (embed surface)
+
+The seam behind the command is public and works anywhere the assembled
+stack runs, including
+[`chimera.AgentSession`](guides/embed.md):
+
+```python
+import chimera
+from chimera.plugins.manager import PluginManager
+
+session = chimera.AgentSession(model="glm-5.2", project_dir="scratch")
+manager = PluginManager()
+manager.load_all()
+session.agent.attach_plugin_manager(manager)
+
+report = session.resync_resources()   # bind now; call again after any edit
+print("\n".join(report.lines()))
+```
+
+`resync_resources()` returns a `ResyncReport` — `refused`, per-kind
+`KindDelta` records (`added` / `removed` / `refreshed` / `failed`), honest
+`notes`, and `lines()` for a ready-to-print rendering.
+
 ## Legacy entry-point plugins
 
 `chimera plugins search --legacy-entrypoints` and

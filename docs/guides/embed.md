@@ -174,3 +174,9 @@ Notes for embedders:
   safe choice for untrusted tasks.
 - **Cost.** `session.total_cost` accrues across turns from per-model
   pricing; unpriced models report `0.0`.
+- **Hot-swap.** `session.resync_resources()` re-discovers plugins / skills /
+  agent definitions on disk and rebinds them into the live session — the
+  seam behind `/resync` in the Chimera frontends. Attach a plugin manager
+  first via `session.agent.attach_plugin_manager(manager)`; the returned
+  `ResyncReport` says exactly what changed. Full semantics (busy refusal,
+  per-plugin isolation, prompt honesty): `docs/plugins.md`.

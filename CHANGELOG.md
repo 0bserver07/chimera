@@ -132,7 +132,41 @@ commit receipts.
     being `load_plugin`.
   - Docs retold as one arc (`docs/guides/interception.md`, `docs/plugins.md`):
     seams → plugins carry them → the shipped packs demonstrate them →
-    hot-swap noted as arriving, not promised.
+    hot-swap ships alongside (next entry).
+
+- **`/resync` — in-session hot-swap of plugins, skills, and agent
+  definitions**, in every interactive frontend: the shared REPL slash
+  registry (`chimera code` and the codename REPLs), the lean assembled REPL,
+  and both TUI surfaces (single lane and multiplexer, focused-lane scoped).
+  Edit a plugin's source, a `SKILL.md`, or an agent `.md` on disk →
+  `/resync` → the next turn uses the new behavior; the transcript reports
+  added / removed / refreshed / failed **per resource kind**. The rebind
+  seam is `chimera/assembly/resync.py` (`resync_agent` / `resync_session` /
+  `ResyncReport`), surfaced as `CodingAgent.resync_resources()` +
+  `attach_plugin_manager()` and `AgentDriver.resync_resources()` + `busy` —
+  which the embed surface `chimera.AgentSession` inherits. Semantics are
+  pinned by tests, not prose: **busy refusal** (a running turn refuses the
+  resync with no partial rebind — proven mid-stream through the hermetic
+  harness), **per-plugin isolation** (a failing plugin is reported and
+  skipped; its previous registration is restored best-effort, else it ends
+  cleanly unloaded — never half-applied, because the manager installs a
+  registry only after a fully successful activation), and **prompt honesty**
+  (the assembled prompt is reassembled every turn, so the refreshed skill
+  catalog demonstrably lands in the *next* turn's system prompt — asserted
+  against the provider-received prompt; the classic REPL rebuilds its baked
+  prompt in place via the base-prompt stash `chimera code` now records, and
+  says plainly when a session predates the stash). Plugin-contributed tools
+  sync into the live tool list in place (name collisions with non-plugin
+  tools refused), and whatever interceptor surface the plugin registries
+  expose binds generically *behind* the constructor-supplied chain. The
+  end-to-end lock: write plugin → load → bind → run a real loop turn → edit
+  source → `/resync` → the same tool answers with the new code
+  (`tests/assembly/test_resync.py`, plus the TUI pilot and REPL suites in
+  `tests/tui/test_resync_command.py` and `tests/cli/test_resync_slash.py`).
+  Docs: `docs/plugins.md` (the guarantees, exactly) and
+  `docs/guides/tui.md`.
+
+- **Verification axis on the capability matrix**
   (`docs/reference/capability-matrix.md`): every benchmark, agent layer,
   provider and sandbox now carries **Exists · Registered · Dataset · Canaried ·
   Live-run receipt · Verdict**, so availability (a code fact) can no longer read
