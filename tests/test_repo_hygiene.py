@@ -669,6 +669,32 @@ def test_every_scanned_root_actually_contributes_files() -> None:
     assert empty == [], f"SCANNED_ROOTS entries with no Python: {empty}"
 
 
+def _roots_with_tracked_python() -> set[str] | None:
+    """Top-level dirs holding git-TRACKED ``*.py``, or ``None`` off-git.
+
+    Tracked, not filesystem: local-only material (an untracked vendor
+    checkout under ``data/vendor/``, scratch runners under ``research/``)
+    must not redden a checkout that CI — a fresh clone — would pass. Same
+    lesson the claims gate learned in 518dc79c: gates that read the
+    filesystem diverge per machine; gates that read the index tell one
+    truth everywhere. The commit-time guarantee is unchanged — the moment
+    a ``*.py`` under an unscanned root is *tracked*, this fails.
+    """
+    try:
+        proc = subprocess.run(
+            ["git", "ls-files", "*.py", "**/*.py"], cwd=ROOT,
+            capture_output=True, text=True, timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired):  # pragma: no cover
+        return None
+    if proc.returncode != 0:  # pragma: no cover - not a git checkout
+        return None
+    return {
+        line.split("/", 1)[0] for line in proc.stdout.splitlines()
+        if line and "/" in line
+    }
+
+
 def test_every_python_root_is_scanned() -> None:
     """No tracked top-level directory may hold Python the gate never reads.
 
@@ -676,12 +702,20 @@ def test_every_python_root_is_scanned() -> None:
     a cwd-relative ``data/`` for months without a single red test. A new root
     with Python in it must join SCANNED_ROOTS in the commit that adds it.
     """
+    tracked_py_roots = _roots_with_tracked_python()
+
+    def _holds_python(name: str) -> bool:
+        if tracked_py_roots is not None:
+            return name in tracked_py_roots
+        # Off-git (tarball checkout): fall back to the filesystem view.
+        return any((ROOT / name).rglob("*.py"))  # pragma: no cover
+
     unscanned = sorted(
         name for name in ALLOWED_ROOT_ENTRIES
         if (ROOT / name).is_dir()
         and name not in SCANNED_ROOTS
         and name != ".github"  # workflow YAML, no Python
-        and any((ROOT / name).rglob("*.py"))
+        and _holds_python(name)
     )
     assert unscanned == [], (
         f"tracked roots holding unscanned Python: {unscanned} — add them to "
