@@ -21,6 +21,9 @@ than the documented limitation. The ``judge`` hook exists for it.
 """
 from __future__ import annotations
 
+import ast
+from pathlib import Path
+
 import pytest
 
 from chimera.eval.benchmarks.context_bench import ContextBench
@@ -120,3 +123,96 @@ class TestTauBenchTerminalActionBoundaries:
         bench = TauBench(domain="mock")
         payload = '{"actions": [{"name": "something_else"}]}'
         assert not bench.evaluate(self._task(), payload, None)
+
+
+# --------------------------------------------------------------------------
+# Static gate: raw containment against an answer must not come back.
+# --------------------------------------------------------------------------
+
+_BENCH_DIR = Path(__file__).resolve().parents[2] / "chimera" / "eval" / "benchmarks"
+
+#: Parameters that hold the agent's answer. `X in <one of these>` is a
+#: containment test against the answer — the exact shape that graded `142` as
+#: `42`.
+_ANSWER_NAMES = frozenset({"agent_output", "output", "answer", "response", "completion"})
+
+#: Legitimate containment tests, enumerated with a reason — never a whole-file
+#: or directory exemption. Empty today, and that is the point: both known sites
+#: were fixed, so ANY new hit is either a real defect or an entry someone must
+#: justify here. Format-presence checks ("does the output contain a fence") are
+#: the plausible legitimate case; a grading verdict never is.
+_CONTAINMENT_ALLOWLIST: dict[str, str] = {}
+
+
+def _containment_sites() -> list[tuple[str, int, str]]:
+    """Every ``X in <answer>`` comparison in the benchmark adapters."""
+    found: list[tuple[str, int, str]] = []
+    for path in sorted(_BENCH_DIR.glob("*.py")):
+        for node in ast.walk(ast.parse(path.read_text())):
+            if not isinstance(node, ast.Compare):
+                continue
+            for op, comparator in zip(node.ops, node.comparators):
+                if not isinstance(op, (ast.In, ast.NotIn)):
+                    continue
+                names = {n.id for n in ast.walk(comparator) if isinstance(n, ast.Name)}
+                if names & _ANSWER_NAMES:
+                    found.append((path.name, node.lineno, ast.unparse(node)[:90]))
+    return found
+
+
+def test_no_adapter_grades_by_raw_containment_in_the_answer() -> None:
+    """`X in answer` is unbounded: `42` is inside `142`, `cat` inside `concatenate`.
+
+    Use a word-boundary match (see ``_contains_on_word_boundary``) or a real
+    judge. Note this gate is *narrower* than the leniency it guards — it cannot
+    see negation or hedging, which no static check can. It stops the class that
+    accepts a demonstrably different value.
+    """
+    offenders = [
+        f"{f}:{ln}  {src}"
+        for f, ln, src in _containment_sites()
+        if f not in _CONTAINMENT_ALLOWLIST
+    ]
+    assert not offenders, (
+        "raw containment against the agent's answer: " + "; ".join(offenders)
+    )
+
+
+def test_the_containment_gate_catches_a_real_violation(tmp_path: Path) -> None:
+    """Falsification, run against the real scanner over a temp package dir.
+
+    Exercises the scanner itself rather than a hand-rolled copy, so the test and
+    the gate cannot drift apart.
+    """
+    import unittest.mock
+
+    (tmp_path / "fake_bench.py").write_text(
+        "def evaluate(self, task, agent_output, env=None):\n"
+        "    return str(task['answer']).lower() in agent_output.lower()\n"
+    )
+    with unittest.mock.patch.dict(globals(), {"_BENCH_DIR": tmp_path}):
+        sites = _containment_sites()
+    assert sites, "gate missed a raw containment test"
+    assert sites[0][0] == "fake_bench.py"
+
+    # And it must not fire on containment against something that is NOT the
+    # answer — otherwise every dict/lookup check trips it and the gate gets
+    # deleted rather than obeyed.
+    (tmp_path / "fake_bench.py").write_text(
+        "def evaluate(self, task, agent_output, env=None):\n"
+        "    return 'FAIL_TO_PASS' in task\n"
+    )
+    with unittest.mock.patch.dict(globals(), {"_BENCH_DIR": tmp_path}):
+        assert not _containment_sites()
+
+
+def test_allowlist_entries_all_still_exist() -> None:
+    """An allowlist that outlives its reason is a permanent hole.
+
+    Empty is the healthy state; this fails the moment an entry names a file that
+    no longer has a hit, forcing the exemption to be removed rather than kept
+    'just in case'.
+    """
+    live = {f for f, _, _ in _containment_sites()}
+    stale = sorted(set(_CONTAINMENT_ALLOWLIST) - live)
+    assert not stale, f"allowlist entries with no matching site — delete them: {stale}"

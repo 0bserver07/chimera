@@ -90,6 +90,16 @@ commit receipts.
     hook exists for it. A test asserts the current behaviour so the limitation
     stays visible — a limitation nobody can see is indistinguishable from a bug
     nobody found.
+- **A static gate so raw containment cannot return by imitation.** The length
+  defect spread that way once (`dpai_arena`'s docstring said it matched "the
+  SWE-bench fallback behaviour"), so the containment fix ships with an AST scan
+  over `chimera/eval/benchmarks/` rejecting `X in <answer>`. It is enforceable
+  because both known sites were fixed first — the allowlist is **empty**, so any
+  new hit is a real defect or an entry someone must justify in place, with a
+  companion test that fails when an allowlist entry no longer matches a live
+  site (an exemption outliving its reason is a permanent hole). Stated honestly
+  in the test: the gate is *narrower* than the leniency it guards, because no
+  static check can see negation.
 - **Two canary exemptions claimed a reason that was false.** `context-bench` and
   `nocha` were both listed as *"no reference answer"* while their graders read
   one: `ContextBench.evaluate` grades against `task["answer"]`, and `nocha`'s
