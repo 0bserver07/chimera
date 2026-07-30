@@ -5,7 +5,12 @@ through the hermetic harness), skills → prompt-catalog rebind reaching the
 next turn's assembled system prompt, agent-definition catalog diffs, and the
 plugin path end-to-end: write plugin → load → bind → edit source → /resync →
 the same tool's behavior changes on the next turn — with per-plugin failure
-isolation and the no-half-applied guarantee.
+isolation and the no-half-applied guarantee. The interceptor composition —
+plugin-carried chains on the shipped registry × /resync — is pinned through
+real loop turns: load the plan-gate pack → a write is blocked → flip the
+pack's gated set on disk → /resync → the next turn enforces the NEW policy
+(and unload → resync → policy gone), with per-seam report accounting, no
+double-binding, and no registry residue across resync cycles.
 """
 from __future__ import annotations
 
@@ -29,8 +34,9 @@ from chimera.assembly.resync import (
     skill_state,
 )
 from chimera.plugins.manager import PluginManager
+from chimera.plugins.registry import PluginExtensionRegistry
 from chimera.providers.faux import FauxProvider
-from chimera.testing import create_assembled_harness
+from chimera.testing import create_assembled_harness, default_test_tools
 
 
 # ---------------------------------------------------------------------------
@@ -41,6 +47,19 @@ from chimera.testing import create_assembled_harness
 def _isolated_home(tmp_path, monkeypatch):
     """Point every ~/.chimera store at a throwaway root (no host pollution)."""
     monkeypatch.setenv("CHIMERA_HOME", str(tmp_path / "chimera-home"))
+
+
+@pytest.fixture(autouse=True)
+def _clean_registry():
+    """Reset the class-level plugin registry between tests.
+
+    The interceptor tests below register chains on the shipped
+    PluginExtensionRegistry; without the reset those chains would ride the
+    per-turn merge of every later test's assembled agent.
+    """
+    PluginExtensionRegistry._reset()
+    yield
+    PluginExtensionRegistry._reset()
 
 
 def _write_skill(workdir: Path, name: str, description: str, body: str = "do it") -> Path:
@@ -98,6 +117,14 @@ class {plugin_class}(BasePlugin):
 _MTIME_BUMP = itertools.count(start=10, step=10)
 
 
+def _publish_source(path: Path, text: str) -> None:
+    """Write module source with a strictly increasing mtime (defeats stale pyc)."""
+    path.write_text(text)
+    future = time.time() + next(_MTIME_BUMP)
+    os.utime(path, (future, future))
+    importlib.invalidate_caches()
+
+
 def _write_plugin(
     path: Path,
     *,
@@ -130,10 +157,7 @@ def _write_plugin(
     )
     if broken:
         body += "\nraise RuntimeError('broken plugin source')\n"
-    path.write_text(textwrap.dedent(body))
-    future = time.time() + next(_MTIME_BUMP)
-    os.utime(path, (future, future))
-    importlib.invalidate_caches()
+    _publish_source(path, textwrap.dedent(body))
 
 
 def _load_plugin_module(mod_name: str, path: Path):
@@ -143,6 +167,28 @@ def _load_plugin_module(mod_name: str, path: Path):
     sys.modules[mod_name] = module
     spec.loader.exec_module(module)
     return module
+
+
+def _load_plan_gate_copy(tmp_path: Path, mod_name: str):
+    """Copy the SHIPPED plan-gate pack source into a tmp module and load it.
+
+    The composition tests hot-swap the pack by editing its source on disk;
+    editing the installed ``chimera/plugins/packs/plan_gate.py`` (or
+    ``importlib.reload``-ing it in-process) would leak into every other
+    test, so the byte-identical source is republished under a throwaway
+    module name instead.
+
+    Returns:
+        ``(module, path, source)`` — the loaded module, the tmp file to
+        edit, and the pristine pack source.
+    """
+    import chimera.plugins.packs.plan_gate as shipped
+
+    source = Path(shipped.__file__).read_text()
+    path = tmp_path / f"{mod_name}.py"
+    _publish_source(path, source)
+    module = _load_plugin_module(mod_name, path)
+    return module, path, source
 
 
 class RecordingFaux(FauxProvider):
@@ -439,7 +485,7 @@ def test_no_plugin_manager_notes_honestly(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Interceptors: generic rebind of whatever the plugin registries expose
+# Interceptors, generic fallback: third-party registry surfaces
 # ---------------------------------------------------------------------------
 
 def test_plugin_interceptors_bind_behind_base_chain(tmp_path):
@@ -510,6 +556,276 @@ def test_opaque_interceptor_shapes_are_counted_not_bound(tmp_path):
             assert agent._interceptors is None  # base was None; nothing bound
     finally:
         sys.modules.pop(mod_name, None)
+
+
+# ---------------------------------------------------------------------------
+# Interceptors, typed path: the shipped registry × /resync, composed
+# ---------------------------------------------------------------------------
+
+#: The one line the flip test removes from the pack's gated set.
+_GATED_LINE = '    "write_file",\n'
+
+
+def _write_script(path: str, content: str) -> list:
+    """One scripted turn: a ``write_file`` call, then a closing text step."""
+    return [
+        {"text": "writing",
+         "tool_calls": [{"name": "write_file",
+                         "arguments": {"path": path, "content": content}}]},
+        {"text": "done"},
+    ]
+
+
+def test_plan_gate_pack_policy_flip_end_to_end(tmp_path):
+    """THE composition lock: the plan-gate pack × /resync, in real turns.
+
+    Load the pack → a real turn's write_file is blocked → flip the pack's
+    gated set on disk → /resync → the next real turn writes. The report
+    counts the pack's chains per seam, and the per-turn merge carries
+    exactly the reloaded instance's chains — never a stale one, never a
+    duplicate.
+    """
+    mod_name = "chimera_test_resync_plan_gate_flip"
+    module, plugin_file, source = _load_plan_gate_copy(tmp_path, mod_name)
+    manager = PluginManager()
+    manager.load_plugin(module.PlanGatePlugin())
+    ws = tmp_path / "ws"
+    script = _write_script("gated.txt", "v1") + _write_script("gated.txt", "v2")
+    try:
+        with create_assembled_harness(
+            script, workspace=ws, tools=default_test_tools(ws),
+        ) as harness:
+            agent = harness.driver.agent
+            agent.attach_plugin_manager(manager)
+
+            bind = harness.driver.resync_resources()
+            assert "plan-gate" in bind.delta("plugins").refreshed
+            inter = bind.delta("interceptors")
+            assert inter is not None
+            assert inter.added == [
+                "context:PlanGatePlugin._watch_context",
+                "tool_call:PlanGatePlugin._gate_tool_call",
+            ]
+            assert any(
+                "plugin-registered interceptors: tool_call 1 · context 1" in n
+                for n in bind.notes
+            )
+
+            run1 = harness.run("write gated.txt")
+            assert run1.reason == "completed"
+            assert run1.files_created == []  # the gate held in a real turn
+            blocked = [r for tc, r in run1.tool_results if tc and tc.name == "write_file"]
+            assert blocked and "plan-gate: no plan recorded" in (blocked[0].error or "")
+
+            # Flip the policy on disk: write_file leaves the gated set.
+            flipped = source.replace(_GATED_LINE, "")
+            assert flipped != source
+            _publish_source(plugin_file, flipped)
+
+            swap = harness.driver.resync_resources()
+            assert "plan-gate" in swap.delta("plugins").refreshed
+            inter2 = swap.delta("interceptors")
+            assert inter2 is not None
+            assert inter2.refreshed == [
+                "context:PlanGatePlugin._watch_context",
+                "tool_call:PlanGatePlugin._gate_tool_call",
+            ]
+            assert inter2.added == [] and inter2.removed == []
+
+            # Exactness: the per-turn merge is the reloaded instance's
+            # chains and nothing else; the host chain stays untouched.
+            current = manager.plugins["plan-gate"]
+            merged = agent._effective_interceptors()
+            assert merged.tool_call == [current._gate_tool_call]
+            assert merged.context == [current._watch_context]
+            assert agent._interceptors is None
+
+            run2 = harness.run("write gated.txt again")
+            assert run2.reason == "completed"
+            assert (ws / "gated.txt").read_text() == "v2"  # NEW policy enforced
+    finally:
+        sys.modules.pop(mod_name, None)
+
+
+def test_plan_gate_pack_unload_then_resync_drops_the_policy(tmp_path):
+    """The inverse lock: unload the pack, /resync, and the policy is gone —
+    the report says removed, per seam, and the next real turn writes."""
+    mod_name = "chimera_test_resync_plan_gate_unload"
+    module, _file, _source = _load_plan_gate_copy(tmp_path, mod_name)
+    manager = PluginManager()
+    manager.load_plugin(module.PlanGatePlugin())
+    ws = tmp_path / "ws"
+    script = _write_script("free.txt", "v1") + _write_script("free.txt", "v2")
+    try:
+        with create_assembled_harness(
+            script, workspace=ws, tools=default_test_tools(ws),
+        ) as harness:
+            agent = harness.driver.agent
+            agent.attach_plugin_manager(manager)
+            harness.driver.resync_resources()  # initial bind + accounting
+
+            run1 = harness.run("write free.txt")
+            assert run1.files_created == []  # gated while loaded
+
+            manager.unload("plan-gate")
+            gone = harness.driver.resync_resources()
+            inter = gone.delta("interceptors")
+            assert inter is not None
+            assert inter.removed == [
+                "context:PlanGatePlugin._watch_context",
+                "tool_call:PlanGatePlugin._gate_tool_call",
+            ]
+            assert inter.added == [] and inter.refreshed == []
+            assert not any("plugin-registered interceptors" in n for n in gone.notes)
+            assert agent._effective_interceptors() is None
+
+            run2 = harness.run("write free.txt now")
+            assert run2.reason == "completed"
+            assert (ws / "free.txt").read_text() == "v2"  # policy gone
+    finally:
+        sys.modules.pop(mod_name, None)
+
+
+_DUAL_SURFACE_PLUGIN = '''\
+"""Composition fixture: ONE interceptor republished on both surfaces."""
+from chimera.core.interception import InterceptDecision
+from chimera.plugins.base import BasePlugin
+from chimera.plugins.registry import PluginExtensionRegistry
+from chimera.types import ToolCall
+
+
+class DualSurfacePlugin(BasePlugin):
+    @property
+    def name(self):
+        return "dual-surface"
+
+    def register_interceptors(self, registry):
+        PluginExtensionRegistry.register_interceptor("tool_call", self._tag)
+        registry.interceptors = {"tool_call": [self._tag]}
+
+    def deactivate(self):
+        PluginExtensionRegistry.unregister_interceptor("tool_call", self._tag)
+
+    def _tag(self, call):
+        if call.name != "write_file":
+            return None
+        args = dict(call.arguments)
+        args["content"] = str(args.get("content", "")) + "+tag"
+        return InterceptDecision.replace(
+            ToolCall(id=call.id, name=call.name, arguments=args)
+        )
+'''
+
+
+def test_registry_chain_republished_on_generic_surface_binds_once(tmp_path):
+    """The product of rows, pinned by the bytes on disk: a plugin carrying
+    its chain on the shipped registry AND republishing it on the generic
+    ``registry.interceptors`` surface mutates a write exactly ONCE — the
+    generic fold excludes what the per-turn merge already carries."""
+    mod_name = "chimera_test_resync_dual_surface"
+    plugin_file = tmp_path / f"{mod_name}.py"
+    _publish_source(plugin_file, _DUAL_SURFACE_PLUGIN)
+    module = _load_plugin_module(mod_name, plugin_file)
+    manager = PluginManager()
+    manager.load_plugin(module.DualSurfacePlugin())
+    ws = tmp_path / "ws"
+    try:
+        with create_assembled_harness(
+            _write_script("tagged.txt", "one"), workspace=ws,
+            tools=default_test_tools(ws),
+        ) as harness:
+            agent = harness.driver.agent
+            agent.attach_plugin_manager(manager)
+
+            report = harness.driver.resync_resources()
+            inter = report.delta("interceptors")
+            assert inter is not None
+            assert inter.added == ["tool_call:DualSurfacePlugin._tag"]
+            assert inter.refreshed == []  # no generic "N bound" — all excluded
+            assert agent._interceptors is None
+            assert len(agent._effective_interceptors().tool_call) == 1
+
+            run = harness.run("write tagged.txt")
+            assert run.reason == "completed"
+            assert (ws / "tagged.txt").read_text() == "one+tag"  # not …+tag+tag
+    finally:
+        sys.modules.pop(mod_name, None)
+
+
+def test_resync_cycles_leave_no_interceptor_residue(tmp_path):
+    """Hygiene across the composition: N resync cycles = N reloads, and the
+    registry still carries exactly one chain per pack seam — the effective
+    merge is always the CURRENT instance's callables, never an
+    accumulation of dead generations."""
+    mod_name = "chimera_test_resync_plan_gate_cycles"
+    module, _file, _source = _load_plan_gate_copy(tmp_path, mod_name)
+    manager = PluginManager()
+    manager.load_plugin(module.PlanGatePlugin())
+    try:
+        with create_assembled_harness("ok", workspace=tmp_path / "ws") as harness:
+            agent = harness.driver.agent
+            agent.attach_plugin_manager(manager)
+            report = None
+            for _ in range(3):
+                report = harness.driver.resync_resources()
+            assert len(PluginExtensionRegistry.get_interceptors("tool_call")) == 1
+            assert len(PluginExtensionRegistry.get_interceptors("context")) == 1
+            current = manager.plugins["plan-gate"]
+            merged = agent._effective_interceptors()
+            assert merged.tool_call == [current._gate_tool_call]
+            assert merged.context == [current._watch_context]
+            # After the first resync, later cycles report refreshed — not
+            # added, and never a growing list.
+            inter = report.delta("interceptors")
+            assert "tool_call:PlanGatePlugin._gate_tool_call" in inter.refreshed
+            assert inter.added == [] and inter.removed == []
+    finally:
+        sys.modules.pop(mod_name, None)
+
+
+def test_registry_chains_reported_without_a_manager(tmp_path):
+    """Chains on the shipped registry ride the per-turn merge whether or
+    not a manager is attached — the typed accounting reports them either
+    way, and steady state drops the delta but keeps the census note."""
+    from chimera.plugins.packs import PlanGatePlugin
+
+    PluginManager().load_plugin(PlanGatePlugin())
+    with create_assembled_harness("ok", workspace=tmp_path / "ws") as harness:
+        first = harness.driver.resync_resources()
+        inter = first.delta("interceptors")
+        assert inter is not None
+        assert inter.added == [
+            "context:PlanGatePlugin._watch_context",
+            "tool_call:PlanGatePlugin._gate_tool_call",
+        ]
+        assert any(
+            "plugin-registered interceptors: tool_call 1 · context 1" in n
+            and "merged into every turn" in n
+            for n in first.notes
+        )
+        second = harness.driver.resync_resources()
+        assert second.delta("interceptors") is None
+        assert any("plugin-registered interceptors" in n for n in second.notes)
+
+
+def test_bare_target_counts_chains_but_says_it_cannot_merge(tmp_path):
+    """A duck-typed target without the per-turn merge gets honesty, not a
+    silent no-op: chains are counted per seam and the note says this
+    target cannot reach them."""
+    from chimera.plugins.packs import PlanGatePlugin
+
+    PluginManager().load_plugin(PlanGatePlugin())
+
+    class Bare:
+        pass
+
+    report = resync_agent(Bare(), workdir=tmp_path)
+    inter = report.delta("interceptors")
+    assert inter is not None and len(inter.added) == 2
+    assert any(
+        "counted only; this target does not expose the per-turn merge" in n
+        for n in report.notes
+    )
 
 
 # ---------------------------------------------------------------------------

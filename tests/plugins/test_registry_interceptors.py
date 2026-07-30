@@ -147,6 +147,18 @@ class TestSeamDriftGuard:
         field_names = tuple(f.name for f in dataclasses.fields(Interceptors))
         assert INTERCEPTOR_SEAMS == field_names
 
+    def test_resync_accounting_shares_the_closed_seam_set(self) -> None:
+        """The hot-swap seam's per-seam interceptor accounting
+        (``chimera.assembly.resync``) iterates its own copy of the closed
+        set — its ResyncReport entries, registry snapshot, and generic-fold
+        bound are all keyed on it. A seam added to the core ``Interceptors``
+        dataclass that resync does not know fails here, instead of as a
+        chain ``/resync`` silently neither reports nor rebinds."""
+        from chimera.assembly.resync import _INTERCEPTOR_SEAMS
+
+        field_names = tuple(f.name for f in dataclasses.fields(Interceptors))
+        assert _INTERCEPTOR_SEAMS == field_names
+
 
 class TestBasePluginInterceptorHook:
     def test_activate_calls_register_interceptors(self) -> None:

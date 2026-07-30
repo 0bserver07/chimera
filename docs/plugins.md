@@ -264,11 +264,19 @@ What one resync does, per kind:
   recomposes built-ins + plugin commands (autocomplete, `/help`, dispatch),
   announcing the delta and any collision rejections (see the
   plugin-slash-commands section above).
-- **interceptors** — whatever interceptor surface the plugin registries
-  expose is aggregated generically and bound *behind* the session's
-  constructor-supplied chain (a team-policy gate always runs first);
-  contributions in a shape the seam cannot bind soundly are counted and
-  reported, never guessed at.
+- **interceptors** — two paths, composed. Chains registered on the shipped
+  `PluginExtensionRegistry` (the seam-validated surface the policy packs
+  use) already ride the assembled per-turn merge — plugin chains first,
+  host chains last — so after the reload the next turn enforces exactly the
+  reloaded chains; the report counts them **per seam**
+  (`tool_call:PlanGatePlugin._gate_tool_call` added / removed / refreshed,
+  plus a census note) and never binds them a second time, which would run
+  every chain twice. Whatever *other* interceptor surface a third-party
+  registry exposes is aggregated generically and bound *behind* the
+  session's constructor-supplied chain (a team-policy gate always runs
+  first), with registry-carried duplicates excluded; contributions in a
+  shape the seam cannot bind soundly are counted and reported, never
+  guessed at.
 - **skills** — the nested `SKILL.md` catalog re-walks and lands in the
   agent's prompt catalog; the flat `*.md` skill commands re-read into the
   `skill` tool's registry, stale entries removed.
@@ -304,6 +312,14 @@ What one resync does, per kind:
   when the session recorded its base prompt (the stock `chimera code
   --legacy-react` REPL does), and otherwise reports plainly that refreshed
   skills apply to new sessions.
+- **Interceptor exactness.** After a resync the assembled per-turn merge
+  carries exactly the reloaded plugins' chains: the shipped registry's
+  chains are diffed per seam in the report and never bound a second time,
+  and a reload cycle (deactivate old, activate new) leaves no dead
+  generation behind in the interceptor registry — pinned through real loop
+  turns with the plan-gate pack (block → edit the gated set on disk →
+  `/resync` → the next turn enforces the new policy; unload → `/resync` →
+  the policy is gone).
 
 ### Programmatic hot-swap (embed surface)
 

@@ -226,6 +226,31 @@ commit receipts.
   `tests/tui/test_resync_command.py` and `tests/cli/test_resync_slash.py`).
   Docs: `docs/plugins.md` (the guarantees, exactly) and
   `docs/guides/tui.md`.
+  - **Composed with plugin-carried interceptors, first-class** (the two
+    features above, verified row-by-row, met in the product of rows): the
+    generic fold predates the shipped registry surface, so `/resync` now
+    gives `PluginExtensionRegistry` the **typed path** — chains read via
+    `get_all_interceptors`, diffed identity-aware and counted **per seam**
+    in the report (`tool_call:PlanGatePlugin._gate_tool_call` added /
+    removed / refreshed, plus a live census note), and never bound a second
+    time, because the assembled per-turn merge already carries them; a
+    registry-carried chain republished on a generic surface is excluded
+    from the fold (it would otherwise run twice per event — the class of
+    bug this pins out, proven by a write mutated `+tag` once, not
+    `+tag+tag`). The generic fallback stays for third-party registries,
+    now scoped to exactly what the merge does not already carry. New
+    guarantee in `docs/plugins.md`: **interceptor exactness** — after a
+    resync the per-turn merge is exactly the reloaded plugins' chains, and
+    reload cycles leave no dead generation in the registry. Locked through
+    real loop turns with the shipped plan-gate pack source: load → a real
+    turn's `write_file` blocked → flip the pack's gated set on disk →
+    `/resync` → the next real turn writes; unload → `/resync` → the policy
+    is gone (removed, per seam, in the report); 3 resync cycles keep the
+    registry at one chain per pack seam; `deactivate()` residue-hygiene
+    pinned in `tests/plugins/packs/test_plan_gate.py`; and the seam drift
+    guard in `tests/plugins/test_registry_interceptors.py` now also pins
+    resync's closed seam set to the `Interceptors` dataclass, so a fifth
+    seam cannot ship half-known.
 
 - **Verification axis on the capability matrix**
   (`docs/reference/capability-matrix.md`): every benchmark, agent layer,

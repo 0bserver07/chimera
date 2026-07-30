@@ -40,6 +40,14 @@ Guarantees (also documented in ``docs/plugins.md``):
   turn of the current conversation*. In the classic REPL the prompt was
   baked at startup; resync rebuilds it in place when the session recorded
   its base prompt, and says so either way.
+* **Interceptor exactness.** Chains plugins register on the shipped
+  :class:`~chimera.plugins.registry.PluginExtensionRegistry` are merged
+  into every assembled turn by the host itself (plugin chains first, host
+  chains last), so after a resync the per-turn merge carries exactly the
+  reloaded plugins' chains. Resync accounts for them **per seam** in the
+  report and never binds them a second time — a second binding would run
+  every chain twice. Only interceptor surfaces a *third-party* registry
+  exposes bind through the generic fold, behind the host's own chain.
 
 Stdlib-only (zero-dependency core); every discovery step is best-effort and
 reported rather than raised.
@@ -72,10 +80,13 @@ __all__ = [
 #: see the same sentence in the REPL and the TUI.
 BUSY_MESSAGE = "a turn is running — cancel or wait for it, then /resync"
 
-#: The four interceptor seams (mirrors
-#: :class:`chimera.core.interception.Interceptors`). Kept as data so the
-#: plugin-registry aggregation stays generic: whatever shape a registry
-#: exposes, only these chains are ever bound.
+#: The four interceptor seams — the same closed set as
+#: :class:`chimera.core.interception.Interceptors` and
+#: :data:`chimera.plugins.registry.INTERCEPTOR_SEAMS`, drift-pinned by
+#: ``tests/plugins/test_registry_interceptors.py`` so a seam added to core
+#: cannot escape resync's per-seam accounting. Doubles as the bound on the
+#: generic aggregation: whatever shape a third-party registry exposes, only
+#: these chains are ever bound.
 _INTERCEPTOR_SEAMS = ("provider_request", "tool_call", "tool_result", "context")
 
 
@@ -89,11 +100,15 @@ class KindDelta:
 
     Args:
         kind: Resource kind label (``"plugins"``, ``"skills"``, ``"agents"``,
-            ``"plugin tools"``, ``"interceptors"``).
+            ``"plugin tools"``, ``"interceptors"``). For ``interceptors``
+            the entries are per-seam: ``"<seam>:<callable name>"`` for
+            chains on the shipped plugin registry, plus the generic
+            surfaces' aggregate count (``"N bound"``) under refreshed.
         added: Names newly bound by this resync.
         removed: Names that disappeared (file deleted / plugin unloaded).
         refreshed: Names re-bound with changed content (edited skill, hot-
-            swapped plugin, replaced tool).
+            swapped plugin, replaced tool, a reloaded plugin's fresh
+            interceptor on the same seam).
         failed: ``(name, reason)`` pairs for entries that errored; the reason
             states what the failure left behind.
     """
@@ -331,13 +346,107 @@ def _plugin_registries(manager: Any) -> list[Any]:
     return []
 
 
-def _collect_plugin_interceptors(manager: Any) -> tuple[Any | None, int, int]:
+def _callable_name(fn: Any) -> str:
+    """Best-effort display name for an interceptor callable."""
+    return (
+        getattr(fn, "__qualname__", None)
+        or getattr(fn, "__name__", None)
+        or type(fn).__name__
+    )
+
+
+def _registry_interceptor_chains() -> dict[str, list[Any]]:
+    """Snapshot the shipped plugin registry's per-seam interceptor chains.
+
+    The typed half of the interceptor accounting: reads
+    :meth:`~chimera.plugins.registry.PluginExtensionRegistry.get_all_interceptors`
+    — the seam-validated surface plugins (and the bundled policy packs)
+    register on — and returns its four chains keyed by seam name. The
+    snapshot holds the callables themselves, not hashes: keeping the
+    previous generation alive across a resync means the identity diff in
+    :func:`_diff_interceptor_chains` can never be confused by object-id
+    reuse after a reload garbage-collects the old instances.
+
+    Returns:
+        Mapping of seam name → interceptor callables, in chain order.
+    """
+    from chimera.plugins.registry import PluginExtensionRegistry
+
+    bundle = PluginExtensionRegistry.get_all_interceptors()
+    return {seam: list(getattr(bundle, seam)) for seam in _INTERCEPTOR_SEAMS}
+
+
+def _diff_interceptor_chains(
+    old: Mapping[str, list[Any]] | None,
+    new: Mapping[str, list[Any]],
+) -> KindDelta:
+    """Diff two per-seam chain snapshots into the ``interceptors`` delta.
+
+    Entries are ``"<seam>:<callable name>"``, so the report counts
+    interceptors *per seam*. Identity decides sameness: a callable present
+    in both snapshots is unchanged (not listed); a same-named callable with
+    a new identity on the same seam — a reloaded plugin's fresh instance —
+    is *refreshed*; the remainder are added / removed.
+
+    Args:
+        old: Previous snapshot (``None`` on the first resync; everything in
+            *new* then reports as added, mirroring the skills convention).
+        new: Current snapshot from :func:`_registry_interceptor_chains`.
+
+    Returns:
+        The typed entries of the ``interceptors`` :class:`KindDelta` (the
+        generic fallback appends its own accounting afterwards).
+    """
+    delta = KindDelta(kind="interceptors")
+    prev: Mapping[str, list[Any]] = old or {}
+    for seam in _INTERCEPTOR_SEAMS:
+        remaining_old = list(prev.get(seam, []))
+        fresh: list[Any] = []
+        for fn in new.get(seam, []):
+            for i, old_fn in enumerate(remaining_old):
+                if old_fn is fn:
+                    del remaining_old[i]
+                    break
+            else:
+                fresh.append(fn)
+        old_names = [_callable_name(fn) for fn in remaining_old]
+        for fn in fresh:
+            name = _callable_name(fn)
+            if name in old_names:
+                old_names.remove(name)
+                delta.refreshed.append(f"{seam}:{name}")
+            else:
+                delta.added.append(f"{seam}:{name}")
+        delta.removed.extend(f"{seam}:{name}" for name in old_names)
+    delta.added.sort()
+    delta.removed.sort()
+    delta.refreshed.sort()
+    return delta
+
+
+def _interceptor_census(chains: Mapping[str, list[Any]]) -> str:
+    """Per-seam census of non-empty chains (``"tool_call 1 · context 1"``)."""
+    return " · ".join(
+        f"{seam} {len(chains[seam])}"
+        for seam in _INTERCEPTOR_SEAMS
+        if chains.get(seam)
+    )
+
+
+def _collect_plugin_interceptors(
+    manager: Any,
+    *,
+    exclude: Mapping[str, list[Any]] | None = None,
+) -> tuple[Any | None, int, int]:
     """Aggregate whatever interceptor surface the plugin registries expose.
 
     Deliberately generic — it binds any shape it can do so soundly and
     counts (without binding) shapes it cannot, so a registry that grows a
     richer interceptor surface composes with this seam instead of fighting
-    it. Recognized shapes, per registry ``interceptors`` attribute (also
+    it. The shipped :class:`~chimera.plugins.registry.PluginExtensionRegistry`
+    never routes through here — its chains take the typed path
+    (:func:`_registry_interceptor_chains`) and ride the host's per-turn
+    merge. Recognized shapes, per registry ``interceptors`` attribute (also
     ``manager.get_all_interceptors()`` when present):
 
     * an ``Interceptors``-shaped object (has the four seam-chain attributes),
@@ -346,6 +455,13 @@ def _collect_plugin_interceptors(manager: Any) -> tuple[Any | None, int, int]:
 
     Args:
         manager: The plugin manager to read.
+        exclude: Per-seam chains the target's per-turn merge already
+            carries (the shipped registry's snapshot). A callable found on
+            a generic surface that matches an excluded one — by the same
+            equality :meth:`~chimera.plugins.registry.PluginExtensionRegistry.unregister_interceptor`
+            uses, so a bound method re-derived from the same instance
+            matches — is skipped silently: it is already live, and binding
+            it here too would run it twice per event.
 
     Returns:
         ``(merged, bound, opaque)`` — a fresh merged ``Interceptors`` (or
@@ -359,6 +475,16 @@ def _collect_plugin_interceptors(manager: Any) -> tuple[Any | None, int, int]:
     merged = Interceptors()
     bound = 0
     opaque = 0
+    excluded = [fn for chain in (exclude or {}).values() for fn in chain]
+
+    def _is_excluded(fn: Any) -> bool:
+        for known in excluded:
+            try:
+                if fn is known or fn == known:
+                    return True
+            except Exception:  # noqa: BLE001 - a foreign __eq__ must not break resync
+                continue
+        return False
 
     def _fold(raw: Any) -> None:
         nonlocal bound, opaque
@@ -369,6 +495,8 @@ def _collect_plugin_interceptors(manager: Any) -> tuple[Any | None, int, int]:
                 chain = getattr(raw, seam, None) or []
                 for fn in chain:
                     if callable(fn):
+                        if _is_excluded(fn):
+                            continue
                         getattr(merged, seam).append(fn)
                         bound += 1
                     else:
@@ -381,6 +509,8 @@ def _collect_plugin_interceptors(manager: Any) -> tuple[Any | None, int, int]:
                     continue
                 for fn in chain or []:
                     if callable(fn):
+                        if _is_excluded(fn):
+                            continue
                         getattr(merged, seam).append(fn)
                         bound += 1
                     else:
@@ -405,12 +535,14 @@ def _collect_plugin_interceptors(manager: Any) -> tuple[Any | None, int, int]:
 
 
 def _bind_interceptors(agent: Any, plugin_chain: Any | None) -> None:
-    """Rebind the agent's interceptors as base ⊕ plugin-contributed.
+    """Rebind the agent's interceptors as base ⊕ generic-surface chains.
 
     The constructor-supplied chain (e.g. a team-policy gate) is stashed on
     first resync and always kept *ahead* of plugin chains; clearing all
     plugin interceptors restores exactly the base. A target without an
-    ``_interceptors`` seam is left untouched.
+    ``_interceptors`` seam is left untouched. Only chains from *generic*
+    third-party surfaces route through here — the shipped registry's
+    chains ride the host's own per-turn merge and never touch the base.
     """
     if not hasattr(agent, "_interceptors"):
         return
@@ -616,8 +748,18 @@ def resync_agent(
       exactly what the next ``/subagent`` or spawner call sees.
     * **plugins** — hot-swaps every loaded plugin on the attached manager
       (:func:`resync_plugins`), then rebinds plugin-contributed tools into
-      the live tool list and plugin-contributed interceptors behind the
-      agent's constructor-supplied chain.
+      the live tool list.
+    * **interceptors** — two paths, composed. Chains registered on the
+      shipped :class:`~chimera.plugins.registry.PluginExtensionRegistry`
+      already ride the host's per-turn merge (plugin chains first, host
+      chains last), so after the reload above the next turn enforces
+      exactly the reloaded chains; this seam diffs them **per seam**
+      (``"<seam>:<name>"`` added / removed / refreshed) and reports a
+      census note, never binding them a second time. Interceptor surfaces
+      a *third-party* registry exposes still bind generically behind the
+      constructor-supplied chain (:func:`_collect_plugin_interceptors`),
+      with registry-carried duplicates excluded on hosts that merge per
+      turn.
 
     Args:
         agent: The :class:`~chimera.assembly.coding_agent.CodingAgent` (or a
@@ -653,16 +795,50 @@ def resync_agent(
         tools_delta = _bind_plugin_tools(agent, manager)
         if tools_delta.changed:
             report.deltas.append(tools_delta)
-        chain, bound, opaque = _collect_plugin_interceptors(manager)
+
+    # -- interceptors: typed path for the shipped registry ------------------
+    # Chains plugins register on chimera.plugins.registry are merged into
+    # every assembled turn by the host itself (plugin chains first, host
+    # chains last), so after the reload above the next turn's merge already
+    # carries exactly the reloaded chains. Resync's job for them is honest
+    # per-seam accounting — never a second binding, which would run every
+    # chain twice.
+    registry_chains = _registry_interceptor_chains()
+    inter_delta = _diff_interceptor_chains(
+        getattr(agent, "_resync_interceptor_state", None), registry_chains,
+    )
+    agent._resync_interceptor_state = registry_chains
+    host_merges_per_turn = hasattr(agent, "_effective_interceptors")
+
+    if manager is not None:
+        # Generic fallback: interceptor surfaces third-party registries
+        # expose. On hosts that merge the shipped registry per turn,
+        # registry-carried callables republished on a generic surface are
+        # excluded — they are already live once.
+        chain, bound, opaque = _collect_plugin_interceptors(
+            manager,
+            exclude=registry_chains if host_merges_per_turn else None,
+        )
         _bind_interceptors(agent, chain)
-        if bound or opaque:
-            inter_delta = KindDelta(kind="interceptors")
-            inter_delta.refreshed = [f"{bound} bound"] if bound else []
-            if opaque:
-                inter_delta.failed.append(
-                    ("opaque", f"{opaque} contribution(s) in a shape this seam cannot bind")
-                )
-            report.deltas.append(inter_delta)
+        if bound:
+            inter_delta.refreshed.append(f"{bound} bound")
+        if opaque:
+            inter_delta.failed.append(
+                ("opaque", f"{opaque} contribution(s) in a shape this seam cannot bind")
+            )
+    if inter_delta.changed:
+        report.deltas.append(inter_delta)
+    census = _interceptor_census(registry_chains)
+    if census:
+        report.notes.append(
+            f"plugin-registered interceptors: {census} — "
+            + (
+                "merged into every turn, ahead of host chains"
+                if host_merges_per_turn
+                else "counted only; this target does not expose the per-turn merge"
+            )
+        )
+    if manager is not None:
         _plugin_surface_notes(manager, report.notes)
         _discover_unloaded_note(manager, report.notes)
 

@@ -9,9 +9,10 @@ from __future__ import annotations
 import pytest
 
 from chimera.core.interception import intercept_tool_call
+from chimera.plugins.base import ComponentRegistry
 from chimera.plugins.manager import PluginManager
 from chimera.plugins.packs import PlanGatePlugin
-from chimera.plugins.registry import PluginExtensionRegistry
+from chimera.plugins.registry import INTERCEPTOR_SEAMS, PluginExtensionRegistry
 from chimera.testing import create_assembled_harness, default_test_tools
 from chimera.tools.think import ThinkTool
 from chimera.types import ToolCall
@@ -127,6 +128,32 @@ def test_unload_withdraws_the_gate(tmp_path):
     )
     run = harness.run("write freely")
     assert run.files_created == ["free.txt"]
+
+
+def test_deactivate_leaves_no_registry_residue_and_spares_other_chains():
+    """The hygiene pin behind hot-swap: ``deactivate()`` withdraws exactly
+    the pack's own chains — every seam free of them, other registrants
+    untouched, and a second ``deactivate()`` is a safe no-op. A reload
+    cycle (deactivate old, activate new) therefore can never accumulate
+    dead generations in the interceptor registry."""
+    def other_gate(call):
+        return None
+
+    PluginExtensionRegistry.register_interceptor("tool_call", other_gate)
+    pack = PlanGatePlugin()
+    pack.activate(ComponentRegistry())
+    assert len(PluginExtensionRegistry.get_interceptors("tool_call")) == 2
+
+    pack.deactivate()
+    for seam in INTERCEPTOR_SEAMS:
+        assert not any(
+            "PlanGatePlugin" in getattr(fn, "__qualname__", "")
+            for fn in PluginExtensionRegistry.get_interceptors(seam)
+        ), f"plan-gate residue on seam {seam!r}"
+    assert PluginExtensionRegistry.get_interceptors("tool_call") == [other_gate]
+
+    pack.deactivate()  # idempotent — never over-removes
+    assert PluginExtensionRegistry.get_interceptors("tool_call") == [other_gate]
 
 
 # ---------------------------------------------------------------------------
