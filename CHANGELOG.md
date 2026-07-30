@@ -9,6 +9,36 @@ commit receipts.
 
 ### Fixed
 
+- **The plan-gate pack no longer fails open across concurrent agents.** Gate
+  state was a single process-global high-water mark on the shared plugin
+  instance, so after a longer conversation planned, a fresh unplanned agent's
+  context seam saw fewer user messages, never re-armed, and its writes were
+  waved through — and in reverse, a longer conversation's user count
+  spuriously re-armed a just-planned shorter one. The seams carry no session
+  id, so gate state is now **per conversation** via execution-lane keying
+  (the thread + asyncio task driving the loop — every shipped loop fires the
+  `context` and `tool_call` seams inline on that lane), with each lane's
+  truth re-derived from the message list itself before every provider call;
+  unknown lanes fail closed (armed). Both directions of the two-agent
+  scenario are pinned through real concurrent loops — interleaved asyncio
+  tasks on one event loop, separate threads, and same-thread sequential
+  reuse — and all four new tests fail against the previous implementation.
+  Single-agent behavior is unchanged (the six existing pins pass against
+  both). Honest residual, documented in the pack and the guide: a host that
+  hand-interleaves two conversations inside one asyncio task shares a lane
+  for at most one step; compaction that rewrites away the planning call
+  re-arms (fails closed, never open).
+- **The redactor pack scrubs `TextContent` blocks, not just `.content`.**
+  `_scrub_message` passed `content_blocks` through verbatim, so a multimodal
+  message's `TextContent` duplicate of the text (`Message.user_with_image`
+  creates one) kept the secret on the wire even when the content field was
+  scrubbed. Text inside `TextContent` blocks is now scrubbed; the limits
+  statement (docstring + guide) names exactly what still passes through —
+  `ImageContent` bytes and media type, non-`TextContent` block types, and
+  `ToolResult.metadata`. Pinned with a multimodal message through the real
+  `provider_request` seam; the test fails against the previous
+  implementation.
+
 - **Interception seams now reach the strategy loops — closing the hole where
   a policy pack gating writes in the default loop silently did not apply to a
   `:plan-execute` / `:reflexion` / `:tot` lane.** Two halves, one shipped gap:

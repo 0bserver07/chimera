@@ -182,26 +182,38 @@ message — issuing is enough (the gate opens on the `tool_call` seam,
 before execution, so it works even where no planning tool is installed);
 the pack does not read the plan or judge its quality. A `context`-seam
 watcher re-arms the gate on every new user message, including mid-run
-steering. Limits: gate state is per plugin instance and therefore per
-process (all agents in the process share one gate), and tool names match
-exactly as the loop dispatches them — namespaced variants need explicit
-configuration.
+steering. Gate state is **per conversation**: the seams carry no session
+id, so the pack keys state by execution lane — the (thread, asyncio
+task) pair the loop runs on — and re-derives each lane's truth from the
+message list itself before every provider call. Concurrent agents in one
+process (multiplexer lanes on one event loop, REPL turns on worker
+threads, strategy-loop bridge threads, sequential thread reuse) get
+independent gates; a lane with no recorded state fails closed (armed) —
+pinned in both failure directions through real concurrent loops. Limits:
+a host that hand-interleaves two conversations' streams inside a single
+asyncio task shares a lane for at most one step (no shipped runner does
+this); a compaction that rewrites away this turn's planning call re-arms
+the gate (fails closed, never open); and tool names match exactly as the
+loop dispatches them — namespaced variants need explicit configuration.
 
 ### redactor
 
 Scrubs a configurable secret pattern (`pattern=`, `replacement=`) from
-the provider request — message contents, tool-call arguments riding them,
-and request headers — on the `provider_request` seam, and from tool
-outputs and error text on the `tool_result` seam. Headers named in
-`headers=` (`Authorization` by default, case-insensitive) are replaced
-wholesale. The wire scrub is **ephemeral** (the durable conversation
-keeps its originals); the tool-result scrub is **durable** (the
-transcript records the scrubbed output) — both sides are pinned through
-the real loop. Limits: header redaction reaches only providers exposing a
-`request_headers` surface; text only (image blocks and result metadata
-pass through); both seams are fail-open by the seam contract, so pair it
-with the events-side `RedactionMiddleware` for defense in depth. An
-invalid pattern raises at construction.
+the provider request — message contents, `TextContent` blocks (a
+multimodal message duplicates its text into one), tool-call arguments
+riding them, and request headers — on the `provider_request` seam, and
+from tool outputs and error text on the `tool_result` seam. Headers
+named in `headers=` (`Authorization` by default, case-insensitive) are
+replaced wholesale. The wire scrub is **ephemeral** (the durable
+conversation keeps its originals); the tool-result scrub is **durable**
+(the transcript records the scrubbed output) — both sides are pinned
+through the real loop. Limits: header redaction reaches only providers
+exposing a `request_headers` surface; text only — exactly what passes
+through unscrubbed is `ImageContent` blocks (bytes and media type),
+content-block types other than `TextContent`, and `ToolResult.metadata`;
+both seams are fail-open by the seam contract, so pair it with the
+events-side `RedactionMiddleware` for defense in depth. An invalid
+pattern raises at construction.
 
 ### delegate-spawner
 
