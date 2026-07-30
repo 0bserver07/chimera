@@ -511,9 +511,12 @@ Ranked by *how confidently a reader would trust the cell*, not by effort.
 
 6. ~~**`mbpp-plus 99.7%` in `README.md` without the base-grading caveat.**~~
    **RESOLVED 2026-07-30** — the plus harness now runs and README carries the
-   plus-graded 84.9%. Original entry: The
-   number is real for what executed; the name promises more.
-   *Cheapest fix:* copy the observatory's ‡ footnote into the README line.
+   plus-graded **84.9%**, so the name and the number finally agree.
+   *Original entry, kept for the record:* "The number is real for what
+   executed; the name promises more. *Cheapest fix:* copy the observatory's ‡
+   footnote into the README line." The actual fix went further than that,
+   because the footnote would have documented an inflated number rather than
+   correcting it.
 
 7. **`--env swe-modal` and `--modal-gpu` described as live-proven.** Both are
    narrative-only; the one named receipt is missing.
