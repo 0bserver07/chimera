@@ -64,6 +64,36 @@ really runs rather than a hand-built stand-in.
 skipped so an unaudited adapter stays visible instead of being mistaken for a
 healthy one.
 
+**An `EXEMPT` reason is itself a claim, and claims rot.** `context-bench` and
+`nocha` both sat exempt as *"no reference answer"* while their graders read one —
+`ContextBench.evaluate` grades against `task["answer"]`, and `nocha`'s correct
+choice is the constant `"A"` in every instance by construction. Nobody
+re-derives a reason once the sweep prints EXEMPT beside it, so the adapters
+stayed unverified indefinitely. Both are real recipes now. When you read an
+exemption, check it against the adapter's `evaluate` rather than trusting the
+sentence.
+
+## What a `PASS` does not tell you
+
+The canary answers one question: *can this grader score its own reference
+answer, and does it reject wrong ones?* Two defect classes live outside that,
+both found in adapters the sweep called green:
+
+- **Under-strength grading.** `mbpp-plus` executed the dataset's *base*
+  `test_list` asserts while its name promised the EvalPlus expanded harness. The
+  canary is structurally blind to this: a weaker suite still passes correct
+  answers and still rejects wrong ones. Wiring the real harness moved the column
+  from 99.7% to **84.9%** — 14.8 points, grading alone. Only a claim-vs-code read
+  finds this class; the disclosure lives in `GRADING_NOTES`.
+- **Leniency the inverse check happens to miss.** The wrong answer a recipe
+  supplies must be wrong *in the way the grader is weak*. `ContextBench` accepted
+  `142` for ground truth `42` — its recipe's `-99999` was rejected correctly, so
+  a positive/negative pair alone said PASS. Boundary cases like that are covered
+  by `tests/eval/test_substring_grading_boundaries.py`, not by the sweep.
+
+So a green sweep means *the graders are not fabricating*, not *the numbers mean
+what their names say*.
+
 ## False alarms are failures too
 
 A canary that calls a working adapter broken sends someone to "fix" correct
@@ -96,6 +126,26 @@ RECIPES = {
 }
 ```
 
+**`test_fields` is a claim about another module — re-derive it whenever that
+module's grading path changes.** It names the source the grader *executes*, and
+it is what tells `ENV-MISSING` apart from `BROKEN`. `mbpp-plus` carried
+`("test_list",)` under a comment asserting that was what `MBPPPlus.evaluate`
+actually ran: true when written, wrong the moment the plus harness was wired. The
+stale scope did not merely miss a dependency, it **inverted a verdict** — with
+numpy absent the sweep reported `BROKEN`, accusing a working grader, where the
+honest answer was `ENV-MISSING`.
+
+Two practical notes from proving that fix:
+
+- Test both directions against a venv where the dependency is **really**
+  uninstalled. An import-blocking shim does not work — leaving a `numpy.py` on
+  the path keeps `find_spec` succeeding, so the canary cannot detect absence at
+  all and you learn nothing.
+- Pin the scope *together with* the behaviour it describes (for mbpp-plus, that
+  the adapter genuinely grades at plus strength). Otherwise un-wiring the grader
+  leaves a green assertion describing nothing — which is exactly how the old
+  comment rotted.
+
 ## Disclosed exclusions
 
 `KNOWN_UNPASSABLE` lists tasks whose *dataset's own* reference answer cannot
@@ -115,13 +165,23 @@ would love to hide behind — a test rejects a thin reason.
 
 ## Current state
 
-Last full sweep (`--limit 200`): **7 pass, 0 broken, 1 not staged, 19 exempt.**
+Last full sweep (`--limit 200`, 2026-07-30): **7 pass, 0 broken, 3 not staged,
+17 exempt.**
 
 `human-eval`, `humaneval-plus`, `humaneval-x`, `mbpp`, `mbpp-plus`, `aimo` and
 `bigcodebench` all grade their own canonical answers correctly across the full
 dataset *and* reject wrong ones. Those are the adapters behind the published
 flagship scorecard, so those numbers rest on a verified grader.
 
-The 19 exempt adapters are **unverified, not healthy**. Extending the canary to
-the SWE-family (gold patch against a real repo + test runner) is the highest
--value next step, since those are the columns most likely to be bought next.
+The 17 exempt adapters are **unverified, not healthy** — down from 19 because
+`context-bench` and `nocha` turned out to have reference answers despite exempt
+reasons claiming otherwise; they are recipes now and report NOT-STAGED until
+their datasets land.
+
+Extending the canary to the SWE-family (gold patch against a real repo + test
+runner) is the highest-value next step, since those are the columns most likely
+to be bought next. It is tracked in **#175**, where the blocker is
+**environment provisioning, not the gold patch**: all five datasets stage
+`patch` *and* `test_patch` for every row, but none carries a `docker_image`, and
+the three families differ in what they do carry (`environment_setup_commit`, a
+per-row `Dockerfile`, or nothing at all).
