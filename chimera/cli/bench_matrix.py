@@ -41,6 +41,13 @@ _SANDBOX_ENVS: dict[str, tuple[str, str]] = {
 }
 
 
+#: Exit codes for outcomes the caller must be able to distinguish. Chosen above
+#: 2 so they never collide with the argparse/usage and credential-gate returns
+#: already used in this module.
+_EXIT_ALL_CELLS_FAILED = 3
+_EXIT_SOME_CELLS_FAILED = 4
+
+
 def missing_sandbox_credentials(env_kind: str) -> str | None:
     """Return the env var a managed-sandbox backend needs but does not have.
 
@@ -220,7 +227,27 @@ def run_bench_matrix(args: argparse.Namespace) -> int:
         print(f"Error: {e}", file=sys.stderr)
         return 1
 
-    provider = create_provider(model=args.model)
+    # Validate the model BEFORE anything expensive. It used to be constructed
+    # here outside any guard, so an unresolvable id surfaced only once the
+    # harness was running — and then only as an error cell, indistinguishable
+    # from a scored result. `glm-5.2` — the model this repo publishes its
+    # flagship scorecard with — was absent from the catalog for months and this
+    # is how it stayed invisible.
+    try:
+        provider = create_provider(model=args.model)
+    except (ValueError, ImportError, NotImplementedError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        try:
+            from chimera.providers.catalog import ProviderCatalog
+
+            known = sorted(ProviderCatalog.default().models)
+            print(
+                f"Known catalog models ({len(known)}): {', '.join(known)}",
+                file=sys.stderr,
+            )
+        except Exception:  # noqa: BLE001 - the hint is best-effort
+            pass
+        return 1
     try:
         runners = [resolve(registry[name], provider=provider) for name in agent_names]
     except (ValueError, NotImplementedError, ImportError) as e:
@@ -349,9 +376,56 @@ def run_bench_matrix(args: argparse.Namespace) -> int:
     else:
         print(report.summary())
 
+    # A run that produced nothing must not look like a run that succeeded.
+    # ``run_matrix`` deliberately contains a per-cell exception as a
+    # ``status="error"`` cell so one bad pair cannot abort the grid — that is
+    # correct — but nothing downstream asked "did anything actually succeed?".
+    # An unresolvable model, missing credentials or a dead endpoint yields
+    # total=0/passed=0/status=error for EVERY cell plus a JSON file shaped
+    # exactly like a scorecard, and this function returned 0. A `&&` chain, a
+    # CI step, or any script reading the exit code treated that as a passing
+    # benchmark run. Same failure class as every fabricated number this repo
+    # has had to retract: a failure that renders as data.
+    # ``total`` alone does NOT mean a cell measured anything. A dead endpoint
+    # produced ``status="error", total=2, passed=0`` — the benchmark had loaded
+    # its two tasks before the failure — so a "total > 0" test called a fully
+    # dead run PARTIAL instead of FAILED. A cell counts as graded only if it
+    # both attempted tasks AND did not error; anything else is unmeasured, and
+    # unmeasured must never be read as zero.
+    errored = [c for c in report.cells if c.status == "error"]
+    graded = [c for c in report.cells if c.total > 0 and c.status != "error"]
+
     if args.output:
         with open(args.output, "w", encoding="utf-8") as f:
             json.dump(_report_to_dict(report), f, indent=2)
         print(f"Report written to {args.output}", file=sys.stderr)
+        if not graded:
+            print(
+                f"WARNING: {args.output} contains NO graded cell — every cell "
+                "errored. That file is a failure record, not a scorecard: do "
+                "not promote it to data/ and do not cite a number from it.",
+                file=sys.stderr,
+            )
 
+    for cell in errored:
+        print(
+            f"  error: {cell.agent_id} x {cell.benchmark}: "
+            f"{cell.budget_note or 'no detail recorded'}",
+            file=sys.stderr,
+        )
+
+    if not graded:
+        print(
+            f"FAILED: 0 of {len(report.cells)} cell(s) graded a single task.",
+            file=sys.stderr,
+        )
+        return _EXIT_ALL_CELLS_FAILED
+    if errored:
+        print(
+            f"PARTIAL: {len(errored)} of {len(report.cells)} cell(s) errored; "
+            f"{len(graded)} graded. Treat an errored cell as unmeasured, never "
+            "as zero.",
+            file=sys.stderr,
+        )
+        return _EXIT_SOME_CELLS_FAILED
     return 0

@@ -9,6 +9,28 @@ commit receipts.
 
 ### Fixed
 
+- **`bench-matrix` exited 0 on a run that graded nothing.** `run_matrix`
+  deliberately contains a per-cell exception as a `status="error"` cell so one
+  bad pair cannot abort the grid — correct — but nothing downstream asked *did
+  anything actually succeed?*. An unresolvable model, absent credentials or a
+  dead endpoint produced `total=0/passed=0/status=error` for **every** cell,
+  wrote a JSON file shaped exactly like a scorecard, and returned 0, so any
+  `&&` chain, CI step or script reading the exit code saw a passing benchmark
+  run. Same class as every fabricated number this repo has retracted: a failure
+  that renders as data. Now exits **3** when no cell graded a task and **4**
+  when some did (both above the existing usage/credential returns), prints each
+  cell's failure reason, and warns explicitly that an all-error report must not
+  be promoted to `data/` or cited.
+  - `--model` is validated **before** any benchmark loads, listing the 25
+    known catalog models — it was constructed outside the guard that already
+    protected runner resolution, so a bad id surfaced only as an error cell.
+    This is how `glm-5.2` stayed missing from the catalog unnoticed.
+  - A subtlety the real reproduction caught and a stubbed test would not: a
+    dead endpoint yields `status="error"` with **`total=2`**, because the
+    benchmark loaded its tasks before the provider call failed. Testing
+    `total > 0` alone therefore called a fully dead run *partial*. A cell counts
+    as graded only if it attempted tasks **and** did not error.
+
 - **`glm-5.2` was missing from the provider catalog** — the model this repo
   publishes its flagship scorecard with. A `bench-matrix --model glm-5.2` run
   failed with `Unknown provider: 'glm-5.2'` and recorded an **error cell**, so
