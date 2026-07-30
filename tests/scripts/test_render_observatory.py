@@ -260,6 +260,38 @@ def test_grading_notes_registry_reasons_are_substantive() -> None:
         assert len(reason) > 120, f"{bench}: note too thin to act on"
 
 
+def test_every_ceiling_is_backed_by_a_canary_exclusion() -> None:
+    """`CEILINGS`' own docstring says it is "Verified by canary_benchmarks.py
+    (KNOWN_UNPASSABLE)" — nothing enforced that, and the pairing broke.
+
+    The mbpp-plus ceiling shipped in `CEILINGS` while its `KNOWN_UNPASSABLE`
+    counterpart sat uncommitted in a different worktree, so the published page
+    claimed a verified cap that no canary entry backed. A ceiling is a *published
+    reduction of the denominator*: it must be traceable to a specific task the
+    canary agrees cannot pass, or it is just a number lowering a score.
+    """
+    import importlib.util as _u
+
+    script = Path(__file__).resolve().parents[2] / "scripts" / "canary_benchmarks.py"
+    spec = _u.spec_from_file_location("_canary_for_ceilings", script)
+    assert spec is not None and spec.loader is not None
+    canary = _u.module_from_spec(spec)
+    sys.modules["_canary_for_ceilings"] = canary
+    spec.loader.exec_module(canary)
+
+    assert obs.CEILINGS, "registry emptied — a ceiling was removed, not fixed?"
+    unbacked = [
+        bench
+        for bench in obs.CEILINGS
+        if not canary.KNOWN_UNPASSABLE.get(bench)
+    ]
+    assert not unbacked, (
+        "ceiling published with no canary-side exclusion naming the task: "
+        f"{unbacked}. Add the KNOWN_UNPASSABLE entry (with the reason) or drop "
+        "the ceiling."
+    )
+
+
 def test_retraction_registry_reasons_are_substantive() -> None:
     # A retraction with a thin reason is how a retraction quietly gets reverted.
     assert obs.RETRACTED, "registry emptied — was a fix verified?"

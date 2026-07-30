@@ -288,3 +288,48 @@ class TestReporting:
         assert payload["summary"][cb.PASS] == 1
         assert payload["results"][0]["bench"] == "b1"
         assert payload["results"][0]["checked"] == 3
+
+
+# ------------------------------------------- test_fields must track the grader
+class TestRecipeScopeTracksTheGrader:
+    """``test_fields`` names the source the grader EXECUTES, so it is a claim
+    about another module's behaviour — and claims about other modules go stale
+    silently.
+
+    It happened: mbpp-plus carried ``test_fields=("test_list",)`` with a comment
+    asserting that was "what MBPPPlus.evaluate ACTUALLY executes". True while
+    grading was base-strength; wrong the moment the EvalPlus expanded harness
+    was wired. The stale scope did not merely miss a dependency, it **inverted a
+    verdict**: with numpy absent the sweep reported mbpp-plus BROKEN — accusing
+    a working grader — where the honest answer was ENV-MISSING. Proven by
+    running the sweep three ways against a genuinely numpy-free venv:
+    stale scope → BROKEN, fixed scope → ENV-MISSING, fixed + numpy → PASS.
+    """
+
+    def test_mbpp_plus_scans_the_expanded_harness_it_now_runs(self) -> None:
+        fields = cb.RECIPES["mbpp-plus"].test_fields
+        assert "test" in fields, (
+            "MBPPPlus.evaluate runs the expanded `test` blob; a scope that omits "
+            "it cannot see that blob's imports"
+        )
+        # `test_list` stays in scope because the adapter falls back to it for
+        # rows with no `test` blob — dropping it would blind the scan to those.
+        assert "test_list" in fields
+        assert fields.index("test") < fields.index("test_list"), (
+            "order should mirror the grader's own preference"
+        )
+
+    def test_the_adapter_really_does_grade_at_plus_strength(self) -> None:
+        """The pairing, not just the tuple.
+
+        Without this, un-wiring the plus harness would leave the assertion above
+        passing while it described nothing — the exact failure mode that let the
+        old comment rot. If this breaks, re-derive `test_fields` from whatever
+        the grader now executes; do not simply adjust the assertion.
+        """
+        from chimera.eval.benchmarks.mbpp import MBPPPlus
+
+        plus = MBPPPlus.graded_strength({"test": "assert True", "test_list": ["x"]})
+        base = MBPPPlus.graded_strength({"test_list": ["x"]})
+        assert plus == "plus", "a row WITH a `test` blob must grade at plus strength"
+        assert base == "base", "a row without one must degrade visibly, not silently"

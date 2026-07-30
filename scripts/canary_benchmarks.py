@@ -194,11 +194,17 @@ RECIPES: dict[str, Recipe] = {
     # NOT "prompt" — that is BigCodeBench's natural-language instruct prompt.
     "bigcodebench": Recipe(answer=_joined("code_prompt")),
     "mbpp": Recipe(answer=_field("code"), test_fields=("test_list",)),
-    # mbpp-plus: test_fields matches what MBPPPlus.evaluate ACTUALLY executes —
-    # the base `test_list` asserts. The EvalPlus `test` harness is staged but
-    # never run (base-strength grading, disclosed on the observatory), so
-    # scanning it here would invent a numpy dependency the grader never imports.
-    "mbpp-plus": Recipe(answer=_field("code"), test_fields=("test_list",)),
+    # mbpp-plus: `test` FIRST, because MBPPPlus.evaluate now runs the EvalPlus
+    # expanded harness and falls back to `test_list` only for rows with no
+    # `test` blob. This field list was `("test_list",)` with a comment claiming
+    # scanning `test` "would invent a numpy dependency the grader never
+    # imports" — accurate while grading was base-strength, and wrong the moment
+    # the plus harness was wired. The stale scope did not merely miss a
+    # blocker, it inverted a verdict: with numpy absent the adapter reported
+    # BROKEN (a working grader accused) instead of ENV-MISSING. Whenever an
+    # adapter's grading path changes, re-check this tuple against it — the two
+    # must name the same code.
+    "mbpp-plus": Recipe(answer=_field("code"), test_fields=("test", "test_list")),
     # --- natural-language answer graders -----------------------------------
     "aimo": Recipe(answer=_field("answer"), wrong=lambda t: "-99999", code_like=False),
     "math-500": Recipe(
@@ -270,6 +276,15 @@ def _shapes(answer: str, code_like: bool) -> list[tuple[str, str]]:
 #: bug would love to hide behind. Verified by reading the staged bytes, not
 #: inferred from a failure.
 KNOWN_UNPASSABLE: dict[str, dict[str, str]] = {
+    "mbpp-plus": {
+        "590": (
+            "upstream EvalPlus data: polar_rect's expanded harness compares "
+            "floats with atol=0, and the dataset's OWN canonical answer differs "
+            "in the last ULP (38.85387210404512 vs ...511). The answer is "
+            "correct; the comparison is exact where it should be approximate. "
+            "Caps mbpp-plus at 377/378 = 99.7% under plus grading."
+        ),
+    },
     "humaneval-plus": {
         "HumanEval/32": (
             "upstream EvalPlus data: the final assertion is "

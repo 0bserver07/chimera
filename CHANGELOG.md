@@ -133,6 +133,26 @@ commit receipts.
     receipts predate the plus harness, so a ✓ under a plus-labelled column meant
     the base contract — the same overstatement the retracted-adapter clause
     already guarded against, for the same reason.
+  - **The ceiling was published without the canary entry backing it, and my own
+    changelog claimed otherwise.** `CEILINGS`' docstring says it is "Verified by
+    `canary_benchmarks.py` (`KNOWN_UNPASSABLE`)" — nothing enforced that pairing,
+    so the mbpp-plus ceiling shipped while its `KNOWN_UNPASSABLE` counterpart sat
+    uncommitted in a different worktree. Entry added; a test now fails on any
+    ceiling with no canary-side exclusion naming the task, because a ceiling is a
+    published reduction of the denominator, not a free adjustment.
+  - **Wiring the plus harness silently inverted a canary verdict.** The recipe
+    scanned `test_list` for dependency blockers while the grader had moved to the
+    expanded `test` blob — carrying a comment asserting that scope was "what
+    `MBPPPlus.evaluate` ACTUALLY executes", true when written and wrong after.
+    With numpy absent, the sweep reported mbpp-plus **BROKEN**, accusing a
+    working grader, where the honest verdict was ENV-MISSING. Proven three ways
+    against a genuinely numpy-free venv: stale scope → BROKEN, fixed scope →
+    ENV-MISSING, fixed + numpy → PASS. (A first attempt to reproduce this with an
+    import-blocking shim was invalid — a `numpy.py` on the path keeps
+    `find_spec` succeeding, so the canary cannot detect absence at all.) The
+    scope now tracks the grader and a test pins it *together with* the fact that
+    the adapter really grades at plus strength, so un-wiring one breaks the
+    other rather than leaving a green assertion describing nothing.
   - `DEFAULT_PATTERNS` gained `modal-grid-fullscore4-*` — a receipt the
     generator does not glob is silently never read, and this one first landed
     under an `observatory-*` name that put it in the depth matrix instead of the
