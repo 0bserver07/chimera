@@ -4,6 +4,7 @@ from collections.abc import Generator
 from typing import TYPE_CHECKING
 
 from chimera.core.context import Context
+from chimera.core.interception import intercepted_complete
 from chimera.core.loop import drain_steps
 from chimera.core.tool import BaseTool
 from chimera.core.tool_executor import (
@@ -56,13 +57,34 @@ class Reflexion:
         action_count = 0
         total_cost = 0.0
         event_bus = self.config.event_bus if self.config else None
+        interceptors = self.config.interceptors if self.config else None
 
         for _ in range(self.max_steps):
             steps += 1
-            response = provider.complete(
-                context.to_messages(),
-                tools=schemas if schemas else None,
+            # Interception seams: context rewrite + provider request, via the
+            # shared strategy-loop enforcement site (ephemeral; the durable
+            # Context is untouched; None interceptors = byte-identical call).
+            response, blocked = intercepted_complete(
+                interceptors, provider, context.to_messages(),
+                schemas if schemas else None, event_bus=event_bus,
             )
+            if blocked is not None:
+                blocked_msg = f"Blocked by interceptor: {blocked}"
+                yield StepResult(
+                    message=Message.assistant(blocked_msg),
+                    tool_calls=[],
+                    done=True,
+                    step=steps,
+                    cost=0.0,
+                )
+                return AgentResult(
+                    output=blocked_msg,
+                    steps=steps,
+                    tool_calls_total=total_tool_calls,
+                    cost=total_cost,
+                    success=False,
+                    error=blocked_msg,
+                )
             if event_bus:
                 from chimera.events.types import ModelResponseEvent
                 event_bus.publish(ModelResponseEvent(

@@ -4,6 +4,7 @@ from collections.abc import Generator
 from typing import TYPE_CHECKING
 
 from chimera.core.context import Context
+from chimera.core.interception import intercepted_complete
 from chimera.core.loop import drain_steps
 from chimera.core.tool import BaseTool
 from chimera.core.tool_executor import (
@@ -55,6 +56,8 @@ class TreeOfThought:
         steps = 0
         total_tool_calls = 0
         total_cost = 0.0
+        event_bus = self.config.event_bus if self.config else None
+        interceptors = self.config.interceptors if self.config else None
 
         for _ in range(self.max_steps):
             steps += 1
@@ -64,11 +67,33 @@ class TreeOfThought:
             candidates: list[str] = []
             candidate_tool_calls = []
             for _ in range(self.n_candidates):
-                response = provider.complete(
-                    context.to_messages(),
-                    tools=schemas if schemas else None,
+                # Interception seams: context rewrite + provider request run
+                # per candidate call (each sends the conversation), via the
+                # shared strategy-loop enforcement site. The envelope carries
+                # temperature=0.7 so envelope interceptors see — and may
+                # replace — what is actually sent.
+                response, blocked = intercepted_complete(
+                    interceptors, provider, context.to_messages(),
+                    schemas if schemas else None, event_bus=event_bus,
                     temperature=0.7,
                 )
+                if blocked is not None:
+                    blocked_msg = f"Blocked by interceptor: {blocked}"
+                    yield StepResult(
+                        message=Message.assistant(blocked_msg),
+                        tool_calls=[],
+                        done=True,
+                        step=steps,
+                        cost=step_cost,
+                    )
+                    return AgentResult(
+                        output=blocked_msg,
+                        steps=steps,
+                        tool_calls_total=total_tool_calls,
+                        cost=total_cost,
+                        success=False,
+                        error=blocked_msg,
+                    )
                 c = calculate_cost(provider.model_name, response.usage)
                 step_cost += c
                 total_cost += c
@@ -158,6 +183,12 @@ class TreeOfThought:
                 eval_prompt = self.EVALUATE_PROMPT.format(n=len(candidates))
                 eval_context = Context(system="You are an evaluator.")
                 eval_context.add(Message.user(f"{candidate_text}\n\n{eval_prompt}"))
+                # Honest scope (documented in docs/guides/interception.md,
+                # pinned inert by test): this internal candidate-evaluation
+                # call is NOT run through the interception seams. It sends a
+                # synthetic evaluator prompt, not the conversation — context
+                # interceptors are written against the conversation (e.g. a
+                # watcher counting user messages) and would misread it.
                 eval_response = provider.complete(eval_context.to_messages())
                 eval_cost = calculate_cost(provider.model_name, eval_response.usage)
                 step_cost += eval_cost

@@ -85,6 +85,7 @@ __all__ = [
     "intercept_provider_request",
     "intercept_tool_call",
     "intercept_tool_result",
+    "intercepted_complete",
     "merge_interceptors",
 ]
 
@@ -530,6 +531,7 @@ def apply_pre_provider_seams(
     messages: list[Message],
     tools: list[dict[str, Any]] | None,
     *,
+    kwargs: dict[str, Any] | None = None,
     event_bus: "EventBus | None" = None,
 ) -> PreProviderOutcome:
     """Apply the ``context`` then ``provider_request`` seams for one call.
@@ -546,13 +548,20 @@ def apply_pre_provider_seams(
         provider: The provider about to be called.
         messages: The message list about to be sent.
         tools: The tool schemas about to be offered.
+        kwargs: Extra keyword arguments the caller intends to pass to the
+            provider call (e.g. ``{"temperature": 0.7}``).  Seeds
+            :attr:`ProviderRequest.kwargs` so the envelope interceptors
+            see — and may replace — what will actually be sent.  ``None``
+            seeds an empty dict (unchanged behavior).
         event_bus: Optional bus for observational events.
 
     Returns:
         A :class:`PreProviderOutcome`; when *interceptors* is ``None`` or
         both chains are empty, it echoes the inputs untouched.
     """
-    outcome = PreProviderOutcome(messages=messages, tools=tools)
+    outcome = PreProviderOutcome(
+        messages=messages, tools=tools, kwargs=dict(kwargs) if kwargs else {},
+    )
     if interceptors is None:
         return outcome
     if not interceptors.context and not interceptors.provider_request:
@@ -595,3 +604,72 @@ def apply_pre_provider_seams(
                 pass
 
     return outcome
+
+
+def intercepted_complete(
+    interceptors: "Interceptors | None",
+    provider: Any,
+    messages: list[Message],
+    tools: list[dict[str, Any]] | None,
+    *,
+    event_bus: "EventBus | None" = None,
+    **call_kwargs: Any,
+) -> tuple[Any, str | None]:
+    """Apply the pre-provider seams, then make one guarded ``complete()`` call.
+
+    The single enforcement site for loops whose provider calls are plain
+    synchronous ``provider.complete(...)`` invocations — the strategy loops
+    (:class:`~chimera.core.loops.plan_execute.PlanAndExecute`,
+    :class:`~chimera.core.loops.reflexion.Reflexion`,
+    :class:`~chimera.core.loops.tree_of_thought.TreeOfThought`) route every
+    conversation provider call through here so the ``context`` and
+    ``provider_request`` seams behave identically across them.  (``ReAct``
+    and ``AgentLoop`` apply :func:`apply_pre_provider_seams` inline because
+    they also drive the streaming path.)
+
+    Semantics, in order:
+
+    1. Run the ``context`` then ``provider_request`` chains
+       (:func:`apply_pre_provider_seams`), seeding the request envelope
+       with *call_kwargs* so envelope interceptors see — and may replace —
+       the extra arguments the caller intends to send.
+    2. On a block, return ``(None, block_reason)`` — the provider is never
+       called.
+    3. Otherwise call ``provider.complete(effective_messages,
+       tools=effective_tools, **effective_kwargs)``.
+    4. Header injection is per-call: if an interceptor replaced the
+       provider's ``request_headers``, the original snapshot is restored in
+       a ``finally``, even when the request raises.
+
+    With *interceptors* ``None`` (or both pre-provider chains empty) the
+    call is byte-identical to ``provider.complete(messages, tools=tools,
+    **call_kwargs)`` — pinned by test.
+
+    Args:
+        interceptors: The configured chains, or ``None`` (no-op).
+        provider: The provider to call.
+        messages: The message list about to be sent.
+        tools: The tool schemas about to be offered, or ``None``.
+        event_bus: Optional bus for observational events.
+        **call_kwargs: Extra keyword arguments for the provider call
+            (e.g. ``temperature=0.7``); they seed the envelope's
+            ``kwargs`` and are passed to ``complete`` unless replaced.
+
+    Returns:
+        ``(response, None)`` on success, or ``(None, block_reason)`` when a
+        pre-provider seam blocked the call.
+    """
+    outcome = apply_pre_provider_seams(
+        interceptors, provider, messages, tools,
+        kwargs=call_kwargs or None, event_bus=event_bus,
+    )
+    if outcome.block_reason is not None:
+        return None, outcome.block_reason
+    try:
+        return (
+            provider.complete(outcome.messages, tools=outcome.tools, **outcome.kwargs),
+            None,
+        )
+    finally:
+        if outcome.header_snapshot is not None:
+            provider.request_headers = outcome.header_snapshot
