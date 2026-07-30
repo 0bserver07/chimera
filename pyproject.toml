@@ -84,6 +84,14 @@ chimera = "chimera.cli.main:main"
 chimera-team-mcp = "chimera.mcp_servers.team_server:main"
 chimera-team-run = "chimera.mcp_servers.teammate_runner:main"
 
+# Bundled policy packs, loadable by name through PluginManager
+# (discover()/load()); worked interceptor-carrying plugins shipped in the
+# package. See chimera/plugins/packs/ and docs/guides/interception.md.
+[project.entry-points."chimera.plugins"]
+plan-gate = "chimera.plugins.packs.plan_gate:PlanGatePlugin"
+redactor = "chimera.plugins.packs.redactor:RedactorPlugin"
+delegate-spawner = "chimera.plugins.packs.delegate_spawner:DelegateSpawnerPlugin"
+
 [tool.hatch.build.targets.wheel]
 packages = ["chimera"]
 

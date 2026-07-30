@@ -2,6 +2,11 @@ from chimera.plugins.base import BasePlugin, ComponentRegistry, Hook, MCPServerC
 from chimera.plugins.dir_loader import DirectoryPluginLoader
 from chimera.plugins.manager import PluginManager
 from chimera.plugins.marketplace import Marketplace, MarketplaceRegistry, PluginInfo
+from chimera.plugins.packs import (
+    DelegateSpawnerPlugin,
+    PlanGatePlugin,
+    RedactorPlugin,
+)
 from chimera.plugins.registry import PluginExtensionRegistry
 from chimera.plugins.ui import (
     PanelPlacement,
@@ -16,15 +21,18 @@ from chimera.plugins.ui import (
 __all__ = [
     "BasePlugin",
     "ComponentRegistry",
+    "DelegateSpawnerPlugin",
     "DirectoryPluginLoader",
     "Hook",
     "MCPServerConfig",
     "Marketplace",
     "PanelPlacement",
+    "PlanGatePlugin",
     "PluginExtensionRegistry",
     "PluginInfo",
     "PluginManager",
     "MarketplaceRegistry",
+    "RedactorPlugin",
     "StatuslineSection",
     "UICommand",
     "UIExtensionRegistry",
