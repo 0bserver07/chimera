@@ -146,6 +146,16 @@ class CodingAgent:
         # loop_adapter) are not yet covered.
         self._interceptors = interceptors
 
+        # Hot-swap seam (/resync): the skills prompt section starts empty —
+        # byte-identical prompts until the first resync_resources() binds the
+        # discovered SKILL.md catalog; run() appends it to every subsequent
+        # turn's assembled prompt. The busy flag makes a resync refuse
+        # cleanly instead of racing a streaming turn, and the optional plugin
+        # manager is what /resync hot-swaps (None = plugins not scanned).
+        self._skills_prompt_section: str = ""
+        self._turn_active: bool = False
+        self._plugin_manager: Any = None
+
         # Uniform run budget (T12, additive): a
         # chimera.core.budget.BudgetSpec whose caps (cost / steps=llm_calls /
         # wall-clock / tool_calls) end a run cleanly with a
@@ -360,7 +370,20 @@ class CodingAgent:
         )
 
     async def run(self, task: str) -> AsyncGenerator[LoopEvent, None]:
-        """Run the agent on a task, yielding LoopEvents."""
+        """Run the agent on a task, yielding LoopEvents.
+
+        Marks the agent busy for the duration (the ``/resync`` hot-swap seam
+        refuses while a turn is active), then delegates to :meth:`_run_turn`.
+        """
+        self._turn_active = True
+        try:
+            async for event in self._run_turn(task):
+                yield event
+        finally:
+            self._turn_active = False
+
+    async def _run_turn(self, task: str) -> AsyncGenerator[LoopEvent, None]:
+        """The actual turn body (see :meth:`run`)."""
         # Check for slash command
         was_command, output = await self._input_handler.process(task)
         if was_command:
@@ -379,8 +402,14 @@ class CodingAgent:
             tools=self.tools,
             model=getattr(self.provider, "model_name", "unknown"),
         )
+        # Hot-swap seam: the skills prompt section is "" until the first
+        # /resync binds a discovered catalog, so pre-resync prompts are
+        # byte-identical to before the seam existed. Because assembly runs
+        # here on every turn, a resync reaches the NEXT turn of the current
+        # conversation — no restart, no new session.
         system_prompt = await assembler.assemble(
-            user_append=self._system_prompt_text,
+            user_append=str(self._system_prompt_text)
+            + (getattr(self, "_skills_prompt_section", "") or ""),
         )
 
         # Inject memory
@@ -589,3 +618,46 @@ class CodingAgent:
         if old is not None:
             enforcer.tally = old.tally  # keep consumption spent under the old cap
         self._budget_enforcer = enforcer
+
+    # -- hot-swap seam (/resync) ----------------------------------------
+    @property
+    def plugin_manager(self) -> Any:
+        """The attached :class:`~chimera.plugins.manager.PluginManager`, or ``None``."""
+        return self._plugin_manager
+
+    def attach_plugin_manager(self, manager: Any) -> None:
+        """Attach the plugin manager :meth:`resync_resources` hot-swaps.
+
+        Attachment alone binds nothing — the next :meth:`resync_resources`
+        call is what syncs the manager's plugin-contributed tools and
+        interceptors into this agent. ``None`` detaches (plugins are then
+        skipped by resync; anything previously bound stays bound until a
+        resync with a manager runs).
+
+        Args:
+            manager: A :class:`~chimera.plugins.manager.PluginManager`
+                (or ``None`` to detach).
+        """
+        self._plugin_manager = manager
+
+    def resync_resources(self) -> Any:
+        """Hot-swap plugins / skills / agent definitions from disk, live.
+
+        Re-discovers each catalog and rebinds it into this running agent via
+        :func:`chimera.assembly.resync.resync_agent`: plugin hot-swap (with
+        per-plugin failure isolation), plugin tool + interceptor rebind, the
+        refreshed skills prompt catalog (reaches the next turn — the prompt
+        is reassembled every turn), the flat skill-command registry, and the
+        agent-definition catalog.
+
+        Returns:
+            The :class:`~chimera.assembly.resync.ResyncReport`; refused (and
+            nothing rebound) while a turn is active.
+        """
+        from chimera.assembly.resync import resync_agent
+
+        return resync_agent(
+            self,
+            workdir=self._project_dir,
+            plugin_manager=self._plugin_manager,
+        )

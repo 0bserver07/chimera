@@ -28,6 +28,35 @@ class CommandRegistry:
         for alias in command.aliases:
             self._alias_map[alias] = command.name
 
+    def unregister_source(self, source: str) -> list[str]:
+        """Remove every command whose ``source`` matches, with its aliases.
+
+        The hot-swap seam (``/resync``) uses this to drop stale
+        ``source="skill"`` entries before re-registering the fresh catalog,
+        so a deleted skill file actually disappears from the registry
+        instead of lingering behind the last-write-wins ``register``.
+
+        Args:
+            source: The ``source`` label to purge (e.g. ``"skill"``).
+
+        Returns:
+            The removed command names, sorted.
+        """
+        removed = sorted(
+            name
+            for name, cmd in self._commands.items()
+            if getattr(cmd, "source", None) == source
+        )
+        for name in removed:
+            self._commands.pop(name, None)
+        gone = set(removed)
+        self._alias_map = {
+            alias: target
+            for alias, target in self._alias_map.items()
+            if target not in gone
+        }
+        return removed
+
     # ------------------------------------------------------------------
     # Lookup
     # ------------------------------------------------------------------

@@ -225,6 +225,25 @@ class AgentDriver:
         if setter is not None:
             setter(budget)
 
+    # -- hot-swap seam (/resync) ----------------------------------------
+    @property
+    def busy(self) -> bool:
+        """Whether a turn is currently streaming through this driver."""
+        return bool(getattr(self._agent, "_turn_active", False))
+
+    def resync_resources(self) -> Any:
+        """Hot-swap plugins / skills / agent definitions from disk, live.
+
+        Delegates to :meth:`CodingAgent.resync_resources` — the seam behind
+        ``/resync`` in both frontends and on the embed surface
+        (:class:`~chimera.embed.AgentSession` inherits this method).
+
+        Returns:
+            The :class:`~chimera.assembly.resync.ResyncReport`; refused (and
+            nothing rebound) while a turn is running.
+        """
+        return self._agent.resync_resources()
+
 
 def render_event(ev: LoopEvent) -> str | None:
     """Render a loop event as a single display line, or ``None`` to skip.
