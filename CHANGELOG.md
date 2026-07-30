@@ -9,6 +9,40 @@ commit receipts.
 
 ### Fixed
 
+- **Interception seams now reach the strategy loops — closing the hole where
+  a policy pack gating writes in the default loop silently did not apply to a
+  `:plan-execute` / `:reflexion` / `:tot` lane.** Two halves, one shipped gap:
+  `loop_adapter` built the loops with no config at all (so even the
+  tool-seam support already present in the shared executors never fired on
+  the assembled path), and the loops owned their provider calls (so the
+  `context` / `provider_request` seams had no site to fire from anywhere).
+  Now: every conversation provider call in `PlanAndExecute` / `Reflexion` /
+  `TreeOfThought` routes through one shared enforcement site
+  (`chimera.core.interception.intercepted_complete` — pre-provider seams, a
+  block ends the run with the reason, per-call header restore), and
+  `adapt_loop(interceptors=...)` threads the SAME merged plugin+host chains
+  the default path uses (`CodingAgent._effective_interceptors()`; the adapter
+  never merges) via a seams-only `LoopConfig` — lanes keep their documented
+  no-permission-checks posture, and with no interceptors the loop is built
+  config-free, byte-identical (pinned).
+  - Honest scope, documented in the new per-loop coverage table in
+    `docs/guides/interception.md` and pinned by tests both ways: every
+    supported seam×loop cell has an enforcement test through the real loop
+    (`tests/core/test_loops_interception.py`, 30 tests;
+    `tests/assembly/test_loop_adapter.py` +5;
+    `tests/assembly/test_plugin_interceptors.py` +7); the two claimed-
+    unsupported sites — `TreeOfThought`'s internal candidate-evaluation call
+    and the resumed-approval carve-out — each have a test proving they are
+    genuinely inert.
+  - `ProviderRequest.kwargs` is now seeded with the call's own extra
+    arguments on the strategy loops, so `TreeOfThought`'s candidate
+    `temperature=0.7` is visible to — and replaceable by — envelope
+    interceptors instead of riding past them.
+  - The stale honest-gap notes this supersedes are updated in place
+    (`coding_agent.py` interceptor/budget comments, the guide's coverage
+    bullet, the TUI guide's lane caveat). Budgets still do not reach
+    strategy-loop lanes; that note now says exactly that.
+
 - **`bench-matrix` exited 0 on a run that graded nothing.** `run_matrix`
   deliberately contains a per-cell exception as a `status="error"` cell so one
   bad pair cannot abort the grid — correct — but nothing downstream asked *did

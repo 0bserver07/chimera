@@ -12,6 +12,15 @@ loop's blocking provider calls don't stall the asyncio event loop and lanes stay
 concurrent — and translates each ``StepResult`` into ``LoopEvent``s over a
 thread-safe hop back to the loop. Cancellation is cooperative at step boundaries:
 the worker checks the agent's abort signal between steps.
+
+Interceptors: ``adapt_loop(interceptors=...)`` threads the caller's merged
+interceptor chains (``CodingAgent._effective_interceptors`` — plugin chains
+first, host chains last; the ONE merge site) into the strategy loop via a
+``LoopConfig`` that carries only the seams, so a policy pack that gates
+writes in the default loop gates them in a strategy-loop lane too. With
+``interceptors=None`` the loop is built config-free, byte-identical to
+before (pinned). The lanes' documented no-permission-checks posture is
+unchanged either way.
 """
 from __future__ import annotations
 
@@ -76,14 +85,36 @@ class _BoundedProvider:
             max_tokens=max_tokens or self._cap, **kwargs,
         )
 
+    @property
+    def request_headers(self) -> Any:
+        """Pass the inner provider's header-injection surface through.
+
+        The ``provider_request`` seam reads — and may per-call replace —
+        ``provider.request_headers``. Reads of a missing attribute already
+        delegate via ``__getattr__``, but a bare wrapper would swallow the
+        *write* (plain attribute assignment lands on the wrapper, never
+        reaching the wire), so both directions are explicit. Raises
+        ``AttributeError`` when the inner provider has no such surface,
+        which the seam treats as ``headers=None`` (no injection).
+        """
+        return self._inner.request_headers
+
+    @request_headers.setter
+    def request_headers(self, value: Any) -> None:
+        self._inner.request_headers = value
+
     def __getattr__(self, name: str) -> Any:
         return getattr(self._inner, name)
 
 
-def _build_loop(name: str, max_steps: int) -> Any:
+def _build_loop(name: str, max_steps: int, config: Any = None) -> Any:
     module_path, cls_name = REAL_LOOPS[name]
     cls = getattr(importlib.import_module(module_path), cls_name)
-    return cls(max_steps=max_steps)
+    if config is None:
+        # No-config path stays byte-identical to before interceptors existed
+        # (pinned by test): the loop is constructed exactly as it always was.
+        return cls(max_steps=max_steps)
+    return cls(max_steps=max_steps, config=config)
 
 
 def _step_to_events(step: Any, turn: int) -> list[LoopEvent]:
@@ -130,13 +161,18 @@ async def adapt_loop(
     env: Any = None,
     max_steps: int = 50,
     abort_signal: Any = None,
+    interceptors: Any = None,
 ) -> AsyncIterator[LoopEvent]:
     """Run a strategy loop and yield its progress as ``LoopEvent``s.
 
     Args mirror what ``CodingAgent`` already has (provider, tools, the assembled
     system prompt, the seed conversation, the workspace env). ``max_steps`` bounds
     the loop; ``abort_signal`` (an ``AbortSignal``) enables step-boundary cancel.
-    Ends with exactly one ``result`` event (guaranteed terminal, like AgentLoop).
+    ``interceptors`` carries the caller's already-merged
+    :class:`~chimera.core.interception.Interceptors` chains (the assembled
+    path passes ``CodingAgent._effective_interceptors()`` — the one
+    plugin+host merge site; this adapter never merges). Ends with exactly one
+    ``result`` event (guaranteed terminal, like AgentLoop).
     """
     import asyncio
 
@@ -146,8 +182,17 @@ async def adapt_loop(
     for message in messages:
         context.add(message)
 
+    loop_config: Any = None
+    if interceptors is not None:
+        from chimera.core.loop_config import LoopConfig
+
+        # yolo_mode keeps the lanes' documented posture — strategy-loop lanes
+        # bypass permission checks (see docs/guides/tui.md) — so this config
+        # carries ONLY the interceptor chains; everything else is unchanged.
+        loop_config = LoopConfig(interceptors=interceptors, yolo_mode=True)
+
     provider = _BoundedProvider(provider)  # keep the loops' non-streaming complete() valid
-    loop_obj = _build_loop(loop_name, max_steps)
+    loop_obj = _build_loop(loop_name, max_steps, loop_config)
     aio_loop = asyncio.get_running_loop()
     queue: asyncio.Queue[Any] = asyncio.Queue()
     sentinel = object()

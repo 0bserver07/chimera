@@ -275,3 +275,79 @@ def test_agent_session_runs_with_plugin_gate_active(tmp_path):
 
     assert result.reason == "completed"
     assert not (tmp_path / "hello.txt").exists()
+
+
+# ---------------------------------------------------------------------------
+# Strategy-loop lanes: the same merged chains gate plan-execute/reflexion/tot
+# ---------------------------------------------------------------------------
+
+
+_STRATEGY_LOOPS = ["plan-execute", "reflexion", "tot"]
+
+
+@pytest.mark.parametrize("loop_name", _STRATEGY_LOOPS)
+def test_loaded_plugin_gates_strategy_loop_lane(tmp_path, loop_name):
+    """ACCEPTANCE: a policy pack that gates writes in the default loop gates
+    them in a strategy-loop lane too — same merged plugin+host source
+    (CodingAgent._effective_interceptors), threaded through loop_adapter."""
+    manager = PluginManager()
+    manager.load_plugin(WriteGatePlugin())
+
+    harness = create_assembled_harness(
+        _WRITE_SCRIPT,
+        workspace=tmp_path,
+        tools=default_test_tools(tmp_path),
+        agent_kwargs={"loop": loop_name},
+    )
+    run = harness.run("create hello.txt")
+
+    assert run.reason == "completed"
+    assert not (tmp_path / "hello.txt").exists()  # the write never executed
+    blocked = [r for tc, r in run.tool_results if tc and tc.name == "write_file"]
+    assert blocked
+    assert "Blocked by interceptor: write-gate: writes are gated" in (
+        blocked[0].error or ""
+    )
+
+
+@pytest.mark.parametrize("loop_name", _STRATEGY_LOOPS)
+def test_strategy_loop_lane_without_plugin_still_writes(tmp_path, loop_name):
+    """Falsifiability control: the identical lane with nothing loaded
+    executes the write — the gate above is what blocked it."""
+    harness = create_assembled_harness(
+        _WRITE_SCRIPT,
+        workspace=tmp_path,
+        tools=default_test_tools(tmp_path),
+        agent_kwargs={"loop": loop_name},
+    )
+    run = harness.run("create hello.txt")
+
+    assert run.reason == "completed"
+    assert (tmp_path / "hello.txt").read_text() == "one"
+
+
+def test_host_interceptors_reach_strategy_loop_lane(tmp_path):
+    """Host-supplied chains (no plugin) ride the same merge into a lane:
+    a tool_result patch lands in what the lane records."""
+    from chimera.types import ToolResult
+
+    def patch(tc: ToolCall, result: ToolResult):
+        if tc.name == "write_file":
+            return InterceptDecision.replace(ToolResult(output="WRITE-AUDITED"))
+        return None
+
+    harness = create_assembled_harness(
+        _WRITE_SCRIPT,
+        workspace=tmp_path,
+        tools=default_test_tools(tmp_path),
+        agent_kwargs={
+            "loop": "plan-execute",
+            "interceptors": Interceptors(tool_result=[patch]),
+        },
+    )
+    run = harness.run("create hello.txt")
+
+    assert (tmp_path / "hello.txt").read_text() == "one"  # the tool ran
+    patched = [r for tc, r in run.tool_results if tc and tc.name == "write_file"]
+    assert patched
+    assert patched[0].output == "WRITE-AUDITED"

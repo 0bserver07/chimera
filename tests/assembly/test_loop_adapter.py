@@ -62,7 +62,7 @@ class _FakeLoop:
 
 @pytest.mark.asyncio
 async def test_adapt_loop_streams_and_terminates(monkeypatch):
-    monkeypatch.setattr(la, "_build_loop", lambda name, steps: _FakeLoop())
+    monkeypatch.setattr(la, "_build_loop", lambda name, steps, config=None: _FakeLoop())
     evs = [
         ev async for ev in la.adapt_loop(
             "plan-execute", provider=None, tools=[], system_prompt="s",
@@ -79,7 +79,7 @@ async def test_adapt_loop_streams_and_terminates(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_adapt_loop_cancels_at_step_boundary(monkeypatch):
-    monkeypatch.setattr(la, "_build_loop", lambda name, steps: _FakeLoop())
+    monkeypatch.setattr(la, "_build_loop", lambda name, steps, config=None: _FakeLoop())
     evs = [
         ev async for ev in la.adapt_loop(
             "plan-execute", provider=None, tools=[], system_prompt="s",
@@ -99,7 +99,7 @@ async def test_adapt_loop_error_yields_error_then_terminal_result(monkeypatch):
         def iter_steps(self, *a):
             raise RuntimeError("boom")
 
-    monkeypatch.setattr(la, "_build_loop", lambda name, steps: _BoomLoop())
+    monkeypatch.setattr(la, "_build_loop", lambda name, steps, config=None: _BoomLoop())
     evs = [
         ev async for ev in la.adapt_loop(
             "plan-execute", provider=None, tools=[], system_prompt="s", messages=[],
@@ -125,3 +125,159 @@ def test_bounded_provider_caps_max_tokens():
     assert seen["max_tokens"] == 8192               # capped when caller passes None
     bounded.complete([], max_tokens=100)
     assert seen["max_tokens"] == 100                # an explicit value is preserved
+
+
+# ---------------------------------------------------------------------------
+# Interceptor threading (lanes pick up the caller's merged chains)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_adapt_loop_without_interceptors_builds_configless_loop(monkeypatch):
+    """Byte-identical pin: interceptors=None (the default) constructs the
+    strategy loop with NO config, exactly as before the seam existed."""
+    captured = {}
+
+    def fake_build(name, steps, config=None):
+        captured["config"] = config
+        return _FakeLoop()
+
+    monkeypatch.setattr(la, "_build_loop", fake_build)
+    async for _ev in la.adapt_loop(
+        "plan-execute", provider=None, tools=[], system_prompt="s", messages=[],
+    ):
+        pass
+
+    assert captured["config"] is None
+
+
+@pytest.mark.asyncio
+async def test_adapt_loop_interceptors_ride_a_seams_only_config(monkeypatch):
+    """The adapter config carries ONLY the interceptor chains: the lanes'
+    no-permission-checks posture is unchanged (permissions stays None)."""
+    from chimera.core.interception import Interceptors
+
+    captured = {}
+
+    def fake_build(name, steps, config=None):
+        captured["config"] = config
+        return _FakeLoop()
+
+    monkeypatch.setattr(la, "_build_loop", fake_build)
+    bundle = Interceptors(tool_call=[lambda tc: None])
+    async for _ev in la.adapt_loop(
+        "plan-execute", provider=None, tools=[], system_prompt="s", messages=[],
+        interceptors=bundle,
+    ):
+        pass
+
+    config = captured["config"]
+    assert config is not None
+    assert config.interceptors is bundle
+    assert config.permissions is None  # no policy sneaks into lanes
+    assert config.event_bus is None
+
+
+@pytest.mark.asyncio
+async def test_adapt_loop_enforces_tool_call_block_end_to_end():
+    """No monkeypatching: the real PlanAndExecute, driven through the
+    adapter, honors a tool_call gate carried by ``interceptors=``."""
+    from chimera.core.interception import InterceptDecision, Interceptors
+    from chimera.providers.base import Response
+    from tests.core.test_interception import DangerousTool, RecordingProvider
+
+    tool = DangerousTool()
+    provider = RecordingProvider([
+        Response(
+            content="deleting",
+            tool_calls=[ToolCall(id="1", name="dangerous_delete", arguments={})],
+            usage={},
+        ),
+        Response(content="done", tool_calls=[], usage={}),
+    ])
+
+    def gate(tc):
+        if tc.name == "dangerous_delete":
+            return InterceptDecision.block("gated in lanes too")
+        return None
+
+    evs = [
+        ev async for ev in la.adapt_loop(
+            "plan-execute", provider=provider, tools=[tool], system_prompt="s",
+            messages=[Message.user("go")],
+            interceptors=Interceptors(tool_call=[gate]),
+        )
+    ]
+
+    assert tool.executed is False
+    results = [e for e in evs if e.type == LoopEventType.tool_result]
+    assert results
+    assert "Blocked by interceptor: gated in lanes too" in (results[0].data[1].error or "")
+    assert evs[-1].type == LoopEventType.result
+    assert evs[-1].data.reason == "completed"
+
+
+@pytest.mark.asyncio
+async def test_adapt_loop_header_injection_reaches_inner_provider():
+    """The bounded-provider wrapper forwards the header surface both ways,
+    so per-call header replacement lands on the inner provider and the
+    originals are restored afterwards."""
+    from chimera.core.interception import (
+        InterceptDecision,
+        Interceptors,
+        ProviderRequest,
+    )
+    from chimera.providers.base import Response
+    from tests.core.test_interception import HeaderedProvider
+
+    provider = HeaderedProvider(
+        [Response(content="done", tool_calls=[], usage={})],
+        headers={"Authorization": "Bearer real"},
+    )
+
+    def redact(req: ProviderRequest):
+        if req.headers is None:
+            return None
+        return InterceptDecision.replace(ProviderRequest(
+            model=req.model, messages=req.messages, tools=req.tools,
+            kwargs=req.kwargs,
+            headers={**req.headers, "Authorization": "[redacted]"},
+        ))
+
+    async for _ev in la.adapt_loop(
+        "plan-execute", provider=provider, tools=[], system_prompt="s",
+        messages=[Message.user("go")],
+        interceptors=Interceptors(provider_request=[redact]),
+    ):
+        pass
+
+    assert provider.headers_seen == [{"Authorization": "[redacted]"}]  # during the call
+    assert provider.request_headers == {"Authorization": "Bearer real"}  # restored
+
+
+def test_bounded_provider_forwards_header_surface():
+    class _HeaderInner:
+        model_name = "m"
+
+        def __init__(self):
+            self._h = {"Authorization": "real"}
+
+        @property
+        def request_headers(self):
+            return dict(self._h)
+
+        @request_headers.setter
+        def request_headers(self, value):
+            self._h = dict(value)
+
+    inner = _HeaderInner()
+    bounded = la._BoundedProvider(inner)
+    assert bounded.request_headers == {"Authorization": "real"}
+    bounded.request_headers = {"Authorization": "x"}
+    assert inner._h == {"Authorization": "x"}  # the write reached the inner provider
+
+    class _Plain:
+        pass
+
+    # Providers without the surface read as absent through the wrapper too.
+    assert getattr(la._BoundedProvider(_Plain()), "request_headers", None) is None

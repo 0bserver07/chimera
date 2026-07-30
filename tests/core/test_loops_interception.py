@@ -329,6 +329,70 @@ def test_tot_internal_evaluator_call_is_not_intercepted():
 
 
 # ---------------------------------------------------------------------------
+# Resumed approvals: the documented carve-out is real (claimed-gap pin)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("name", LOOP_NAMES)
+def test_resumed_approval_calls_skip_interceptors(name):
+    """Claimed carve-out pin (documented in docs/guides/interception.md):
+    tool calls re-executed after an interactive approval resume run with the
+    executor's config detached, so interceptors do NOT run for them — the
+    gate fires once, before the ASK, and never sees the resumed batch."""
+    from chimera.core.loop_config import LoopConfig
+    from chimera.permissions.base import PermissionAction, PermissionPolicy
+
+    class AskOnEcho(PermissionPolicy):
+        def evaluate(self, tool_name, args):
+            return (
+                PermissionAction.ASK if tool_name == "echo"
+                else PermissionAction.ALLOW
+            )
+
+    dangerous = DangerousTool()
+    seen: list[str] = []
+
+    def gate(call: ToolCall):
+        seen.append(call.name)
+        if call.name == "dangerous_delete":
+            return InterceptDecision.block("gated")
+        return None
+
+    two_calls = Response(
+        content="two calls",
+        tool_calls=[
+            ToolCall(id="a", name="echo", arguments={"message": "hi"}),
+            ToolCall(id="b", name="dangerous_delete", arguments={}),
+        ],
+        usage={},
+    )
+    provider = RecordingProvider(_tool_script(name, two_calls))
+    config = LoopConfig(
+        permissions=AskOnEcho(),
+        interceptors=Interceptors(tool_call=[gate]),
+    )
+    loop = _make_loop(name, config)
+    gen = loop.iter_steps(provider, [EchoTool(), dangerous], _fresh_context(), None)
+
+    step = next(gen)
+    assert step.pending_approval is not None
+    step.pending_approval.approve()
+    result = None
+    try:
+        while True:
+            next(gen)
+    except StopIteration as stop:
+        result = stop.value
+
+    assert result is not None and result.success is True
+    # The gate fired once (for the call that hit the ASK); the batch resumed
+    # after approval never re-entered the seam...
+    assert seen == ["echo"]
+    # ...so the gated tool executed — the carve-out is real, not theoretical.
+    assert dangerous.executed is True
+
+
+# ---------------------------------------------------------------------------
 # Byte-identical pin: no interceptors configured = unchanged behavior
 # ---------------------------------------------------------------------------
 

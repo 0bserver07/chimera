@@ -82,6 +82,37 @@ binding's source (default / user / migrated). Defaults:
 
 Mid-turn, typing **steers** the running lane; at idle it starts a new turn.
 
+### `/resync` — hot-swap plugins, skills, and agents
+
+Edit a plugin's source, a `SKILL.md`, or an agent definition on disk, type
+**`/resync`**, and the next turn uses the new behavior — no restart, no new
+session. The command re-discovers each catalog and rebinds it into the
+*focused lane's* live driver (every lane owns its own workspace, so lanes
+resync independently), then reports exactly what happened per resource kind:
+
+```
+resync: plugins 1 refreshed · plugin tools 1 refreshed · skills 1 added · agents unchanged
+  · system prompt is reassembled every turn — the refreshed skill catalog
+    reaches the next turn of this conversation
+```
+
+The semantics are deliberate and honest:
+
+- **Refused while running.** A lane mid-turn refuses the resync outright —
+  message, no partial rebind. Cancel or let the turn finish first.
+- **Per-plugin isolation.** Each loaded plugin hot-swaps on its own; one
+  plugin failing to swap never blocks the rest, and a failure line names
+  the plugin, the error, and what state it was left in.
+- **Prompt honesty.** The assembled stack rebuilds its system prompt every
+  turn, so a refreshed skill catalog genuinely reaches the *current*
+  conversation's next turn — the report says so rather than leaving you to
+  guess.
+- **External lanes** (a third-party CLI racing in a lane) have no Chimera
+  resources to rebind; `/resync` says so instead of pretending.
+
+Full hot-swap semantics — including the exact per-plugin atomicity guarantee
+— live in the [plugins guide](../plugins.md).
+
 ## Selecting and copying text
 
 Drag to select transcript text, then **Ctrl+Y** copies it to the system
@@ -328,7 +359,10 @@ reason that is returned to the agent as the denial message. Multiple pending
 requests queue one modal at a time. Caveats: presets built with
 `permissions=False` (minimal / explore / swebench) have no checker, so the
 opt-in is a no-op there; strategy-loop lanes (`:plan-execute` etc.) bypass
-permission checks entirely (pre-existing).
+permission checks entirely (pre-existing). Interceptor policy packs are a
+separate mechanism and **are** enforced in strategy-loop lanes — a loaded
+plugin's write gate blocks there the same as in a default lane (see the
+interception guide's per-loop coverage table).
 
 ## Budgets
 

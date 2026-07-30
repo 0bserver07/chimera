@@ -401,7 +401,10 @@ reason that is returned to the agent as the denial message. Multiple pending
 requests queue one modal at a time. Caveats: presets built with
 `permissions=False` (minimal / explore / swebench) have no checker, so the
 opt-in is a no-op there; strategy-loop lanes (`:plan-execute` etc.) bypass
-permission checks entirely (pre-existing).
+permission checks entirely (pre-existing). Interceptor policy packs are a
+separate mechanism and **are** enforced in strategy-loop lanes — a loaded
+plugin's write gate blocks there the same as in a default lane (see the
+interception guide's per-loop coverage table).
 
 ## Budgets
 

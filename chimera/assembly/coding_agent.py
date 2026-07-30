@@ -141,9 +141,10 @@ class CodingAgent:
         # touching core. None (default) = unchanged behavior. At run()
         # time these host chains are merged with interceptors registered
         # by loaded plugins (_effective_interceptors: plugin chains first,
-        # host chains last). Applies to the default AgentLoop path;
-        # strategy-loop lanes (plan-execute / reflexion / tot via
-        # loop_adapter) are not yet covered.
+        # host chains last). The merged chains reach BOTH run paths — the
+        # default AgentLoop and strategy-loop lanes (plan-execute /
+        # reflexion / tot via loop_adapter); per-loop seam coverage is
+        # tabled in docs/guides/interception.md.
         self._interceptors = interceptors
 
         # Hot-swap seam (/resync): the skills prompt section starts empty —
@@ -164,7 +165,9 @@ class CodingAgent:
         # the agent's whole life (a lane's successive turns), and wall-clock
         # measures active time via start()/pause() around each turn. Enforcement
         # rides the default AgentLoop path; strategy-loop lanes are not covered
-        # yet (same seam as interceptors). None / an all-None spec = unchanged.
+        # yet (the loop_adapter seam now carries interceptors; threading the
+        # budget enforcer through it is still open). None / an all-None spec
+        # = unchanged.
         self._budget = budget if budget is not None and budget.is_set else None
         self._budget_enforcer: Any = None
         if self._budget is not None:
@@ -451,6 +454,9 @@ class CodingAgent:
                 env=LocalEnvironment(str(self._project_dir)),
                 max_steps=_max,
                 abort_signal=self._abort_signal,
+                # The SAME merged plugin+host chains the AgentLoop path gets —
+                # one merge site, so a policy pack gates strategy-loop lanes too.
+                interceptors=self._effective_interceptors(),
             ):
                 if event.type == LoopEventType.result and getattr(event.data, "messages", None):
                     self._history = list(event.data.messages)

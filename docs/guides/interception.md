@@ -317,23 +317,77 @@ the same way. When the policy is worth keeping, promote it into a plugin
 agent the process assembles — the plan-gate pack began as exactly this
 kind of gate.
 
+## Per-loop coverage
+
+Every runnable loop, seam by seam. A "yes" cell is enforced through the
+real loop by a test; the one scoped cell and the resumed-approval
+carve-out below are *also* pinned by tests proving the uncovered calls
+are genuinely inert — a claimed gap here is documented and tested, never
+assumed.
+
+| Seam | `ReAct` (sync + async) | `AgentLoop` (`chimera code` default) | `PlanAndExecute` | `Reflexion` | `TreeOfThought` |
+| --- | --- | --- | --- | --- | --- |
+| `context` | yes | yes | yes | yes | conversation calls only¹ |
+| `provider_request` | yes | yes | yes | yes | conversation calls only¹ |
+| `tool_call` | yes | yes | yes | yes | yes |
+| `tool_result` | yes | yes | yes | yes | yes |
+
+¹ `TreeOfThought` makes two kinds of provider calls. Its
+candidate-generation calls send the conversation and run both
+pre-provider seams — the envelope carries the candidates'
+`temperature=0.7`, so an envelope interceptor decides over what is
+actually sent. Its **internal candidate-evaluation call** sends a
+synthetic evaluator prompt instead of the conversation and is **not**
+intercepted: conversation-shaped context interceptors (e.g. a watcher
+that re-arms a gate on each new user message) would misread it. Pinned
+inert by test.
+
+The strategy loops route every conversation provider call through one
+shared enforcement site (`intercepted_complete` in
+`chimera.core.interception`), so a pre-provider block ends the run with
+`"Blocked by interceptor: <reason>"` in all three, exactly as in `ReAct`.
+
+Pins: `tests/core/test_interception.py` (`ReAct`, `AgentLoop`),
+`tests/core/test_loops_interception.py` (the three strategy loops — every
+supported cell, the inert-evaluator pin, and a byte-identical
+no-interceptors pin per loop), `tests/assembly/test_loop_adapter.py` and
+`tests/assembly/test_plugin_interceptors.py` (the assembled lanes below).
+
+### Strategy-loop lanes
+
+The assembled path reaches the strategy loops through
+`chimera/assembly/loop_adapter.py` — a lane's `:plan-execute` /
+`:reflexion` / `:tot`, and `CodingAgent(loop=...)`. Lanes receive the
+**same merged plugin+host chains** as the default `AgentLoop` path:
+`CodingAgent._effective_interceptors()` is the one merge site, and the
+adapter never merges. Loading a policy pack therefore gates every lane
+regardless of which reasoning loop it runs. Two adapter facts, both
+pinned: with no interceptors the loop is built config-free
+(byte-identical to before the seam existed), and the config that carries
+the chains carries *only* the chains — the lanes' documented
+no-permission-checks posture (see the TUI guide) is unchanged. Lanes run
+without an event bus, so interceptor decisions surface through denial
+text and run results there, as on the `AgentLoop` path.
+
 ## Scope and contract notes
 
 - **Sync-only.** Interceptors are plain callables; coroutines are not
   awaited (the seams also run inside synchronous executors). Do fast,
   in-memory work — the same posture as `PermissionPolicy.evaluate`.
-- **Coverage.** The `tool_call` / `tool_result` seams fire in every loop
-  that funnels tools through the shared executors: `ReAct` (sync and
-  async), `PlanAndExecute`, `Reflexion`, `TreeOfThought`, and `AgentLoop`
-  (the `chimera code` path). The `context` / `provider_request` seams
-  fire at the `ReAct` and `AgentLoop` provider-call sites; strategy loops
-  own their provider calls and are not yet covered there. The
-  plugin-registry merge rides the assembled (`AgentLoop`) path.
+- **Coverage.** See the per-loop coverage table above: the shared tool
+  executors carry the tool seams into every loop, the per-loop
+  provider-call sites carry the pre-provider seams, and the
+  plugin-registry merge rides the whole assembled path — the default
+  `AgentLoop` and the strategy-loop lanes alike.
 - **`kwargs` passthrough.** `ProviderRequest.kwargs` is passed verbatim
   to the provider's `complete` / `stream` call (e.g.
   `{"temperature": 0.7}`); keys must be accepted by the provider's
-  signature.
+  signature. On the strategy loops the envelope is seeded with the extra
+  arguments the call already carries (`TreeOfThought`'s candidate
+  `temperature=0.7`), so replacing `kwargs` replaces what is actually
+  sent.
 - **Resumed approvals.** Tool calls re-executed after an interactive
   approval resume run with the executor's config detached (the existing
   approval contract) and skip all config-driven checks, interceptors
-  included.
+  included. This carve-out is shared by `ReAct` and the three strategy
+  loops.
