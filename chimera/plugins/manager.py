@@ -101,6 +101,15 @@ class PluginManager:
     def unload(self, name: str) -> None:
         """Deactivate and remove a loaded plugin.
 
+        Also drops the plugin's UI-surface contributions (slash commands,
+        panels, status-line segments) from
+        :class:`chimera.plugins.ui.UIExtensionRegistry`, matched by the
+        provenance the plugin registered them with — so an unloaded
+        plugin's commands genuinely disappear from the REPL and TUI
+        catalogs on the next recompute (``/resync``) instead of lingering.
+        Contributions registered without provenance cannot be attributed
+        and are left in place.
+
         Args:
             name: The plugin name to unload.
 
@@ -111,6 +120,14 @@ class PluginManager:
             raise KeyError(f"Plugin '{name}' is not loaded")
         plugin = self._plugins.pop(name)
         self._registries.pop(name, None)
+        # Prune before deactivate: a raising deactivate() must not leave the
+        # plugin's slash commands behind on the interactive surfaces.
+        try:
+            from chimera.plugins.ui import UIExtensionRegistry
+
+            UIExtensionRegistry.unregister_plugin(name)
+        except Exception:  # noqa: BLE001 - best-effort surface cleanup
+            pass
         plugin.deactivate()
 
     def reload(self, name: str) -> BasePlugin:

@@ -499,7 +499,8 @@ def _plugin_surface_notes(manager: Any, notes: list[str]) -> None:
     if commands:
         notes.append(
             f"plugin-registered commands: {len(commands)} "
-            "(REPL surfaces re-install them; the TUI catalog is fixed)"
+            "(frontends refresh their catalogs — the REPL re-installs them, "
+            "the TUI recomposes built-ins + plugin commands)"
         )
     try:
         hooks = manager.get_all_hooks()

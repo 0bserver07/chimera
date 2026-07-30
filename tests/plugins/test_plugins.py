@@ -88,6 +88,44 @@ def test_plugin_manager_unload():
     assert deactivated == [True]
 
 
+def test_plugin_manager_unload_prunes_ui_contributions():
+    """Unload drops the plugin's UI-surface rows (by provenance) — even when
+    ``deactivate`` raises — so its slash commands vanish from the REPL/TUI
+    catalogs instead of lingering behind last-write-wins registration."""
+    from chimera.plugins.ui import UIExtensionRegistry
+
+    UIExtensionRegistry._reset()
+    try:
+
+        class SurfacePlugin(BasePlugin):
+            @property
+            def name(self) -> str:
+                return "surface-plugin"
+
+            def activate(self, registry: ComponentRegistry) -> None:
+                UIExtensionRegistry.register_command(
+                    "surf",
+                    lambda session, env, args, out: out("surf"),
+                    plugin="surface-plugin",
+                )
+
+            def deactivate(self) -> None:
+                raise RuntimeError("deactivate blew up")
+
+        manager = PluginManager()
+        manager.load_plugin(SurfacePlugin())
+        assert UIExtensionRegistry.get_command("surf") is not None
+
+        with pytest.raises(RuntimeError, match="deactivate blew up"):
+            manager.unload("surface-plugin")
+
+        assert "surface-plugin" not in manager.plugins
+        # pruned BEFORE deactivate ran, so the raise could not strand it
+        assert UIExtensionRegistry.get_command("surf") is None
+    finally:
+        UIExtensionRegistry._reset()
+
+
 def test_plugin_registry_register_tool():
     """register_tool adds a tool to the registry's tools list."""
     registry = ComponentRegistry()

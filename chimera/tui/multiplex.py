@@ -51,7 +51,13 @@ from chimera.tui.budget import (
     parse_budget_spec,
 )
 from chimera.tui.cohort import Cohort, load_cohort_retention, prune_cohorts
-from chimera.tui.commands import completion_catalog, help_lines
+from chimera.tui.commands import (
+    TUICommandContext,
+    completion_catalog,
+    dispatch_plugin_command,
+    help_lines,
+    plugin_command_rejections,
+)
 from chimera.tui.keys import (
     KeymapError,
     apply_keymap,
@@ -379,7 +385,10 @@ class MultiplexApp(App):
     BINDINGS = build_bindings()
 
     #: Local slash-command catalog (drives /help and slash autocomplete),
-    #: derived from the slash-command registry (chimera.tui.commands).
+    #: derived from the slash-command registry (chimera.tui.commands). A
+    #: class-level snapshot only — instances recompute per surface in
+    #: ``__init__`` and again on ``/resync`` (``_refresh_slash_catalog``), so
+    #: hot-swapped plugin commands appear/disappear live.
     #: NOT named ``COMMANDS`` — that shadows Textual's command-palette provider
     #: registry on ``App``, and the palette then crashes on Ctrl+P trying to
     #: instantiate strings as providers.
@@ -439,6 +448,8 @@ class MultiplexApp(App):
             self._keybinds_error = str(exc)
         apply_keymap(self._bindings, self._keybinds)
         self._slash_commands = completion_catalog(single=self._single)
+        #: Collision-policy reports already surfaced (loud once, not nagging).
+        self._announced_rejections: set[tuple[str, str]] = set()
         self._focus_index = 0
         self._panes: list[LanePane] = []
         self._pane_by_id: dict[str, LanePane] = {}
@@ -517,6 +528,9 @@ class MultiplexApp(App):
             self._say_focused(
                 f"tui theme config: {self._theme_settings.error}", style="red",
             )
+        # Collision policy, report time: a plugin command shadowing a built-in
+        # was rejected at catalog composition — say so, loudly, at start.
+        self._announce_plugin_rejections()
         self._statusline.start()
         self.set_interval(0.5, self._refresh_global)
         # ONE interval animates every pane's heartbeat (R-FOLD-1): per-pane
@@ -1143,8 +1157,86 @@ class MultiplexApp(App):
                 self.request_resume(parts[1])
             else:
                 self._open_cohort_picker()
+        elif self._dispatch_plugin_command(cmd, text, lane):
+            pass  # an accepted plugin command handled it (or refused, loudly)
         else:
             say(f"unknown command: {cmd}", style="red")
+
+    # -- plugin commands (hosted like built-ins, built-ins win) ----------
+    def _dispatch_plugin_command(self, cmd: str, text: str, lane: Lane | None) -> bool:
+        """Dispatch *cmd* to an accepted plugin command, if it names one.
+
+        Runs after every built-in branch, so a built-in always wins its own
+        token — and the composition layer already rejected any plugin
+        command that would shadow one, so a rejected token falls through to
+        the unknown-command message rather than half-working. The handler
+        keeps the REPL contract ``(session, env, args, out)``; the focused
+        lane's :class:`~chimera.tui.commands.TUICommandContext` rides in the
+        ``session`` position (transcript ``say``, driver, busy state), and
+        output scopes to the focused lane's pane.
+
+        Args:
+            cmd: The typed command token (``"/greet"``).
+            text: The full submission (args are everything after *cmd*).
+            lane: The focused lane; ``None`` dispatches nothing.
+
+        Returns:
+            True when an accepted plugin command handled the token.
+        """
+        if lane is None:
+            return False
+        workspace = getattr(lane, "workspace", None)
+        context = TUICommandContext(
+            driver=lane.driver,
+            say=self._say_focused,
+            lane_id=lane.id,
+            lane_label=lane.label,
+            model=lane.config.model,
+            busy=lane.telemetry.busy,
+            single=self._single,
+            workdir=str(workspace.path) if workspace is not None else None,
+        )
+        return dispatch_plugin_command(cmd, text[len(cmd):].strip(), context)
+
+    def _refresh_slash_catalog(self, *, announce: bool = False) -> None:
+        """Recompute the slash catalog (built-ins + accepted plugin commands).
+
+        Rebinds both autocomplete surfaces — the hint line's catalog and the
+        prompt widget's Tab-completion list — so a hot-swap that added or
+        removed a plugin command is immediately visible. With *announce*,
+        the delta is written to the focused lane's transcript.
+        """
+        previous = set(self._slash_commands)
+        self._slash_commands = completion_catalog(single=self._single)
+        try:
+            prompt = self.query_one("#prompt", PromptArea)
+        except Exception:  # noqa: BLE001 - not mounted yet (tests, early calls)
+            prompt = None
+        if prompt is not None:
+            prompt.commands = list(self._slash_commands)
+        if announce:
+            current = set(self._slash_commands)
+            added = sorted(current - previous)
+            removed = sorted(previous - current)
+            if added or removed:
+                bits: list[str] = []
+                if added:
+                    bits.append(" ".join("+" + c for c in added))
+                if removed:
+                    bits.append(" ".join("−" + c for c in removed))
+                self._say_focused("slash catalog: " + "  ".join(bits))
+        self._announce_plugin_rejections()
+
+    def _announce_plugin_rejections(self) -> None:
+        """Surface each collision rejection once — loud at report time."""
+        for token, why in plugin_command_rejections():
+            key = (token, why)
+            if key in self._announced_rejections:
+                continue
+            self._announced_rejections.add(key)
+            self._say_focused(
+                f"plugin command /{token} rejected: {why}", style="red",
+            )
 
     # -- hot-swap (/resync) ----------------------------------------------
     def _handle_resync_command(self) -> None:
@@ -1187,6 +1279,10 @@ class MultiplexApp(App):
             else:
                 style = "dim"
             pane.note(line, style=style)
+        # The swap may have (re)registered or dropped plugin slash commands —
+        # recompose the catalog so autocomplete and dispatch agree with disk.
+        if not report.refused:
+            self._refresh_slash_catalog(announce=True)
 
     # -- themes (#R-THEME-3) ---------------------------------------------
     def _handle_theme_command(self, text: str) -> None:

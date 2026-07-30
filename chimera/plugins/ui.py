@@ -622,6 +622,46 @@ class UIExtensionRegistry:
             segments = [s for s in segments if s.section == wanted]
         return sorted(segments, key=lambda s: (s.order, s.id))
 
+    # -- Provenance-scoped removal (the hot-swap seam) ------------------------
+
+    @classmethod
+    def unregister_plugin(cls, plugin: str) -> list[str]:
+        """Remove every UI contribution whose provenance matches *plugin*.
+
+        The hot-swap seam uses this the same way the command registry uses
+        ``unregister_source``: when a plugin is unloaded (explicitly, or by a
+        failed ``/resync`` swap whose restore also failed), its slash
+        commands, panels, and status-line segments must actually disappear
+        from the surfaces instead of lingering behind last-write-wins
+        registration. Contributions registered without provenance
+        (``plugin=None``) are deliberately untouched — there is nothing to
+        attribute them to.
+
+        Args:
+            plugin: The contributing plugin's name
+                (:attr:`UICommand.plugin` et al.).
+
+        Returns:
+            The removed command names, sorted (panels and status-line
+            segments are removed too but not reported here).
+        """
+        removed = sorted(
+            name for name, cmd in cls._commands.items() if cmd.plugin == plugin
+        )
+        for name in removed:
+            cls._commands.pop(name, None)
+        gone = set(removed)
+        cls._command_aliases = {
+            alias: target
+            for alias, target in cls._command_aliases.items()
+            if target not in gone
+        }
+        for panel_id in [i for i, p in cls._panels.items() if p.plugin == plugin]:
+            cls._panels.pop(panel_id, None)
+        for seg_id in [i for i, s in cls._statuslines.items() if s.plugin == plugin]:
+            cls._statuslines.pop(seg_id, None)
+        return removed
+
     # -- Reset (for testing) --------------------------------------------------
 
     @classmethod

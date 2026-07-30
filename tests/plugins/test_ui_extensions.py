@@ -396,3 +396,38 @@ class TestInstallIntoRepl:
         first = install_into_repl()
         second = install_into_repl()
         assert first == second == ["plugcmd"]
+
+
+# ---------------------------------------------------------------------------
+# Provenance-scoped removal (the hot-swap seam)
+# ---------------------------------------------------------------------------
+
+
+class TestUnregisterPlugin:
+    def test_removes_commands_aliases_panels_and_statuslines_by_provenance(self):
+        UIExtensionRegistry.register_command(
+            "greet", _noop_handler, aliases=["hello"], plugin="demo"
+        )
+        UIExtensionRegistry.register_command("bye", _noop_handler, plugin="demo")
+        UIExtensionRegistry.register_command("keep", _noop_handler, plugin="other")
+        UIExtensionRegistry.register_panel("p1", _noop_renderer, plugin="demo")
+        UIExtensionRegistry.register_statusline("s1", _noop_renderer, plugin="demo")
+
+        removed = UIExtensionRegistry.unregister_plugin("demo")
+
+        assert removed == ["bye", "greet"]  # sorted command names
+        assert UIExtensionRegistry.get_command("greet") is None
+        assert UIExtensionRegistry.get_command("hello") is None  # alias gone too
+        assert UIExtensionRegistry.get_command("bye") is None
+        assert UIExtensionRegistry.get_panel("p1") is None
+        assert UIExtensionRegistry.get_statusline("s1") is None
+        # another plugin's contribution is untouched
+        assert UIExtensionRegistry.get_command("keep") is not None
+
+    def test_provenance_free_contributions_are_left_in_place(self):
+        UIExtensionRegistry.register_command("anon", _noop_handler)  # plugin=None
+        assert UIExtensionRegistry.unregister_plugin("demo") == []
+        assert UIExtensionRegistry.get_command("anon") is not None
+
+    def test_unknown_plugin_is_a_quiet_noop(self):
+        assert UIExtensionRegistry.unregister_plugin("never-loaded") == []
