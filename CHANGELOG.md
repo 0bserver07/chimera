@@ -221,7 +221,10 @@ commit receipts.
   says plainly when a session predates the stash). Plugin-contributed tools
   sync into the live tool list in place (name collisions with non-plugin
   tools refused), and whatever interceptor surface the plugin registries
-  expose binds generically *behind* the constructor-supplied chain. The
+  expose binds generically *ahead of* the constructor-supplied chain —
+  plugin-first, host-last, host final say, conformed to the canonical
+  merge order by the composition fix below (this entry originally shipped
+  the opposite fold). The
   end-to-end lock: write plugin → load → bind → run a real loop turn → edit
   source → `/resync` → the same tool answers with the new code
   (`tests/assembly/test_resync.py`, plus the TUI pilot and REPL suites in
@@ -274,6 +277,19 @@ commit receipts.
     next real turn still writes → unload(v1) → registry empty) plus
     manager/registry units (partial multi-seam rollback, seam-typo
     rollback, forgetful/dying deactivate scrubs, ownership alignment).
+  - **One interceptor ordering rule everywhere** (adversarial-review
+    finding, confirmed): the resync generic fold shipped host-first /
+    plugin-behind — the exact opposite of the canonical merge contract
+    the per-turn registry merge is pinned to (plugin chains first, host
+    `interceptors=` last, host final say; `docs/guides/interception.md`).
+    The fold now conforms, so the total effective order on an assembled
+    agent is registry chains → generic third-party chains → host base:
+    the host always sees the plugin-effective value, its replacements
+    land last, and a block from either side stays terminal. The
+    base-ahead test flipped with it
+    (`test_generic_plugin_interceptors_bind_ahead_of_base_chain`), and
+    `docs/plugins.md` now states the same rule as the interception guide
+    instead of contradicting it.
 
 - **Verification axis on the capability matrix**
   (`docs/reference/capability-matrix.md`): every benchmark, agent layer,

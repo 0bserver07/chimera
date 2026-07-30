@@ -272,11 +272,14 @@ What one resync does, per kind:
   (`tool_call:PlanGatePlugin._gate_tool_call` added / removed / refreshed,
   plus a census note) and never binds them a second time, which would run
   every chain twice. Whatever *other* interceptor surface a third-party
-  registry exposes is aggregated generically and bound *behind* the
-  session's constructor-supplied chain (a team-policy gate always runs
-  first), with registry-carried duplicates excluded; contributions in a
-  shape the seam cannot bind soundly are counted and reported, never
-  guessed at.
+  registry exposes is aggregated generically and bound under the same one
+  ordering rule — plugin chains first, the session's constructor-supplied
+  chain last, host final say (see the merge contract in
+  [the interception guide](guides/interception.md)): a host team-policy
+  gate sees the plugin-effective call, its block stays terminal, and no
+  plugin replacement can override it — with registry-carried duplicates
+  excluded; contributions in a shape the seam cannot bind soundly are
+  counted and reported, never guessed at.
 - **skills** — the nested `SKILL.md` catalog re-walks and lands in the
   agent's prompt catalog; the flat `*.md` skill commands re-read into the
   `skill` tool's registry, stale entries removed.

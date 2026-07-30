@@ -51,8 +51,9 @@ Guarantees (also documented in ``docs/plugins.md``):
   chains last), so after a resync the per-turn merge carries exactly the
   reloaded plugins' chains. Resync accounts for them **per seam** in the
   report and never binds them a second time — a second binding would run
-  every chain twice. Only interceptor surfaces a *third-party* registry
-  exposes bind through the generic fold, behind the host's own chain.
+  every chain twice. Interceptor surfaces a *third-party* registry
+  exposes bind through the generic fold under the same one ordering rule:
+  plugin chains first, the host's own chain last, host final say.
 
 Stdlib-only (zero-dependency core); every discovery step is best-effort and
 reported rather than raised.
@@ -544,14 +545,19 @@ def _collect_plugin_interceptors(
 
 
 def _bind_interceptors(agent: Any, plugin_chain: Any | None) -> None:
-    """Rebind the agent's interceptors as base ⊕ generic-surface chains.
+    """Rebind the agent's interceptors as generic-surface chains ⊕ base.
 
-    The constructor-supplied chain (e.g. a team-policy gate) is stashed on
-    first resync and always kept *ahead* of plugin chains; clearing all
-    plugin interceptors restores exactly the base. A target without an
-    ``_interceptors`` seam is left untouched. Only chains from *generic*
-    third-party surfaces route through here — the shipped registry's
-    chains ride the host's own per-turn merge and never touch the base.
+    The one ordering rule everywhere (the merge contract in
+    ``docs/guides/interception.md``): plugin chains first, host chains
+    last, host final say — so the constructor-supplied chain (e.g. a
+    team-policy gate) is stashed on first resync and always folded
+    *after* plugin chains: it sees the plugin-effective value, its
+    replacements land last, and a block from either side stays terminal.
+    Clearing all plugin interceptors restores exactly the base. A target
+    without an ``_interceptors`` seam is left untouched. Only chains from
+    *generic* third-party surfaces route through here — the shipped
+    registry's chains ride the host's own per-turn merge (which applies
+    the same rule) and never touch the base.
     """
     if not hasattr(agent, "_interceptors"):
         return
@@ -564,7 +570,7 @@ def _bind_interceptors(agent: Any, plugin_chain: Any | None) -> None:
     from chimera.core.interception import Interceptors
 
     merged = Interceptors()
-    for source in (base, plugin_chain):
+    for source in (plugin_chain, base):
         if source is None:
             continue
         for seam in _INTERCEPTOR_SEAMS:
@@ -765,10 +771,11 @@ def resync_agent(
       exactly the reloaded chains; this seam diffs them **per seam**
       (``"<seam>:<name>"`` added / removed / refreshed) and reports a
       census note, never binding them a second time. Interceptor surfaces
-      a *third-party* registry exposes still bind generically behind the
-      constructor-supplied chain (:func:`_collect_plugin_interceptors`),
-      with registry-carried duplicates excluded on hosts that merge per
-      turn.
+      a *third-party* registry exposes still bind generically
+      (:func:`_collect_plugin_interceptors`) — ahead of the
+      constructor-supplied chain, the same plugin-first / host-last /
+      host-final-say rule as the per-turn merge — with registry-carried
+      duplicates excluded on hosts that merge per turn.
 
     Args:
         agent: The :class:`~chimera.assembly.coding_agent.CodingAgent` (or a

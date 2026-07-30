@@ -488,8 +488,11 @@ def test_no_plugin_manager_notes_honestly(tmp_path):
 # Interceptors, generic fallback: third-party registry surfaces
 # ---------------------------------------------------------------------------
 
-def test_plugin_interceptors_bind_behind_base_chain(tmp_path):
-    """A plugin-exposed interceptor surface binds behind the base chain.
+def test_generic_plugin_interceptors_bind_ahead_of_base_chain(tmp_path):
+    """A plugin-exposed interceptor surface binds ahead of the base chain —
+    the ONE ordering rule (plugin chains first, host chains last, host
+    final say), the same contract the per-turn registry merge is pinned
+    to in ``tests/assembly/test_plugin_interceptors.py``.
 
     The plugin publishes interceptors during its own activation (the seam a
     ``register_interceptor`` registry method would feed), so the surface
@@ -522,7 +525,7 @@ def test_plugin_interceptors_bind_behind_base_chain(tmp_path):
             inter = report.delta("interceptors")
             assert inter is not None and inter.refreshed == ["1 bound"]
             chain_names = [fn.__name__ for fn in agent._interceptors.tool_call]
-            assert chain_names == ["base_gate", "plugin_gate"]
+            assert chain_names == ["plugin_gate", "base_gate"]
 
             # Republish the plugin WITHOUT the surface: resync restores the
             # base chain exactly.
