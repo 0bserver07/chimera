@@ -85,6 +85,7 @@ __all__ = [
     "intercept_provider_request",
     "intercept_tool_call",
     "intercept_tool_result",
+    "merge_interceptors",
 ]
 
 
@@ -194,6 +195,62 @@ class Interceptors:
     tool_call: list[ToolCallInterceptor] = field(default_factory=list)
     tool_result: list[ToolResultInterceptor] = field(default_factory=list)
     context: list[ContextInterceptor] = field(default_factory=list)
+
+
+def _bundle_is_empty(bundle: "Interceptors") -> bool:
+    """True when *bundle* carries no interceptor on any seam."""
+    return not (
+        bundle.provider_request
+        or bundle.tool_call
+        or bundle.tool_result
+        or bundle.context
+    )
+
+
+def merge_interceptors(*bundles: "Interceptors | None") -> "Interceptors | None":
+    """Merge interceptor bundles into one chain per seam, in argument order.
+
+    The composition seam for hosts that accept interceptors from more than
+    one source — e.g. chains registered by loaded plugins plus the host's
+    own configuration.  Pass the bundles in the order their chains should
+    run: with ``merge_interceptors(plugin_bundle, host_bundle)`` every
+    plugin interceptor runs before every host interceptor on each seam,
+    and the ordinary chain contract does the rest — first ``block`` wins
+    (a block from either side is terminal; nothing can un-block),
+    ``replace`` decisions chain (the later bundle sees the earlier
+    bundle's replacements), and the per-seam failure policy is unchanged.
+
+    Identity guarantees (pinned by test):
+
+    - Every input ``None`` or empty → ``None``, so the no-interceptors
+      configuration stays byte-identical.
+    - Exactly one non-empty input → that exact object, unmodified — an
+      existing single-source configuration passes through untouched when
+      nothing else contributes.
+    - Otherwise → a new :class:`Interceptors`; the inputs are never
+      mutated.
+
+    Args:
+        *bundles: Interceptor bundles in the order their chains should
+            run.  ``None`` and all-empty entries are skipped.
+
+    Returns:
+        The merged bundle, or ``None`` when no input carries any
+        interceptor.
+    """
+    contributing = [
+        b for b in bundles if b is not None and not _bundle_is_empty(b)
+    ]
+    if not contributing:
+        return None
+    if len(contributing) == 1:
+        return contributing[0]
+    return Interceptors(
+        provider_request=[fn for b in contributing for fn in b.provider_request],
+        tool_call=[fn for b in contributing for fn in b.tool_call],
+        tool_result=[fn for b in contributing for fn in b.tool_result],
+        context=[fn for b in contributing for fn in b.context],
+    )
 
 
 def _name_of(fn: Callable[..., Any]) -> str:

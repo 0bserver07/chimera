@@ -20,6 +20,7 @@ from chimera.core.interception import (
     intercept_provider_request,
     intercept_tool_call,
     intercept_tool_result,
+    merge_interceptors,
 )
 from chimera.core.loop import ReAct
 from chimera.core.loop_config import LoopConfig
@@ -734,6 +735,106 @@ async def test_async_loop_provider_request_block():
     assert result.success is False
     assert result.error == "Blocked by interceptor: halt"
     assert provider.calls == []
+
+
+# ---------------------------------------------------------------------------
+# merge_interceptors: multi-source composition (plugins + host)
+# ---------------------------------------------------------------------------
+
+
+def test_merge_all_none_or_empty_returns_none():
+    """The no-interceptors configuration must stay None (byte-identical pin)."""
+    assert merge_interceptors() is None
+    assert merge_interceptors(None) is None
+    assert merge_interceptors(None, None) is None
+    assert merge_interceptors(Interceptors(), None) is None
+    assert merge_interceptors(Interceptors(), Interceptors()) is None
+
+
+def test_merge_single_nonempty_bundle_is_identity():
+    """One contributing bundle passes through as the exact same object."""
+    host = Interceptors(tool_call=[lambda call: None])
+    assert merge_interceptors(None, host) is host
+    assert merge_interceptors(host, None) is host
+    assert merge_interceptors(Interceptors(), host) is host
+
+
+def test_merge_concatenates_per_seam_in_argument_order():
+    def p1(call):
+        return None
+
+    def p2(call):
+        return None
+
+    def h1(call):
+        return None
+
+    def p_ctx(messages):
+        return None
+
+    def h_res(call, result):
+        return None
+
+    plugin = Interceptors(tool_call=[p1, p2], context=[p_ctx])
+    host = Interceptors(tool_call=[h1], tool_result=[h_res])
+    merged = merge_interceptors(plugin, host)
+
+    assert merged is not None
+    assert merged.tool_call == [p1, p2, h1]  # plugin first, host last
+    assert merged.context == [p_ctx]
+    assert merged.tool_result == [h_res]
+    assert merged.provider_request == []
+    # Inputs are never mutated.
+    assert plugin.tool_call == [p1, p2]
+    assert host.tool_call == [h1]
+
+
+def test_merged_chain_host_sees_plugin_replacement_and_blocks_last():
+    """Through the real seam runner: the host runs last on the
+    plugin-effective value, and its block is terminal."""
+    host_saw: list[str] = []
+
+    def plugin_rewrite(call):
+        return InterceptDecision.replace(
+            ToolCall(id=call.id, name=call.name,
+                     arguments={"message": call.arguments["message"] + "+plugin"})
+        )
+
+    def host_gate(call):
+        host_saw.append(call.arguments["message"])
+        return InterceptDecision.block("host says no")
+
+    merged = merge_interceptors(
+        Interceptors(tool_call=[plugin_rewrite]),
+        Interceptors(tool_call=[host_gate]),
+    )
+    tc = ToolCall(id="t1", name="echo", arguments={"message": "start"})
+    _, block = intercept_tool_call(merged.tool_call, tc)
+
+    assert host_saw == ["start+plugin"]  # host evaluated the plugin-effective call
+    assert block == "host says no"
+
+
+def test_merged_chain_plugin_block_wins_before_host_runs():
+    """First block wins: a plugin gate fires before the host is consulted."""
+    host_ran: list[str] = []
+
+    def plugin_gate(call):
+        return InterceptDecision.block("plugin says no")
+
+    def host_fn(call):
+        host_ran.append(call.name)
+        return None
+
+    merged = merge_interceptors(
+        Interceptors(tool_call=[plugin_gate]),
+        Interceptors(tool_call=[host_fn]),
+    )
+    tc = ToolCall(id="t1", name="echo", arguments={})
+    _, block = intercept_tool_call(merged.tool_call, tc)
+
+    assert block == "plugin says no"
+    assert host_ran == []
 
 
 # ---------------------------------------------------------------------------

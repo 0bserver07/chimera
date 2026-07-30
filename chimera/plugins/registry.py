@@ -4,9 +4,23 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from chimera.agents.config import AgentConfig
     from chimera.config.skills import Skill
+    from chimera.core.interception import InterceptDecision, Interceptors
     from chimera.plugins.base import Hook, MCPServerConfig
+
+
+#: Seam names accepted by :meth:`PluginExtensionRegistry.register_interceptor`,
+#: matching the fields of :class:`chimera.core.interception.Interceptors`
+#: (drift-pinned by ``tests/plugins/test_registry_interceptors.py``).
+INTERCEPTOR_SEAMS: tuple[str, ...] = (
+    "provider_request",
+    "tool_call",
+    "tool_result",
+    "context",
+)
 
 
 class PluginExtensionRegistry:
@@ -14,7 +28,7 @@ class PluginExtensionRegistry:
 
     Extends the per-instance :class:`ComponentRegistry` with global
     registries for agents, strategies, constraints, middleware, skills,
-    MCP servers, and hooks.
+    MCP servers, hooks, and interceptors.
     """
 
     _agents: dict[str, AgentConfig] = {}
@@ -24,6 +38,7 @@ class PluginExtensionRegistry:
     _skills: dict[str, Skill] = {}
     _mcp_servers: dict[str, MCPServerConfig] = {}
     _hooks: dict[str, list[Hook]] = {}
+    _interceptors: dict[str, list[Callable[..., InterceptDecision | None]]] = {}
 
     # -- Agents ---------------------------------------------------------------
 
@@ -179,6 +194,111 @@ class PluginExtensionRegistry:
         """
         return cls._hooks.get(event_type, [])
 
+    # -- Interceptors ----------------------------------------------------------
+
+    @classmethod
+    def register_interceptor(
+        cls,
+        seam: str,
+        interceptor: Callable[..., InterceptDecision | None],
+    ) -> None:
+        """Register an interceptor for one of the four loop seams.
+
+        Interceptors registered here are merged into every assembled
+        agent's loop configuration: per seam, plugin-registered chains run
+        first, in registration order, and host-supplied chains run last
+        (see :func:`chimera.core.interception.merge_interceptors`).
+
+        Args:
+            seam: One of :data:`INTERCEPTOR_SEAMS` — ``"provider_request"``,
+                ``"tool_call"``, ``"tool_result"``, or ``"context"``.
+            interceptor: The interceptor callable; its signature is
+                seam-specific (see :mod:`chimera.core.interception`).
+
+        Raises:
+            ValueError: If *seam* is not one of the four seam names. A
+                typo must fail loudly here — a chain registered on a seam
+                that does not exist would never fire, silently.
+        """
+        if seam not in INTERCEPTOR_SEAMS:
+            raise ValueError(
+                f"unknown interceptor seam {seam!r}; "
+                f"expected one of {INTERCEPTOR_SEAMS}"
+            )
+        cls._interceptors.setdefault(seam, []).append(interceptor)
+
+    @classmethod
+    def unregister_interceptor(
+        cls,
+        seam: str,
+        interceptor: Callable[..., InterceptDecision | None],
+    ) -> None:
+        """Remove a previously registered interceptor from a seam.
+
+        The withdrawal half of :meth:`register_interceptor`, used by a
+        plugin's ``deactivate()`` so unloading (or reloading) a plugin
+        removes its chains. Removing an interceptor that is not
+        registered is a no-op.
+
+        Args:
+            seam: One of :data:`INTERCEPTOR_SEAMS`.
+            interceptor: The callable to remove (matched by equality, so
+                a bound method re-derived from the same instance matches).
+
+        Raises:
+            ValueError: If *seam* is not one of the four seam names.
+        """
+        if seam not in INTERCEPTOR_SEAMS:
+            raise ValueError(
+                f"unknown interceptor seam {seam!r}; "
+                f"expected one of {INTERCEPTOR_SEAMS}"
+            )
+        try:
+            cls._interceptors.get(seam, []).remove(interceptor)
+        except ValueError:
+            pass
+
+    @classmethod
+    def get_interceptors(
+        cls, seam: str,
+    ) -> list[Callable[..., InterceptDecision | None]]:
+        """Return interceptors registered for a seam, in registration order.
+
+        Args:
+            seam: One of :data:`INTERCEPTOR_SEAMS`.
+
+        Returns:
+            List of interceptor callables for the seam.
+
+        Raises:
+            ValueError: If *seam* is not one of the four seam names.
+        """
+        if seam not in INTERCEPTOR_SEAMS:
+            raise ValueError(
+                f"unknown interceptor seam {seam!r}; "
+                f"expected one of {INTERCEPTOR_SEAMS}"
+            )
+        return list(cls._interceptors.get(seam, []))
+
+    @classmethod
+    def get_all_interceptors(cls) -> Interceptors:
+        """Return all registered interceptors as one bundle.
+
+        Returns:
+            A fresh :class:`~chimera.core.interception.Interceptors`
+            whose per-seam chains hold the registered interceptors in
+            registration order (empty chains when nothing is registered).
+            Mutating the returned bundle does not affect the registry.
+        """
+        from chimera.core.interception import Interceptors
+
+        return Interceptors(
+            provider_request=list(cls._interceptors.get("provider_request", [])),
+            tool_call=list(cls._interceptors.get("tool_call", [])),
+            tool_result=list(cls._interceptors.get("tool_result", [])),
+            context=list(cls._interceptors.get("context", [])),
+        )
+
     # -- Reset (for testing) --------------------------------------------------
 
     @classmethod
@@ -191,3 +311,4 @@ class PluginExtensionRegistry:
         cls._skills.clear()
         cls._mcp_servers.clear()
         cls._hooks.clear()
+        cls._interceptors.clear()

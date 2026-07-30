@@ -103,7 +103,9 @@ class AgentDriver:
             ``provider``, ``tools_override``, or ``interceptors=`` — a
             :class:`~chimera.core.interception.Interceptors` instance whose
             seams can block/mutate provider requests, tool calls, tool
-            results, and the outgoing context).
+            results, and the outgoing context; merged per turn with chains
+            registered by loaded plugins, plugin chains first, host chains
+            last).
     """
 
     def __init__(

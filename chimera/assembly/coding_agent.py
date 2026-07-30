@@ -138,9 +138,12 @@ class CodingAgent:
         # chimera.core.interception.Interceptors instance threaded into
         # AgentLoop.run so embedders can block/mutate provider requests,
         # tool calls, tool results, and the outgoing context without
-        # touching core. None (default) = unchanged behavior. Applies to
-        # the default AgentLoop path; strategy-loop lanes (plan-execute /
-        # reflexion / tot via loop_adapter) are not yet covered.
+        # touching core. None (default) = unchanged behavior. At run()
+        # time these host chains are merged with interceptors registered
+        # by loaded plugins (_effective_interceptors: plugin chains first,
+        # host chains last). Applies to the default AgentLoop path;
+        # strategy-loop lanes (plan-execute / reflexion / tot via
+        # loop_adapter) are not yet covered.
         self._interceptors = interceptors
 
         # Uniform run budget (T12, additive): a
@@ -327,6 +330,35 @@ class CodingAgent:
         """Create a CodingAgent from a named preset."""
         return cls(preset=preset, **kwargs)
 
+    def _effective_interceptors(self) -> Any:
+        """Merge plugin-registered interceptor chains with this host's own.
+
+        Read at the top of every :meth:`run`, so a plugin loaded (or
+        unloaded) between turns simply takes effect on the next turn.
+
+        Ordering contract (pinned by
+        ``tests/assembly/test_plugin_interceptors.py``): per seam,
+        interceptors registered by loaded plugins run first, in
+        registration order; the host's ``interceptors=`` chains run last.
+        The host therefore sees the plugin-effective value and has final
+        say on replacement; a ``block`` from either side is terminal —
+        nothing can un-block, so a host block can never be undone by a
+        plugin. With no plugin registrations the host's configuration
+        object passes through untouched, and ``None`` stays ``None``
+        (byte-identical behavior, pinned).
+
+        Returns:
+            The merged :class:`~chimera.core.interception.Interceptors`,
+            or ``None`` when neither plugins nor the host contribute any.
+        """
+        from chimera.core.interception import merge_interceptors
+        from chimera.plugins.registry import PluginExtensionRegistry
+
+        return merge_interceptors(
+            PluginExtensionRegistry.get_all_interceptors(),
+            getattr(self, "_interceptors", None),
+        )
+
     async def run(self, task: str) -> AsyncGenerator[LoopEvent, None]:
         """Run the agent on a task, yielding LoopEvents."""
         # Check for slash command
@@ -440,7 +472,7 @@ class CodingAgent:
                 enable_auto_continue=getattr(self, "_enable_nudges", True),
                 env=_tool_env,
                 loop_detector=_loop_detector,
-                interceptors=getattr(self, "_interceptors", None),
+                interceptors=self._effective_interceptors(),
                 budget_enforcer=_enforcer,
             ):
                 # Track modified files from tool_result events

@@ -203,6 +203,7 @@ class BasePlugin(ABC):
         self.register_skills(registry)
         self.register_mcp_servers(registry)
         self.register_hooks(registry)
+        self.register_interceptors(registry)
 
     def register_tools(self, registry: ComponentRegistry) -> None:
         """Override to register tools."""
@@ -233,6 +234,18 @@ class BasePlugin(ABC):
 
     def register_hooks(self, registry: ComponentRegistry) -> None:
         """Override to register hooks."""
+
+    def register_interceptors(self, registry: ComponentRegistry) -> None:
+        """Override to register loop-seam interceptors.
+
+        Register chains via
+        :meth:`chimera.plugins.registry.PluginExtensionRegistry.register_interceptor`;
+        they are merged into every assembled agent's loop configuration
+        (plugin chains first, in registration order; host-supplied chains
+        last). Pair each registration with an
+        ``unregister_interceptor`` call in :meth:`deactivate` so unloading
+        the plugin withdraws its chains.
+        """
 
     def deactivate(self) -> None:
         """Called when the plugin is unloaded."""
