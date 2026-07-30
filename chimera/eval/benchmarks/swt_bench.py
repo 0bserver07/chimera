@@ -190,8 +190,10 @@ class SWTBench(Benchmark):
           3. Apply the gold ``patch`` (the fix).
           4. Re-run — those same tests MUST PASS, with no P2F regressions.
 
-        Without an environment, falls back to a non-empty heuristic so
-        the harness can still run smoke tests.
+        Without an environment there is nothing to run, so F2P cannot be
+        checked and the instance is NOT resolved. This previously fell back to
+        "output longer than 10 characters", which graded prose as a solved
+        instance (see :mod:`tests.eval.test_no_length_grading`).
 
         Args:
             task: Task dict from :meth:`tasks`.
@@ -200,10 +202,17 @@ class SWTBench(Benchmark):
             env: Execution environment (required for true F2P scoring).
 
         Returns:
-            True iff F2P holds (or, in fallback mode, output is non-trivial).
+            True iff F2P holds. Never true when F2P could not be checked.
         """
         if env is None:
-            return bool(agent_output and len(agent_output.strip()) > 10)
+            # MEASUREMENT INTEGRITY: inability to grade is not a pass. This was
+            # `len(agent_output.strip()) > 10`, which graded a sentence of prose
+            # as a solved instance — the same defect class as a sandbox
+            # degrading to local: the result becomes indistinguishable from a
+            # real solve. A column of these reads as a uniform zero, which
+            # `scripts/render_observatory.py` already refuses to publish as a
+            # score. Pinned by tests/eval/test_no_length_grading.py.
+            return False
 
         gold_patch = task.get("patch", "")
         if not gold_patch:

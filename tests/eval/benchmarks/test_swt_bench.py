@@ -159,9 +159,13 @@ def test_add_instance_and_instances() -> None:
 # ------------------------------------------------------------------ evaluate (base)
 
 
-def test_evaluate_no_env_uses_length_heuristic() -> None:
+def test_evaluate_no_env_is_never_a_pass() -> None:
+    # Was: asserted that an answer over N characters graded as SOLVED. The
+    # suite was pinning the defect in place — which is exactly why nothing
+    # caught it. Inability to grade is not a pass; see
+    # tests/eval/test_no_length_grading.py.
     bench = SWTBench()
-    assert bench.evaluate(_item(), "x" * 11, None) is True
+    assert bench.evaluate(_item(), "x" * 11, None) is False
     assert bench.evaluate(_item(), "tiny", None) is False
 
 

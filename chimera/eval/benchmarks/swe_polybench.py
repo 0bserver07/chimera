@@ -374,7 +374,7 @@ class SWEPolyBench(Benchmark):
               blanket path. Otherwise, runs the language-appropriate command
               from :data:`LANGUAGE_TEST_COMMANDS` via ``env.run_command`` and
               treats exit code ``0`` as a pass.
-            - Falls back to a non-empty-output heuristic only as a last
+            - Grades as unresolved (never on output length) as a last
               resort (so unit tests without a Docker env can exercise the
               adapter shape).
 
@@ -432,7 +432,14 @@ class SWEPolyBench(Benchmark):
                 except Exception:
                     return False
 
-        return bool(agent_output and len(agent_output.strip()) > 10)
+        # MEASUREMENT INTEGRITY: inability to grade is not a pass. This was
+        # `len(agent_output.strip()) > 10`, which graded a sentence of prose as a
+        # solved task — the same defect class as a sandbox degrading to local:
+        # the result becomes indistinguishable from a real solve. A column of
+        # these reads as a uniform zero, which `scripts/render_observatory.py`
+        # already refuses to publish as a score. Pinned by
+        # tests/eval/test_no_length_grading.py.
+        return False
 
     def _grade_named_tests(
         self,

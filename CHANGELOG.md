@@ -72,6 +72,37 @@ commit receipts.
     (`coding_agent.py` interceptor/budget comments, the guide's coverage
     bullet, the TUI guide's lane caveat). Budgets still do not reach
     strategy-loop lanes; that note now says exactly that.
+- **A fifth fabricated-result class: length-as-correctness.** Five benchmark
+  adapters — `swe_bench`, `swt_bench`, `swe_polybench`, `feature_bench`,
+  `dpai_arena` (six sites) — graded a task **solved** from
+  `len(agent_output.strip()) > 10` whenever they could not run the benchmark's
+  own tests. Verified live, not inferred: `"I have analyzed the issue and
+  implemented a comprehensive fix."` graded as a **RESOLVED SWE-bench
+  instance**. All six sites now return unresolved, because inability to grade is
+  not a pass — the same principle as a cloud sandbox refusing to degrade to
+  local, since either way the result becomes indistinguishable from a real one.
+  - **The adapters disagreed about which configuration was unsafe.**
+    `swe_bench` was safe with `env=None` and unsafe with a runner-less env;
+    `swt_bench` was the exact mirror image. A test covering one shape would have
+    passed on four of five while the fifth stayed broken, so the new test
+    parametrises **both**.
+  - **The class spread by imitation.** `dpai_arena._evaluate_rubric`'s docstring
+    said its placeholder was "matching the SWE-bench fallback behaviour". So
+    alongside the behavioural test there is now a static **AST** gate over
+    `chimera/eval/benchmarks/` that fails on any `len()` of an answer-shaped
+    parameter. AST, not grep: the fix's own comments quote the old code, and a
+    text search would have forced deleting the explanation to stay green.
+  - **Six existing tests asserted the defect** — `test_evaluate_fallback_heuristic`,
+    `test_evaluate_no_env_uses_length_heuristic`,
+    `test_evaluate_unknown_track_falls_back_to_length`, and three siblings. The
+    suite was not blind to this behaviour; it was **pinning it in place**. They
+    are inverted, each carrying a note saying what it used to assert.
+  - The zero this produces is the honest outcome and is *legible*: a uniform-zero
+    column is already the harness-gap signature `scripts/render_observatory.py`
+    refuses to publish as a score. A 100% built from prose is not legible at all.
+  - Found while scoping the SWE-family gold-patch canary — the exemption the
+    canary sweep reported as "unverified, not healthy". It was right.
+
 - **The mbpp-plus base-grading inflation, measured: 14.8 points.** The
   published **99.7% (377/378)** was the MBPP+ task set graded with the
   dataset's *base* `test_list` asserts. Re-running the **identical model

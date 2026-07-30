@@ -179,8 +179,10 @@ class DPAIArena(Benchmark):
         - coverage: run tests with coverage, check delta
         - pr-review / static-analysis / compliance: rubric scoring (TODO)
 
-        When ``env`` is ``None`` or missing required hooks, falls back to a
-        non-empty-output check so unit tests can exercise the dispatch logic.
+        When ``env`` is ``None`` or missing the hooks a track needs, the
+        instance grades as unresolved — there is nothing to run, so nothing is
+        verified. (This used to fall back to a non-empty-output check, which
+        scored prose as a solved task.)
         """
         if env is None:
             return False
@@ -192,7 +194,9 @@ class DPAIArena(Benchmark):
             return self._evaluate_coverage(task, agent_output, env)
         if track in ("pr-review", "static-analysis", "compliance"):
             return self._evaluate_rubric(task, agent_output, env)
-        return bool(agent_output and len(agent_output.strip()) > 10)
+        # An unrecognised track has no grader, so nothing can be verified.
+        # Grading it by output length would score every answer as correct.
+        return False
 
     def _evaluate_patch(self, task: dict[str, Any], agent_output: str, env: Any) -> bool:
         """Apply the gold test patch and run the project's tests."""
@@ -212,7 +216,8 @@ class DPAIArena(Benchmark):
                 return bool(test_result.all_passed)
             except Exception:
                 return False
-        return bool(agent_output and len(agent_output.strip()) > 10)
+        # No runner: the patch was never executed, so it is not verified.
+        return False
 
     def _evaluate_coverage(self, task: dict[str, Any], agent_output: str, env: Any) -> bool:
         """Coverage track: run tests with coverage instrumentation.
@@ -232,11 +237,21 @@ class DPAIArena(Benchmark):
     def _evaluate_rubric(self, task: dict[str, Any], agent_output: str, env: Any) -> bool:
         """Rubric-style tracks (PR review, static analysis, compliance).
 
-        TODO: wire up an LLM judge or DPAI Arena's official scoring tool.
-        Placeholder returns ``True`` only when the agent produced substantive
-        output, matching the SWE-bench fallback behaviour.
+        NOT IMPLEMENTED — these tracks need an LLM judge or DPAI Arena's own
+        scoring tool, and neither is wired up. Until one is, every instance
+        grades as unresolved.
+
+        The placeholder used to return ``True`` for any output over 20
+        characters, explicitly "matching the SWE-bench fallback behaviour" —
+        which is how the length-as-correctness defect propagated here by
+        imitation. A rubric track scoring 100% on prose is worse than one
+        scoring 0%: the zero is legible as a missing grader (the observatory's
+        uniform-zero gate names it), the 100% is not.
+
+        Returns:
+            ``False``, always, until a real rubric grader exists.
         """
-        return bool(agent_output and len(agent_output.strip()) > 20)
+        return False
 
     @property
     def track(self) -> str:

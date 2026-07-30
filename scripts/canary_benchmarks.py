@@ -205,19 +205,19 @@ RECIPES: dict[str, Recipe] = {
         answer=_field("answer"), wrong=lambda t: "-99999", code_like=False
     ),
     # --- exempt: grading needs a checked-out repo and a real test runner ----
-    "swe-bench": Recipe(exempt="gold patch needs a checked-out repo + test runner"),
+    "swe-bench": Recipe(exempt="gold patch needs a checked-out repo + test runner; blocked on per-instance env provisioning (no dataset carries docker_image) — #175"),
     "swe-bench-verified": Recipe(
-        exempt="gold patch needs a checked-out repo + test runner"
+        exempt="gold patch needs a checked-out repo + test runner; blocked on per-instance env provisioning (no dataset carries docker_image) — #175"
     ),
-    "swe-polybench": Recipe(exempt="gold patch needs a checked-out repo + test runner"),
-    "swt-bench": Recipe(exempt="gold patch needs a checked-out repo + test runner"),
+    "swe-polybench": Recipe(exempt="gold patch needs a checked-out repo + test runner; blocked on per-instance env provisioning (no dataset carries docker_image) — #175"),
+    "swt-bench": Recipe(exempt="gold patch needs a checked-out repo + test runner; blocked on per-instance env provisioning (no dataset carries docker_image) — #175"),
     "multi-swe-bench": Recipe(
-        exempt="gold patch needs a checked-out repo + test runner"
+        exempt="gold patch needs a checked-out repo + test runner; blocked on per-instance env provisioning (no dataset carries docker_image) — #175"
     ),
     "senior-swe-bench": Recipe(
-        exempt="gold patch needs a checked-out repo + test runner"
+        exempt="gold patch needs a checked-out repo + test runner; blocked on per-instance env provisioning (no dataset carries docker_image) — #175"
     ),
-    "swe-lancer": Recipe(exempt="gold patch needs a checked-out repo + test runner"),
+    "swe-lancer": Recipe(exempt="gold patch needs a checked-out repo + test runner; blocked on per-instance env provisioning (no dataset carries docker_image) — #175"),
     # --- exempt: no reference answer exists in the dataset ------------------
     # The grading contract was fixed 2026-07-25 (functional tasks are now
     # called, not piped), but the dataset stages no canonical solution, so

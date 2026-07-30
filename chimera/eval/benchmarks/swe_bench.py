@@ -546,7 +546,9 @@ class SWEBench(Benchmark):
            every PASS_TO_PASS test passes.
         3. **Fallback path** — otherwise run the env's blanket suite via
            ``run_tests()`` and pass iff nothing failed (back-compat).
-        4. **No-env / no-runner** — pass iff the output is non-trivial.
+        4. **No-env / no-runner** — grade as unresolved. Nothing ran, so
+           nothing is verified; this used to pass on any output over 10
+           characters.
 
         Args:
             task: The task dict (from :meth:`SWEBenchInstance.to_task`); may
@@ -604,8 +606,14 @@ class SWEBench(Benchmark):
             except Exception:
                 return False
 
-        # Last resort: check if output contains meaningful content.
-        return bool(agent_output and len(agent_output.strip()) > 10)
+        # MEASUREMENT INTEGRITY: inability to grade is not a pass. This was
+        # `len(agent_output.strip()) > 10`, which graded a sentence of prose as a
+        # solved task — the same defect class as a sandbox degrading to local:
+        # the result becomes indistinguishable from a real solve. A column of
+        # these reads as a uniform zero, which `scripts/render_observatory.py`
+        # already refuses to publish as a score. Pinned by
+        # tests/eval/test_no_length_grading.py.
+        return False
 
     def _resolve_conda_prefix(self, env: Any) -> str:
         """Resolve the shell prefix for named-test commands against *env*.

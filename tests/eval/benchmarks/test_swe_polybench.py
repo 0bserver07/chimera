@@ -186,10 +186,14 @@ def test_evaluate_language_command_path() -> None:
     assert SWEPolyBench().evaluate(_item(test_patch=""), "", _CmdOnlyEnv(success=False)) is False
 
 
-def test_evaluate_fallback_heuristic() -> None:
+def test_evaluate_without_a_runner_is_never_a_pass() -> None:
+    # Was: asserted that an answer over N characters graded as SOLVED. The
+    # suite was pinning the defect in place — which is exactly why nothing
+    # caught it. Inability to grade is not a pass; see
+    # tests/eval/test_no_length_grading.py.
     task = _item(test_patch="")
     env = SimpleNamespace()  # no hooks at all
-    assert SWEPolyBench().evaluate(task, "x" * 11, env) is True
+    assert SWEPolyBench().evaluate(task, "x" * 11, env) is False
     assert SWEPolyBench().evaluate(task, "tiny", env) is False
 
 
