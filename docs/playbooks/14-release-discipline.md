@@ -68,9 +68,10 @@ Chimera's policy, set explicitly by the project owner:
   sits behind `importorskip("cryptography")` and CI installs no `cryptography`.
   A release is the one moment worth paying for the highest posture.
   *Corollary for the numbers:* quote the test count from the posture you name.
-  The same tree reports **10,470** with a partial extra set and **11,017** with
-  all extras — the lower figure is not a smaller suite, it is a less-tested
-  one.
+  The 0.9.2.2 tree reports **11,018 passed / 79 skipped** under all extras and
+  **10,501 passed / 133 skipped** under the CI posture — a 517-test gap that is
+  entirely `importorskip`, not a smaller suite. A bare test count without its
+  posture is not a verifiable number.
 - README/status refreshed to match reality.
 - Publish pipeline per `docs/playbooks/` release notes and
   the release-ops history (tag → CI publish → uvx verification).
