@@ -367,12 +367,20 @@ def test_dispatch_serve_http_passes_tls_flags(
         auth_token: str | None,
         tls_cert: Any,
         tls_key: Any,
+        pidfile_prefix: str,
     ) -> int:
         captured["host"] = host
         captured["port"] = port
         captured["auth_token"] = auth_token
         captured["tls_cert"] = tls_cert
         captured["tls_key"] = tls_key
+        # Added in e5d4d725 (serve mgmt) and never reflected here, so this fake
+        # raised TypeError on every call. The module is behind
+        # `importorskip("cryptography")`, which CI does not install — so the
+        # break never failed a build. Captured rather than swallowed with
+        # **kwargs: a fake that silently absorbs new arguments stops testing the
+        # call contract it exists to test.
+        captured["pidfile_prefix"] = pidfile_prefix
         return 0
 
     monkeypatch.setattr(
@@ -397,4 +405,5 @@ def test_dispatch_serve_http_passes_tls_flags(
     assert rc == 0
     assert captured["tls_cert"] == str(cert)
     assert captured["tls_key"] == str(key)
+    assert captured["pidfile_prefix"] == "otter"
     assert captured["auth_token"] == "tok"

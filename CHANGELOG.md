@@ -7,7 +7,35 @@ commit receipts.
 
 ## Unreleased
 
+<!-- Entries land here with the work; a release rolls this into a named block. -->
+
+## 0.9.2.2 — 2026-07-30 — the gates
+
 ### Fixed
+
+- **Disclosed, not fixed: the E2B backend is broken against `e2b >= 2.x`**
+  (#177). `template` / `api_key` / `timeout` moved off the `Sandbox` constructor
+  onto `Sandbox.create()`, and `pyproject` declares an unbounded `e2b>=1.0`, so
+  `--env e2b` raises `TypeError` at construction with a current SDK (2.30.0
+  measured). Two blind spots hid it: the tests inject a **fake** SDK at the
+  module boundary — right for CI, but a fake never has to match the real
+  signature — and `mypy chimera/` is clean in CI because CI installs no extras,
+  so the call is unchecked. It surfaced only under the new all-extras gate. Left
+  unfixed deliberately: verifying a two-generation compatibility change needs
+  real E2B infrastructure, and an unverified code path would be worse than a
+  failure that is at least loud and immediate.
+
+- **A test that had never run in CI, and was broken.**
+  `tests/otter/test_server_tls.py` raised `TypeError` on every invocation since
+  `e5d4d725` gave `serve_http` a `pidfile_prefix` argument its fake never
+  accepted. The module sits behind `pytest.importorskip("cryptography")`, which
+  CI does not install, so the break never failed a build — and it is invisible
+  to *both* standard gates, since the full-suite run and the CI-posture run are
+  each missing that dep. Found only by running the suite under
+  `uv sync --all-extras`, which is now a required release gate (playbook 14).
+  The fake captures and asserts the new argument rather than swallowing it with
+  `**kwargs`: a fake that silently absorbs new parameters stops testing the call
+  contract it exists to test.
 
 - **The plan-gate pack no longer fails open across concurrent agents.** Gate
   state was a single process-global high-water mark on the shared plugin
