@@ -58,6 +58,19 @@ Chimera's policy, set explicitly by the project owner:
   `tui` extra — replicate its exact env + cold-cache mypy + its pytest
   invocation locally before the push. Added after two red CI runs on the
   0.9.1 batch proved local-green ≠ CI-green.
+- **ALL-EXTRAS run** (`uv sync --all-extras` then the full suite). The two
+  gates above are both *lower* postures, and a test gated behind
+  `pytest.importorskip` for a dep neither installs is checked by **neither** —
+  it is skipped in one and skipped in the other, so it can be broken for
+  months while every gate stays green. Found on the 0.9.2.2 cut:
+  `tests/otter/test_server_tls.py` had raised `TypeError` since `e5d4d725`
+  added a `pidfile_prefix` argument its fake never accepted, because the module
+  sits behind `importorskip("cryptography")` and CI installs no `cryptography`.
+  A release is the one moment worth paying for the highest posture.
+  *Corollary for the numbers:* quote the test count from the posture you name.
+  The same tree reports **10,470** with a partial extra set and **11,017** with
+  all extras — the lower figure is not a smaller suite, it is a less-tested
+  one.
 - README/status refreshed to match reality.
 - Publish pipeline per `docs/playbooks/` release notes and
   the release-ops history (tag → CI publish → uvx verification).

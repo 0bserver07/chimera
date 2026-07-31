@@ -7,7 +7,23 @@ commit receipts.
 
 ## Unreleased
 
+<!-- Entries land here with the work; a release rolls this into a named block. -->
+
+## 0.9.2.2 — 2026-07-30 — the gates
+
 ### Fixed
+
+- **A test that had never run in CI, and was broken.**
+  `tests/otter/test_server_tls.py` raised `TypeError` on every invocation since
+  `e5d4d725` gave `serve_http` a `pidfile_prefix` argument its fake never
+  accepted. The module sits behind `pytest.importorskip("cryptography")`, which
+  CI does not install, so the break never failed a build — and it is invisible
+  to *both* standard gates, since the full-suite run and the CI-posture run are
+  each missing that dep. Found only by running the suite under
+  `uv sync --all-extras`, which is now a required release gate (playbook 14).
+  The fake captures and asserts the new argument rather than swallowing it with
+  `**kwargs`: a fake that silently absorbs new parameters stops testing the call
+  contract it exists to test.
 
 - **The plan-gate pack no longer fails open across concurrent agents.** Gate
   state was a single process-global high-water mark on the shared plugin
