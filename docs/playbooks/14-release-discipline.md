@@ -75,6 +75,26 @@ Chimera's policy, set explicitly by the project owner:
 - README/status refreshed to match reality.
 - Publish pipeline per `docs/playbooks/` release notes and
   the release-ops history (tag → CI publish → uvx verification).
+- **Post-publish, RUN the thing — importing it is not verification.** The
+  0.9.2.2 check was a clean venv outside the repo confirming
+  `chimera --version`, `import chimera`, and that the fixes were in the wheel.
+  All true, all green, and it exercised none of what a user does first. Within
+  minutes of installing, a user hit a **5.1 s** time-to-first-prompt (all of it
+  eagerly importing providers) and a `KeyboardInterrupt` traceback dumped on
+  quit. Neither is reachable by importing.
+  Minimum for the next release: launch the actual entry point, time it, and
+  quit it.
+
+  ```bash
+  cd /tmp && python3 -m venv v && ./v/bin/pip install 'chimera-run[anthropic]'
+  time ./v/bin/chimera code < /dev/null    # time-to-prompt, and a clean exit
+  ```
+
+  Also verify on a machine that is **not** the dev box. The same release
+  installed fine here and failed on a user's Linux host — a `pip` shim bound to
+  a dead Python 3.8 while `python3` was 3.11.7, which reports as
+  `(from versions: none)` and reads exactly like "the package was never
+  published".
 
 ## Why this is written down
 
