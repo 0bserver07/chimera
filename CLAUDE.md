@@ -308,8 +308,11 @@ Interactive frontends over AgentDriver (spec: `docs/specs/interactive-frontends.
   time-to-first-prompt (`_ensure_builtins_registered` importing all ten
   providers to build one) and a `KeyboardInterrupt` traceback dumped after
   "Bye!". Neither defect is reachable through an import. **Launch the entry
-  point, time it, and quit it** — `time chimera code < /dev/null` would have
-  caught both in one command. Corollary: verify on a machine that is *not* the
+  point, time it, and quit it** — but with **two** commands, not one:
+  `time chimera code < /dev/null` measures startup, while only a real
+  `kill -INT` reproduces the quit traceback (closing stdin raises `EOFError`,
+  a different path — verified: the redirect exits 0 and silent on the very
+  build that crashes on Ctrl+C). Corollary: verify on a machine that is *not* the
   dev box. That same release failed to install on a user's Linux host because
   `pip` was bound to a dead Python 3.8 while `python3` was 3.11.7 — pip reports
   that as `(from versions: none)`, which reads exactly like the package was

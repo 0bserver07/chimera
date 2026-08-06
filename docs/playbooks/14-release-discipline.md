@@ -87,8 +87,15 @@ Chimera's policy, set explicitly by the project owner:
 
   ```bash
   cd /tmp && python3 -m venv v && ./v/bin/pip install 'chimera-run[anthropic]'
-  time ./v/bin/chimera code < /dev/null    # time-to-prompt, and a clean exit
+  time ./v/bin/chimera code < /dev/null    # time-to-prompt
+  ./v/bin/chimera code & sleep 6; kill -INT %1; wait   # quit must not traceback
   ```
+
+  **Both lines, not just the first.** `< /dev/null` closes stdin, which raises
+  `EOFError` — a different path from `SIGINT`. Measured on the 0.9.2.2 tree: the
+  redirect exits 0 and silent, while an actual Ctrl+C dumps
+  `KeyboardInterrupt`. A gate that only tests the easy exit reports green on a
+  crash-on-quit, which is how this one shipped.
 
   Also verify on a machine that is **not** the dev box. The same release
   installed fine here and failed on a user's Linux host — a `pip` shim bound to
