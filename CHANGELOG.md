@@ -9,6 +9,8 @@ commit receipts.
 
 <!-- Entries land here with the work; a release rolls this into a named block. -->
 
+## 0.9.2.3 — 2026-08-06 — run it before you ship it
+
 ### Fixed
 
 - **`chimera code` spent ~99% of its startup importing providers it never
