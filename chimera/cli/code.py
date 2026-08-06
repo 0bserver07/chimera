@@ -870,12 +870,20 @@ def run_code(args: Any) -> int:
             asyncio.run(_print_run())
             return 0
 
-        asyncio.run(
-            _run_new_stack(
-                model=model, preset=effective_preset, cwd=cwd,
-                agent_kwargs=agent_kwargs,
-            ),
-        )
+        try:
+            asyncio.run(
+                _run_new_stack(
+                    model=model, preset=effective_preset, cwd=cwd,
+                    agent_kwargs=agent_kwargs,
+                ),
+            )
+        except KeyboardInterrupt:
+            # The REPL already printed its goodbye before unwinding. A Ctrl+C
+            # landing during asyncio's own shutdown makes `asyncio.run` cancel
+            # the task and re-raise, which dumped a CancelledError +
+            # KeyboardInterrupt traceback *after* "Bye!" — alarming, and it
+            # made a clean quit look like a crash. Quitting is not an error.
+            pass
         return 0
 
     workdir = os.path.abspath(getattr(args, "workdir", None) or os.getcwd())
