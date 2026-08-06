@@ -10,9 +10,50 @@ chimera mink                        # TUI-first coding agent
 chimera agents                      # list all 7 CLIs with one-line pitches
 ```
 
-**Status** (master, 2026-08-06) — 11032 passing tests, 79 skipped locally under `uv sync --all-extras`, excluding the three live-infra files; CI's no-extras posture is the badge above (a lower posture runs fewer tests, not a smaller suite). Released as **v0.9.2.3**. Flagship full-dataset scorecard on glm-5.2 (status_counts-verified): mbpp-plus 84.9% (plus-graded), mbpp 99.1%, human-eval-plus 92.1%, math500 77.6% — plus the first multi-agent depth matrix (4 architectures × 4 benchmarks at n=50). New in 0.9.2.2 — **the gates**: the mbpp-plus number re-measured under the EvalPlus expanded harness (99.7% was base-graded; the real figure is 84.9%, a 14.8-point grading gap), five adapters that graded a task solved from the *length* of the answer, static AST gates so neither class can return, one path registry for every on-disk store with `doctor`/`gc` over it, and interception seams reaching every loop with `/resync` hot-swap ([release notes](docs/releases/0.9.2.2.md), [observatory](docs/benchmarks/observatory.md)). Raw results in `data/`.
+**Status** — v0.9.2.3 · 11,032 tests passing · flagship scorecard below.
 
-## New in 0.9.0 — the multiplexer: race N agents on one task
+<table>
+<tr><td>
+
+**Benchmarks** — `coding-agent` on glm-5.2, full datasets, every score traceable to a receipt in [`data/`](data/)
+
+| benchmark | score |
+|---|---|
+| mbpp | 99.1% |
+| human-eval-plus | 92.1% |
+| mbpp-plus | 84.9% <sub>plus-graded</sub> |
+| math500 | 77.6% |
+
+</td><td>
+
+**Also measured** — the first multi-agent depth matrix: 4 architectures × 4 benchmarks at n=50.
+
+Scores are `status_counts`-verified: a run with errored cells cannot publish a number. See the [observatory](docs/benchmarks/observatory.md).
+
+</td></tr>
+</table>
+
+<details>
+<summary><b>Test-count details</b> — why two numbers, and which one the badge shows</summary>
+
+11,032 passing / 79 skipped locally under `uv sync --all-extras`, excluding the
+three live-infra files. The badge above shows CI's no-extras posture, which runs
+**10,515** — a lower posture runs fewer tests, not a smaller suite. The gap is
+entirely `pytest.importorskip` for optional dependencies.
+
+</details>
+
+## New in 0.9.2.3 — startup is sub-second again
+
+`chimera code` used to take **five seconds** to reach a prompt: creating one
+provider imported all ten built-in provider modules, and the vendor SDKs with
+them. Talking to Anthropic cost the OpenAI SDK's import. Lookup is lazy now —
+**1942 ms → 566 ms** on the machine that reported it. Quitting with Ctrl+C no
+longer prints a traceback after "Bye!".
+[Release notes](docs/releases/0.9.2.3.md) ·
+[all releases](docs/releases/)
+
+## Race N agents on one task — the multiplexer
 
 Chimera's comparison mission as a live interface: N agent lanes — different
 models, presets, or genuinely different reasoning loops — attack the **same
@@ -223,7 +264,9 @@ The plugin honors a `settings.json` schema for ecosystem interop, so the same ho
 
 > **Discoverability note:** Each of the 7 coding-agent CLIs has a purpose alias for tab-friendly invocation: `chimera tui` ≡ `chimera mink`, `chimera multi` ≡ `chimera otter`, `chimera sandbox` ≡ `chimera ferret`, `chimera mini` ≡ `chimera weasel`, `chimera tiny` ≡ `chimera shrew`, `chimera shell` ≡ `chimera stoat`, `chimera strict` ≡ `chimera badger`. Run `chimera agents` to list all seven with one-liner pitches and the upstream tool that inspired each. See [docs/inspirations.md](docs/inspirations.md).
 
-### Otter — server-first coding agent
+<details>
+<summary><b>Otter</b> — server-first coding agent</summary>
+
 
 `chimera otter` is the second coding-agent CLI. Where `chimera mink` mirrors a TUI-first agent, otter mirrors a server-first / multi-client open-source coding agent: a single ReAct loop you can drive from a one-shot CLI, an interactive REPL, an HTTP server with SSE streaming, or an ACP JSON-RPC transport — all backed by the same `LoopConfig`, tool registry, and event-sourced session store the rest of Chimera uses.
 
@@ -259,7 +302,11 @@ Every persisted run lives under `~/.chimera/eventlog/otter-<utc>-<uuid>/` and is
 
 See the [Otter quickstart](docs/otter/quickstart.md) for the full walkthrough — provider resolution order, env vars, on-disk layout, and pointers to `providers.md`, `models.md`, `sessions.md`, `share.md`, and `server.md`.
 
-### Ferret — sandbox-first IDE-flagship coding agent
+</details>
+
+<details>
+<summary><b>Ferret</b> — sandbox-first IDE-flagship coding agent</summary>
+
 
 `chimera ferret` is the third coding-agent CLI. Where mink is TUI-first and otter is server-first, ferret mirrors the upstream IDE-flagship posture: a sandbox-first runner with single-flag approval presets, an ACP JSON-RPC transport that ships as the *default* `serve` transport (HTTP is opt-in), and an optional cloud bridge so a local ferret session can be driven from a remote UI. The two headline guardrails compose: `--sandbox` blocks at the OS level, `--approval` blocks at the policy level, and a tool call has to pass both.
 
@@ -275,7 +322,11 @@ chimera ferret serve --http --port 5173                                  # HTTP,
 
 See the [Ferret quickstart](docs/ferret/quickstart.md) for the four entry points, sandbox modes, approval presets, IDE-bridge wiring, and cloud-bridge setup.
 
-### Weasel — minimal harness with four operating modes
+</details>
+
+<details>
+<summary><b>Weasel</b> — minimal harness with four operating modes</summary>
+
 
 `chimera weasel` is the fourth coding-agent CLI. Where mink/otter/ferret each ship strong opinions, weasel mirrors the *minimal harness* posture: powerful defaults, no sub-agents, no plan mode, no built-in approval presets — just one ReAct loop reachable through four interchangeable I/O envelopes (interactive REPL, one-shot print, stdio JSON-RPC, embedded SDK), an auto-discovered `.weasel/extensions/` directory, and an embeddable `Agent` class. If you want more, you build it (or install an extension); weasel will not get in the way.
 
@@ -290,7 +341,11 @@ python -c "from chimera.weasel.sdk import Agent; print(Agent(model='claude-sonne
 
 See the [Weasel quickstart](docs/weasel/quickstart.md) for the four modes in detail, the extension layout, and the SDK recipe.
 
-### Shrew — coding agent tuned for small local models
+</details>
+
+<details>
+<summary><b>Shrew</b> — coding agent tuned for small local models</summary>
+
 
 `chimera shrew` is the fifth coding-agent CLI, **explicitly tuned for small local models** (Qwen3.5-9B, Qwen3.6-35B-A3B MoE, and friends). It is a thin layer on top of weasel — same four modes, same session schema, same extension surface — but with three small-model adjustments: the default model is `qwen3.6-35b-a3b` served by llama.cpp on `127.0.0.1:8888`, `--max-steps` defaults to 30 (smaller than mink/otter's 50; small models don't benefit from long horizons), and the default `--allowed-tools` is the restricted `Read,Write,Edit,Bash` set so a 4-bit quantised model doesn't burn its context budget on tool selection. Cloud fallbacks (`anthropic/claude-haiku-4-5`, `openai/gpt-4o-mini`) work via `--model vendor/name`.
 
@@ -308,7 +363,11 @@ chimera shrew --model anthropic/claude-haiku-4-5 -p "..."  # cloud fallback
 
 See the [Shrew quickstart](docs/shrew/quickstart.md) for the small-model setup walkthrough and benchmark harness.
 
-### Stoat — shell-mode-toggle coding agent
+</details>
+
+<details>
+<summary><b>Stoat</b> — shell-mode-toggle coding agent</summary>
+
 
 `chimera stoat` is the sixth coding-agent CLI. Where the first five each ship rich opinionated postures, stoat's distinguishing ergonomic is the **shell-mode toggle**: in the same REPL, each line either feeds the LLM agent or runs as a direct shell command, and the user flips between the two with `/shell` (or `--shell-mode` on boot). Stoat is for users who live in their terminal and want one buffer for both `ls -la` and "explain this repo". The provider chain is Kimi-first via `$MOONSHOT_API_KEY` (`kimi-k2.6` on `api.moonshot.ai/v1`), with Anthropic / OpenAI / OpenRouter / Ollama fallthroughs.
 
@@ -322,7 +381,11 @@ chimera stoat --shell-mode                           # boot directly into shell 
 
 In the REPL, `stoat>` is agent mode, `stoat$` is shell mode; `/shell` toggles. Mode-tagged history (`/history` renders `>` and `$` markers) keeps both modes visible inline. See the [Stoat quickstart](docs/stoat/quickstart.md) for the full shell-mode walkthrough.
 
-### Badger — harness-rewrite coding agent
+</details>
+
+<details>
+<summary><b>Badger</b> — harness-rewrite coding agent</summary>
+
 
 `chimera badger` is the seventh coding-agent CLI. Where stoat's headline is ergonomic, badger's is **harness discipline**: tighter step budget (`--max-steps` defaults to 25 vs 50 for the other six), rerun-on-failure as a first-class flag (`--rerun-on-failure --max-reruns 2`), and a parity-tracker subcommand (`chimera badger parity --against PARITY.md`) that diffs a declared schema against the live agent's defaults. The provider chain is Anthropic-first.
 
@@ -335,6 +398,8 @@ chimera badger parity --against PARITY.json          # rc=0 on match, rc=1 on di
 ```
 
 The rerun-on-failure detector is a conservative marker list (pytest summaries, Python tracebacks, Rust E0xxx, syntax errors, explicit `BUILD FAILED`). When fired, the refined-prompt directive names the markers and asks the agent to verify before reporting done. See the [Badger quickstart](docs/badger/quickstart.md) for the rationale and full surface.
+
+</details>
 
 ## How It's Organized
 
