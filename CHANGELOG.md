@@ -9,6 +9,37 @@ commit receipts.
 
 <!-- Entries land here with the work; a release rolls this into a named block. -->
 
+### Fixed
+
+- **`chimera code` spent ~99% of its startup importing providers it never
+  used.** `create_provider` called `_ensure_builtins_registered()`, which
+  imports **all ten** built-in provider modules — and the `anthropic` and
+  `openai` vendor SDKs with them — to construct **one**. Lookup is now lazy:
+  `get_provider_factory` imports only the module that owns the requested name.
+  - Measured on a modest Linux box (the machine that surfaced it): resolving a
+    provider went **1942 ms → 566 ms**, a **1376 ms** saving and 3.4x faster.
+    That was the bulk of a **5.1 s** time-to-first-prompt for `chimera code`;
+    profiling put `_ensure_builtins_registered` at **5.107 s** of a 5.8 s run,
+    essentially all of it `importlib` work rather than anything Chimera does.
+  - Talking to Anthropic no longer costs the OpenAI SDK's import. Pinned by
+    `tests/providers/test_lazy_provider_imports.py`, which asserts it **in a
+    subprocess** — `sys.modules` in the test process is already polluted by the
+    suite, which would have made the assertion vacuous.
+  - The name→module table is **re-derived** by the tests, not trusted: each
+    module is imported in a clean interpreter and its registrations compared
+    against the map. Reading the source would have missed that
+    `modal_endpoint`, `xai` and `acmecloud` each also register `compatible` as
+    an import side effect.
+  - `_ensure_builtins_registered()` stays for callers that must enumerate
+    (`list_providers` in the factory's error path, `chimera which`), so no
+    provider became unreachable — a test resolves **every** registered name
+    from a cold interpreter with no eager registration at all.
+- **Quitting `chimera code` with Ctrl+C dumped a traceback after "Bye!".** A
+  Ctrl+C landing during asyncio's shutdown made `asyncio.run` cancel the task
+  and re-raise, printing a `CancelledError` + `KeyboardInterrupt` traceback
+  *after* the goodbye — so a clean quit looked like a crash. `run_code` now
+  catches it: quitting is not an error.
+
 ## 0.9.2.2 — 2026-07-30 — the gates
 
 ### Fixed

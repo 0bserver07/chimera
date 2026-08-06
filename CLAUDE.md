@@ -300,6 +300,26 @@ Interactive frontends over AgentDriver (spec: `docs/specs/interactive-frontends.
   exists and still needs to exist. A number whose receipt is missing is marked
   `⊘ NO RECEIPT` at the claim, never deleted: naming the gap is the disclosure,
   removing the number is the cover-up.
+- **Verifying a published package by importing it is not verification — run
+  it.** The 0.9.2.2 post-publish check installed from PyPI into a clean venv
+  outside the repo and confirmed `chimera --version`, `import chimera`, and
+  that the fixes were present in the wheel. Every assertion true, and it
+  exercised nothing a user actually does: within minutes a user hit a **5.1 s**
+  time-to-first-prompt (`_ensure_builtins_registered` importing all ten
+  providers to build one) and a `KeyboardInterrupt` traceback dumped after
+  "Bye!". Neither defect is reachable through an import. **Launch the entry
+  point, time it, and quit it** — but with **two** commands, not one:
+  `time chimera code < /dev/null` measures startup, while only a real
+  `kill -INT` reproduces the quit traceback (closing stdin raises `EOFError`,
+  a different path — verified: the redirect exits 0 and silent on the very
+  build that crashes on Ctrl+C). Corollary: verify on a machine that is *not* the
+  dev box. That same release failed to install on a user's Linux host because
+  `pip` was bound to a dead Python 3.8 while `python3` was 3.11.7 — pip reports
+  that as `(from versions: none)`, which reads exactly like the package was
+  never published. And when diagnosing a remote box over SSH, remember
+  non-interactive SSH does not load `.zshrc`: my first diagnosis there reported
+  the wrong interpreter and a wrong PATH, both artifacts of my own session
+  rather than facts about the machine — re-run through `zsh -i -l -c`.
 - **Inability to grade is not a pass — and a test that asserts the lenient
   fallback is pinning the defect, not covering it.** Five benchmark adapters
   graded a task *solved* from `len(agent_output.strip()) > 10` whenever they

@@ -25,13 +25,20 @@ def register_provider(name: str, factory: ProviderFactory) -> None:
 def get_provider_factory(name: str) -> ProviderFactory | None:
     """Look up a registered provider factory by name.
 
+    Imports the one built-in module that owns *name* if it has not been loaded
+    yet, so asking for ``"anthropic"`` never costs the OpenAI SDK's import.
+
     Args:
         name: The provider identifier to look up.
 
     Returns:
         The registered factory callable, or ``None`` if not found.
     """
-    return _registry.get(name)
+    factory = _registry.get(name)
+    if factory is None:
+        _ensure_builtin(name)
+        factory = _registry.get(name)
+    return factory
 
 
 def list_providers() -> list[str]:
@@ -52,19 +59,63 @@ def unregister_provider(name: str) -> None:
     _registry.pop(name, None)
 
 
+#: Built-in provider name -> the module whose import self-registers it.
+#: Derived by importing each module in a clean interpreter and reading
+#: ``list_providers()``, not by reading the source — three modules
+#: (``modal_endpoint``, ``xai``, ``acmecloud``) also register ``compatible``
+#: as a side effect of importing it, and a hand-written map missed that.
+#: ``tests/providers/test_lazy_provider_imports.py`` re-derives it and fails
+#: if a module's registrations drift from this table.
+_BUILTIN_MODULES: dict[str, str] = {
+    "anthropic": "chimera.providers.anthropic",
+    "openai": "chimera.providers.openai",
+    "google": "chimera.providers.google",
+    "ollama": "chimera.providers.ollama",
+    "compatible": "chimera.providers.compatible",
+    "modal": "chimera.providers.modal",
+    "modal-endpoint": "chimera.providers.modal_endpoint",
+    "xai": "chimera.providers.xai",
+    "acmecloud": "chimera.providers.acmecloud",
+    "faux": "chimera.providers.faux",
+}
+
+
+def _ensure_builtin(name: str) -> None:
+    """Import only the built-in module that registers *name*.
+
+    Why this exists: ``_ensure_builtins_registered`` imports all ten provider
+    modules, and two of them pull heavy vendor SDKs — measured at 445 ms
+    (``anthropic``) and 247 ms (``openai``) on a warm dev machine, and **5.1 s
+    together** on a modest Linux box, where it was 99% of ``chimera code``'s
+    5.1 s time-to-prompt. Talking to Anthropic should not cost the OpenAI SDK's
+    import.
+
+    Unknown names are a no-op: a caller may be asking for a provider registered
+    at runtime by a plugin, which no built-in module owns.
+
+    Args:
+        name: The provider identifier being looked up.
+    """
+    module = _BUILTIN_MODULES.get(name)
+    if module is None:
+        return
+    import importlib
+
+    importlib.import_module(module)
+
+
 def _ensure_builtins_registered() -> None:
-    """Import all built-in provider modules to trigger self-registration."""
+    """Import **all** built-in provider modules to trigger self-registration.
+
+    Only for callers that must enumerate every provider (``list_providers`` for
+    an error message, ``chimera which``). Resolving a single provider goes
+    through :func:`_ensure_builtin` instead — see its docstring for the cost.
+    """
     global _builtins_registered
     if _builtins_registered:
         return
     _builtins_registered = True
-    import chimera.providers.anthropic  # noqa: F401
-    import chimera.providers.openai  # noqa: F401
-    import chimera.providers.google  # noqa: F401
-    import chimera.providers.ollama  # noqa: F401
-    import chimera.providers.compatible  # noqa: F401
-    import chimera.providers.modal  # noqa: F401
-    import chimera.providers.modal_endpoint  # noqa: F401
-    import chimera.providers.xai  # noqa: F401
-    import chimera.providers.acmecloud  # noqa: F401
-    import chimera.providers.faux  # noqa: F401
+    import importlib
+
+    for module in dict.fromkeys(_BUILTIN_MODULES.values()):
+        importlib.import_module(module)

@@ -156,11 +156,14 @@ def create_provider(
             the model name.
     """
     from chimera.providers.registry import (
-        _ensure_builtins_registered,
         get_provider_factory,
         list_providers,
     )
-    _ensure_builtins_registered()
+    # NOT `_ensure_builtins_registered()` — that imports all ten provider
+    # modules (and the anthropic + openai SDKs with them) to build one.
+    # `get_provider_factory` now imports just the module that owns the name;
+    # `list_providers` in the error path below still loads everything, which
+    # is correct because that path has to enumerate.
 
     if model is None:
         model = os.environ.get("ANTHROPIC_MODEL") or os.environ.get("OPENAI_MODEL")
